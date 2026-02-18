@@ -144,12 +144,12 @@ async def root():
 
 @app.get("/health")
 async def health():
+    profiles = get_profiles()
+    stats = get_stat_comps()
     return {
         "status": "ok",
-        "profiles": len(get_profiles()),
-        "stat_comps": len(get_stat_comps()),
-        "anthro_comps": len(get_anthro_comps()),
-        "search_index": len(get_search_index()),
+        "profiles": len(profiles),
+        "stat_comps": len(stats),
     }
 
 
