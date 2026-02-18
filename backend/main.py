@@ -1,16 +1,16 @@
-"""
-ProspectTheory API — FastAPI backend serving precomputed player data.
+﻿"""
+ProspectTheory API â€” FastAPI backend serving precomputed player data.
 
 Uses compressed api_*.json files from Script 11.
 
 Endpoints:
-  GET /api/players/search?q=name       → Search players by name
-  GET /api/player/{name}               → Full player profile
-  GET /api/comps/stats/{name}          → Statistical comparisons
-  GET /api/comps/anthro/{name}         → Anthropometric comparisons
-  GET /api/tiers/{name}                → Tier probabilities
-  GET /api/players/top?n=50            → Top N by predicted PIE
-  GET /api/players/draft/{year}        → All players from a draft year
+  GET /api/players/search?q=name       â†’ Search players by name
+  GET /api/player/{name}               â†’ Full player profile
+  GET /api/comps/stats/{name}          â†’ Statistical comparisons
+  GET /api/comps/anthro/{name}         â†’ Anthropometric comparisons
+  GET /api/tiers/{name}                â†’ Tier probabilities
+  GET /api/players/top?n=50            â†’ Top N by predicted PIE
+  GET /api/players/draft/{year}        â†’ All players from a draft year
 
 Run:
   uvicorn main:app --host 0.0.0.0 --port 8000 --reload
@@ -24,13 +24,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-# ═══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # APP CONFIG
-# ═══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 app = FastAPI(
     title="ProspectTheory API",
-    description="NBA Draft Intelligence — Player profiles, comparisons, and tier predictions",
+    description="NBA Draft Intelligence â€” Player profiles, comparisons, and tier predictions",
     version="1.0.0",
 )
 
@@ -48,9 +48,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ═══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # DATA LOADING (compressed api_*.json from Script 11)
-# ═══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 DATA_DIR = Path(os.getenv("DATA_DIR", "data/processed"))
 
@@ -63,7 +63,7 @@ _search_index = None
 def load_json(filepath: Path):
     """Load a JSON file, return empty dict/list if missing."""
     if not filepath.exists():
-        print(f"⚠️  Not found: {filepath}")
+        print(f"âš ï¸  Not found: {filepath}")
         return {}
     with open(filepath, "r", encoding="utf-8") as f:
         return json.load(f)
@@ -74,7 +74,7 @@ def get_profiles() -> dict:
     if _profiles is None:
         print("Loading profiles...")
         _profiles = load_json(DATA_DIR / "api_profiles.json")
-        print(f"  → {len(_profiles):,} profiles")
+        print(f"  â†’ {len(_profiles):,} profiles")
     return _profiles
 
 
@@ -83,7 +83,7 @@ def get_stat_comps() -> dict:
     if _stat_comps is None:
         print("Loading stat comps...")
         _stat_comps = load_json(DATA_DIR / "api_stat_comps.json")
-        print(f"  → {len(_stat_comps):,} entries")
+        print(f"  â†’ {len(_stat_comps):,} entries")
     return _stat_comps
 
 
@@ -92,7 +92,7 @@ def get_anthro_comps() -> dict:
     if _anthro_comps is None:
         print("Loading anthro comps...")
         _anthro_comps = load_json(DATA_DIR / "api_anthro_comps.json")
-        print(f"  → {len(_anthro_comps):,} entries")
+        print(f"  â†’ {len(_anthro_comps):,} entries")
     return _anthro_comps
 
 
@@ -115,7 +115,7 @@ def get_search_index() -> list:
                     "mu": p.get("pred_mu"), "pn": p.get("pred_p_nba"),
                 })
             _search_index.sort(key=lambda x: (-(x.get("pn") or 0), -(x.get("mu") or 0)))
-        print(f"  → {len(_search_index):,} players in index")
+        print(f"  â†’ {len(_search_index):,} players in index")
     return _search_index
 
 
@@ -133,9 +133,9 @@ def find_player(name: str) -> tuple:
     return None, None
 
 
-# ═══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # ENDPOINTS
-# ═══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 @app.get("/")
 async def root():
@@ -365,9 +365,9 @@ async def draft_class(year: int):
     return {"year": year, "count": len(results), "players": results}
 
 
-# ═══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # STATIC FILES (if frontend built to frontend/dist)
-# ═══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 frontend_dist = Path("frontend/dist")
 if frontend_dist.exists():
