@@ -377,7 +377,3 @@ if frontend_dist.exists():
         if file_path.is_file():
             return FileResponse(file_path)
         return FileResponse(frontend_dist / "index.html")
-
-# v2 deploy fix
-
-# v2 deploy fix
