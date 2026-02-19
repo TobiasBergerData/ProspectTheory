@@ -1,1 +1,1 @@
-{"buildCommand":"npm run build","outputDirectory":"dist","installCommand":"npm install","framework":"vite","rewrites":[{"source":"/api/(.*)","destination":"https://prospecttheory-api.onrender.com/api/$1"}]}
+{"buildCommand":"npm run build","outputDirectory":"dist","installCommand":"npm install","framework":"vite","rewrites":[{"source":"/api/(.*)","destination":"https://api.prospecttheory.io/api/$1"}]}
