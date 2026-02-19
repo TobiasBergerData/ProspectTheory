@@ -173,80 +173,72 @@ const BADGE_DEFS = {
 // ═══════════════════════════════════════════════════════════
 // SAMPLE DATA
 // ═══════════════════════════════════════════════════════════
-const PLAYERS = {
-  "Anthony Davis": {
-    team:"Kentucky",pos:"Big",age:19.2,ht:'6\'10"',htIn:82,wt:222,ws:89.5,wsDelta:7.25,
-    cls:"Freshman",recRank:1,yr:2012,conf:"SEC",confTier:"Power",seasonsPlayed:1,
-    gp:40,min:32.0,pts:14.2,reb:10.4,ast:1.3,stl:1.3,blk:4.7,to:1.3,foul:2.6,mp:1280,
-    p36:{pts:16.0,reb:11.7,ast:1.5,stl:1.5,blk:5.3},
-    bpm:16.1,obpm:7.8,dbpm:8.3,ortg:120.4,usg:28.0,
-    astP:8.4,toP:12.2,orbP:12.2,drbP:18.4,stlP:3.1,blkP:14.7,astTov:1.0,
-    ts:60.3,fg:51.2,tp:0,ft:71.0,efg:53.2,
-    rimF:42,rimPct:68,midF:35,midPct:44,threeF:0,threePct:0,dunkR:18,ftr:47,
-    rimAst:42,midAst:28,threeAst:0,tpaPerG:0,
-    ff:{efg:82,tov:88,orb:72,ftr:91,comp:85},
-    pctl:{bpm:98,usg:88,ts:78,ast:22,to:85,orb:82,drb:72,stl:68,blk:99,pts36:72,ast36:18,reb36:92},
-    comb:{hgt:81.25,wgt:222,ws:89.5,sr:108.5,hl:9.0,hw:10.0,bf:7.5,sv:31.5,mv:35.0,sprint:3.29,lane:11.1},
-    traj:{bpm:0,ts:0,usg:0,comp:0,seasons:1},
-    feel:84,funcAth:90,shootScore:60,defScore:100,overall:88,
-    floor:77,ceiling:87,risk:"Low Risk, High Floor",safeBet:80,selfCreation:52,
-    projNba3p:28.1,projNba3pa:0.5,projNba3par:12,projNbaTs:56.2,
-    roles:{playmaker:18,scorer:78,spacer:8,driver:85,crasher:92,onball:32,rimProt:98,rebounder:95,switchPot:55},
-    badges:["High Feel Athlete","Rim Pressure"],redFlags:[],
-    mu:0.191,sigma:0.028,pNba:0.98,
-    tiers:{Superstar:42,"All-Star":28,Starter:15,"Role Player":8,Replacement:3,Negative:2,"Never NBA":2},
-    actual:"Superstar",peakPie:0.192,nbaName:"Anthony Davis",
-    statComps:[
-      {name:"Karl-Anthony Towns",pos:"Big",sim:94,tier:"All-Star",nba:true,bpm:12.8,usg:27,ts:58,astP:9,blkP:8.2,badges:["Stretch Big"]},
-      {name:"DeMarcus Cousins",pos:"Big",sim:91,tier:"All-Star",nba:true,bpm:14.2,usg:30,ts:55,astP:12,blkP:5.1,badges:["Modern Big"]},
-      {name:"Joel Embiid",pos:"Big",sim:89,tier:"Superstar",nba:true,bpm:11.1,usg:26,ts:59,astP:7,blkP:11.8,badges:["Rim Pressure"]},
-      {name:"Andre Drummond",pos:"Big",sim:84,tier:"Starter",nba:true,bpm:9.8,usg:21,ts:57,astP:4,blkP:7.5,badges:["Rim Pressure"]},
-      {name:"Caleb Carr",pos:"Big",sim:82,tier:"Never Made NBA",nba:false,bpm:8.2,usg:22,ts:54,astP:5,blkP:6.1,badges:[]},
-    ],
-    anthroComps:[
-      {name:"Kevin Durant",dist:1.2,sim:92,ht:82,wt:215,ws:89,nba:true,tier:"Superstar"},
-      {name:"Chris Bosh",dist:1.4,sim:88,ht:83,wt:228,ws:87,nba:true,tier:"All-Star"},
-      {name:"Jaren Jackson Jr",dist:1.5,sim:86,ht:83,wt:242,ws:88,nba:true,tier:"Starter"},
-      {name:"Brandon Clarke",dist:1.8,sim:81,ht:80,wt:215,ws:83,nba:true,tier:"Role Player"},
-    ],
-    seasonLines:[{yr:2012,cls:"Fr",gp:40,min:32,pts:14.2,reb:10.4,ast:1.3,stl:1.3,blk:4.7,bpm:16.1,ts:60.3,usg:28}],
-  },
-  "Stephen Curry": {
-    team:"Davidson",pos:"Playmaker",age:21.4,ht:'6\'2"',htIn:74,wt:185,ws:78.25,wsDelta:4.25,
-    cls:"Junior",recRank:null,yr:2009,conf:"SC",confTier:"Mid-Major",seasonsPlayed:3,
-    gp:34,min:34.4,pts:28.6,reb:4.4,ast:5.6,stl:2.5,blk:0.2,to:3.7,foul:2.0,mp:1170,
-    p36:{pts:29.9,reb:4.6,ast:5.9,stl:2.6,blk:0.2},
-    bpm:14.2,obpm:12.8,dbpm:1.4,ortg:125.1,usg:31.2,
-    astP:24.3,toP:18.8,orbP:2.1,drbP:11.8,stlP:3.8,blkP:0.4,astTov:1.5,
-    ts:63.1,fg:46.8,tp:38.7,ft:86.6,efg:58.7,
-    rimF:22,rimPct:62,midF:28,midPct:48,threeF:38,threePct:38.7,dunkR:1,ftr:38,
-    rimAst:35,midAst:22,threeAst:18,tpaPerG:7.2,
-    ff:{efg:91,tov:68,orb:12,ftr:82,comp:72},
-    pctl:{bpm:97,usg:95,ts:88,ast:92,to:52,orb:8,drb:42,stl:82,blk:5,pts36:98,ast36:88,reb36:28},
-    comb:null,traj:{bpm:2.8,ts:1.9,usg:3.2,comp:2.4,seasons:3},
-    feel:75,funcAth:58,shootScore:93,defScore:100,overall:83,
-    floor:70,ceiling:82,risk:"Low Risk, High Floor",safeBet:78,selfCreation:78,
-    projNba3p:42.1,projNba3pa:8.6,projNba3par:48,projNbaTs:62.8,
-    roles:{playmaker:92,scorer:95,spacer:96,driver:42,crasher:5,onball:62,rimProt:2,rebounder:15,switchPot:22},
-    badges:["Floor General Spacer","Elite Shooting","Efficient High Usage"],redFlags:[],
-    mu:0.162,sigma:0.032,pNba:0.90,
-    tiers:{Superstar:28,"All-Star":31,Starter:22,"Role Player":10,Replacement:4,Negative:3,"Never NBA":2},
-    actual:"Superstar",peakPie:0.180,nbaName:"Stephen Curry",
-    statComps:[
-      {name:"Damian Lillard",pos:"Playmaker",sim:92,tier:"All-Star",nba:true,bpm:12.1,usg:29,ts:60,astP:28,blkP:0.3,badges:["Floor General Spacer"]},
-      {name:"Trae Young",pos:"Playmaker",sim:90,tier:"All-Star",nba:true,bpm:13.5,usg:33,ts:57,astP:32,blkP:0.2,badges:["Floor General Spacer"]},
-      {name:"Buddy Hield",pos:"Wing",sim:86,tier:"Starter",nba:true,bpm:8.1,usg:26,ts:58,astP:8,blkP:0.5,badges:["Elite Shooting"]},
-      {name:"CJ McCollum",pos:"Playmaker",sim:84,tier:"Starter",nba:true,bpm:7.2,usg:25,ts:56,astP:18,blkP:0.4,badges:[]},
-    ],
-    anthroComps:[],
-    seasonLines:[
-      {yr:2007,cls:"Fr",gp:36,min:32,pts:21.5,reb:4.6,ast:2.8,stl:1.8,blk:0.2,bpm:9.8,ts:58.2,usg:26},
-      {yr:2008,cls:"So",gp:36,min:34,pts:25.9,reb:4.9,ast:5.6,stl:2.1,blk:0.3,bpm:12.4,ts:61.8,usg:29},
-      {yr:2009,cls:"Jr",gp:34,min:34.4,pts:28.6,reb:4.4,ast:5.6,stl:2.5,blk:0.2,bpm:14.2,ts:63.1,usg:31.2},
-    ],
-  },
-};
-const PLAYER_LIST = Object.keys(PLAYERS);
+// ═══════════════════════════════════════════════════════════
+// API DATA LAYER
+// ═══════════════════════════════════════════════════════════
+const API_BASE = "/api";
+
+function mapProfile(d) {
+  /* Transform flat API profile → nested structure expected by components */
+  if(!d) return null;
+  const badges = typeof d.badges==="string" ? d.badges.split("|").filter(Boolean) : (d.badges||[]);
+  const redFlags = typeof d.red_flags==="string" ? d.red_flags.split("|").filter(Boolean) : (d.redFlags||d.red_flags||[]);
+  return {
+    name:d.name, team:d.team, pos:d.pos, yr:d.yr, cls:d.cls||"",
+    conf:d.conf||"", confTier:d.conf_tier||d.confTier||"",
+    ht:d.ht!=null?`${Math.floor(d.ht/12)}'${Math.round(d.ht%12)}"`:null,
+    htIn:d.ht, wt:d.wt, age:d.age, recRank:d.recRank,
+    seasonsPlayed:d.seasons, gp:d.gp, min:d.min,
+    pts:d.pts, reb:d.reb, ast:d.ast, stl:d.stl, blk:d.blk,
+    to:null, foul:null, mp:d.gp&&d.min?Math.round(d.gp*d.min):null,
+    p36:{pts:d.pts36,reb:d.reb36,ast:d.ast36,stl:d.stl36,blk:d.blk36},
+    bpm:d.bpm, obpm:d.obpm, dbpm:d.dbpm, ortg:d.ortg, usg:d.usg,
+    astP:d.ast_p, toP:d.to_p, orbP:d.orb_p, drbP:d.drb_p,
+    stlP:d.stl_p, blkP:d.blk_p, astTov:d.ast_tov,
+    ts:d.ts, fg:d.fg_pct, tp:d.tp_pct, ft:d.ft_pct, efg:d.efg,
+    rimF:d.rim_f, rimPct:d.rim_pct, midF:d.mid_f, midPct:d.mid_pct,
+    threeF:d.three_f, threePct:d.tp_pct, dunkR:d.dunk_r, ftr:d.ftr,
+    threePar:d.three_par,
+    ff:{efg:d.ff_efg,tov:d.ff_tov,orb:d.ff_orb,ftr:d.ff_ftr,comp:d.ff_comp},
+    pctl:{bpm:d.pctl_bpm,usg:d.pctl_usg,ts:d.pctl_ts,ast:d.pctl_ast,
+          to:d.pctl_to,orb:d.pctl_orb,drb:d.pctl_drb,stl:d.pctl_stl,blk:d.pctl_blk,
+          pts36:d.pctl_pts36,ast36:d.pctl_ast36,reb36:d.pctl_reb36},
+    comb:d.comb_hgt?{hgt:d.comb_hgt,wgt:d.comb_wgt,ws:d.comb_ws,sr:d.comb_sr,
+      hl:d.comb_hl,hw:d.comb_hw,bf:d.comb_bf,sv:d.comb_sv,mv:d.comb_mv,
+      sprint:d.comb_sprint,lane:d.comb_lane,bench:d.comb_bench}:null,
+    wsDelta:d.ws_delta,
+    traj:{bpm:d.traj_bpm,ts:d.traj_ts,usg:d.traj_usg,ast:d.traj_ast,comp:d.traj_comp},
+    deltaBpm:d.delta_bpm, deltaTs:d.delta_ts,
+    feel:d.feel, funcAth:d.func_ath, shootScore:d.shoot_score, defScore:d.def_score,
+    overall:d.overall, selfCreation:d.self_creation,
+    projNba3p:d.proj_3p, projNba3pa:null, projNba3par:d.proj_3par, projNbaTs:d.proj_ts,
+    roles:{playmaker:d.role_playmaker,scorer:d.role_scorer,spacer:d.role_spacer,
+      driver:d.role_driver,crasher:d.role_crasher,onball:d.role_onball,
+      rimProt:d.role_rim_prot,rebounder:d.role_rebounder,switchPot:d.role_switch},
+    roleVersatility:d.role_versatility,
+    floor:d.floor, ceiling:d.ceiling, margin:d.margin, risk:d.risk, safeBet:d.safe_bet,
+    badges, redFlags,
+    posPlaymaker:d.pos_playmaker, posWing:d.pos_wing, posBig:d.pos_big,
+    mu:d.pred_mu, sigma:d.pred_sigma, pNba:d.pred_p_nba, predTier:d.pred_tier,
+    tiers:{
+      Superstar:((d.prob_super||0)*100),
+      "All-Star":((d.prob_allstar||0)*100),
+      Starter:((d.prob_starter||0)*100),
+      "Role Player":((d.prob_role||0)*100),
+      Replacement:((d.prob_repl||0)*100),
+      Negative:((d.prob_neg||0)*100),
+      "Never NBA":((d.prob_never||0)*100),
+    },
+    actual:d.tier, peakPie:d.peak_pie, nbaName:d.nba_name||"",
+    madeNba:d.made_nba, draftYear:d.draft_year, draftPick:d.draft_pick,
+    confidence:d.confidence||"full", sampleMin:d.sample_min, sampleGp:d.sample_gp,
+    statComps:[], anthroComps:[], seasonLines:[],
+  };
+}
+
+// Placeholder — populated by App on mount
+let PLAYERS = {};
+let PLAYER_LIST = [];
 
 // ═══════════════════════════════════════════════════════════
 // SHARED COMPONENTS
@@ -538,12 +530,12 @@ function CompsTab({p}) {
 
   // Dynamic anthropometric re-ranking
   const dynamicAnthro = useMemo(()=>{
-    if(!p.anthroComps.length)return[];
+    if(!(p.anthroComps||[]).length)return[];
     const baseWt=p.comb?.wgt||p.wt;
     const baseWs=p.comb?.ws||0;
     const adjWt=baseWt+wtAdj;
     const adjWs=baseWs+wsAdj;
-    return p.anthroComps.map(c=>{
+    return (p.anthroComps||[]).map(c=>{
       const wtDiff=Math.abs((c.wt||0)-adjWt);
       const wsDiff=Math.abs((c.ws||0)-adjWs);
       const htDiff=Math.abs((c.ht||0)-(p.htIn||0));
@@ -554,7 +546,7 @@ function CompsTab({p}) {
     }).sort((a,b)=>b.sim-a.sim);
   },[p,wsAdj,wtAdj]);
 
-  const fStat=nbaOnly?p.statComps.filter(c=>c.nba):p.statComps;
+  const fStat=nbaOnly?(p.statComps||[]).filter(c=>c.nba):(p.statComps||[]);
   const fAnth=nbaOnly?dynamicAnthro.filter(c=>c.nba):dynamicAnthro;
 
   return (
@@ -596,7 +588,7 @@ function CompsTab({p}) {
         </div>
       </Sec>
       <Sec icon="📏" title="Anthropometric Comps" sub="Physical similarity. Adjust sliders to project weight gain/wingspan if unknown.">
-        {(p.comb||p.anthroComps.length>0) ? <>
+        {(p.comb||(p.anthroComps||[]).length>0) ? <>
           <div className="flex gap-6 mb-4 p-3 rounded-lg" style={{background:"#0d1117"}}>
             <div className="flex-1">
               <div className="flex justify-between text-xs mb-1"><span style={{color:"#9ca3af"}}>Weight Adjust</span><span style={{color:"#f97316"}}>{wtAdj>0?"+":""}{wtAdj} lbs</span></div>
@@ -633,7 +625,7 @@ function ProjectionTab({p}) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-3 gap-4">
-        {[["Chance of NBA Career",`${(p.pNba*100).toFixed(0)}%`,"#f97316"],["μ Peak PIE",p.mu.toFixed(3),"#e5e7eb"],["σ",`± ${p.sigma.toFixed(3)}`,"#6b7280"]].map(([l,v,c])=>(
+        {[["Chance of NBA Career",`${p.pNba!=null?((p.pNba*100).toFixed(0))+"%":"—"}`,p.pNba!=null?"#f97316":"#6b7280"],["μ Peak PIE",p.mu!=null?p.mu.toFixed(3):"—","#e5e7eb"],["σ",p.sigma!=null?`± ${p.sigma.toFixed(3)}`:"—","#6b7280"]].map(([l,v,c])=>(
           <div key={l} className="rounded-xl p-5 text-center" style={{background:"#111827"}}>
             <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#6b7280"}}>{l}</div>
             <div className="text-3xl font-bold" style={{color:c,fontFamily:"'Oswald',sans-serif"}}>{v}</div>
@@ -654,12 +646,12 @@ function ProjectionTab({p}) {
         </div>}
       </Sec>
       <Sec icon="📈" title="Season-by-Season" sub="▲▼ shows change from previous season">
-        {p.seasonLines.length>1?(
+        {(p.seasonLines||[]).length>1?(
           <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr>
             {["Year","Cls","GP","MIN","PTS","REB","AST","STL","BLK","BPM","TS%","USG"].map(h=><th key={h} className="px-2 py-1 text-xs uppercase text-left" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>{h}</th>)}
           </tr></thead><tbody>
-            {p.seasonLines.map((s,i)=>{
-              const prev=i>0?p.seasonLines[i-1]:null;
+            {(p.seasonLines||[]).map((s,i)=>{
+              const prev=i>0?(p.seasonLines||[])[i-1]:null;
               const D=(cur,prv,inv)=>{if(!prev)return null;const d=cur-prv;const c=inv?(d<0?"#22c55e":d>0?"#ef4444":"#6b7280"):(d>0?"#22c55e":d<0?"#ef4444":"#6b7280");return<span className="text-xs ml-1" style={{color:c}}>{d>0?"▲":"▼"}{Math.abs(d).toFixed(1)}</span>;};
               return(<tr key={i} style={{borderBottom:"1px solid #1f293744"}}>
                 <td className="px-2 py-2 font-semibold" style={{color:"#e5e7eb"}}>{s.yr}</td><td className="px-2" style={{color:"#9ca3af"}}>{s.cls}</td>
@@ -720,11 +712,11 @@ function ScoutingTab({p}) {
       </Sec>
       <Sec icon="🏅" title="Skill Badges" sub="Hover badges for qualification criteria">
         <div className="flex flex-wrap gap-2 mb-4">
-          {p.badges.map((b,i)=><BadgeChip key={i} text={b} color="#22c55e"/>)}
-          {p.badges.length===0&&<span className="text-sm" style={{color:"#6b7280"}}>No badges earned</span>}
+          {(p.badges||[]).map((b,i)=><BadgeChip key={i} text={b} color="#22c55e"/>)}
+          {(p.badges||[]).length===0&&<span className="text-sm" style={{color:"#6b7280"}}>No badges earned</span>}
         </div>
-        {p.redFlags.length>0&&<><div className="text-xs uppercase tracking-wider mb-2 mt-4" style={{color:"#ef4444"}}>⚠️ Red Flags</div>
-          <div className="flex flex-wrap gap-2">{p.redFlags.map((f,i)=><BadgeChip key={i} text={f} color="#ef4444"/>)}</div>
+        {(p.redFlags||[]).length>0&&<><div className="text-xs uppercase tracking-wider mb-2 mt-4" style={{color:"#ef4444"}}>⚠️ Red Flags</div>
+          <div className="flex flex-wrap gap-2">{(p.redFlags||[]).map((f,i)=><BadgeChip key={i} text={f} color="#ef4444"/>)}</div>
         </>}
       </Sec>
     </div>
@@ -939,20 +931,95 @@ const TABS = [
 ];
 
 export default function App() {
-  const [sel,setSel]=useState(null); // null = show BigBoard
+  const [sel,setSel]=useState(null);
   const [tab,setTab]=useState("overview");
   const [search,setSearch]=useState("");
   const [showS,setShowS]=useState(false);
   const [compTier,setCompTier]=useState("Replacement");
 
+  // ── API State ──
+  const [boardData,setBoardData]=useState([]);       // BigBoard entries (summary)
+  const [profileCache,setProfileCache]=useState({}); // name → full mapped profile
+  const [loading,setLoading]=useState(true);
+  const [profileLoading,setProfileLoading]=useState(false);
+  const [searchResults,setSearchResults]=useState([]);
+
+  // Load fonts
   useEffect(()=>{const l=document.createElement("link");l.href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Barlow:wght@400;500;600;700&display=swap";l.rel="stylesheet";document.head.appendChild(l);},[]);
 
-  const p=sel?PLAYERS[sel]:null;
-  const filt=PLAYER_LIST.filter(n=>n.toLowerCase().includes(search.toLowerCase()));
+  // Fetch BigBoard on mount
+  useEffect(()=>{
+    setLoading(true);
+    fetch(`${API_BASE}/board?n=500`)
+      .then(r=>r.json())
+      .then(d=>{
+        const players = d.players||[];
+        setBoardData(players);
+        // Populate module-level vars for backward compat
+        PLAYERS={};PLAYER_LIST=[];
+        players.forEach(pl=>{
+          const mapped = mapProfile(pl);
+          PLAYERS[pl.name]=mapped;
+          PLAYER_LIST.push(pl.name);
+        });
+        setLoading(false);
+      })
+      .catch(e=>{console.error("Board fetch failed:",e);setLoading(false);});
+  },[]);
 
-  const selectPlayer = (name) => {
+  // Fetch full profile when player selected
+  const selectPlayer = async (name) => {
     setSel(name);setSearch("");setShowS(false);setTab("overview");
+    if(profileCache[name]) return; // already cached
+    setProfileLoading(true);
+    try {
+      const [profRes,statsRes,anthroRes] = await Promise.all([
+        fetch(`${API_BASE}/player/${encodeURIComponent(name)}`).then(r=>r.ok?r.json():null),
+        fetch(`${API_BASE}/comps/stats/${encodeURIComponent(name)}`).then(r=>r.ok?r.json():null).catch(()=>null),
+        fetch(`${API_BASE}/comps/anthro/${encodeURIComponent(name)}`).then(r=>r.ok?r.json():null).catch(()=>null),
+      ]);
+      if(profRes?.profile){
+        const mapped = mapProfile(profRes.profile);
+        // Attach comps
+        if(statsRes?.comparisons) mapped.statComps = statsRes.comparisons.map(c=>({
+          name:c.name,pos:c.position||c.pos,sim:Math.round((c.similarity||0)*100),
+          tier:c.tier||"",nba:!!c.made_nba,bpm:c.bpm,usg:c.usg,ts:c.ts,
+          astP:c.ast_p,blkP:c.blk_p,badges:c.badges?c.badges.split("|").filter(Boolean):[],
+        }));
+        if(anthroRes?.comparisons) mapped.anthroComps = anthroRes.comparisons.map(c=>({
+          name:c.name,dist:c.distance,sim:Math.round(c.similarity||0),
+          ht:c.height||c.ht,wt:c.weight||c.wt,ws:c.wingspan||c.ws,
+          nba:!!c.made_nba,tier:c.tier||"",
+        }));
+        // Update caches
+        PLAYERS[name]=mapped;
+        setProfileCache(prev=>({...prev,[name]:mapped}));
+      }
+    } catch(e){ console.error("Profile fetch failed:",e); }
+    setProfileLoading(false);
   };
+
+  // Search: local filter + API fallback
+  useEffect(()=>{
+    if(!search||search.length<2){setSearchResults([]);return;}
+    const local = PLAYER_LIST.filter(n=>n.toLowerCase().includes(search.toLowerCase())).slice(0,15);
+    if(local.length>0){setSearchResults(local);return;}
+    // API fallback for names not in board
+    const t=setTimeout(()=>{
+      fetch(`${API_BASE}/players/search?q=${encodeURIComponent(search)}&limit=15`)
+        .then(r=>r.json())
+        .then(d=>{
+          const names=(d.results||[]).map(r=>r.name);
+          setSearchResults(names);
+          // Add to PLAYER_LIST for future lookups
+          names.forEach(n=>{if(!PLAYERS[n]){PLAYER_LIST.push(n);PLAYERS[n]={name:n,pos:"",team:""};}});
+        })
+        .catch(()=>{});
+    },300);
+    return ()=>clearTimeout(t);
+  },[search]);
+
+  const p = sel ? (profileCache[sel] || PLAYERS[sel] || null) : null;
 
   return (
     <div className="min-h-screen" style={{background:"#080b12",fontFamily:"'Barlow',sans-serif",color:"#e5e7eb"}}>
@@ -966,8 +1033,8 @@ export default function App() {
             <input className="w-48 md:w-72 px-4 py-2 rounded-lg text-sm outline-none" style={{background:"#111827",border:"1px solid #374151",color:"#e5e7eb"}} placeholder="Search players..." value={search}
               onChange={e=>{setSearch(e.target.value);setShowS(true)}} onFocus={()=>setShowS(true)} onBlur={()=>setTimeout(()=>setShowS(false),200)}/>
             {showS&&search&&<div className="absolute top-full mt-1 left-0 right-0 rounded-lg overflow-hidden shadow-2xl z-50" style={{background:"#111827",border:"1px solid #374151",maxHeight:200,overflowY:"auto"}}>
-              {filt.map(n=><button key={n} className="w-full text-left px-4 py-2.5 text-sm hover:bg-white hover:bg-opacity-5" onMouseDown={()=>selectPlayer(n)} style={{color:"#e5e7eb",borderBottom:"1px solid #1f2937"}}>
-                <span className="font-semibold">{n}</span><span className="ml-2 text-xs" style={{color:"#6b7280"}}>{PLAYERS[n].pos} · {PLAYERS[n].team}</span>
+              {searchResults.map(n=><button key={n} className="w-full text-left px-4 py-2.5 text-sm hover:bg-white hover:bg-opacity-5" onMouseDown={()=>selectPlayer(n)} style={{color:"#e5e7eb",borderBottom:"1px solid #1f2937"}}>
+                <span className="font-semibold">{n}</span><span className="ml-2 text-xs" style={{color:"#6b7280"}}>{PLAYERS[n]?.pos} · {PLAYERS[n]?.team}</span>
               </button>)}
             </div>}
           </div>
@@ -976,7 +1043,24 @@ export default function App() {
       <main className="max-w-7xl mx-auto px-4 md:px-8 py-6">
         {!sel ? (
           /* ── BIG BOARD LANDING ── */
-          <BigBoardView onSelect={selectPlayer}/>
+          loading ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <div className="w-12 h-12 rounded-full border-4 border-t-transparent animate-spin mb-4" style={{borderColor:"#f97316",borderTopColor:"transparent"}}/>
+              <p className="text-sm" style={{color:"#6b7280"}}>Loading prospects...</p>
+            </div>
+          ) : (
+            <BigBoardView onSelect={selectPlayer}/>
+          )
+        ) : profileLoading && !p ? (
+          <div className="flex flex-col items-center justify-center py-20">
+            <div className="w-12 h-12 rounded-full border-4 border-t-transparent animate-spin mb-4" style={{borderColor:"#f97316",borderTopColor:"transparent"}}/>
+            <p className="text-sm" style={{color:"#6b7280"}}>Loading profile...</p>
+          </div>
+        ) : !p ? (
+          <div className="text-center py-20">
+            <p style={{color:"#6b7280"}}>Player not found</p>
+            <button onClick={()=>setSel(null)} className="mt-4 px-4 py-2 rounded-lg text-sm" style={{background:"#f97316",color:"#000"}}>Back to Board</button>
+          </div>
         ) : (
           /* ── PLAYER PROFILE ── */
           <>
@@ -994,13 +1078,13 @@ export default function App() {
                     <h1 className="text-2xl md:text-3xl font-bold tracking-tight" style={{fontFamily:"'Oswald',sans-serif"}}>{sel}</h1>
                     <div className="flex flex-wrap items-center gap-2 mt-1 text-sm" style={{color:"#9ca3af"}}>
                       <span className="px-2 py-0.5 rounded text-xs font-semibold" style={{background:"#f9731622",color:"#f97316"}}>{p.pos}</span>
-                      <span>{p.team}</span><span>·</span><span>{p.ht} · {p.wt} lbs</span><span>·</span><span>Age {p.age.toFixed(1)}</span>
+                      <span>{p.team}</span><span>·</span><span>{p.ht} · {p.wt?`${p.wt} lbs`:""}</span><span>·</span><span>Age {p.age!=null?Number(p.age).toFixed(1):"—"}</span>
                       {p.recRank&&<><span>·</span><span>#{p.recRank} Recruit</span></>}
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
-                    {p.badges.slice(0,3).map((b,i)=><BadgeChip key={i} text={b}/>)}
-                    {p.redFlags.slice(0,2).map((f,i)=><BadgeChip key={`rf${i}`} text={f} color="#ef4444"/>)}
+                    {(p.badges||[]).slice(0,3).map((b,i)=><BadgeChip key={i} text={b}/>)}
+                    {(p.redFlags||[]).slice(0,2).map((f,i)=><BadgeChip key={`rf${i}`} text={f} color="#ef4444"/>)}
                   </div>
                 </div>
               </div>
