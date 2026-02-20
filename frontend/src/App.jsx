@@ -181,6 +181,10 @@ const API_BASE = "/api";
 function mapProfile(d) {
   /* Transform flat API profile → nested structure expected by components */
   if(!d) return null;
+  // Auto-scale: if a percentage value is < 1.0, multiply by 100
+  const pct = (v) => v!=null && v < 1.0 && v > 0 ? v*100 : v;
+  // Same but for percentiles (should be 0-100)
+  const p100 = (v) => v!=null && v <= 1.0 && v >= 0 ? Math.round(v*100) : (v!=null ? Math.round(v) : null);
   const badges = typeof d.badges==="string" ? d.badges.split("|").filter(Boolean) : (d.badges||[]);
   const redFlags = typeof d.red_flags==="string" ? d.red_flags.split("|").filter(Boolean) : (d.redFlags||d.red_flags||[]);
   return {
@@ -195,14 +199,14 @@ function mapProfile(d) {
     bpm:d.bpm, obpm:d.obpm, dbpm:d.dbpm, ortg:d.ortg, usg:d.usg,
     astP:d.ast_p, toP:d.to_p, orbP:d.orb_p, drbP:d.drb_p,
     stlP:d.stl_p, blkP:d.blk_p, astTov:d.ast_tov,
-    ts:d.ts, fg:d.fg_pct, tp:d.tp_pct, ft:d.ft_pct, efg:d.efg,
-    rimF:d.rim_f, rimPct:d.rim_pct, midF:d.mid_f, midPct:d.mid_pct,
-    threeF:d.three_f, threePct:d.tp_pct, dunkR:d.dunk_r, ftr:d.ftr,
+    ts:d.ts, fg:pct(d.fg_pct), tp:pct(d.tp_pct), ft:pct(d.ft_pct), efg:d.efg,
+    rimF:d.rim_f, rimPct:pct(d.rim_pct), midF:d.mid_f, midPct:pct(d.mid_pct),
+    threeF:d.three_f, threePct:pct(d.tp_pct), dunkR:d.dunk_r, ftr:d.ftr,
     threePar:d.three_par,
-    ff:{efg:d.ff_efg,tov:d.ff_tov,orb:d.ff_orb,ftr:d.ff_ftr,comp:d.ff_comp},
-    pctl:{bpm:d.pctl_bpm,usg:d.pctl_usg,ts:d.pctl_ts,ast:d.pctl_ast,
-          to:d.pctl_to,orb:d.pctl_orb,drb:d.pctl_drb,stl:d.pctl_stl,blk:d.pctl_blk,
-          pts36:d.pctl_pts36,ast36:d.pctl_ast36,reb36:d.pctl_reb36},
+    ff:{efg:pct(d.ff_efg),tov:pct(d.ff_tov),orb:pct(d.ff_orb),ftr:pct(d.ff_ftr),comp:pct(d.ff_comp)},
+    pctl:{bpm:p100(d.pctl_bpm),usg:p100(d.pctl_usg),ts:p100(d.pctl_ts),ast:p100(d.pctl_ast),
+          to:p100(d.pctl_to),orb:p100(d.pctl_orb),drb:p100(d.pctl_drb),stl:p100(d.pctl_stl),blk:p100(d.pctl_blk),
+          pts36:p100(d.pctl_pts36),ast36:p100(d.pctl_ast36),reb36:p100(d.pctl_reb36)},
     comb:d.comb_hgt?{hgt:d.comb_hgt,wgt:d.comb_wgt,ws:d.comb_ws,sr:d.comb_sr,
       hl:d.comb_hl,hw:d.comb_hw,bf:d.comb_bf,sv:d.comb_sv,mv:d.comb_mv,
       sprint:d.comb_sprint,lane:d.comb_lane,bench:d.comb_bench}:null,
@@ -786,7 +790,7 @@ function MethodologyTab() {
 function BigBoardView({onSelect}) {
   const [sortBy,setSortBy]=useState("ceiling");
   const [posFilter,setPosFilter]=useState("All");
-  const [yearFilter,setYearFilter]=useState("2025");
+  const [yearFilter,setYearFilter]=useState("latest");
 
   const allPlayers = useMemo(()=>{
     return PLAYER_LIST.map(n=>{
@@ -797,13 +801,17 @@ function BigBoardView({onSelect}) {
 
   const years = useMemo(()=>{
     const s = new Set(allPlayers.map(p=>p.yr).filter(Boolean));
-    return ["All",...[...s].sort((a,b)=>b-a)];
+    const sorted = [...s].sort((a,b)=>b-a);
+    return ["All",...sorted];
   },[allPlayers]);
+
+  // Resolve "latest" to actual latest year
+  const resolvedYear = yearFilter==="latest" ? (years[1]||"All") : yearFilter;
 
   const filtered = useMemo(()=>{
     let list = allPlayers;
     if(posFilter!=="All") list = list.filter(p=>p.pos===posFilter);
-    if(yearFilter!=="All") list = list.filter(p=>String(p.yr)===yearFilter);
+    if(resolvedYear!=="All") list = list.filter(p=>String(p.yr)===resolvedYear);
     list = list.filter(p=>p.confidence!=="very_low");
     // Sort
     const sortFn = {
@@ -816,7 +824,7 @@ function BigBoardView({onSelect}) {
     };
     list = [...list].sort(sortFn[sortBy]||sortFn.ceiling);
     return list.slice(0,60);
-  },[allPlayers,sortBy,posFilter,yearFilter]);
+  },[allPlayers,sortBy,posFilter,resolvedYear]);
 
   const posColors = {Playmaker:"#3b82f6",Wing:"#f97316",Big:"#8b5cf6"};
 
@@ -854,7 +862,7 @@ function BigBoardView({onSelect}) {
         </div>
         {years.length>2 && <div className="flex items-center gap-2">
           <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Year:</span>
-          <select value={yearFilter} onChange={e=>setYearFilter(e.target.value)}
+          <select value={resolvedYear} onChange={e=>setYearFilter(e.target.value)}
             className="px-3 py-1 rounded-lg text-xs font-semibold outline-none"
             style={{background:"#1f2937",color:"#e5e7eb",border:"1px solid #374151"}}>
             {years.map(y=><option key={y} value={y}>{y==="All"?"All Years":y}</option>)}
@@ -981,12 +989,13 @@ export default function App() {
       if(profRes?.profile){
         const mapped = mapProfile(profRes.profile);
         // Attach comps
-        if(statsRes?.comparisons) mapped.statComps = statsRes.comparisons.map(c=>({
-          name:c.name,pos:c.position||c.pos,sim:Math.round((c.similarity||0)*100),
+        if(statsRes?.comps) mapped.statComps = statsRes.comps.map(c=>({
+          name:c.name,pos:c.position||c.pos,
+          sim: c.similarity!=null ? (c.similarity > 1 ? Math.round(c.similarity) : Math.round(c.similarity*100)) : null,
           tier:c.tier||"",nba:!!c.made_nba,bpm:c.bpm,usg:c.usg,ts:c.ts,
           astP:c.ast_p,blkP:c.blk_p,badges:c.badges?c.badges.split("|").filter(Boolean):[],
         }));
-        if(anthroRes?.comparisons) mapped.anthroComps = anthroRes.comparisons.map(c=>({
+        if(anthroRes?.comps) mapped.anthroComps = anthroRes.comps.map(c=>({
           name:c.name,dist:c.distance,sim:Math.round(c.similarity||0),
           ht:c.height||c.ht,wt:c.weight||c.wt,ws:c.wingspan||c.ws,
           nba:!!c.made_nba,tier:c.tier||"",
