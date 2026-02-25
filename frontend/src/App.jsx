@@ -787,10 +787,9 @@ function MethodologyTab() {
 // ═══════════════════════════════════════════════════════════
 // BIG BOARD LANDING PAGE
 // ═══════════════════════════════════════════════════════════
-function BigBoardView({onSelect}) {
+function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, availableYears, yearFilter, setYearFilter}) {
   const [sortBy,setSortBy]=useState("ceiling");
   const [posFilter,setPosFilter]=useState("All");
-  const [yearFilter,setYearFilter]=useState("All");
 
   // Fetch board for a specific year
   const fetchBoard = (year) => {
@@ -975,6 +974,7 @@ export default function App() {
   useEffect(()=>{const l=document.createElement("link");l.href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Barlow:wght@400;500;600;700&display=swap";l.rel="stylesheet";document.head.appendChild(l);},[]);
 
   const [availableYears,setAvailableYears]=useState(["All"]);
+  const [yearFilter,setYearFilter]=useState("All");
 
   // Fetch BigBoard on mount — detect latest year, then fetch that year
   useEffect(()=>{
@@ -1089,7 +1089,7 @@ export default function App() {
               <p className="text-sm" style={{color:"#6b7280"}}>Loading prospects...</p>
             </div>
           ) : (
-            <BigBoardView onSelect={selectPlayer}/>
+            <BigBoardView onSelect={selectPlayer} boardData={boardData} setBoardData={setBoardData} loading={loading} setLoading={setLoading} availableYears={availableYears} yearFilter={yearFilter} setYearFilter={setYearFilter}/>
           )
         ) : profileLoading && !p ? (
           <div className="flex flex-col items-center justify-center py-20">
