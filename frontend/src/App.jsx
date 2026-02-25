@@ -790,28 +790,47 @@ function MethodologyTab() {
 function BigBoardView({onSelect}) {
   const [sortBy,setSortBy]=useState("ceiling");
   const [posFilter,setPosFilter]=useState("All");
-  const [yearFilter,setYearFilter]=useState("latest");
+  const [yearFilter,setYearFilter]=useState("All");
+
+  // Fetch board for a specific year
+  const fetchBoard = (year) => {
+    setLoading(true);
+    const url = year && year!=="All" 
+      ? `${API_BASE}/board?n=500&year=${year}`
+      : `${API_BASE}/board?n=500`;
+    fetch(url)
+      .then(r=>r.json())
+      .then(d=>{
+        const players = d.players||[];
+        setBoardData(players);
+        PLAYERS={};PLAYER_LIST=[];
+        players.forEach(pl=>{
+          const mapped = mapProfile(pl);
+          PLAYERS[pl.name]=mapped;
+          PLAYER_LIST.push(pl.name);
+        });
+        setLoading(false);
+      })
+      .catch(e=>{console.error("Board fetch failed:",e);setLoading(false);});
+  };
+
+  // Handle year change — re-fetch from API
+  const handleYearChange = (newYear) => {
+    setYearFilter(newYear);
+    fetchBoard(newYear);
+  };
 
   const allPlayers = useMemo(()=>{
     return PLAYER_LIST.map(n=>{
       const p=PLAYERS[n];
       return {name:n,...p};
     });
-  },[]);
-
-  const years = useMemo(()=>{
-    const s = new Set(allPlayers.map(p=>p.yr).filter(Boolean));
-    const sorted = [...s].sort((a,b)=>b-a);
-    return ["All",...sorted];
-  },[allPlayers]);
-
-  // Resolve "latest" to actual latest year
-  const resolvedYear = yearFilter==="latest" ? (years[1]||"All") : yearFilter;
+  },[boardData]); // re-compute when boardData changes
 
   const filtered = useMemo(()=>{
     let list = allPlayers;
     if(posFilter!=="All") list = list.filter(p=>p.pos===posFilter);
-    if(resolvedYear!=="All") list = list.filter(p=>String(p.yr)===resolvedYear);
+    // Year filtering is now done server-side via API
     list = list.filter(p=>p.confidence!=="very_low");
     // Sort
     const sortFn = {
@@ -824,7 +843,7 @@ function BigBoardView({onSelect}) {
     };
     list = [...list].sort(sortFn[sortBy]||sortFn.ceiling);
     return list.slice(0,60);
-  },[allPlayers,sortBy,posFilter,resolvedYear]);
+  },[allPlayers,sortBy,posFilter]);
 
   const posColors = {Playmaker:"#3b82f6",Wing:"#f97316",Big:"#8b5cf6"};
 
@@ -860,12 +879,12 @@ function BigBoardView({onSelect}) {
             </button>
           ))}
         </div>
-        {years.length>2 && <div className="flex items-center gap-2">
+        {availableYears.length>2 && <div className="flex items-center gap-2">
           <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Year:</span>
-          <select value={resolvedYear} onChange={e=>setYearFilter(e.target.value)}
+          <select value={yearFilter} onChange={e=>handleYearChange(e.target.value)}
             className="px-3 py-1 rounded-lg text-xs font-semibold outline-none"
             style={{background:"#1f2937",color:"#e5e7eb",border:"1px solid #374151"}}>
-            {years.map(y=><option key={y} value={y}>{y==="All"?"All Years":y}</option>)}
+            {availableYears.map(y=><option key={y} value={y}>{y==="All"?"All Years":y}</option>)}
           </select>
         </div>}
       </div>
@@ -955,24 +974,36 @@ export default function App() {
   // Load fonts
   useEffect(()=>{const l=document.createElement("link");l.href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Barlow:wght@400;500;600;700&display=swap";l.rel="stylesheet";document.head.appendChild(l);},[]);
 
-  // Fetch BigBoard on mount
+  const [availableYears,setAvailableYears]=useState(["All"]);
+
+  // Fetch BigBoard on mount — detect latest year, then fetch that year
   useEffect(()=>{
     setLoading(true);
-    fetch(`${API_BASE}/board?n=500`)
+    fetch(`${API_BASE}/years`)
       .then(r=>r.json())
-      .then(d=>{
-        const players = d.players||[];
-        setBoardData(players);
-        // Populate module-level vars for backward compat
-        PLAYERS={};PLAYER_LIST=[];
-        players.forEach(pl=>{
-          const mapped = mapProfile(pl);
-          PLAYERS[pl.name]=mapped;
-          PLAYER_LIST.push(pl.name);
-        });
-        setLoading(false);
+      .then(yearData=>{
+        const yrs = yearData.years || [];
+        setAvailableYears(["All", ...yrs]);
+        const latestYear = yearData.latest || 2025;
+        setYearFilter(String(latestYear));
+        return fetch(`${API_BASE}/board?n=500&year=${latestYear}`)
+          .then(r=>r.json())
+          .then(d=>{
+            const players = d.players||[];
+            setBoardData(players);
+            PLAYERS={};PLAYER_LIST=[];
+            players.forEach(pl=>{
+              const mapped = mapProfile(pl);
+              PLAYERS[pl.name]=mapped;
+              PLAYER_LIST.push(pl.name);
+            });
+            setLoading(false);
+          });
       })
-      .catch(e=>{console.error("Board fetch failed:",e);setLoading(false);});
+      .catch(e=>{
+        console.error("Board fetch failed:",e);
+        setLoading(false);
+      });
   },[]);
 
   // Fetch full profile when player selected
