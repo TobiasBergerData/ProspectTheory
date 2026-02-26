@@ -138,10 +138,10 @@ const METHODS = {
     desc: "Overall efficiency projection. College TS% as anchor, boosted by FT% (free throws are free points) and 3P shooting. Clipped to 40-70%.",
   },
   fourFactors: {
-    name: "Four Factors Composite",
-    formula: "eFG_norm × 0.40 + (1-TO%)_norm × 0.25 + ORB%_norm × 0.20 + FTR_norm × 0.15",
-    inputs: (p) => `eFG%: ${fmt(p.efg)} | TO%: ${fmt(p.toP)} | ORB%: ${fmt(p.orbP)} | FTR: ${fmt(p.ftr)}`,
-    desc: "Dean Oliver's Four Factors of basketball success. Each factor min-max normalized within season to prevent cross-era bias, then weighted by Oliver's empirical findings: eFG (shooting) most important at 40%, turnover avoidance 25%, offensive rebounding 20%, getting to the line 15%. Measures possession quality.",
+    name: "Context-Free Four Factor Rating (CFFR)",
+    formula: "reliability × (0.40 × z_eFG + 0.25 × z_TOV + 0.20 × z_ORB + 0.15 × z_FTR)",
+    inputs: (p) => `eFG%: ${fmt(p.efg)} | TO%: ${fmt(p.toP)} | ORB%: ${fmt(p.orbP)} | FTR: ${fmt(p.ftr)} | Role: ${p.cffr?.usageRole||"?"}`,
+    desc: "Usage-role-adjusted Four Factors. Players are bucketed by usage (Primary ≥28%, Secondary ≥22%, Finisher ≥15%, LowUsage <15%). Each factor's expected value is computed per season × role, then residuals are z-scored within season. A Primary scorer with 52% eFG rates higher than a LowUsage player with the same number. Reliability weight (1-e^(-min/600)) prevents small-sample inflation.",
   },
   posClassification: {
     name: "Position Classification (3-Role Model)",
@@ -187,11 +187,13 @@ function mapProfile(d) {
   const p100 = (v) => v!=null && v <= 1.0 && v >= 0 ? Math.round(v*100) : (v!=null ? Math.round(v) : null);
   const badges = typeof d.badges==="string" ? d.badges.split("|").filter(Boolean) : (d.badges||[]);
   const redFlags = typeof d.red_flags==="string" ? d.red_flags.split("|").filter(Boolean) : (d.redFlags||d.red_flags||[]);
+  // Recruit rank → percentile (lower rank = better, top 100 out of ~3500 eligible)
+  const recPctl = d.recRank!=null ? Math.round(Math.max(0, (1 - d.recRank/350) * 100)) : null;
   return {
     name:d.name, team:d.team, pos:d.pos, yr:d.yr, cls:d.cls||"",
     conf:d.conf||"", confTier:d.conf_tier||d.confTier||"",
     ht:d.ht!=null?`${Math.floor(d.ht/12)}'${Math.round(d.ht%12)}"`:null,
-    htIn:d.ht, wt:d.wt, age:d.age, recRank:d.recRank,
+    htIn:d.ht, wt:d.wt, age:d.age, recRank:d.recRank, recPctl,
     seasonsPlayed:d.seasons, gp:d.gp, min:d.min,
     pts:d.pts, reb:d.reb, ast:d.ast, stl:d.stl, blk:d.blk,
     to:null, foul:null, mp:d.gp&&d.min?Math.round(d.gp*d.min):null,
@@ -203,6 +205,12 @@ function mapProfile(d) {
     rimF:d.rim_f, rimPct:pct(d.rim_pct), midF:d.mid_f, midPct:pct(d.mid_pct),
     threeF:d.three_f, threePct:pct(d.tp_pct), dunkR:d.dunk_r, ftr:d.ftr,
     threePar:d.three_par,
+    // CFFR (Context-Free Four Factor Rating)
+    cffr:{
+      score:pct(d.cffr)||pct(d.ff_comp),
+      zEfg:d.cffr_z_efg, zTov:d.cffr_z_tov, zOrb:d.cffr_z_orb, zFtr:d.cffr_z_ftr,
+      reliability:d.cffr_reliability, usageRole:d.cffr_usage_role||"",
+    },
     ff:{efg:pct(d.ff_efg),tov:pct(d.ff_tov),orb:pct(d.ff_orb),ftr:pct(d.ff_ftr),comp:pct(d.ff_comp)},
     pctl:{bpm:p100(d.pctl_bpm),usg:p100(d.pctl_usg),ts:p100(d.pctl_ts),ast:p100(d.pctl_ast),
           to:p100(d.pctl_to),orb:p100(d.pctl_orb),drb:p100(d.pctl_drb),stl:p100(d.pctl_stl),blk:p100(d.pctl_blk),
@@ -334,7 +342,8 @@ function OverviewTab({p, compTier, setCompTier}) {
     <div className="space-y-5">
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
         {[["Conference",p.conf,p.confTier==="Power"?"#10b981":"#f97316"],["Class",p.cls,"#e5e7eb"],
-          ["Age",p.age.toFixed(1),"#e5e7eb"],["Recruit",p.recRank?`#${p.recRank}`:"Unranked","#e5e7eb"],
+          ["Age",p.age.toFixed(1),"#e5e7eb"],
+          ["Recruit",p.recRank?`#${p.recRank}`+(p.recPctl!=null?` (${p.recPctl}th pctl)`:""):"Unranked",p.recPctl!=null&&p.recPctl>70?"#22c55e":"#e5e7eb"],
           ["Seasons",p.seasonsPlayed,"#e5e7eb"],["Conf Tier",p.confTier,p.confTier==="Power"?"#10b981":"#f97316"]
         ].map(([l,v,c])=>(
           <div key={l} className="rounded-lg p-3" style={{background:"#111827"}}>
@@ -356,7 +365,10 @@ function OverviewTab({p, compTier, setCompTier}) {
           ))}
         </div>
       </Sec>
-      <Sec icon="⚡" title="Advanced" sub="Era-adjusted percentile coloring (green=elite, red=poor)">
+      <Sec icon="⚡" title="Advanced" sub="">
+        <Tip wide content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>Percentile Basis</div><div style={{color:"#cbd5e1"}}>All percentiles are computed against the <strong>entire database</strong> (~34k college players since 2008), grouped by season to account for era effects. Green = elite (top 15%), Yellow = average, Red = bottom 15%. NOT same-class comparisons.</div></div>}>
+          <div className="text-xs mb-3 cursor-help" style={{color:"#6b7280"}}>Era-adjusted percentile coloring vs. all college players since 2008 <span style={{color:"#475569"}}>ⓘ hover for details</span></div>
+        </Tip>
         <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
           {[["BPM",p.bpm,p.pctl.bpm],["OBPM",p.obpm,null],["DBPM",p.dbpm,null],["ORtg",p.ortg,null],
             ["USG%",p.usg,p.pctl.usg],["TS%",p.ts,p.pctl.ts],["AST%",p.astP,p.pctl.ast],["TO%",p.toP,p.pctl.to],
@@ -364,7 +376,7 @@ function OverviewTab({p, compTier, setCompTier}) {
           ].map(([l,v,pc])=><StatCell key={l} label={l} val={v} pctl={pc}/>)}
         </div>
       </Sec>
-      <Sec icon="↗" title="Four Factors" sub="">
+      <Sec icon="↗" title="Four Factors (CFFR)" sub="">
         <Tip wide content={
           <div>
             <div className="font-bold mb-1" style={{color:"#f97316"}}>{METHODS.fourFactors.name}</div>
@@ -373,8 +385,12 @@ function OverviewTab({p, compTier, setCompTier}) {
             <div style={{color:"#cbd5e1"}}>{METHODS.fourFactors.desc}</div>
           </div>
         }>
-          <div className="text-xs mb-4 cursor-help" style={{color:"#6b7280"}}>Dean Oliver's Four Factors — how does this player affect possession quality? <span style={{color:"#475569"}}>ⓘ hover for formula</span></div>
+          <div className="text-xs mb-4 cursor-help" style={{color:"#6b7280"}}>Context-Free Four Factor Rating — usage-role adjusted, season-normalized <span style={{color:"#475569"}}>ⓘ hover for formula</span></div>
         </Tip>
+        {p.cffr?.usageRole && <div className="text-xs mb-3 px-3 py-1.5 rounded-lg inline-block" style={{background:"#1f2937",color:"#f97316"}}>
+          Usage Role: <span className="font-bold">{p.cffr.usageRole}</span>
+          {p.cffr.reliability!=null && <span style={{color:"#6b7280"}}> · Reliability: {(p.cffr.reliability*100).toFixed(0)}%</span>}
+        </div>}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[["eFG%","Shooting efficiency",p.ff.efg,"#fbbf24"],["TO Control","Avoids turnovers",p.ff.tov,"#3b82f6"],
             ["ORB%","Offensive glass",p.ff.orb,"#06b6d4"],["FT Rate","Gets to the line",p.ff.ftr,"#8b5cf6"]
@@ -429,26 +445,80 @@ function OverviewTab({p, compTier, setCompTier}) {
 // TAB: SHOOTING
 // ═══════════════════════════════════════════════════════════
 function ShootingTab({p}) {
-  const zones=[{z:"@Rim",f:p.rimF,pct:p.rimPct,ast:p.rimAst,c:"#ef4444"},{z:"Mid-Range",f:p.midF,pct:p.midPct,ast:p.midAst,c:"#f97316"},
-    {z:"3-Point",f:p.threeF,pct:p.threePct,ast:p.threeAst,c:"#3b82f6"},{z:"Dunks",f:p.dunkR,pct:null,ast:null,c:"#10b981"}];
+  // Half-court zones with volume + accuracy
+  const totalShots = (p.rimF||0) + (p.midF||0) + (p.threeF||0);
+  const zoneSize = (freq) => freq > 30 ? "text-2xl" : freq > 15 ? "text-xl" : "text-lg";
+  const zoneOpacity = (freq) => freq > 30 ? 1.0 : freq > 15 ? 0.8 : freq > 5 ? 0.6 : 0.35;
   return (
     <div className="space-y-5">
-      <Sec icon="🏀" title="Shot Profile" sub="Zone breakdown: frequency, accuracy, and assisted %">
-        <div className="grid grid-cols-4 gap-3 mb-4">
-          {zones.map(z=>(
-            <div key={z.z} className="rounded-lg p-3 text-center" style={{background:"#0d1117",border:`1px solid ${z.c}33`}}>
-              <div className="text-xs uppercase tracking-wider mb-2" style={{color:z.c}}>{z.z}</div>
-              <div className="text-2xl font-bold" style={{color:"#e5e7eb",fontFamily:"'Oswald',sans-serif"}}>{z.f}%</div>
-              <div className="text-xs" style={{color:"#6b7280"}}>of shots</div>
-              {z.pct!=null&&<><div className="text-lg font-bold mt-2" style={{color:z.pct>45?"#22c55e":z.pct>35?"#fbbf24":"#ef4444",fontFamily:"'Oswald',sans-serif"}}>{z.pct}%</div><div className="text-xs" style={{color:"#6b7280"}}>accuracy</div></>}
-              {z.ast!=null&&<div className="text-xs mt-1" style={{color:"#94a3b8"}}>{z.ast}% ast'd</div>}
+      <Sec icon="🏀" title="3.5 Level Scoring" sub="Shot distribution, accuracy, and volume across all scoring zones">
+        {/* Half-Court SVG Visualization */}
+        <div className="relative mx-auto" style={{maxWidth:420,aspectRatio:"1/0.85"}}>
+          <svg viewBox="0 0 420 357" className="w-full h-full">
+            {/* Court background */}
+            <rect x="0" y="0" width="420" height="357" rx="8" fill="#0d1117"/>
+            {/* Baseline */}
+            <line x1="10" y1="10" x2="410" y2="10" stroke="#1f2937" strokeWidth="2"/>
+            {/* 3-point arc */}
+            <path d="M 47 10 L 47 85 A 170 170 0 0 0 373 85 L 373 10" fill="none" stroke="#3b82f688" strokeWidth="2"/>
+            {/* Paint/Key */}
+            <rect x="130" y="10" width="160" height="190" fill="none" stroke="#1f2937" strokeWidth="1.5" rx="2"/>
+            {/* FT circle */}
+            <circle cx="210" cy="200" r="60" fill="none" stroke="#1f293766" strokeWidth="1"/>
+            {/* FT line */}
+            <line x1="130" y1="200" x2="290" y2="200" stroke="#8b5cf644" strokeWidth="1.5" strokeDasharray="6,3"/>
+            {/* Rim circle */}
+            <circle cx="210" cy="42" r="18" fill="none" stroke="#ef444466" strokeWidth="2"/>
+            {/* Backboard */}
+            <line x1="190" y1="22" x2="230" y2="22" stroke="#6b7280" strokeWidth="3"/>
+            
+            {/* @Rim + Dunks Zone */}
+            <g opacity={zoneOpacity(p.rimF||0)}>
+              <text x="210" y="72" textAnchor="middle" fill="#ef4444" className="font-bold" style={{fontSize:14}}>@RIM</text>
+              <text x="210" y="92" textAnchor="middle" fill="#e5e7eb" className="font-bold" style={{fontSize:20}}>{fmt(p.rimPct)}%</text>
+              <text x="210" y="108" textAnchor="middle" fill="#6b7280" style={{fontSize:11}}>{p.rimF}% freq{p.dunkR>0?` · ${p.dunkR}% dunks`:""}</text>
+            </g>
+            
+            {/* FT Line Zone */}
+            <g>
+              <text x="210" y="185" textAnchor="middle" fill="#8b5cf6" className="font-bold" style={{fontSize:12}}>FREE THROW</text>
+              <text x="210" y="216" textAnchor="middle" fill="#e5e7eb" className="font-bold" style={{fontSize:18}}>{fmt(p.ft)}%</text>
+              <text x="210" y="232" textAnchor="middle" fill="#6b7280" style={{fontSize:11}}>FTR: {fmt(p.ftr)}</text>
+            </g>
+            
+            {/* Mid-Range Zone (sides) */}
+            <g opacity={zoneOpacity(p.midF||0)}>
+              <text x="85" y="145" textAnchor="middle" fill="#f97316" className="font-bold" style={{fontSize:12}}>MID</text>
+              <text x="85" y="168" textAnchor="middle" fill="#e5e7eb" className="font-bold" style={{fontSize:18}}>{fmt(p.midPct)}%</text>
+              <text x="85" y="183" textAnchor="middle" fill="#6b7280" style={{fontSize:10}}>{p.midF}% freq</text>
+            </g>
+            
+            {/* 3-Point Zone */}
+            <g opacity={zoneOpacity(p.threeF||0)}>
+              <text x="210" y="295" textAnchor="middle" fill="#3b82f6" className="font-bold" style={{fontSize:14}}>3-POINT</text>
+              <text x="210" y="322" textAnchor="middle" fill="#e5e7eb" className="font-bold" style={{fontSize:22}}>{fmt(p.tp)}%</text>
+              <text x="210" y="340" textAnchor="middle" fill="#6b7280" style={{fontSize:11}}>{p.threeF}% freq · 3PAr: {fmt(p.threePar)}</text>
+              {/* Corner indicators */}
+              <text x="55" y="55" textAnchor="middle" fill="#3b82f644" style={{fontSize:10}}>3PT</text>
+              <text x="365" y="55" textAnchor="middle" fill="#3b82f644" style={{fontSize:10}}>3PT</text>
+            </g>
+          </svg>
+        </div>
+        
+        {/* Volume & Efficiency Summary */}
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mt-4">
+          {[["TS%",p.ts,p.pctl?.ts,"#fbbf24"],["FG%",p.fg,null,"#9ca3af"],["eFG%",p.efg,null,"#9ca3af"],
+            ["FT%",p.ft,null,"#8b5cf6"],["FTR",p.ftr,null,"#8b5cf6"],["Dunk%",p.dunkR,null,"#10b981"]
+          ].map(([l,v,pc,c])=>(
+            <div key={l} className="rounded-lg p-2 text-center" style={{background:"#111827"}}>
+              <div className="text-xs" style={{color:"#6b7280"}}>{l}</div>
+              <div className="font-bold" style={{color:pc?valColor(pc):c,fontFamily:"'Oswald',sans-serif"}}>{fmt(v)}</div>
             </div>
           ))}
         </div>
-        <div className="flex gap-4 text-xs" style={{color:"#6b7280"}}>
-          <span>FT Rate: <span style={{color:"#e5e7eb"}}>{p.ftr}%</span></span>
+        <div className="flex gap-4 text-xs mt-3" style={{color:"#6b7280"}}>
           <Tip content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>{METHODS.selfCreation.name}</div><code className="text-xs" style={{color:"#7dd3fc"}}>{METHODS.selfCreation.formula}</code><div className="mt-1">{METHODS.selfCreation.inputs(p)}</div><div className="mt-1" style={{color:"#cbd5e1"}}>{METHODS.selfCreation.desc}</div></div>}>
-            <span>Self-Creation: <span style={{color:"#f97316"}}>{p.selfCreation}</span> <span style={{color:"#475569"}}>ⓘ</span></span>
+            <span>Self-Creation (Unassisted): <span style={{color:"#f97316"}}>{p.selfCreation}</span> <span style={{color:"#475569"}}>ⓘ</span></span>
           </Tip>
         </div>
       </Sec>
@@ -563,7 +633,7 @@ function CompsTab({p}) {
       <Sec icon="📊" title="Statistical Comps" sub="Similarity based on era-adjusted percentiles. Colors = absolute strength/weakness.">
         <div className="overflow-x-auto">
           <table className="w-full text-sm"><thead><tr>
-            {["Name","Pos","Sim","BPM","USG","TS%","AST%","BLK%","Tier"].map(h=><th key={h} className="text-left px-2 py-1.5 text-xs uppercase" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>{h}</th>)}
+            {["Name","Pos","Sim","BPM","USG","TS%","AST%","TO%","ORB%","DRB%","STL%","BLK%","FTR","@Rim%","3P%","FT%","Tier"].map(h=><th key={h} className="text-left px-2 py-1.5 text-xs uppercase" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>{h}</th>)}
           </tr></thead><tbody>
             <tr style={{background:"#f9731611"}}>
               <td className="px-2 py-2 font-bold" style={{color:"#f97316"}}>{p.nbaName||"Selected"}</td>
@@ -572,7 +642,15 @@ function CompsTab({p}) {
               <td className="px-2 font-semibold" style={{color:valColor(p.pctl.usg)}}>{fmt(p.usg)}</td>
               <td className="px-2 font-semibold" style={{color:valColor(p.pctl.ts)}}>{fmt(p.ts)}</td>
               <td className="px-2 font-semibold" style={{color:valColor(p.pctl.ast)}}>{fmt(p.astP)}</td>
+              <td className="px-2 font-semibold" style={{color:valColor(100-(p.pctl.to||50))}}>{fmt(p.toP)}</td>
+              <td className="px-2 font-semibold" style={{color:valColor(p.pctl.orb)}}>{fmt(p.orbP)}</td>
+              <td className="px-2 font-semibold" style={{color:valColor(p.pctl.drb)}}>{fmt(p.drbP)}</td>
+              <td className="px-2 font-semibold" style={{color:valColor(p.pctl.stl)}}>{fmt(p.stlP)}</td>
               <td className="px-2 font-semibold" style={{color:valColor(p.pctl.blk)}}>{fmt(p.blkP)}</td>
+              <td className="px-2" style={{color:"#9ca3af"}}>{fmt(p.ftr)}</td>
+              <td className="px-2" style={{color:"#9ca3af"}}>{fmt(p.rimPct)}</td>
+              <td className="px-2" style={{color:"#9ca3af"}}>{fmt(p.tp)}</td>
+              <td className="px-2" style={{color:"#9ca3af"}}>{fmt(p.ft)}</td>
               <td className="px-2">{p.actual?<TierBadge tier={p.actual}/>:"—"}</td>
             </tr>
             {fStat.map((c,i)=>(
@@ -584,7 +662,15 @@ function CompsTab({p}) {
                 <td className="px-2" style={{color:valColor(c.usg>27?80:c.usg>22?55:30)}}>{fmt(c.usg)}</td>
                 <td className="px-2" style={{color:valColor(c.ts>58?80:c.ts>53?55:30)}}>{fmt(c.ts)}</td>
                 <td className="px-2" style={{color:valColor(c.astP>20?80:c.astP>12?55:30)}}>{fmt(c.astP)}</td>
+                <td className="px-2" style={{color:valColor(c.toP<15?80:c.toP<20?55:30)}}>{fmt(c.toP)}</td>
+                <td className="px-2" style={{color:valColor(c.orbP>8?80:c.orbP>4?55:30)}}>{fmt(c.orbP)}</td>
+                <td className="px-2" style={{color:valColor(c.drbP>18?80:c.drbP>12?55:30)}}>{fmt(c.drbP)}</td>
+                <td className="px-2" style={{color:valColor(c.stlP>3?80:c.stlP>1.5?55:30)}}>{fmt(c.stlP)}</td>
                 <td className="px-2" style={{color:valColor(c.blkP>5?80:c.blkP>2?55:30)}}>{fmt(c.blkP)}</td>
+                <td className="px-2" style={{color:"#9ca3af"}}>{fmt(c.ftr)}</td>
+                <td className="px-2" style={{color:"#9ca3af"}}>{fmt(c.rimPct)}</td>
+                <td className="px-2" style={{color:"#9ca3af"}}>{fmt(c.tp)}</td>
+                <td className="px-2" style={{color:"#9ca3af"}}>{fmt(c.ft)}</td>
                 <td className="px-2"><TierBadge tier={c.tier}/></td>
               </tr>
             ))}
@@ -629,11 +715,17 @@ function ProjectionTab({p}) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-3 gap-4">
-        {[["Chance of NBA Career",`${p.pNba!=null?((p.pNba*100).toFixed(0))+"%":"—"}`,p.pNba!=null?"#f97316":"#6b7280"],["μ Peak PIE",p.mu!=null?p.mu.toFixed(3):"—","#e5e7eb"],["σ",p.sigma!=null?`± ${p.sigma.toFixed(3)}`:"—","#6b7280"]].map(([l,v,c])=>(
-          <div key={l} className="rounded-xl p-5 text-center" style={{background:"#111827"}}>
-            <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#6b7280"}}>{l}</div>
-            <div className="text-3xl font-bold" style={{color:c,fontFamily:"'Oswald',sans-serif"}}>{v}</div>
-          </div>
+        {[["Chance of NBA Career",`${p.pNba!=null?((p.pNba*100).toFixed(0))+"%":"—"}`,p.pNba!=null?"#f97316":"#6b7280"],["Proj. 3yr NBA Peak",p.mu!=null?p.mu.toFixed(3):"—","#e5e7eb"],["Uncertainty (σ)",p.sigma!=null?`± ${p.sigma.toFixed(3)}`:"—","#6b7280"]].map(([l,v,c])=>(
+          <Tip key={l} wide content={
+            l.includes("Peak") ? <div><div className="font-bold mb-1" style={{color:"#f97316"}}>Projected 3-Year NBA Peak PIE</div><div style={{color:"#cbd5e1"}}>The model's best estimate of this player's peak Player Impact Estimate (PIE) over their best 3 consecutive NBA seasons. PIE measures a player's contribution to their team's success. Average NBA player ≈ 0.100, All-Star ≈ 0.150+, MVP ≈ 0.200+.</div></div>
+            : l.includes("σ") ? <div><div className="font-bold mb-1" style={{color:"#f97316"}}>Uncertainty (Standard Deviation)</div><div style={{color:"#cbd5e1"}}>How uncertain the model is about this projection. Lower σ = more confident prediction (typically older players with more data). Higher σ = wider range of possible outcomes (typically young players or those with unusual profiles). The actual outcome falls within ±1σ about 68% of the time.</div></div>
+            : <div><div className="font-bold mb-1" style={{color:"#f97316"}}>NBA Career Probability</div><div style={{color:"#cbd5e1"}}>Estimated probability that this player will play meaningful NBA minutes (≥500 career minutes). Based on historical comparison of similar statistical profiles.</div></div>
+          }>
+            <div className="rounded-xl p-5 text-center cursor-help" style={{background:"#111827"}}>
+              <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#6b7280"}}>{l} <span style={{color:"#475569"}}>ⓘ</span></div>
+              <div className="text-3xl font-bold" style={{color:c,fontFamily:"'Oswald',sans-serif"}}>{v}</div>
+            </div>
+          </Tip>
         ))}
       </div>
       <Sec icon="◆" title="Projected Outcome" sub="Monte Carlo (20k samples) — tier probability distribution">
