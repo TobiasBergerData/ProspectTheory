@@ -444,247 +444,104 @@ function OverviewTab({p, compTier, setCompTier}) {
 // ═══════════════════════════════════════════════════════════
 // TAB: SHOOTING
 // ═══════════════════════════════════════════════════════════
-// ─── Bayesian Hierarchical Shooting Projection (Berger 2022) ───────────────
-function calculateProjections(p) {
-  const ft = (p.ft || 0) / 100;          // FT% as decimal
-  const tp = (p.tp || 0) / 100;          // College 3P% as decimal
-  const tpar = p.threePar || p.threeF || 0; // 3PAr as %
-
-  // Prior mean: FT%² represents player "Touch" / shooting feel
-  const mu0 = ft * ft;
-  const n0 = 100; // Prior strength (standard stabilization sample)
-
-  // Estimate effective 3PA from 3PAr and games played
-  // Assume ~15 FGA/game for an average rotation player's 3PA
-  const estFga = 10;
-  const estGp = p.gp || 30;
-  const est3pa = (tpar / 100) * estFga * Math.min(estGp, 35);
-
-  // Blake Griffin Check: < 5% 3PAr → extremely low volume, heavy regression
-  const effectiveN = tpar < 5
-    ? Math.min(est3pa, 8)   // cap volume so prior dominates
-    : est3pa;
-
-  // Beta-Binomial Bayesian Update
-  // adj_θ = (μ₀·n₀ + θ_college·n_actual) / (n₀ + n_actual)
-  const adj3p = (mu0 * n0 + tp * effectiveN) / (n0 + effectiveN);
-
-  // NBA translation discount: college → NBA efficiency drop (~−4pp)
-  const nba3p = Math.max(0, adj3p * 100 - 4);
-
-  // Volume Projection
-  // 3PAr carries forward from college (habit / skillset signal)
-  const nba3par = Math.min(60, tpar * 0.9); // slight discount for NBA defenders
-
-  // 3PA/G using NBA rotation average of 10.5 total shots
-  const nba3pag = (nba3par / 100) * 10.5;
-
-  // Proj. TS%: weighted combo of projected 3P%, FT%, and rim finishing
-  // TS% = PTS / (2 × (FGA + 0.44×FTA))
-  // Simplified: use rim fg% as a proxy for 2P finishing
-  const rimFg = (p.rimPct || 55) / 100;
-  const ftPct = ft;
-  const w3 = nba3par / 100;
-  const wRim = Math.min(0.45, (p.rimF || 30) / 100 * 0.9);
-  const wMid = Math.max(0, 1 - w3 - wRim);
-  const midFg = (p.midPct || 38) / 100 * 0.88;
-  const efg = (w3 * (nba3p / 100) * 1.5 + wRim * rimFg + wMid * midFg);
-  const ftr = p.ftr || 0.3;
-  const ts = (efg * 2) / (2 + ftr * 0.88) * 100;
-
-  return {
-    nba3p: Math.round(nba3p * 10) / 10,
-    nba3pag: Math.round(nba3pag * 10) / 10,
-    nba3par: Math.round(nba3par * 10) / 10,
-    ts: Math.round(Math.min(68, Math.max(44, ts)) * 10) / 10,
-    mu0pct: Math.round(mu0 * 100 * 10) / 10,
-    effectiveN: Math.round(effectiveN),
-    lowVolume: tpar < 5,
-  };
-}
-
 function ShootingTab({p}) {
-  const bProj = useMemo(() => calculateProjections(p), [p]);
-
-  // Use backend values when available, otherwise use Bayesian frontend calc
-  const proj3p   = p.projNba3p  != null ? p.projNba3p  : bProj.nba3p;
-  const proj3pag = p.projNba3pa != null ? p.projNba3pa : bProj.nba3pag;
-  const proj3par = p.projNba3par!= null ? p.projNba3par: bProj.nba3par;
-  const projTs   = p.projNbaTs  != null ? p.projNbaTs  : bProj.ts;
-
+  // Half-court zones with volume + accuracy
+  const totalShots = (p.rimF||0) + (p.midF||0) + (p.threeF||0);
+  const zoneSize = (freq) => freq > 30 ? "text-2xl" : freq > 15 ? "text-xl" : "text-lg";
   const zoneOpacity = (freq) => freq > 30 ? 1.0 : freq > 15 ? 0.8 : freq > 5 ? 0.6 : 0.35;
-  const zoneColor   = (freq) => { const op = zoneOpacity(freq); return op; };
-
-  // Volume bars: normalize to max zone
-  const maxF = Math.max(p.rimF||0, p.midF||0, p.threeF||1);
-  const barW = (f) => Math.round((f / maxF) * 80);
-
   return (
     <div className="space-y-5">
-      {/* ── 3.5 LEVEL SCORING ─────────────────────────────── */}
-      <Sec icon="🏀" title="3.5 Level Scoring" sub="Shot distribution · accuracy · volume — including self-created (unassisted) shots">
-
-        {/* Half-Court SVG */}
-        <div className="relative mx-auto" style={{maxWidth:480}}>
-          <svg viewBox="0 0 480 400" className="w-full h-full">
-            {/* Court bg */}
-            <rect x="0" y="0" width="480" height="400" rx="10" fill="#0a0f1a"/>
-            {/* Outer court boundary */}
-            <rect x="10" y="10" width="460" height="380" rx="6" fill="none" stroke="#1e293b" strokeWidth="1.5"/>
-            {/* Baseline (top) */}
-            <line x1="10" y1="10" x2="470" y2="10" stroke="#334155" strokeWidth="2"/>
+      <Sec icon="🏀" title="3.5 Level Scoring" sub="Shot distribution, accuracy, and volume across all scoring zones">
+        {/* Half-Court SVG Visualization */}
+        <div className="relative mx-auto" style={{maxWidth:420,aspectRatio:"1/0.85"}}>
+          <svg viewBox="0 0 420 357" className="w-full h-full">
+            {/* Court background */}
+            <rect x="0" y="0" width="420" height="357" rx="8" fill="#0d1117"/>
+            {/* Baseline */}
+            <line x1="10" y1="10" x2="410" y2="10" stroke="#1f2937" strokeWidth="2"/>
             {/* 3-point arc */}
-            <path d="M 55 10 L 55 95 A 190 190 0 0 0 425 95 L 425 10" fill="#3b82f608" stroke="#3b82f6" strokeWidth="2" strokeDasharray="0"/>
-            {/* Corner 3 zones fill */}
-            <rect x="10" y="10" width="45" height="85" fill="#3b82f60a" stroke="none"/>
-            <rect x="425" y="10" width="45" height="85" fill="#3b82f60a" stroke="none"/>
-            {/* Paint */}
-            <rect x="150" y="10" width="180" height="210" fill="#ef44440a" stroke="#1e293b" strokeWidth="1.5" rx="2"/>
-            {/* Restricted area */}
-            <path d="M 195 10 A 45 45 0 0 0 285 10" fill="#ef44441a" stroke="#ef444466" strokeWidth="1.5"/>
+            <path d="M 47 10 L 47 85 A 170 170 0 0 0 373 85 L 373 10" fill="none" stroke="#3b82f688" strokeWidth="2"/>
+            {/* Paint/Key */}
+            <rect x="130" y="10" width="160" height="190" fill="none" stroke="#1f2937" strokeWidth="1.5" rx="2"/>
             {/* FT circle */}
-            <circle cx="240" cy="220" r="65" fill="none" stroke="#1e293b" strokeWidth="1"/>
+            <circle cx="210" cy="200" r="60" fill="none" stroke="#1f293766" strokeWidth="1"/>
             {/* FT line */}
-            <line x1="150" y1="220" x2="330" y2="220" stroke="#8b5cf655" strokeWidth="1.5" strokeDasharray="5,4"/>
-            {/* Rim */}
-            <circle cx="240" cy="42" r="9" fill="#ef444433" stroke="#ef4444" strokeWidth="2"/>
+            <line x1="130" y1="200" x2="290" y2="200" stroke="#8b5cf644" strokeWidth="1.5" strokeDasharray="6,3"/>
+            {/* Rim circle */}
+            <circle cx="210" cy="42" r="18" fill="none" stroke="#ef444466" strokeWidth="2"/>
             {/* Backboard */}
-            <line x1="210" y1="22" x2="270" y2="22" stroke="#94a3b8" strokeWidth="3"/>
-
-            {/* ── @RIM + DUNKS zone ─────────────────────── */}
-            <g opacity={Math.max(0.3, zoneOpacity(p.rimF||0))}>
-              {/* Dunk highlight pill if applicable */}
-              {(p.dunkR||0)>2 && (
-                <rect x="195" y="48" width="90" height="18" rx="9" fill="#10b98133" stroke="#10b98166" strokeWidth="1"/>
-              )}
-              <text x="240" y="30" textAnchor="middle" fill="#ef4444" style={{fontSize:11,fontWeight:"bold",letterSpacing:2}}>@RIM{(p.dunkR||0)>2?" + DUNKS":""}</text>
-              <text x="240" y="80" textAnchor="middle" fill="#f1f5f9" style={{fontSize:24,fontWeight:900}}>{fmt(p.rimPct)}%</text>
-              <text x="240" y="98" textAnchor="middle" fill="#64748b" style={{fontSize:10}}>
-                {p.rimF}% of shots{(p.dunkR||0)>0?` · ${fmt(p.dunkR,1)}% dunks`:""}
-              </text>
-              {/* Volume bar */}
-              <rect x={240-barW(p.rimF||0)/2} y="104" width={barW(p.rimF||0)} height="4" rx="2" fill="#ef444466"/>
+            <line x1="190" y1="22" x2="230" y2="22" stroke="#6b7280" strokeWidth="3"/>
+            
+            {/* @Rim + Dunks Zone */}
+            <g opacity={zoneOpacity(p.rimF||0)}>
+              <text x="210" y="72" textAnchor="middle" fill="#ef4444" className="font-bold" style={{fontSize:14}}>@RIM</text>
+              <text x="210" y="92" textAnchor="middle" fill="#e5e7eb" className="font-bold" style={{fontSize:20}}>{fmt(p.rimPct)}%</text>
+              <text x="210" y="108" textAnchor="middle" fill="#6b7280" style={{fontSize:11}}>{p.rimF}% freq{p.dunkR>0?` · ${p.dunkR}% dunks`:""}</text>
             </g>
-
-            {/* ── MID-RANGE (both sides shown) ────────────── */}
-            <g opacity={Math.max(0.25, zoneOpacity(p.midF||0))}>
-              {/* Left mid label */}
-              <text x="90" y="140" textAnchor="middle" fill="#f97316" style={{fontSize:10,fontWeight:"bold",letterSpacing:1}}>MID</text>
-              <text x="90" y="165" textAnchor="middle" fill="#f1f5f9" style={{fontSize:20,fontWeight:900}}>{fmt(p.midPct)}%</text>
-              <text x="90" y="180" textAnchor="middle" fill="#64748b" style={{fontSize:9}}>{p.midF}% freq</text>
-              <rect x={90-barW(p.midF||0)*0.4} y="185" width={barW(p.midF||0)*0.8} height="3" rx="1.5" fill="#f9731666"/>
-              {/* Right mid mirror */}
-              <text x="390" y="140" textAnchor="middle" fill="#f97316" style={{fontSize:10,fontWeight:"bold",letterSpacing:1}}>MID</text>
-              <text x="390" y="165" textAnchor="middle" fill="#f1f5f9" style={{fontSize:20,fontWeight:900}}>{fmt(p.midPct)}%</text>
-              <text x="390" y="180" textAnchor="middle" fill="#64748b" style={{fontSize:9}}>{p.midF}% freq</text>
-            </g>
-
-            {/* ── FREE THROW zone ─────────────────────────── */}
+            
+            {/* FT Line Zone */}
             <g>
-              <rect x="165" y="200" width="150" height="55" rx="6" fill="#8b5cf611" stroke="#8b5cf633" strokeWidth="1"/>
-              <text x="240" y="217" textAnchor="middle" fill="#a78bfa" style={{fontSize:10,fontWeight:"bold",letterSpacing:2}}>FREE THROW</text>
-              <text x="240" y="242" textAnchor="middle" fill="#f1f5f9" style={{fontSize:20,fontWeight:900}}>{fmt(p.ft)}%</text>
-              <text x="240" y="255" textAnchor="middle" fill="#64748b" style={{fontSize:9}}>FTR: {fmt(p.ftr,2)}</text>
+              <text x="210" y="185" textAnchor="middle" fill="#8b5cf6" className="font-bold" style={{fontSize:12}}>FREE THROW</text>
+              <text x="210" y="216" textAnchor="middle" fill="#e5e7eb" className="font-bold" style={{fontSize:18}}>{fmt(p.ft)}%</text>
+              <text x="210" y="232" textAnchor="middle" fill="#6b7280" style={{fontSize:11}}>FTR: {fmt(p.ftr)}</text>
             </g>
-
-            {/* ── 3-POINT zone ────────────────────────────── */}
-            <g opacity={Math.max(0.3, zoneOpacity(p.threeF||0))}>
-              <text x="240" y="300" textAnchor="middle" fill="#60a5fa" style={{fontSize:12,fontWeight:"bold",letterSpacing:2}}>3-POINT</text>
-              <text x="240" y="335" textAnchor="middle" fill="#f1f5f9" style={{fontSize:28,fontWeight:900}}>{fmt(p.tp)}%</text>
-              <text x="240" y="352" textAnchor="middle" fill="#64748b" style={{fontSize:10}}>
-                {p.threeF}% of shots · 3PAr: {fmt(p.threePar,1)}%
-              </text>
-              <rect x={240-barW(p.threeF||0)/2} y="356" width={barW(p.threeF||0)} height="4" rx="2" fill="#3b82f666"/>
+            
+            {/* Mid-Range Zone (sides) */}
+            <g opacity={zoneOpacity(p.midF||0)}>
+              <text x="85" y="145" textAnchor="middle" fill="#f97316" className="font-bold" style={{fontSize:12}}>MID</text>
+              <text x="85" y="168" textAnchor="middle" fill="#e5e7eb" className="font-bold" style={{fontSize:18}}>{fmt(p.midPct)}%</text>
+              <text x="85" y="183" textAnchor="middle" fill="#6b7280" style={{fontSize:10}}>{p.midF}% freq</text>
+            </g>
+            
+            {/* 3-Point Zone */}
+            <g opacity={zoneOpacity(p.threeF||0)}>
+              <text x="210" y="295" textAnchor="middle" fill="#3b82f6" className="font-bold" style={{fontSize:14}}>3-POINT</text>
+              <text x="210" y="322" textAnchor="middle" fill="#e5e7eb" className="font-bold" style={{fontSize:22}}>{fmt(p.tp)}%</text>
+              <text x="210" y="340" textAnchor="middle" fill="#6b7280" style={{fontSize:11}}>{p.threeF}% freq · 3PAr: {fmt(p.threePar)}</text>
               {/* Corner indicators */}
-              <text x="32" y="58" textAnchor="middle" fill="#3b82f688" style={{fontSize:9}}>C3</text>
-              <text x="448" y="58" textAnchor="middle" fill="#3b82f688" style={{fontSize:9}}>C3</text>
+              <text x="55" y="55" textAnchor="middle" fill="#3b82f644" style={{fontSize:10}}>3PT</text>
+              <text x="365" y="55" textAnchor="middle" fill="#3b82f644" style={{fontSize:10}}>3PT</text>
             </g>
-
-            {/* Self-created label (bottom right) */}
-            <text x="470" y="393" textAnchor="end" fill="#475569" style={{fontSize:9}}>
-              Unassisted (self-created): {p.selfCreation ?? "—"}
-            </text>
           </svg>
         </div>
-
-        {/* Volume & Efficiency Summary Cards */}
-        <div className="grid grid-cols-4 md:grid-cols-8 gap-2 mt-3">
-          {[
-            ["TS%",   p.ts,     p.pctl?.ts, "#fbbf24"],
-            ["eFG%",  p.efg,    null,       "#9ca3af"],
-            ["FG%",   p.fg,     null,       "#9ca3af"],
-            ["FT%",   p.ft,     null,       "#a78bfa"],
-            ["FTR",   p.ftr,    null,       "#a78bfa"],
-            ["Dunk%", p.dunkR,  null,       "#10b981"],
-            ["@Rim%", p.rimPct, null,       "#ef4444"],
-            ["3PAr%", p.threePar,null,      "#3b82f6"],
+        
+        {/* Volume & Efficiency Summary */}
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mt-4">
+          {[["TS%",p.ts,p.pctl?.ts,"#fbbf24"],["FG%",p.fg,null,"#9ca3af"],["eFG%",p.efg,null,"#9ca3af"],
+            ["FT%",p.ft,null,"#8b5cf6"],["FTR",p.ftr,null,"#8b5cf6"],["Dunk%",p.dunkR,null,"#10b981"]
           ].map(([l,v,pc,c])=>(
             <div key={l} className="rounded-lg p-2 text-center" style={{background:"#111827"}}>
               <div className="text-xs" style={{color:"#6b7280"}}>{l}</div>
-              <div className="font-bold text-sm" style={{color:pc?valColor(pc):c,fontFamily:"'Oswald',sans-serif"}}>{fmt(v)}</div>
+              <div className="font-bold" style={{color:pc?valColor(pc):c,fontFamily:"'Oswald',sans-serif"}}>{fmt(v)}</div>
             </div>
           ))}
         </div>
-
-        {/* Self-Creation callout */}
         <div className="flex gap-4 text-xs mt-3" style={{color:"#6b7280"}}>
           <Tip content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>{METHODS.selfCreation.name}</div><code className="text-xs" style={{color:"#7dd3fc"}}>{METHODS.selfCreation.formula}</code><div className="mt-1">{METHODS.selfCreation.inputs(p)}</div><div className="mt-1" style={{color:"#cbd5e1"}}>{METHODS.selfCreation.desc}</div></div>}>
-            <span className="flex items-center gap-1.5">
-              <span style={{color:"#475569"}}>🔓</span>
-              <span>Unassisted (Self-Created) Shots:</span>
-              <span className="font-bold" style={{color:"#f97316"}}>{p.selfCreation ?? "—"}</span>
-              <span style={{color:"#475569"}}>ⓘ</span>
-            </span>
+            <span>Self-Creation (Unassisted): <span style={{color:"#f97316"}}>{p.selfCreation}</span> <span style={{color:"#475569"}}>ⓘ</span></span>
           </Tip>
         </div>
       </Sec>
-
-      {/* ── NBA SHOOTING PROJECTION ───────────────────────── */}
-      <Sec icon="🔮" title="NBA Shooting Projection" sub="Bayesian Hierarchical Model · Berger (2022)">
-        {/* Bayesian info bar */}
-        <div className="flex items-center gap-3 px-3 py-2 rounded-lg mb-4 text-xs" style={{background:"#0d1117",border:"1px solid #1e293b"}}>
-          <span style={{color:"#64748b"}}>Prior μ₀</span>
-          <span className="font-mono font-bold" style={{color:"#f97316"}}>{bProj.mu0pct}%</span>
-          <span style={{color:"#334155"}}>·</span>
-          <span style={{color:"#64748b"}}>n₀ = 100</span>
-          <span style={{color:"#334155"}}>·</span>
-          <span style={{color:"#64748b"}}>Est. 3PA</span>
-          <span className="font-mono font-bold" style={{color:"#60a5fa"}}>{bProj.effectiveN}</span>
-          {bProj.lowVolume && (
-            <span className="ml-auto px-2 py-0.5 rounded text-xs font-bold" style={{background:"#7c2d1233",color:"#fca5a5"}}>
-              ⚠ Low-vol regression
-            </span>
-          )}
-        </div>
-
+      <Sec icon="🔮" title="NBA Shooting Projection" sub="">
+        <div className="text-xs mb-4 cursor-help" style={{color:"#6b7280"}}>Hover each metric for methodology ⓘ</div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            ["projNba3p",  "Proj. 3P%",   proj3p,   proj3p>36?"#22c55e":proj3p>32?"#fbbf24":"#ef4444",  "%"],
-            ["projNba3pa", "Proj. 3PA/G", proj3pag, proj3pag>5?"#3b82f6":proj3pag>3?"#fbbf24":"#6b7280", ""],
-            ["projNba3par","Proj. 3PAr",  proj3par, proj3par>35?"#3b82f6":proj3par>20?"#fbbf24":"#6b7280","%"],
-            ["projNbaTs",  "Proj. TS%",   projTs,   projTs>56?"#22c55e":projTs>52?"#fbbf24":"#ef4444",   "%"],
-          ].map(([key,l,v,c,suffix])=>(
+          {[["projNba3p","Proj. 3P%",p.projNba3p,p.projNba3p>36?"#22c55e":p.projNba3p>32?"#fbbf24":"#ef4444"],
+            ["projNba3pa","Proj. 3PA/G",p.projNba3pa,p.projNba3pa>5?"#3b82f6":"#6b7280"],
+            ["projNba3par","Proj. 3PAr",p.projNba3par,p.projNba3par>30?"#3b82f6":"#6b7280"],
+            ["projNbaTs","Proj. TS%",p.projNbaTs,p.projNbaTs>56?"#22c55e":p.projNbaTs>52?"#fbbf24":"#ef4444"],
+          ].map(([key,l,v,c])=>(
             <Tip key={key} wide content={
-              <div>
-                <div className="font-bold mb-1" style={{color:"#f97316"}}>{METHODS[key]?.name}</div>
-                <div className="mb-1"><span style={{color:"#94a3b8"}}>Formula:</span><br/><code className="text-xs" style={{color:"#7dd3fc"}}>{METHODS[key]?.formula}</code></div>
-                <div className="mb-1"><span style={{color:"#94a3b8"}}>Inputs:</span> {METHODS[key]?.inputs(p)}</div>
-                <div style={{color:"#cbd5e1"}}>{METHODS[key]?.desc}</div>
-              </div>
+              <div><div className="font-bold mb-1" style={{color:"#f97316"}}>{METHODS[key].name}</div>
+              <div className="mb-1"><span style={{color:"#94a3b8"}}>Formula:</span><br/><code className="text-xs" style={{color:"#7dd3fc"}}>{METHODS[key].formula}</code></div>
+              <div className="mb-1"><span style={{color:"#94a3b8"}}>Inputs:</span> {METHODS[key].inputs(p)}</div>
+              <div style={{color:"#cbd5e1"}}>{METHODS[key].desc}</div></div>
             }>
-              <div className="rounded-xl p-4 text-center cursor-help" style={{background:"#0d1117",border:"1px solid #1e293b"}}>
-                <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#6b7280"}}>{l} <span style={{color:"#475569"}}>ⓘ</span></div>
-                <div className="font-bold" style={{color:c,fontFamily:"'Oswald',sans-serif",fontSize:32}}>{fmt(v)}{suffix}</div>
+              <div className="rounded-lg p-4 text-center cursor-help" style={{background:"#0d1117"}}>
+                <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#6b7280"}}>{l} <span style={{color:"#475569"}}>ⓘ</span></div>
+                <div className="text-3xl font-bold" style={{color:c,fontFamily:"'Oswald',sans-serif"}}>{fmt(v)}</div>
               </div>
             </Tip>
           ))}
-        </div>
-
-        {/* Formula breakdown */}
-        <div className="mt-3 px-3 py-2 rounded-lg text-xs" style={{background:"#0d1117",color:"#475569"}}>
-          θ_adj = (μ₀ · n₀ + θ_college · n_actual) / (n₀ + n_actual)
-          &nbsp;→&nbsp;FT%² prior + {fmt(p.tp)}% college 3P% ({bProj.effectiveN} est. attempts)
-          &nbsp;→&nbsp;<span style={{color:"#f97316"}}>{fmt(bProj.nba3p)}% pre-discount</span>
         </div>
       </Sec>
     </div>
@@ -776,98 +633,61 @@ function CompsTab({p}) {
       <Sec icon="📊" title="Statistical Comps" sub="Similarity based on era-adjusted percentiles. Colors = absolute strength/weakness.">
         <div className="overflow-x-auto">
           <table className="w-full text-sm"><thead><tr>
-            {["Name","Pos","Sim","Min%","BPM","USG%","TS%","OREB%","DREB%","AST%","TO%","BLK%","STL%","FTR","Dunk%","@Rim%","Mid%","3P%","3PAr","FT%","Tier"].map(h=>(
-              <th key={h} className="text-left px-1.5 py-1.5 text-xs uppercase whitespace-nowrap" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>{h}</th>
-            ))}
+            {["Name","Pos","Sim","BPM","USG","TS%","AST%","TO%","ORB%","DRB%","STL%","BLK%","FTR","@Rim%","3P%","FT%","Tier"].map(h=><th key={h} className="text-left px-2 py-1.5 text-xs uppercase" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>{h}</th>)}
           </tr></thead><tbody>
-            {/* Selected player row */}
             <tr style={{background:"#f9731611"}}>
-              <td className="px-1.5 py-2 font-bold whitespace-nowrap" style={{color:"#f97316"}}>{p.nbaName||"Selected"}</td>
-              <td className="px-1.5" style={{color:"#9ca3af"}}>{p.pos}</td>
-              <td className="px-1.5" style={{color:"#f97316"}}>—</td>
-              <td className="px-1.5" style={{color:"#9ca3af"}}>{fmt(p.min)}</td>
-              <td className="px-1.5 font-semibold" style={{color:valColor(p.pctl.bpm)}}>{fmt(p.bpm)}</td>
-              <td className="px-1.5 font-semibold" style={{color:valColor(p.pctl.usg)}}>{fmt(p.usg)}</td>
-              <td className="px-1.5 font-semibold" style={{color:valColor(p.pctl.ts)}}>{fmt(p.ts)}</td>
-              <td className="px-1.5 font-semibold" style={{color:valColor(p.pctl.orb)}}>{fmt(p.orbP)}</td>
-              <td className="px-1.5 font-semibold" style={{color:valColor(p.pctl.drb)}}>{fmt(p.drbP)}</td>
-              <td className="px-1.5 font-semibold" style={{color:valColor(p.pctl.ast)}}>{fmt(p.astP)}</td>
-              <td className="px-1.5 font-semibold" style={{color:valColor(100-(p.pctl.to||50))}}>{fmt(p.toP)}</td>
-              <td className="px-1.5 font-semibold" style={{color:valColor(p.pctl.blk)}}>{fmt(p.blkP)}</td>
-              <td className="px-1.5 font-semibold" style={{color:valColor(p.pctl.stl)}}>{fmt(p.stlP)}</td>
-              <td className="px-1.5" style={{color:"#9ca3af"}}>{fmt(p.ftr,2)}</td>
-              <td className="px-1.5" style={{color:"#10b981"}}>{fmt(p.dunkR,1)}</td>
-              <td className="px-1.5" style={{color:"#ef4444"}}>{fmt(p.rimPct)}</td>
-              <td className="px-1.5" style={{color:"#f97316"}}>{fmt(p.midPct)}</td>
-              <td className="px-1.5" style={{color:"#60a5fa"}}>{fmt(p.tp)}</td>
-              <td className="px-1.5" style={{color:"#60a5fa"}}>{fmt(p.threePar,1)}</td>
-              <td className="px-1.5" style={{color:"#a78bfa"}}>{fmt(p.ft)}</td>
-              <td className="px-1.5">{p.actual?<TierBadge tier={p.actual}/>:"—"}</td>
+              <td className="px-2 py-2 font-bold" style={{color:"#f97316"}}>{p.nbaName||"Selected"}</td>
+              <td className="px-2" style={{color:"#9ca3af"}}>{p.pos}</td><td className="px-2" style={{color:"#f97316"}}>—</td>
+              <td className="px-2 font-semibold" style={{color:valColor(p.pctl.bpm)}}>{fmt(p.bpm)}</td>
+              <td className="px-2 font-semibold" style={{color:valColor(p.pctl.usg)}}>{fmt(p.usg)}</td>
+              <td className="px-2 font-semibold" style={{color:valColor(p.pctl.ts)}}>{fmt(p.ts)}</td>
+              <td className="px-2 font-semibold" style={{color:valColor(p.pctl.ast)}}>{fmt(p.astP)}</td>
+              <td className="px-2 font-semibold" style={{color:valColor(100-(p.pctl.to||50))}}>{fmt(p.toP)}</td>
+              <td className="px-2 font-semibold" style={{color:valColor(p.pctl.orb)}}>{fmt(p.orbP)}</td>
+              <td className="px-2 font-semibold" style={{color:valColor(p.pctl.drb)}}>{fmt(p.drbP)}</td>
+              <td className="px-2 font-semibold" style={{color:valColor(p.pctl.stl)}}>{fmt(p.stlP)}</td>
+              <td className="px-2 font-semibold" style={{color:valColor(p.pctl.blk)}}>{fmt(p.blkP)}</td>
+              <td className="px-2" style={{color:"#9ca3af"}}>{fmt(p.ftr)}</td>
+              <td className="px-2" style={{color:"#9ca3af"}}>{fmt(p.rimPct)}</td>
+              <td className="px-2" style={{color:"#9ca3af"}}>{fmt(p.tp)}</td>
+              <td className="px-2" style={{color:"#9ca3af"}}>{fmt(p.ft)}</td>
+              <td className="px-2">{p.actual?<TierBadge tier={p.actual}/>:"—"}</td>
             </tr>
             {fStat.map((c,i)=>(
               <tr key={i} className="hover:bg-white hover:bg-opacity-5" style={{borderBottom:"1px solid #1f293744"}}>
-                <td className="px-1.5 py-2 font-semibold whitespace-nowrap" style={{color:"#e5e7eb"}}>{c.name}</td>
-                <td className="px-1.5" style={{color:"#6b7280"}}>{c.pos}</td>
-                <td className="px-1.5 font-bold" style={{color:"#f97316"}}>{c.sim}%</td>
-                <td className="px-1.5" style={{color:"#6b7280"}}>{c.min!=null?fmt(c.min):"—"}</td>
-                <td className="px-1.5" style={{color:valColor(c.bpm>10?90:c.bpm>5?65:35)}}>{fmt(c.bpm)}</td>
-                <td className="px-1.5" style={{color:valColor(c.usg>27?80:c.usg>22?55:30)}}>{fmt(c.usg)}</td>
-                <td className="px-1.5" style={{color:valColor(c.ts>58?80:c.ts>53?55:30)}}>{fmt(c.ts)}</td>
-                <td className="px-1.5" style={{color:valColor(c.orbP>8?80:c.orbP>4?55:30)}}>{fmt(c.orbP)}</td>
-                <td className="px-1.5" style={{color:valColor(c.drbP>18?80:c.drbP>12?55:30)}}>{fmt(c.drbP)}</td>
-                <td className="px-1.5" style={{color:valColor(c.astP>20?80:c.astP>12?55:30)}}>{fmt(c.astP)}</td>
-                <td className="px-1.5" style={{color:valColor(c.toP<15?80:c.toP<20?55:30)}}>{fmt(c.toP)}</td>
-                <td className="px-1.5" style={{color:valColor(c.blkP>5?80:c.blkP>2?55:30)}}>{fmt(c.blkP)}</td>
-                <td className="px-1.5" style={{color:valColor(c.stlP>3?80:c.stlP>1.5?55:30)}}>{fmt(c.stlP)}</td>
-                <td className="px-1.5" style={{color:"#9ca3af"}}>{fmt(c.ftr,2)}</td>
-                <td className="px-1.5" style={{color:"#10b981"}}>{c.dunkR!=null?fmt(c.dunkR,1):"—"}</td>
-                <td className="px-1.5" style={{color:"#ef4444"}}>{fmt(c.rimPct)}</td>
-                <td className="px-1.5" style={{color:"#f97316"}}>{c.midPct!=null?fmt(c.midPct):"—"}</td>
-                <td className="px-1.5" style={{color:"#60a5fa"}}>{fmt(c.tp)}</td>
-                <td className="px-1.5" style={{color:"#60a5fa"}}>{c.threePar!=null?fmt(c.threePar,1):"—"}</td>
-                <td className="px-1.5" style={{color:"#a78bfa"}}>{fmt(c.ft)}</td>
-                <td className="px-1.5"><TierBadge tier={c.tier}/></td>
+                <td className="px-2 py-2 font-semibold" style={{color:"#e5e7eb"}}>{c.name}</td>
+                <td className="px-2" style={{color:"#6b7280"}}>{c.pos}</td>
+                <td className="px-2 font-bold" style={{color:"#f97316"}}>{c.sim}%</td>
+                <td className="px-2" style={{color:valColor(c.bpm>10?90:c.bpm>5?65:35)}}>{fmt(c.bpm)}</td>
+                <td className="px-2" style={{color:valColor(c.usg>27?80:c.usg>22?55:30)}}>{fmt(c.usg)}</td>
+                <td className="px-2" style={{color:valColor(c.ts>58?80:c.ts>53?55:30)}}>{fmt(c.ts)}</td>
+                <td className="px-2" style={{color:valColor(c.astP>20?80:c.astP>12?55:30)}}>{fmt(c.astP)}</td>
+                <td className="px-2" style={{color:valColor(c.toP<15?80:c.toP<20?55:30)}}>{fmt(c.toP)}</td>
+                <td className="px-2" style={{color:valColor(c.orbP>8?80:c.orbP>4?55:30)}}>{fmt(c.orbP)}</td>
+                <td className="px-2" style={{color:valColor(c.drbP>18?80:c.drbP>12?55:30)}}>{fmt(c.drbP)}</td>
+                <td className="px-2" style={{color:valColor(c.stlP>3?80:c.stlP>1.5?55:30)}}>{fmt(c.stlP)}</td>
+                <td className="px-2" style={{color:valColor(c.blkP>5?80:c.blkP>2?55:30)}}>{fmt(c.blkP)}</td>
+                <td className="px-2" style={{color:"#9ca3af"}}>{fmt(c.ftr)}</td>
+                <td className="px-2" style={{color:"#9ca3af"}}>{fmt(c.rimPct)}</td>
+                <td className="px-2" style={{color:"#9ca3af"}}>{fmt(c.tp)}</td>
+                <td className="px-2" style={{color:"#9ca3af"}}>{fmt(c.ft)}</td>
+                <td className="px-2"><TierBadge tier={c.tier}/></td>
               </tr>
             ))}
           </tbody></table>
         </div>
       </Sec>
-      <Sec icon="📏" title="Anthropometric Comps" sub="Physical similarity. Adjust sliders to simulate weight gain or projected wingspan.">
+      <Sec icon="📏" title="Anthropometric Comps" sub="Physical similarity. Adjust sliders to project weight gain/wingspan if unknown.">
         {(p.comb||(p.anthroComps||[]).length>0) ? <>
-          <div className="p-3 rounded-lg mb-3" style={{background:"#0d1117",border:"1px solid #1e293b"}}>
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold uppercase tracking-wider" style={{color:"#475569"}}>Projection Sliders</span>
-              <button onClick={()=>{setWtAdj(0);setWsAdj(0);}} className="text-xs px-2 py-0.5 rounded" style={{background:"#1f2937",color:"#6b7280"}}>Reset</button>
+          <div className="flex gap-6 mb-4 p-3 rounded-lg" style={{background:"#0d1117"}}>
+            <div className="flex-1">
+              <div className="flex justify-between text-xs mb-1"><span style={{color:"#9ca3af"}}>Weight Adjust</span><span style={{color:"#f97316"}}>{wtAdj>0?"+":""}{wtAdj} lbs</span></div>
+              <input type="range" min={-20} max={20} value={wtAdj} onChange={e=>setWtAdj(+e.target.value)} className="w-full" style={{accentColor:"#f97316"}}/>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <div className="flex justify-between text-xs mb-1.5">
-                  <span style={{color:"#9ca3af"}}>Weight Adjust <span style={{color:"#475569"}}>({(p.comb?.wgt||p.wt)||"—"} lbs base)</span></span>
-                  <span className="font-bold" style={{color:wtAdj===0?"#475569":wtAdj>0?"#22c55e":"#f97316"}}>{wtAdj>0?"+":""}{wtAdj} lbs</span>
-                </div>
-                <input type="range" min={-10} max={35} step={1} value={wtAdj} onChange={e=>setWtAdj(+e.target.value)} className="w-full" style={{accentColor:"#f97316"}}/>
-                <div className="flex justify-between text-xs mt-0.5" style={{color:"#334155"}}>
-                  <span>−10</span><span>0</span><span>+35</span>
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between text-xs mb-1.5">
-                  <span style={{color:"#9ca3af"}}>Wingspan Adjust <span style={{color:"#475569"}}>({(p.comb?.ws||0)||"unknown"}" base)</span></span>
-                  <span className="font-bold" style={{color:wsAdj===0?"#475569":wsAdj>0?"#22c55e":"#f97316"}}>{wsAdj>0?"+":""}{wsAdj}"</span>
-                </div>
-                <input type="range" min={-3} max={3} step={0.25} value={wsAdj} onChange={e=>setWsAdj(+e.target.value)} className="w-full" style={{accentColor:"#f97316"}}/>
-                <div className="flex justify-between text-xs mt-0.5" style={{color:"#334155"}}>
-                  <span>−3"</span><span>0</span><span>+3"</span>
-                </div>
-              </div>
+            <div className="flex-1">
+              <div className="flex justify-between text-xs mb-1"><span style={{color:"#9ca3af"}}>Wingspan Adjust</span><span style={{color:"#f97316"}}>{wsAdj>0?"+":""}{wsAdj}"</span></div>
+              <input type="range" min={-4} max={4} step={0.25} value={wsAdj} onChange={e=>setWsAdj(+e.target.value)} className="w-full" style={{accentColor:"#f97316"}}/>
             </div>
-            {(wsAdj!==0||wtAdj!==0)&&(
-              <div className="mt-2 text-xs" style={{color:"#6b7280"}}>
-                Projected: <span style={{color:"#f97316"}}>{(p.comb?.wgt||p.wt||0)+wtAdj} lbs</span>
-                {" · "}WS <span style={{color:"#f97316"}}>{((p.comb?.ws||0)+wsAdj).toFixed(2)}"</span>
-                {" · "}Reranked vs {fAnth.length} comps
-              </div>
-            )}
           </div>
           <div className="space-y-2">
             {fAnth.map((c,i)=>(
@@ -879,7 +699,7 @@ function CompsTab({p}) {
               </div>
             ))}
           </div>
-          {(wsAdj!==0||wtAdj!==0)&&<div className="mt-2 text-xs" style={{color:"#6b7280"}}></div>}
+          {(wsAdj!==0||wtAdj!==0)&&<div className="mt-2 text-xs" style={{color:"#6b7280"}}>Adjusted base: {(p.comb?.wgt||p.wt)+wtAdj} lbs, WS {((p.comb?.ws||0)+wsAdj).toFixed(1)}"</div>}
         </> : <div className="text-center py-6" style={{color:"#6b7280"}}>No combine data available.</div>}
       </Sec>
     </div>
@@ -887,40 +707,315 @@ function CompsTab({p}) {
 }
 
 // ═══════════════════════════════════════════════════════════
+// MARGIN OF ERROR CALCULATION (Berger / Barttorvik model)
+// ═══════════════════════════════════════════════════════════
+
+// Position average heights (inches) for height z-score
+const POS_HT = { Playmaker: 75.5, Wing: 78.5, Big: 81.5 };
+
+// Approximate probit: percentile → z-score (Beasley-Springer-Moro approx)
+function pctl2z(pctl) {
+  const p = Math.max(0.001, Math.min(0.999, pctl / 100));
+  const a = [-3.969683028665376e1, 2.209460984245205e2, -2.759285104469687e2, 1.383577518672690e2, -3.066479806614716e1, 2.506628277459239];
+  const b = [-5.447609879822406e1, 1.615858368580409e2, -1.556989798598866e2, 6.680131188771972e1, -1.328068155288572e1];
+  const c = [-7.784894002430293e-3, -3.223964580411365e-1, -2.400758277161838, -2.549732539343734, 4.374664141464968, 2.938163982698783];
+  const d = [7.784695709041462e-3, 3.223907427788357e-1, 2.445134137142996, 3.754408661907416];
+  const pLow = 0.02425, pHigh = 1 - pLow;
+  if (p < pLow) {
+    const q = Math.sqrt(-2 * Math.log(p));
+    return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
+  } else if (p <= pHigh) {
+    const q = p - 0.5, r = q*q;
+    return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q / (((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);
+  } else {
+    const q = Math.sqrt(-2 * Math.log(1-p));
+    return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
+  }
+}
+
+function calcMoE(p) {
+  // ── z-score helpers ────────────────────────────────────────────
+  // Use percentile → z where available, otherwise normalize by league avg
+  const z_bpm   = p.pctl?.bpm  != null ? pctl2z(p.pctl.bpm)  : (p.bpm  != null ? (p.bpm - 0)   / 4.0 : 0);
+  const z_usg   = p.pctl?.usg  != null ? pctl2z(p.pctl.usg)  : (p.usg  != null ? (p.usg - 20)  / 4.0 : 0);
+  const z_ts    = p.pctl?.ts   != null ? pctl2z(p.pctl.ts)   : (p.ts   != null ? (p.ts  - 54)  / 5.0 : 0);
+  const z_ast   = p.pctl?.ast  != null ? pctl2z(p.pctl.ast)  : 0;
+  const z_stl   = p.pctl?.stl  != null ? pctl2z(p.pctl.stl)  : 0;
+  const z_blk   = p.pctl?.blk  != null ? pctl2z(p.pctl.blk)  : 0;
+  const z_drb   = p.pctl?.drb  != null ? pctl2z(p.pctl.drb)  : 0;
+
+  // Raw z-scores for fields without pctl (league averages from BartTorvik DB)
+  const z_ft    = p.ft   != null ? (p.ft   - 68.5) / 12.0 : 0;
+  const z_astTo = p.astTov != null ? (p.astTov - 1.3) / 0.7  : 0;
+  const z_dbpm  = p.dbpm != null ? (p.dbpm - -1.5) / 2.0  : 0;
+  const z_ftr   = p.ftr  != null ? (p.ftr  - 28)   / 14.0 : 0;
+  const z_tp    = p.tp   != null ? (p.tp   - 32)   / 7.0  : 0;
+
+  // Height z-score vs. position average
+  const posHtAvg = POS_HT[p.pos] || 78.5;
+  const z_ht    = p.htIn != null ? (p.htIn - posHtAvg) / 2.0 : 0;
+
+  // AgeFactor
+  const age = p.age;
+  const ageFactor = age == null ? 1.0 : age < 20 ? 1.2 : age <= 21 ? 1.0 : age <= 22 ? 0.9 : 0.8;
+
+  // ── Scores ─────────────────────────────────────────────────────
+  const floor   = z_ft * 0.30 + z_astTo * 0.25 + z_dbpm * 0.25 + z_ht * 0.20;
+  const ceilingRaw = (z_usg * z_bpm * 0.40 + z_ftr * 0.30 + z_tp * 0.30) * ageFactor;
+  const ceiling = ceilingRaw;
+  const moe     = Math.abs(ceiling - floor);
+
+  // Normalize to 0-100 display scale (clip ±3σ → 0-100)
+  const toDisplay = (z) => Math.round(Math.min(100, Math.max(0, (z + 3) / 6 * 100)));
+
+  // MoE risk label
+  let riskLabel, riskColor, riskDesc;
+  if (moe > 2.0)      { riskLabel = "Extreme Variance";  riskColor = "#ef4444"; riskDesc = "Very wide outcome gap — elite upside but real bust risk."; }
+  else if (moe > 1.5) { riskLabel = "Boom-or-Bust";      riskColor = "#f97316"; riskDesc = "High variance pick. Team context and role clarity matter enormously."; }
+  else if (moe > 1.0) { riskLabel = "Moderate Risk";     riskColor = "#fbbf24"; riskDesc = "Meaningful spread between floor and ceiling. Typical mid-round range."; }
+  else if (moe > 0.5) { riskLabel = "Controlled Risk";   riskColor = "#86efac"; riskDesc = "Fairly predictable outcome. Floor and ceiling are close together."; }
+  else                 { riskLabel = "Safe Bet";          riskColor = "#22c55e"; riskDesc = "Low variance. Limited upside, but reliable rotation contributor expected."; }
+
+  return {
+    floor, ceiling, moe,
+    floorPct: toDisplay(floor),
+    ceilingPct: toDisplay(ceiling),
+    riskLabel, riskColor, riskDesc,
+    ageFactor,
+    inputs: { z_ft, z_astTo, z_dbpm, z_ht, z_usg, z_bpm, z_ftr, z_tp },
+  };
+}
+
+// ═══════════════════════════════════════════════════════════
 // TAB: PROJECTION
 // ═══════════════════════════════════════════════════════════
 function ProjectionTab({p}) {
   const tierOrder=["Superstar","All-Star","Starter","Role Player","Replacement","Negative","Never NBA"];
-  const tierData=tierOrder.map(t=>({name:t.replace("Never NBA","Never\nNBA"),pct:p.tiers[t]||0,fill:TC[t]||"#374151"}));
+  const tierOrder=["Superstar","All-Star","Starter","Role Player","Replacement","Negative","Never NBA"];
+
+  // ── Bayesian Smoothing ─────────────────────────────────────────
+  // With the pipeline sigma fix, the raw distributions are now much more
+  // granular. We still apply a light 5% base-rate blend to guard against
+  // any remaining zero-probability tiers.
+  const BASE_RATE = 1/7;
+  const MODEL_WEIGHT = 0.95;
+  const PRIOR_WEIGHT = 0.05;
+  const rawTiers = tierOrder.map(t => (p.tiers[t] || 0) / 100);
+  const rawSum = rawTiers.reduce((a,b)=>a+b, 0);
+  const normRaw = rawSum > 0 ? rawTiers.map(v => v / rawSum) : rawTiers;
+  const smoothed = normRaw.map(v => (MODEL_WEIGHT * v + PRIOR_WEIGHT * BASE_RATE) * 100);
+  const tierData = tierOrder.map((t,i) => ({
+    name: t.replace("Never NBA","Never\nNBA"),
+    pct: Math.round(smoothed[i] * 10) / 10,
+    raw: Math.round((p.tiers[t]||0) * 10) / 10,
+    fill: TC[t] || "#374151",
+  }));
+
+  // ── Margin of Error ────────────────────────────────────────────
+  const moe = useMemo(() => calcMoE(p), [p]);
+
   return (
     <div className="space-y-5">
+      {/* ── Top 3 cards ─────────────────────────────────────── */}
       <div className="grid grid-cols-3 gap-4">
-        {[["Chance of NBA Career",`${p.pNba!=null?((p.pNba*100).toFixed(0))+"%":"—"}`,p.pNba!=null?"#f97316":"#6b7280"],["Proj. 3yr NBA Peak",p.mu!=null?p.mu.toFixed(3):"—","#e5e7eb"],["Uncertainty (σ)",p.sigma!=null?`± ${p.sigma.toFixed(3)}`:"—","#6b7280"]].map(([l,v,c])=>(
-          <Tip key={l} wide content={
-            l.includes("Peak") ? <div><div className="font-bold mb-1" style={{color:"#f97316"}}>Projected 3-Year NBA Peak PIE</div><div style={{color:"#cbd5e1"}}>The model's best estimate of this player's peak Player Impact Estimate (PIE) over their best 3 consecutive NBA seasons. PIE measures a player's contribution to their team's success. Average NBA player ≈ 0.100, All-Star ≈ 0.150+, MVP ≈ 0.200+.</div></div>
-            : l.includes("σ") ? <div><div className="font-bold mb-1" style={{color:"#f97316"}}>Uncertainty (Standard Deviation)</div><div style={{color:"#cbd5e1"}}>How uncertain the model is about this projection. Lower σ = more confident prediction (typically older players with more data). Higher σ = wider range of possible outcomes (typically young players or those with unusual profiles). The actual outcome falls within ±1σ about 68% of the time.</div></div>
-            : <div><div className="font-bold mb-1" style={{color:"#f97316"}}>NBA Career Probability</div><div style={{color:"#cbd5e1"}}>Estimated probability that this player will play meaningful NBA minutes (≥500 career minutes). Based on historical comparison of similar statistical profiles.</div></div>
+        {[
+          ["3-Year NBA Peak", p.mu!=null ? p.mu.toFixed(3) : "—", p.mu!=null?"#e5e7eb":"#6b7280", "peak"],
+          ["NBA Career Probability", p.pNba!=null?`${(p.pNba*100).toFixed(0)}%`:"—", p.pNba!=null?"#f97316":"#6b7280", "pnba"],
+          ["Outcome Range (σ)", p.sigma!=null?`± ${p.sigma.toFixed(3)}`:"—", "#6b7280", "sigma"],
+        ].map(([l,v,c,key])=>(
+          <Tip key={key} wide content={
+            key==="peak" ? (
+              <div>
+                <div className="font-bold mb-2" style={{color:"#f97316"}}>3-Year NBA Peak PIE</div>
+                <div style={{color:"#cbd5e1"}} className="mb-2">The model's best estimate of this player's <strong>Player Impact Estimate</strong> over their peak 3 consecutive NBA seasons — not career average, but the realistic best window.</div>
+                <div className="space-y-1 text-xs" style={{color:"#94a3b8"}}>
+                  <div>🟡 Rotation / Replacement ≈ <strong style={{color:"#e5e7eb"}}>0.070 – 0.082</strong></div>
+                  <div>🔵 Starter ≈ <strong style={{color:"#e5e7eb"}}>0.082 – 0.135</strong></div>
+                  <div>🟠 All-Star ≈ <strong style={{color:"#e5e7eb"}}>0.135 – 0.175</strong></div>
+                  <div>🌟 Superstar / MVP ≈ <strong style={{color:"#e5e7eb"}}>0.175+</strong></div>
+                </div>
+              </div>
+            ) : key==="sigma" ? (
+              <div>
+                <div className="font-bold mb-2" style={{color:"#f97316"}}>Outcome Range (σ — Standard Deviation)</div>
+                <div style={{color:"#cbd5e1"}} className="mb-2">How wide the confidence interval is around the predicted peak. Calibrated for out-of-sample accuracy: accounts for model uncertainty <em>plus</em> structural college→NBA translation noise (≈0.015 PIE units).</div>
+                <div className="space-y-1 text-xs" style={{color:"#94a3b8"}}>
+                  <div>📐 True outcome falls within <strong style={{color:"#e5e7eb"}}>μ ± σ</strong> ~68% of cases</div>
+                  <div>📐 Within <strong style={{color:"#e5e7eb"}}>μ ± 2σ</strong> ~95% of cases</div>
+                  <div>🔴 High σ → young / unusual profile / small sample</div>
+                  <div>🟢 Low σ → older / large sample / typical profile</div>
+                </div>
+                {p.mu!=null && p.sigma!=null && (
+                  <div className="mt-2 pt-2 text-xs font-mono" style={{borderTop:"1px solid #374151",color:"#7dd3fc"}}>
+                    μ ± σ: {(p.mu-p.sigma).toFixed(3)} → {(p.mu+p.sigma).toFixed(3)}<br/>
+                    Pessimistic (−2σ): {(p.mu-2*p.sigma).toFixed(3)}<br/>
+                    Optimistic (+2σ): {(p.mu+2*p.sigma).toFixed(3)}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div>
+                <div className="font-bold mb-2" style={{color:"#f97316"}}>NBA Career Probability</div>
+                <div style={{color:"#cbd5e1"}}>Estimated probability this player plays meaningful NBA minutes (≥500 career minutes). Based on historical comparison of similar college statistical profiles.</div>
+              </div>
+            )
           }>
             <div className="rounded-xl p-5 text-center cursor-help" style={{background:"#111827"}}>
               <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#6b7280"}}>{l} <span style={{color:"#475569"}}>ⓘ</span></div>
               <div className="text-3xl font-bold" style={{color:c,fontFamily:"'Oswald',sans-serif"}}>{v}</div>
+              {key==="peak" && p.mu!=null && p.sigma!=null && (
+                <div className="text-xs mt-1" style={{color:"#475569"}}>{(p.mu-p.sigma).toFixed(3)} – {(p.mu+p.sigma).toFixed(3)}</div>
+              )}
             </div>
           </Tip>
         ))}
       </div>
-      <Sec icon="◆" title="Projected Outcome" sub="Monte Carlo (20k samples) — tier probability distribution">
-        <ResponsiveContainer width="100%" height={260}>
+
+      {/* ── Projected Outcome bar chart ─────────────────────── */}
+      <Sec icon="◆" title="Projected Outcome" sub="Student's t Monte Carlo (20k samples) — hover bars for raw vs. smoothed">
+        <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg text-xs" style={{background:"#0d1117",border:"1px solid #1e293b"}}>
+          <span style={{color:"#475569"}}>ⓘ</span>
+          <span style={{color:"#475569"}}>95% model · 5% base rate blend — ensures no tier reads 0% due to sampling noise.</span>
+        </div>
+        <ResponsiveContainer width="100%" height={240}>
           <BarChart data={tierData} margin={{top:5,right:5,bottom:5,left:5}}>
             <XAxis dataKey="name" tick={{fill:"#9ca3af",fontSize:11}} axisLine={false} tickLine={false}/>
-            <YAxis tick={{fill:"#6b7280",fontSize:11}} axisLine={false} tickLine={false} domain={[0,50]} tickFormatter={v=>`${v}%`}/>
-            <RTooltip contentStyle={{background:"#1f2937",border:"1px solid #374151",borderRadius:8,color:"#e5e7eb"}} formatter={v=>[`${v}%`,"Probability"]}/>
+            <YAxis tick={{fill:"#6b7280",fontSize:11}} axisLine={false} tickLine={false} domain={[0,60]} tickFormatter={v=>`${v}%`}/>
+            <RTooltip contentStyle={{background:"#1f2937",border:"1px solid #374151",borderRadius:8,color:"#e5e7eb"}}
+              formatter={(v,name,props)=>[
+                <span key="v"><span style={{fontSize:16,fontWeight:"bold"}}>{v}%</span><span style={{color:"#6b7280",fontSize:11,display:"block"}}>Raw model: {props.payload?.raw}%</span></span>,
+                "Probability"
+              ]}/>
             <Bar dataKey="pct" radius={[6,6,0,0]}>{tierData.map((e,i)=><Cell key={i} fill={e.fill}/>)}</Bar>
           </BarChart>
         </ResponsiveContainer>
+        <div className="grid grid-cols-4 md:grid-cols-7 gap-1.5 mt-3">
+          {tierData.map((t,i)=>(
+            <div key={i} className="rounded-lg p-2 text-center" style={{background:"#0d1117",border:`1px solid ${t.fill}33`}}>
+              <div className="text-xs mb-0.5 truncate" style={{color:t.fill,fontWeight:"bold",fontSize:9}}>{tierOrder[i]}</div>
+              <div className="font-bold" style={{color:t.fill,fontFamily:"'Oswald',sans-serif",fontSize:16}}>{t.pct}%</div>
+            </div>
+          ))}
+        </div>
         {p.actual&&<div className="mt-3 flex items-center gap-3 p-3 rounded-lg" style={{background:"#0c1222",border:"1px solid #1e3a5f"}}>
           <span className="text-xs" style={{color:"#6b7280"}}>Actual:</span><TierBadge tier={p.actual}/><span className="text-sm" style={{color:"#9ca3af"}}>Peak PIE: {p.peakPie?.toFixed(3)}</span>
         </div>}
       </Sec>
+
+      {/* ── Margin of Error / Risk-Reward ───────────────────── */}
+      <Sec icon="⚖️" title="Margin of Error" sub="Floor (stability) vs. Ceiling (upside) — NBA Draft Risk-Reward">
+        <Tip wide content={
+          <div>
+            <div className="font-bold mb-2" style={{color:"#f97316"}}>Margin of Error — Risk-Reward Analytics</div>
+            <div style={{color:"#cbd5e1"}} className="mb-2 text-xs">
+              Quantifies the gap between a player's reliable floor and their theoretical ceiling using z-score normalized BartTorvik stats.
+            </div>
+            <div className="text-xs space-y-1" style={{color:"#94a3b8"}}>
+              <div><strong style={{color:"#22c55e"}}>Floor</strong> = FT%(z)×0.30 + AST/TO(z)×0.25 + DBPM(z)×0.25 + Height(z)×0.20</div>
+              <div><strong style={{color:"#f97316"}}>Ceiling</strong> = (USG×BPM(z)×0.40 + FTR(z)×0.30 + 3P%(z)×0.30) × AgeFactor</div>
+              <div className="mt-1 pt-1" style={{borderTop:"1px solid #374151"}}>AgeFactor: &lt;20 → 1.2× · 20–21 → 1.0× · &gt;21 → 0.8×</div>
+              <div className="mt-1 italic" style={{color:"#64748b"}}>⚠ Team context (spacing, usage role) can shift both anchors significantly.</div>
+            </div>
+          </div>
+        }>
+          {/* Range bar */}
+          <div className="mb-4 cursor-help">
+            <div className="flex justify-between text-xs mb-1.5" style={{color:"#6b7280"}}>
+              <span style={{color:"#22c55e"}}>◀ Floor (Stability)</span>
+              <span className="font-bold px-3 py-0.5 rounded-full text-xs" style={{background:moe.riskColor+"22",color:moe.riskColor,border:`1px solid ${moe.riskColor}66`}}>
+                {moe.riskLabel}
+              </span>
+              <span style={{color:"#f97316"}}>Ceiling (Upside) ▶</span>
+            </div>
+
+            {/* Track */}
+            <div className="relative h-8 rounded-lg overflow-hidden" style={{background:"#0d1117",border:"1px solid #1e293b"}}>
+              {/* Gradient fill between floor and ceiling */}
+              {(() => {
+                const left  = Math.min(moe.floorPct, moe.ceilingPct);
+                const right = Math.max(moe.floorPct, moe.ceilingPct);
+                const width = right - left;
+                return (
+                  <>
+                    <div className="absolute h-full" style={{
+                      left:`${left}%`, width:`${Math.max(width,2)}%`,
+                      background:`linear-gradient(90deg, #22c55e66, ${moe.riskColor}88)`,
+                    }}/>
+                    {/* Floor marker */}
+                    <div className="absolute top-0 bottom-0 w-1 rounded" style={{left:`${moe.floorPct}%`,background:"#22c55e",transform:"translateX(-50%)"}}/>
+                    {/* Ceiling marker */}
+                    <div className="absolute top-0 bottom-0 w-1 rounded" style={{left:`${moe.ceilingPct}%`,background:"#f97316",transform:"translateX(-50%)"}}/>
+                    {/* MoE label in center */}
+                    <div className="absolute inset-0 flex items-center justify-center text-xs font-bold" style={{color:"#e5e7eb"}}>
+                      MoE {moe.moe.toFixed(2)}σ
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* Anchor labels */}
+            <div className="flex justify-between mt-1 text-xs">
+              <span className="font-mono" style={{color:"#22c55e"}}>{moe.floor.toFixed(2)}σ</span>
+              <span style={{color:"#6b7280",fontSize:10}}>{moe.riskDesc}</span>
+              <span className="font-mono" style={{color:"#f97316"}}>{moe.ceiling.toFixed(2)}σ</span>
+            </div>
+          </div>
+        </Tip>
+
+        {/* Score breakdown cards */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-xl p-4" style={{background:"#0d1117",border:"1px solid #22c55e33"}}>
+            <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#22c55e"}}>Floor Contributors</div>
+            {[
+              ["FT%",    moe.inputs.z_ft,    "Translatable skill"],
+              ["AST/TO", moe.inputs.z_astTo, "Decision-making"],
+              ["DBPM",   moe.inputs.z_dbpm,  "Defensive impact"],
+              ["Height", moe.inputs.z_ht,    "vs. position avg"],
+            ].map(([label, z, desc]) => (
+              <div key={label} className="flex items-center gap-2 mb-1.5">
+                <span className="text-xs w-12 shrink-0" style={{color:"#6b7280"}}>{label}</span>
+                <div className="flex-1 h-2 rounded-full overflow-hidden" style={{background:"#1e293b"}}>
+                  <div className="h-full rounded-full" style={{
+                    width:`${Math.min(100,Math.max(0,(z+3)/6*100))}%`,
+                    background: z >= 0 ? "#22c55e" : "#ef4444",
+                    transition:"width 0.3s"
+                  }}/>
+                </div>
+                <span className="text-xs font-mono w-10 text-right" style={{color:z>=0?"#22c55e":"#ef4444"}}>{z>=0?"+":""}{z.toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-xl p-4" style={{background:"#0d1117",border:"1px solid #f9731633"}}>
+            <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#f97316"}}>
+              Ceiling Contributors
+              <span className="ml-2 px-1.5 py-0.5 rounded text-xs" style={{background:"#1e293b",color:"#64748b"}}>
+                Age ×{moe.ageFactor}
+              </span>
+            </div>
+            {[
+              ["USG×BPM",  moe.inputs.z_usg * moe.inputs.z_bpm, "Usage × efficiency"],
+              ["FTR",      moe.inputs.z_ftr,                    "Drawing fouls"],
+              ["3P%",      moe.inputs.z_tp,                     "Shooting volume/quality"],
+            ].map(([label, z, desc]) => (
+              <div key={label} className="flex items-center gap-2 mb-1.5">
+                <span className="text-xs w-14 shrink-0" style={{color:"#6b7280"}}>{label}</span>
+                <div className="flex-1 h-2 rounded-full overflow-hidden" style={{background:"#1e293b"}}>
+                  <div className="h-full rounded-full" style={{
+                    width:`${Math.min(100,Math.max(0,(z+3)/6*100))}%`,
+                    background: z >= 0 ? "#f97316" : "#6b7280",
+                    transition:"width 0.3s"
+                  }}/>
+                </div>
+                <span className="text-xs font-mono w-10 text-right" style={{color:z>=0?"#f97316":"#6b7280"}}>{z>=0?"+":""}{z.toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Sec>
+
+      {/* ── Season-by-Season ─────────────────────────────────── */}
       <Sec icon="📈" title="Season-by-Season" sub="▲▼ shows change from previous season">
         {(p.seasonLines||[]).length>1?(
           <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr>
@@ -1299,7 +1394,6 @@ export default function App() {
           astP:c.ast_p,toP:c.to_p,orbP:c.orb_p,drbP:c.drb_p,
           stlP:c.stl_p,blkP:c.blk_p,ftr:c.ftr,
           rimPct:c.rim_pct,tp:c.tp_pct,ft:c.ft_pct,dunkR:c.dunk_r,
-          midPct:c.mid_pct,threePar:c.three_par,min:c.min,
           badges:c.badges?c.badges.split("|").filter(Boolean):[],
         }));
         if(anthroRes?.comps) mapped.anthroComps = anthroRes.comps.map(c=>({
