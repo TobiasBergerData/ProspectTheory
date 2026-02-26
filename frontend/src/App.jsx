@@ -115,15 +115,15 @@ const METHODS = {
   },
   projNba3p: {
     name: "Projected NBA 3P%",
-    formula: "0.35 × college_3P% + 0.25 × FT% + 0.15 × Midrange% + 5.0",
+    formula: "22.0 + 0.15 × college_3P% + 0.12 × FT% + 0.05 × Midrange%",
     inputs: (p) => `3P%: ${fmt(p.tp)} | FT%: ${fmt(p.ft)} | Mid%: ${fmt(p.midPct)}`,
-    desc: "FT% is the strongest single predictor of NBA 3P translation. Midrange shooting shows touch/craft. Intercept of 5.0 accounts for NBA coaching/development. Clipped to 20-50% range.",
+    desc: "Regression-based projection calibrated to NBA outcomes (typical range 30-42%). FT% is the strongest single predictor of NBA 3P translation (Berger, 2023). Midrange shooting shows touch/craft. Intercept 22 centers output around league average. Clipped to 28-44% range.",
   },
   projNba3pa: {
     name: "Projected NBA 3PA/game",
-    formula: "college_3PA/G × 1.2 + FT% Bonus + Era Adjustment",
-    inputs: (p) => `College 3PA/G: ${fmt(p.tpaPerG)} | FT%: ${fmt(p.ft)} | 3P Freq: ${fmt(p.threeF)}`,
-    desc: "Base: college attempts × 1.2 (NBA spacing effect). FT% bonus: good shooters (>75%) evolve to shoot more 3s. +0.5 3PA/G per 5 FT% points above 75. Era: +1.5 for modern NBA.",
+    formula: "college_3PA/G × 1.2 + FT% Bonus (if FT>75: (FT-75)×0.05) + 1.5 (era)",
+    inputs: (p) => `College 3PA/G: ${fmt(p.projNba3pa)} | FT%: ${fmt(p.ft)} | 3P Freq: ${fmt(p.threeF)}`,
+    desc: "Base: college attempts × 1.2 (NBA spacing effect). FT% bonus: good shooters (>75%) evolve to shoot more 3s. Era adjustment +1.5 for modern NBA three-point inflation.",
   },
   projNba3par: {
     name: "Projected NBA 3P Attempt Rate",
@@ -223,7 +223,7 @@ function mapProfile(d) {
     deltaBpm:d.delta_bpm, deltaTs:d.delta_ts,
     feel:d.feel, funcAth:d.func_ath, shootScore:d.shoot_score, defScore:d.def_score,
     overall:d.overall, selfCreation:d.self_creation,
-    projNba3p:d.proj_3p, projNba3pa:null, projNba3par:d.proj_3par, projNbaTs:d.proj_ts,
+    projNba3p:d.proj_3p, projNba3pa:d.proj_3pa, projNba3par:d.proj_3par, projNbaTs:d.proj_ts,
     roles:{playmaker:d.role_playmaker,scorer:d.role_scorer,spacer:d.role_spacer,
       driver:d.role_driver,crasher:d.role_crasher,onball:d.role_onball,
       rimProt:d.role_rim_prot,rebounder:d.role_rebounder,switchPot:d.role_switch},
@@ -355,7 +355,7 @@ function OverviewTab({p, compTier, setCompTier}) {
       <Sec icon="▦" title="Box Score" sub={`${p.gp} GP · ${p.min} MIN/G · ${p.mp} Total MIN`}>
         <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
           {[["PTS",p.pts,p.pctl.pts36],["REB",p.reb,p.pctl.reb36],["AST",p.ast,p.pctl.ast36],
-            ["STL",p.stl,p.pctl.stl],["BLK",p.blk,p.pctl.blk],["TO",p.to,100-p.pctl.to],["PF",p.foul,null]
+            ["STL",p.stl,p.pctl.stl],["BLK",p.blk,p.pctl.blk],["A/TO",p.astTov,null],["FTR",p.ftr,null]
           ].map(([l,v,pc])=><StatCell key={l} label={l} val={v} pctl={pc}/>)}
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs" style={{color:"#6b7280"}}>
@@ -827,7 +827,7 @@ function MethodologyTab() {
     {cat:"Scouting Scores",items:["feel","funcAth","shootScore","defScore","overall"]},
     {cat:"Margin of Error",items:["floor","ceiling"]},
     {cat:"Shooting Projection",items:["projNba3p","projNba3pa","projNba3par","projNbaTs","selfCreation"]},
-    {cat:"Four Factors",items:["fourFactors"]},
+    {cat:"Context-Free Four Factors (CFFR)",items:["fourFactors"]},
     {cat:"Position Classification",items:["posClassification"]},
   ];
   return (
@@ -1116,7 +1116,10 @@ export default function App() {
           name:c.name,pos:c.position||c.pos,
           sim: c.similarity!=null ? (c.similarity > 1 ? Math.round(c.similarity) : Math.round(c.similarity*100)) : null,
           tier:c.tier||"",nba:!!c.made_nba,bpm:c.bpm,usg:c.usg,ts:c.ts,
-          astP:c.ast_p,blkP:c.blk_p,badges:c.badges?c.badges.split("|").filter(Boolean):[],
+          astP:c.ast_p,toP:c.to_p,orbP:c.orb_p,drbP:c.drb_p,
+          stlP:c.stl_p,blkP:c.blk_p,ftr:c.ftr,
+          rimPct:c.rim_pct,tp:c.tp_pct,ft:c.ft_pct,dunkR:c.dunk_r,
+          badges:c.badges?c.badges.split("|").filter(Boolean):[],
         }));
         if(anthroRes?.comps) mapped.anthroComps = anthroRes.comps.map(c=>({
           name:c.name,dist:c.distance,sim:Math.round(c.similarity||0),
@@ -1131,20 +1134,24 @@ export default function App() {
     setProfileLoading(false);
   };
 
-  // Search: local filter + API fallback
+  // Search: local filter + API always run in parallel (merge results)
   useEffect(()=>{
     if(!search||search.length<2){setSearchResults([]);return;}
     const local = PLAYER_LIST.filter(n=>n.toLowerCase().includes(search.toLowerCase())).slice(0,15);
-    if(local.length>0){setSearchResults(local);return;}
-    // API fallback for names not in board
+    // Show local results immediately
+    if(local.length>0) setSearchResults(local);
+    // ALWAYS also run API search (historical players not in board)
     const t=setTimeout(()=>{
       fetch(`${API_BASE}/players/search?q=${encodeURIComponent(search)}&limit=15`)
         .then(r=>r.json())
         .then(d=>{
-          const names=(d.results||[]).map(r=>r.name);
-          setSearchResults(names);
+          const apiNames=(d.results||[]).map(r=>r.name);
+          // Merge: local first, then API results not already in local
+          const merged = [...local];
+          apiNames.forEach(n=>{if(!merged.includes(n)) merged.push(n);});
+          setSearchResults(merged.slice(0,20));
           // Add to PLAYER_LIST for future lookups
-          names.forEach(n=>{if(!PLAYERS[n]){PLAYER_LIST.push(n);PLAYERS[n]={name:n,pos:"",team:""};}});
+          apiNames.forEach(n=>{if(!PLAYERS[n]){PLAYER_LIST.push(n);PLAYERS[n]={name:n,pos:"",team:""};}});
         })
         .catch(()=>{});
     },300);
