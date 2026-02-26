@@ -707,315 +707,40 @@ function CompsTab({p}) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// MARGIN OF ERROR CALCULATION (Berger / Barttorvik model)
-// ═══════════════════════════════════════════════════════════
-
-// Position average heights (inches) for height z-score
-const POS_HT = { Playmaker: 75.5, Wing: 78.5, Big: 81.5 };
-
-// Approximate probit: percentile → z-score (Beasley-Springer-Moro approx)
-function pctl2z(pctl) {
-  const p = Math.max(0.001, Math.min(0.999, pctl / 100));
-  const a = [-3.969683028665376e1, 2.209460984245205e2, -2.759285104469687e2, 1.383577518672690e2, -3.066479806614716e1, 2.506628277459239];
-  const b = [-5.447609879822406e1, 1.615858368580409e2, -1.556989798598866e2, 6.680131188771972e1, -1.328068155288572e1];
-  const c = [-7.784894002430293e-3, -3.223964580411365e-1, -2.400758277161838, -2.549732539343734, 4.374664141464968, 2.938163982698783];
-  const d = [7.784695709041462e-3, 3.223907427788357e-1, 2.445134137142996, 3.754408661907416];
-  const pLow = 0.02425, pHigh = 1 - pLow;
-  if (p < pLow) {
-    const q = Math.sqrt(-2 * Math.log(p));
-    return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
-  } else if (p <= pHigh) {
-    const q = p - 0.5, r = q*q;
-    return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q / (((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);
-  } else {
-    const q = Math.sqrt(-2 * Math.log(1-p));
-    return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
-  }
-}
-
-function calcMoE(p) {
-  // ── z-score helpers ────────────────────────────────────────────
-  // Use percentile → z where available, otherwise normalize by league avg
-  const z_bpm   = p.pctl?.bpm  != null ? pctl2z(p.pctl.bpm)  : (p.bpm  != null ? (p.bpm - 0)   / 4.0 : 0);
-  const z_usg   = p.pctl?.usg  != null ? pctl2z(p.pctl.usg)  : (p.usg  != null ? (p.usg - 20)  / 4.0 : 0);
-  const z_ts    = p.pctl?.ts   != null ? pctl2z(p.pctl.ts)   : (p.ts   != null ? (p.ts  - 54)  / 5.0 : 0);
-  const z_ast   = p.pctl?.ast  != null ? pctl2z(p.pctl.ast)  : 0;
-  const z_stl   = p.pctl?.stl  != null ? pctl2z(p.pctl.stl)  : 0;
-  const z_blk   = p.pctl?.blk  != null ? pctl2z(p.pctl.blk)  : 0;
-  const z_drb   = p.pctl?.drb  != null ? pctl2z(p.pctl.drb)  : 0;
-
-  // Raw z-scores for fields without pctl (league averages from BartTorvik DB)
-  const z_ft    = p.ft   != null ? (p.ft   - 68.5) / 12.0 : 0;
-  const z_astTo = p.astTov != null ? (p.astTov - 1.3) / 0.7  : 0;
-  const z_dbpm  = p.dbpm != null ? (p.dbpm - -1.5) / 2.0  : 0;
-  const z_ftr   = p.ftr  != null ? (p.ftr  - 28)   / 14.0 : 0;
-  const z_tp    = p.tp   != null ? (p.tp   - 32)   / 7.0  : 0;
-
-  // Height z-score vs. position average
-  const posHtAvg = POS_HT[p.pos] || 78.5;
-  const z_ht    = p.htIn != null ? (p.htIn - posHtAvg) / 2.0 : 0;
-
-  // AgeFactor
-  const age = p.age;
-  const ageFactor = age == null ? 1.0 : age < 20 ? 1.2 : age <= 21 ? 1.0 : age <= 22 ? 0.9 : 0.8;
-
-  // ── Scores ─────────────────────────────────────────────────────
-  const floor   = z_ft * 0.30 + z_astTo * 0.25 + z_dbpm * 0.25 + z_ht * 0.20;
-  const ceilingRaw = (z_usg * z_bpm * 0.40 + z_ftr * 0.30 + z_tp * 0.30) * ageFactor;
-  const ceiling = ceilingRaw;
-  const moe     = Math.abs(ceiling - floor);
-
-  // Normalize to 0-100 display scale (clip ±3σ → 0-100)
-  const toDisplay = (z) => Math.round(Math.min(100, Math.max(0, (z + 3) / 6 * 100)));
-
-  // MoE risk label
-  let riskLabel, riskColor, riskDesc;
-  if (moe > 2.0)      { riskLabel = "Extreme Variance";  riskColor = "#ef4444"; riskDesc = "Very wide outcome gap — elite upside but real bust risk."; }
-  else if (moe > 1.5) { riskLabel = "Boom-or-Bust";      riskColor = "#f97316"; riskDesc = "High variance pick. Team context and role clarity matter enormously."; }
-  else if (moe > 1.0) { riskLabel = "Moderate Risk";     riskColor = "#fbbf24"; riskDesc = "Meaningful spread between floor and ceiling. Typical mid-round range."; }
-  else if (moe > 0.5) { riskLabel = "Controlled Risk";   riskColor = "#86efac"; riskDesc = "Fairly predictable outcome. Floor and ceiling are close together."; }
-  else                 { riskLabel = "Safe Bet";          riskColor = "#22c55e"; riskDesc = "Low variance. Limited upside, but reliable rotation contributor expected."; }
-
-  return {
-    floor, ceiling, moe,
-    floorPct: toDisplay(floor),
-    ceilingPct: toDisplay(ceiling),
-    riskLabel, riskColor, riskDesc,
-    ageFactor,
-    inputs: { z_ft, z_astTo, z_dbpm, z_ht, z_usg, z_bpm, z_ftr, z_tp },
-  };
-}
-
-// ═══════════════════════════════════════════════════════════
 // TAB: PROJECTION
 // ═══════════════════════════════════════════════════════════
 function ProjectionTab({p}) {
   const tierOrder=["Superstar","All-Star","Starter","Role Player","Replacement","Negative","Never NBA"];
-  const tierOrder=["Superstar","All-Star","Starter","Role Player","Replacement","Negative","Never NBA"];
-
-  // ── Bayesian Smoothing ─────────────────────────────────────────
-  // With the pipeline sigma fix, the raw distributions are now much more
-  // granular. We still apply a light 5% base-rate blend to guard against
-  // any remaining zero-probability tiers.
-  const BASE_RATE = 1/7;
-  const MODEL_WEIGHT = 0.95;
-  const PRIOR_WEIGHT = 0.05;
-  const rawTiers = tierOrder.map(t => (p.tiers[t] || 0) / 100);
-  const rawSum = rawTiers.reduce((a,b)=>a+b, 0);
-  const normRaw = rawSum > 0 ? rawTiers.map(v => v / rawSum) : rawTiers;
-  const smoothed = normRaw.map(v => (MODEL_WEIGHT * v + PRIOR_WEIGHT * BASE_RATE) * 100);
-  const tierData = tierOrder.map((t,i) => ({
-    name: t.replace("Never NBA","Never\nNBA"),
-    pct: Math.round(smoothed[i] * 10) / 10,
-    raw: Math.round((p.tiers[t]||0) * 10) / 10,
-    fill: TC[t] || "#374151",
-  }));
-
-  // ── Margin of Error ────────────────────────────────────────────
-  const moe = useMemo(() => calcMoE(p), [p]);
-
+  const tierData=tierOrder.map(t=>({name:t.replace("Never NBA","Never\nNBA"),pct:p.tiers[t]||0,fill:TC[t]||"#374151"}));
   return (
     <div className="space-y-5">
-      {/* ── Top 3 cards ─────────────────────────────────────── */}
       <div className="grid grid-cols-3 gap-4">
-        {[
-          ["3-Year NBA Peak", p.mu!=null ? p.mu.toFixed(3) : "—", p.mu!=null?"#e5e7eb":"#6b7280", "peak"],
-          ["NBA Career Probability", p.pNba!=null?`${(p.pNba*100).toFixed(0)}%`:"—", p.pNba!=null?"#f97316":"#6b7280", "pnba"],
-          ["Outcome Range (σ)", p.sigma!=null?`± ${p.sigma.toFixed(3)}`:"—", "#6b7280", "sigma"],
-        ].map(([l,v,c,key])=>(
-          <Tip key={key} wide content={
-            key==="peak" ? (
-              <div>
-                <div className="font-bold mb-2" style={{color:"#f97316"}}>3-Year NBA Peak PIE</div>
-                <div style={{color:"#cbd5e1"}} className="mb-2">The model's best estimate of this player's <strong>Player Impact Estimate</strong> over their peak 3 consecutive NBA seasons — not career average, but the realistic best window.</div>
-                <div className="space-y-1 text-xs" style={{color:"#94a3b8"}}>
-                  <div>🟡 Rotation / Replacement ≈ <strong style={{color:"#e5e7eb"}}>0.070 – 0.082</strong></div>
-                  <div>🔵 Starter ≈ <strong style={{color:"#e5e7eb"}}>0.082 – 0.135</strong></div>
-                  <div>🟠 All-Star ≈ <strong style={{color:"#e5e7eb"}}>0.135 – 0.175</strong></div>
-                  <div>🌟 Superstar / MVP ≈ <strong style={{color:"#e5e7eb"}}>0.175+</strong></div>
-                </div>
-              </div>
-            ) : key==="sigma" ? (
-              <div>
-                <div className="font-bold mb-2" style={{color:"#f97316"}}>Outcome Range (σ — Standard Deviation)</div>
-                <div style={{color:"#cbd5e1"}} className="mb-2">How wide the confidence interval is around the predicted peak. Calibrated for out-of-sample accuracy: accounts for model uncertainty <em>plus</em> structural college→NBA translation noise (≈0.015 PIE units).</div>
-                <div className="space-y-1 text-xs" style={{color:"#94a3b8"}}>
-                  <div>📐 True outcome falls within <strong style={{color:"#e5e7eb"}}>μ ± σ</strong> ~68% of cases</div>
-                  <div>📐 Within <strong style={{color:"#e5e7eb"}}>μ ± 2σ</strong> ~95% of cases</div>
-                  <div>🔴 High σ → young / unusual profile / small sample</div>
-                  <div>🟢 Low σ → older / large sample / typical profile</div>
-                </div>
-                {p.mu!=null && p.sigma!=null && (
-                  <div className="mt-2 pt-2 text-xs font-mono" style={{borderTop:"1px solid #374151",color:"#7dd3fc"}}>
-                    μ ± σ: {(p.mu-p.sigma).toFixed(3)} → {(p.mu+p.sigma).toFixed(3)}<br/>
-                    Pessimistic (−2σ): {(p.mu-2*p.sigma).toFixed(3)}<br/>
-                    Optimistic (+2σ): {(p.mu+2*p.sigma).toFixed(3)}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div>
-                <div className="font-bold mb-2" style={{color:"#f97316"}}>NBA Career Probability</div>
-                <div style={{color:"#cbd5e1"}}>Estimated probability this player plays meaningful NBA minutes (≥500 career minutes). Based on historical comparison of similar college statistical profiles.</div>
-              </div>
-            )
+        {[["Chance of NBA Career",`${p.pNba!=null?((p.pNba*100).toFixed(0))+"%":"—"}`,p.pNba!=null?"#f97316":"#6b7280"],["Proj. 3yr NBA Peak",p.mu!=null?p.mu.toFixed(3):"—","#e5e7eb"],["Uncertainty (σ)",p.sigma!=null?`± ${p.sigma.toFixed(3)}`:"—","#6b7280"]].map(([l,v,c])=>(
+          <Tip key={l} wide content={
+            l.includes("Peak") ? <div><div className="font-bold mb-1" style={{color:"#f97316"}}>Projected 3-Year NBA Peak PIE</div><div style={{color:"#cbd5e1"}}>The model's best estimate of this player's peak Player Impact Estimate (PIE) over their best 3 consecutive NBA seasons. PIE measures a player's contribution to their team's success. Average NBA player ≈ 0.100, All-Star ≈ 0.150+, MVP ≈ 0.200+.</div></div>
+            : l.includes("σ") ? <div><div className="font-bold mb-1" style={{color:"#f97316"}}>Uncertainty (Standard Deviation)</div><div style={{color:"#cbd5e1"}}>How uncertain the model is about this projection. Lower σ = more confident prediction (typically older players with more data). Higher σ = wider range of possible outcomes (typically young players or those with unusual profiles). The actual outcome falls within ±1σ about 68% of the time.</div></div>
+            : <div><div className="font-bold mb-1" style={{color:"#f97316"}}>NBA Career Probability</div><div style={{color:"#cbd5e1"}}>Estimated probability that this player will play meaningful NBA minutes (≥500 career minutes). Based on historical comparison of similar statistical profiles.</div></div>
           }>
             <div className="rounded-xl p-5 text-center cursor-help" style={{background:"#111827"}}>
               <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#6b7280"}}>{l} <span style={{color:"#475569"}}>ⓘ</span></div>
               <div className="text-3xl font-bold" style={{color:c,fontFamily:"'Oswald',sans-serif"}}>{v}</div>
-              {key==="peak" && p.mu!=null && p.sigma!=null && (
-                <div className="text-xs mt-1" style={{color:"#475569"}}>{(p.mu-p.sigma).toFixed(3)} – {(p.mu+p.sigma).toFixed(3)}</div>
-              )}
             </div>
           </Tip>
         ))}
       </div>
-
-      {/* ── Projected Outcome bar chart ─────────────────────── */}
-      <Sec icon="◆" title="Projected Outcome" sub="Student's t Monte Carlo (20k samples) — hover bars for raw vs. smoothed">
-        <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg text-xs" style={{background:"#0d1117",border:"1px solid #1e293b"}}>
-          <span style={{color:"#475569"}}>ⓘ</span>
-          <span style={{color:"#475569"}}>95% model · 5% base rate blend — ensures no tier reads 0% due to sampling noise.</span>
-        </div>
-        <ResponsiveContainer width="100%" height={240}>
+      <Sec icon="◆" title="Projected Outcome" sub="Monte Carlo (20k samples) — tier probability distribution">
+        <ResponsiveContainer width="100%" height={260}>
           <BarChart data={tierData} margin={{top:5,right:5,bottom:5,left:5}}>
             <XAxis dataKey="name" tick={{fill:"#9ca3af",fontSize:11}} axisLine={false} tickLine={false}/>
-            <YAxis tick={{fill:"#6b7280",fontSize:11}} axisLine={false} tickLine={false} domain={[0,60]} tickFormatter={v=>`${v}%`}/>
-            <RTooltip contentStyle={{background:"#1f2937",border:"1px solid #374151",borderRadius:8,color:"#e5e7eb"}}
-              formatter={(v,name,props)=>[
-                <span key="v"><span style={{fontSize:16,fontWeight:"bold"}}>{v}%</span><span style={{color:"#6b7280",fontSize:11,display:"block"}}>Raw model: {props.payload?.raw}%</span></span>,
-                "Probability"
-              ]}/>
+            <YAxis tick={{fill:"#6b7280",fontSize:11}} axisLine={false} tickLine={false} domain={[0,50]} tickFormatter={v=>`${v}%`}/>
+            <RTooltip contentStyle={{background:"#1f2937",border:"1px solid #374151",borderRadius:8,color:"#e5e7eb"}} formatter={v=>[`${v}%`,"Probability"]}/>
             <Bar dataKey="pct" radius={[6,6,0,0]}>{tierData.map((e,i)=><Cell key={i} fill={e.fill}/>)}</Bar>
           </BarChart>
         </ResponsiveContainer>
-        <div className="grid grid-cols-4 md:grid-cols-7 gap-1.5 mt-3">
-          {tierData.map((t,i)=>(
-            <div key={i} className="rounded-lg p-2 text-center" style={{background:"#0d1117",border:`1px solid ${t.fill}33`}}>
-              <div className="text-xs mb-0.5 truncate" style={{color:t.fill,fontWeight:"bold",fontSize:9}}>{tierOrder[i]}</div>
-              <div className="font-bold" style={{color:t.fill,fontFamily:"'Oswald',sans-serif",fontSize:16}}>{t.pct}%</div>
-            </div>
-          ))}
-        </div>
         {p.actual&&<div className="mt-3 flex items-center gap-3 p-3 rounded-lg" style={{background:"#0c1222",border:"1px solid #1e3a5f"}}>
           <span className="text-xs" style={{color:"#6b7280"}}>Actual:</span><TierBadge tier={p.actual}/><span className="text-sm" style={{color:"#9ca3af"}}>Peak PIE: {p.peakPie?.toFixed(3)}</span>
         </div>}
       </Sec>
-
-      {/* ── Margin of Error / Risk-Reward ───────────────────── */}
-      <Sec icon="⚖️" title="Margin of Error" sub="Floor (stability) vs. Ceiling (upside) — NBA Draft Risk-Reward">
-        <Tip wide content={
-          <div>
-            <div className="font-bold mb-2" style={{color:"#f97316"}}>Margin of Error — Risk-Reward Analytics</div>
-            <div style={{color:"#cbd5e1"}} className="mb-2 text-xs">
-              Quantifies the gap between a player's reliable floor and their theoretical ceiling using z-score normalized BartTorvik stats.
-            </div>
-            <div className="text-xs space-y-1" style={{color:"#94a3b8"}}>
-              <div><strong style={{color:"#22c55e"}}>Floor</strong> = FT%(z)×0.30 + AST/TO(z)×0.25 + DBPM(z)×0.25 + Height(z)×0.20</div>
-              <div><strong style={{color:"#f97316"}}>Ceiling</strong> = (USG×BPM(z)×0.40 + FTR(z)×0.30 + 3P%(z)×0.30) × AgeFactor</div>
-              <div className="mt-1 pt-1" style={{borderTop:"1px solid #374151"}}>AgeFactor: &lt;20 → 1.2× · 20–21 → 1.0× · &gt;21 → 0.8×</div>
-              <div className="mt-1 italic" style={{color:"#64748b"}}>⚠ Team context (spacing, usage role) can shift both anchors significantly.</div>
-            </div>
-          </div>
-        }>
-          {/* Range bar */}
-          <div className="mb-4 cursor-help">
-            <div className="flex justify-between text-xs mb-1.5" style={{color:"#6b7280"}}>
-              <span style={{color:"#22c55e"}}>◀ Floor (Stability)</span>
-              <span className="font-bold px-3 py-0.5 rounded-full text-xs" style={{background:moe.riskColor+"22",color:moe.riskColor,border:`1px solid ${moe.riskColor}66`}}>
-                {moe.riskLabel}
-              </span>
-              <span style={{color:"#f97316"}}>Ceiling (Upside) ▶</span>
-            </div>
-
-            {/* Track */}
-            <div className="relative h-8 rounded-lg overflow-hidden" style={{background:"#0d1117",border:"1px solid #1e293b"}}>
-              {/* Gradient fill between floor and ceiling */}
-              {(() => {
-                const left  = Math.min(moe.floorPct, moe.ceilingPct);
-                const right = Math.max(moe.floorPct, moe.ceilingPct);
-                const width = right - left;
-                return (
-                  <>
-                    <div className="absolute h-full" style={{
-                      left:`${left}%`, width:`${Math.max(width,2)}%`,
-                      background:`linear-gradient(90deg, #22c55e66, ${moe.riskColor}88)`,
-                    }}/>
-                    {/* Floor marker */}
-                    <div className="absolute top-0 bottom-0 w-1 rounded" style={{left:`${moe.floorPct}%`,background:"#22c55e",transform:"translateX(-50%)"}}/>
-                    {/* Ceiling marker */}
-                    <div className="absolute top-0 bottom-0 w-1 rounded" style={{left:`${moe.ceilingPct}%`,background:"#f97316",transform:"translateX(-50%)"}}/>
-                    {/* MoE label in center */}
-                    <div className="absolute inset-0 flex items-center justify-center text-xs font-bold" style={{color:"#e5e7eb"}}>
-                      MoE {moe.moe.toFixed(2)}σ
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-
-            {/* Anchor labels */}
-            <div className="flex justify-between mt-1 text-xs">
-              <span className="font-mono" style={{color:"#22c55e"}}>{moe.floor.toFixed(2)}σ</span>
-              <span style={{color:"#6b7280",fontSize:10}}>{moe.riskDesc}</span>
-              <span className="font-mono" style={{color:"#f97316"}}>{moe.ceiling.toFixed(2)}σ</span>
-            </div>
-          </div>
-        </Tip>
-
-        {/* Score breakdown cards */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-xl p-4" style={{background:"#0d1117",border:"1px solid #22c55e33"}}>
-            <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#22c55e"}}>Floor Contributors</div>
-            {[
-              ["FT%",    moe.inputs.z_ft,    "Translatable skill"],
-              ["AST/TO", moe.inputs.z_astTo, "Decision-making"],
-              ["DBPM",   moe.inputs.z_dbpm,  "Defensive impact"],
-              ["Height", moe.inputs.z_ht,    "vs. position avg"],
-            ].map(([label, z, desc]) => (
-              <div key={label} className="flex items-center gap-2 mb-1.5">
-                <span className="text-xs w-12 shrink-0" style={{color:"#6b7280"}}>{label}</span>
-                <div className="flex-1 h-2 rounded-full overflow-hidden" style={{background:"#1e293b"}}>
-                  <div className="h-full rounded-full" style={{
-                    width:`${Math.min(100,Math.max(0,(z+3)/6*100))}%`,
-                    background: z >= 0 ? "#22c55e" : "#ef4444",
-                    transition:"width 0.3s"
-                  }}/>
-                </div>
-                <span className="text-xs font-mono w-10 text-right" style={{color:z>=0?"#22c55e":"#ef4444"}}>{z>=0?"+":""}{z.toFixed(2)}</span>
-              </div>
-            ))}
-          </div>
-
-          <div className="rounded-xl p-4" style={{background:"#0d1117",border:"1px solid #f9731633"}}>
-            <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#f97316"}}>
-              Ceiling Contributors
-              <span className="ml-2 px-1.5 py-0.5 rounded text-xs" style={{background:"#1e293b",color:"#64748b"}}>
-                Age ×{moe.ageFactor}
-              </span>
-            </div>
-            {[
-              ["USG×BPM",  moe.inputs.z_usg * moe.inputs.z_bpm, "Usage × efficiency"],
-              ["FTR",      moe.inputs.z_ftr,                    "Drawing fouls"],
-              ["3P%",      moe.inputs.z_tp,                     "Shooting volume/quality"],
-            ].map(([label, z, desc]) => (
-              <div key={label} className="flex items-center gap-2 mb-1.5">
-                <span className="text-xs w-14 shrink-0" style={{color:"#6b7280"}}>{label}</span>
-                <div className="flex-1 h-2 rounded-full overflow-hidden" style={{background:"#1e293b"}}>
-                  <div className="h-full rounded-full" style={{
-                    width:`${Math.min(100,Math.max(0,(z+3)/6*100))}%`,
-                    background: z >= 0 ? "#f97316" : "#6b7280",
-                    transition:"width 0.3s"
-                  }}/>
-                </div>
-                <span className="text-xs font-mono w-10 text-right" style={{color:z>=0?"#f97316":"#6b7280"}}>{z>=0?"+":""}{z.toFixed(2)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Sec>
-
-      {/* ── Season-by-Season ─────────────────────────────────── */}
       <Sec icon="📈" title="Season-by-Season" sub="▲▼ shows change from previous season">
         {(p.seasonLines||[]).length>1?(
           <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr>
@@ -1046,10 +771,166 @@ function ProjectionTab({p}) {
 // TAB: SCOUTING
 // ═══════════════════════════════════════════════════════════
 function ScoutingTab({p}) {
+
+  // ═══ NBA ARCHETYPE CLASSIFICATION ENGINE ══════════════
+  const archetype = useMemo(() => {
+    const feel    = p.feel       ?? 0;
+    const funcAth = p.funcAth    ?? 0;
+    const shoot   = p.shootScore ?? 0;
+    const def     = p.defScore   ?? 0;
+    const usg     = p.usg        ?? 0;
+    const pos     = p.pos        ?? "Wing";
+    const blkPctl = p.pctl?.blk  ?? 50;
+    const astPctl = p.pctl?.ast  ?? 50;
+    const threePFreqPctl = p.threeF != null ? Math.min(99, p.threeF * 2.5) : 0;
+    const rimFreqPctl    = p.rimF   != null ? Math.min(99, p.rimF * 2.5)   : 0;
+    const dunkPctl       = p.dunkR  != null ? Math.min(99, p.dunkR * 4.0)  : 0;
+    const htIn           = p.htIn   ?? 78;
+    const isBig          = pos === "Big";
+    const isGuard        = pos === "Playmaker";
+
+    // A. Initiators
+    if (usg > 30 && feel >= 85 && shoot >= 75) return {
+      key:"helio", name:"Heliocentric Engine", group:"A · Initiators", groupColor:"#f97316", icon:"🔆", color:"#fbbf24",
+      comps:"Luka Dončić · James Harden",
+      desc:"Offense runs through this player. Elite IQ and shooting sustain elite usage without efficiency collapse. Needs the ball and a system built around his creation.",
+      strengths:["Elite feel & creation","High-volume shooting","Shot creation off dribble"],
+      risks:["Needs proper spacing","Usage regresses in NBA","Defensive liability possible"],
+      fit:"Primary offensive system — needs shooters around him.",
+    };
+    if (feel >= 80 && shoot >= 65 && (isGuard || usg >= 24)) return {
+      key:"initiator", name:"Primary Initiator", group:"A · Initiators", groupColor:"#f97316", icon:"🎯", color:"#f97316",
+      comps:"Tyrese Haliburton · Dejounte Murray",
+      desc:"Elite playmaker who can also score when needed. Translates via decision-making and court vision rather than pure athleticism. NBA floor is high because creation is real.",
+      strengths:["Playmaking lead","Good shooting base","Low-TO decisions"],
+      risks:["May not be primary scorer at next level","Finishing at rim needed"],
+      fit:"Starting PG or secondary initiator on contender.",
+    };
+    if (feel >= 65 && shoot >= 70 && usg >= 25) return {
+      key:"combo", name:"Combo Guard", group:"A · Initiators", groupColor:"#f97316", icon:"⚡", color:"#fb923c",
+      comps:"Jordan Clarkson · Gary Trent Jr.",
+      desc:"Scoring and passing mix at high usage. Not a pure playmaker but keeps defenses honest. Best fit as secondary ball-handler or sixth man scorer.",
+      strengths:["Versatile scoring","Can handle in spurts","Shooting off movement"],
+      risks:["Neither elite creator nor shooter","Role clarity needed at NBA level"],
+      fit:"6th man scorer or off-ball alongside elite PG.",
+    };
+
+    // B. Wings & Specialists
+    if (shoot >= 75 && def >= 75 && feel >= 50) return {
+      key:"3d", name:"3&D Wing", group:"B · Wings & Specialists", groupColor:"#3b82f6", icon:"🏹", color:"#22c55e",
+      comps:"Mikal Bridges · OG Anunoby",
+      desc:"The most coveted role player in the modern NBA. Translates immediately because both shooting and defense survive the transition. Does not need the ball to contribute.",
+      strengths:["Immediate NBA role","High floor","Two-way value"],
+      risks:["Limited creation / upside","Role player ceiling"],
+      fit:"Starting wing on any roster — ideal in any system.",
+    };
+    if (shoot >= 85 && threePFreqPctl >= 80 && feel < 60) return {
+      key:"mover", name:"Movement Shooter", group:"B · Wings & Specialists", groupColor:"#3b82f6", icon:"🎪", color:"#60a5fa",
+      comps:"Buddy Hield · Duncan Robinson",
+      desc:"Elite shooter off movement and pin-downs. Creates no offense himself but is always a threat in the right system. NBA value depends on landing with a quality playmaker.",
+      strengths:["Elite catch-and-shoot","Forces constant attention","Low-TO specialist"],
+      risks:["Zero creation","System-dependent","Defended off the ball"],
+      fit:"Off-ball specialist — needs a primary creator.",
+    };
+    if (funcAth >= 80 && rimFreqPctl >= 75 && shoot < 60) return {
+      key:"slasher", name:"Slasher", group:"B · Wings & Specialists", groupColor:"#3b82f6", icon:"⚔️", color:"#f87171",
+      comps:"Dorian Finney-Smith · Jalen McDaniels",
+      desc:"Athletic cutter and rim attacker who lives off others' creation. Effective in transition and off cuts but lacks the shooting to threaten from distance.",
+      strengths:["Rim finishing","Athletic plays","Drawing fouls"],
+      risks:["Shooting limits spacing","Predictable off-ball"],
+      fit:"Energy wing / backup — needs spacing around him.",
+    };
+    if (feel >= 75 && def >= 70 && shoot >= 60 && usg < 20) return {
+      key:"connector", name:"Connector / Glue Guy", group:"B · Wings & Specialists", groupColor:"#3b82f6", icon:"🔗", color:"#a78bfa",
+      comps:"Draymond Green (wing) · Kyle Anderson",
+      desc:"Versatile two-way player who makes teams better without doing any single thing at an elite level. High IQ compensates for modest athleticism.",
+      strengths:["Versatility","Smart decisions","Two-way competence"],
+      risks:["No elite skill — may be exposed","Usage too low to project"],
+      fit:"Starting piece on a smart, well-built team.",
+    };
+
+    // C. Frontcourt
+    if (isBig && def >= 85 && funcAth >= 75 && blkPctl >= 80) return {
+      key:"rimprotect", name:"Modern Rim Protector", group:"C · Frontcourt", groupColor:"#8b5cf6", icon:"🛡", color:"#818cf8",
+      comps:"Walker Kessler · Mark Williams",
+      desc:"Defensive anchor whose shot-altering presence alone justifies a roster spot. Must roll hard and set screens. Offensive role is catch-and-finish — and that is fine.",
+      strengths:["Immediate defensive value","Screen/roll threat","Lob target"],
+      risks:["Offensive limitations","Exploitable in space","P&R coverage"],
+      fit:"Starting center on a perimeter-heavy team.",
+    };
+    if (isBig && shoot >= 70 && blkPctl >= 60 && htIn >= 81) return {
+      key:"stretchbig", name:"Stretch Big", group:"C · Frontcourt", groupColor:"#8b5cf6", icon:"📐", color:"#c084fc",
+      comps:"Brook Lopez · Isaiah Hartenstein",
+      desc:"Floor-spacing big who can also protect the rim. The ideal modern center profile — opens the floor for guards while anchoring the paint on defense.",
+      strengths:["Rare skill combination","Opens 5-out lineups","Versatile defender"],
+      risks:["Shooting must translate","May be forced to choose a role"],
+      fit:"Starting center in modern scheme — extremely high value if both skills translate.",
+    };
+    if (isBig && funcAth >= 85 && dunkPctl >= 80 && feel < 50) return {
+      key:"rimrunner", name:"Rim Runner / Finisher", group:"C · Frontcourt", groupColor:"#8b5cf6", icon:"💥", color:"#fb7185",
+      comps:"Clint Capela · Isaiah Roby",
+      desc:"Pure athletic finisher who scores only via lobs, cuts, and offensive rebounds. No halfcourt creation needed — just run, catch, and dunk.",
+      strengths:["Elite athleticism","High-efficiency finishing","OREB"],
+      risks:["Zero creation","Narrow role","Dependent on elite playmakers"],
+      fit:"Backup or complementary starter — pairs best with elite playmakers.",
+    };
+    if (isBig && feel >= 75 && blkPctl >= 70 && astPctl >= 70) return {
+      key:"shortroll", name:"Short Roll Playmaker", group:"C · Frontcourt", groupColor:"#8b5cf6", icon:"🎲", color:"#34d399",
+      comps:"Draymond Green · Nikola Jokić profile",
+      desc:"Rare passing big who initiates from the elbow and punishes aggressive defenses. Translates via IQ rather than athleticism.",
+      strengths:["Unique passing skill","Forces tough rotations","Elite basketball IQ"],
+      risks:["Rare — hard to evaluate in college","Needs right system"],
+      fit:"Ideal in modern motion offense — franchise-altering if elite.",
+    };
+
+    // Fallback
+    return {
+      key:"raw", name:"Raw Prospect", group:"Unclassified", groupColor:"#6b7280", icon:"🔬", color:"#6b7280",
+      comps:"Profile incomplete", desc:"Scores do not clearly match any defined archetype — either multi-dimensional without a dominant skill cluster, a development prospect, or insufficient sample size.",
+      strengths:["Undefined dominant skill"], risks:["Role clarity needed","Projection uncertain"],
+      fit:"Evaluate on deeper film + secondary data.",
+    };
+  }, [p]);
+
   const roleOff=[["Playmaker",p.roles.playmaker],["Scorer",p.roles.scorer],["Spacer",p.roles.spacer],["Driver",p.roles.driver],["Crasher",p.roles.crasher]];
   const roleDef=[["On-Ball D",p.roles.onball],["Rim Protect",p.roles.rimProt],["Rebounder",p.roles.rebounder],["Switch Pot.",p.roles.switchPot]];
+
   return (
     <div className="space-y-5">
+
+      {/* ARCHETYPE CARD */}
+      <div className="rounded-2xl p-5 relative overflow-hidden" style={{
+        background:`linear-gradient(135deg, #0d1117 60%, ${archetype.color}18)`,
+        border:`1px solid ${archetype.color}44`,
+      }}>
+        <div className="absolute top-0 right-0 w-40 h-40 rounded-full opacity-10 blur-3xl pointer-events-none" style={{background:archetype.color}}/>
+        <div className="flex items-start gap-4 relative">
+          <div className="rounded-xl p-3 text-2xl shrink-0" style={{background:archetype.color+"22",border:`1px solid ${archetype.color}44`}}>
+            {archetype.icon}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-xs uppercase tracking-widest mb-1" style={{color:archetype.groupColor}}>{archetype.group}</div>
+            <div className="text-2xl font-bold mb-0.5" style={{color:archetype.color,fontFamily:"'Oswald',sans-serif"}}>{archetype.name}</div>
+            <div className="text-xs mb-3" style={{color:"#64748b"}}>NBA Comps: <span style={{color:"#94a3b8"}}>{archetype.comps}</span></div>
+            <p className="text-sm leading-relaxed mb-3" style={{color:"#cbd5e1"}}>{archetype.desc}</p>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <div className="text-xs uppercase tracking-wider mb-1.5" style={{color:"#22c55e"}}>✓ Strengths</div>
+                <ul className="space-y-1">{archetype.strengths.map((s,i)=><li key={i} className="text-xs flex items-center gap-1.5" style={{color:"#86efac"}}><span style={{color:"#22c55e"}}>·</span>{s}</li>)}</ul>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-wider mb-1.5" style={{color:"#f87171"}}>⚠ Risk Factors</div>
+                <ul className="space-y-1">{archetype.risks.map((r,i)=><li key={i} className="text-xs flex items-center gap-1.5" style={{color:"#fca5a5"}}><span style={{color:"#ef4444"}}>·</span>{r}</li>)}</ul>
+              </div>
+            </div>
+            <div className="px-3 py-2 rounded-lg text-xs" style={{background:"#0d1117",border:`1px solid ${archetype.color}33`}}>
+              <span style={{color:"#64748b"}}>Best Fit: </span><span style={{color:"#e2e8f0"}}>{archetype.fit}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* SCOUTING SCORES */}
       <Sec icon="⭐" title="Scouting Scores" sub="Hover any score for formula, inputs, and methodology ⓘ">
         <ScoreGauge label="Overall" value={p.overall} color="#f97316" methodKey="overall" p={p}/>
         <ScoreGauge label="Feel / IQ" value={p.feel} color="#fbbf24" methodKey="feel" p={p}/>
@@ -1057,10 +938,14 @@ function ScoutingTab({p}) {
         <ScoreGauge label="Shooting" value={p.shootScore} color="#3b82f6" methodKey="shootScore" p={p}/>
         <ScoreGauge label="Defense" value={p.defScore} color="#10b981" methodKey="defScore" p={p}/>
       </Sec>
+
+      {/* ROLES */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <Sec icon="⚔️" title="Offensive Roles">{roleOff.sort((a,b)=>b[1]-a[1]).map(([r,v])=><ScoreGauge key={r} label={r} value={v} color="#f97316"/>)}</Sec>
         <Sec icon="🛡" title="Defensive Roles">{roleDef.sort((a,b)=>b[1]-a[1]).map(([r,v])=><ScoreGauge key={r} label={r} value={v} color="#3b82f6"/>)}</Sec>
       </div>
+
+      {/* MARGIN OF ERROR */}
       <Sec icon="🎯" title="Margin of Error" sub="Hover for formula ⓘ">
         <div className="grid grid-cols-3 gap-4 mb-4">
           <Tip wide content={<div><div className="font-bold mb-1" style={{color:"#22c55e"}}>{METHODS.floor.name}</div><code className="text-xs" style={{color:"#7dd3fc"}}>{METHODS.floor.formula}</code><div className="mt-1">{METHODS.floor.inputs(p)}</div><div className="mt-1" style={{color:"#cbd5e1"}}>{METHODS.floor.desc}</div></div>}>
@@ -1077,10 +962,12 @@ function ScoutingTab({p}) {
           </Tip>
           <div className="rounded-lg p-4 text-center" style={{background:"#0d1117"}}>
             <div className="text-xs uppercase" style={{color:"#6b7280"}}>Risk Profile</div>
-            <div className="text-sm font-bold mt-1" style={{color:p.risk.includes("Low")?"#22c55e":p.risk.includes("High Risk")?"#ef4444":"#fbbf24"}}>{p.risk}</div>
+            <div className="text-sm font-bold mt-1" style={{color:p.risk?.includes("Low")?"#22c55e":p.risk?.includes("High Risk")?"#ef4444":"#fbbf24"}}>{p.risk}</div>
           </div>
         </div>
       </Sec>
+
+      {/* BADGES */}
       <Sec icon="🏅" title="Skill Badges" sub="Hover badges for qualification criteria">
         <div className="flex flex-wrap gap-2 mb-4">
           {(p.badges||[]).map((b,i)=><BadgeChip key={i} text={b} color="#22c55e"/>)}
