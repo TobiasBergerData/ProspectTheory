@@ -1695,6 +1695,530 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
   );
 }
 
+
+// ═══════════════════════════════════════════════════════════
+// 3D DRAFT CUBE COMPONENT
+// X: Initiation & Creation | Y: Defensive Activity | Z: Offensive Scalability
+// ═══════════════════════════════════════════════════════════
+
+// Shared probit function for z-score conversion
+function pctl2zGlobal(p50) {
+  const pp = Math.max(0.001, Math.min(0.999, (p50 ?? 50) / 100));
+  const a=[-3.969683028665376e1,2.209460984245205e2,-2.759285104469687e2,1.383577518672690e2,-3.066479806614716e1,2.506628277459239];
+  const b=[-5.447609879822406e1,1.615858368580409e2,-1.556989798598866e2,6.680131188771972e1,-1.328068155288572e1];
+  const c=[-7.784894002430293e-3,-3.223964580411365e-1,-2.400758277161838,-2.549732539343734,4.374664141464968,2.938163982698783];
+  const d=[7.784695709041462e-3,3.223907427788357e-1,2.445134137142996,3.754408661907416];
+  const pLow=0.02425,pHigh=1-pLow;let z;
+  if(pp<pLow){const q=Math.sqrt(-2*Math.log(pp));z=(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);}
+  else if(pp<=pHigh){const q=pp-0.5,r=q*q;z=(((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q/(((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);}
+  else{const q=Math.sqrt(-2*Math.log(1-pp));z=-(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);}
+  return Math.max(-3, Math.min(3, z));
+}
+
+function rawZ(v, avg, sd) { return Math.max(-3, Math.min(3, ((v ?? avg) - avg) / sd)); }
+
+function cubeCoords(pl) {
+  const pctls = pl.pctl ?? {};
+  const zA = pctl2zGlobal(pctls.ast ?? 50);
+  const zU = pctl2zGlobal(pctls.usg ?? 50);
+  const zS = pctl2zGlobal(pctls.stl ?? 50);
+  const zB = pctl2zGlobal(pctls.blk ?? 50);
+  const zD = pctl2zGlobal(pctls.drb ?? 50);
+  const zT = pctl2zGlobal(pctls.ts  ?? 50);
+  const zTf = rawZ(pl.threeF ?? 0, 30, 15);
+  return {
+    x: zA * 0.6 + zU * 0.4,                // Initiation & Creation
+    y: zS * 0.4 + zB * 0.4 + zD * 0.2,    // Defensive Activity
+    z: zT * 0.5 + zTf * 0.5,              // Offensive Scalability
+  };
+}
+
+function DraftCube({ players }) {
+  const canvasRef = useRef(null);
+  const [rot, setRot] = useState({ yaw: 0.5, pitch: 0.35 });
+  const [drag, setDrag] = useState(null);
+  const [hover, setHover] = useState(null);
+  const [ageFilter, setAgeFilter] = useState([17, 28]);
+  const [riskFilter, setRiskFilter] = useState(10);
+  const [posFilter, setPosFilter] = useState("All");
+  const animRef = useRef(null);
+  const projRef = useRef([]);
+
+  const posColors = { Playmaker:"#3b82f6", Wing:"#22c55e", Big:"#fbbf24" };
+
+  // Compute cube points from players
+  const points = useMemo(() => {
+    return players
+      .filter(pl => {
+        const age = pl.age ?? 20;
+        return age >= ageFilter[0] && age <= ageFilter[1];
+      })
+      .filter(pl => posFilter === "All" || pl.pos === posFilter)
+      .map(pl => {
+        const { x, y, z } = cubeCoords(pl);
+        const bpm = pl.bpm ?? 0;
+        const bustRisk = Math.round(Math.max(1, Math.min(10,
+          5 + (pl.usg > 25 && (pl.stlP ?? 0) < 1.2 && (pl.blkP ?? 0) < 1.0 ? 2 : 0)
+            + ((pl.ft ?? 75) < 65 && (pl.usg ?? 0) > 25 ? 1 : 0)
+            - ((pl.feel ?? 50) > 75 ? 1 : 0)
+            - (bpm > 8 ? 1 : 0)
+        )));
+        return { name: pl.name, team: pl.team, pos: pl.pos ?? "Wing",
+          x, y, z, bpm, bustRisk, age: pl.age ?? 20,
+          color: posColors[pl.pos ?? "Wing"] ?? "#6b7280",
+          tier: pl.predTier ?? pl.actual ?? "—",
+        };
+      })
+      .filter(pt => pt.bustRisk <= riskFilter);
+  }, [players, ageFilter, riskFilter, posFilter]);
+
+  // 3D → 2D projection
+  function project3D(px, py, pz, yaw, pitch, W, H) {
+    const cy = Math.cos(yaw),   sy = Math.sin(yaw);
+    const cp = Math.cos(pitch), sp = Math.sin(pitch);
+    // Rotate around Y axis (yaw)
+    const rx = px * cy - pz * sy;
+    const rz = px * sy + pz * cy;
+    // Rotate around X axis (pitch)
+    const ry = py * cp - rz * sp;
+    const rz2 = py * sp + rz * cp;
+    // Perspective project
+    const fov = 5;
+    const scale = fov / (fov + rz2 + 4);
+    const sx = W / 2 + rx * scale * W * 0.28;
+    const sy2 = H / 2 - ry * scale * H * 0.28;
+    return { sx, sy: sy2, depth: rz2, scale };
+  }
+
+  // Draw on canvas
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const W = canvas.width, H = canvas.height;
+    const ctx = canvas.getContext("2d");
+    const { yaw, pitch } = rot;
+
+    ctx.clearRect(0, 0, W, H);
+
+    // ── Draw cube wireframe ───────────────────────────────────
+    const corners = [
+      [-3,-3,-3],[ 3,-3,-3],[ 3, 3,-3],[-3, 3,-3],
+      [-3,-3, 3],[ 3,-3, 3],[ 3, 3, 3],[-3, 3, 3],
+    ].map(([x,y,z]) => project3D(x,y,z, yaw, pitch, W, H));
+
+    const edges = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],
+                   [0,4],[1,5],[2,6],[3,7]];
+    ctx.strokeStyle = "#1e293b";
+    ctx.lineWidth = 1;
+    edges.forEach(([a,b]) => {
+      ctx.beginPath();
+      ctx.moveTo(corners[a].sx, corners[a].sy);
+      ctx.lineTo(corners[b].sx, corners[b].sy);
+      ctx.stroke();
+    });
+
+    // ── Draw zero planes (translucent) ───────────────────────
+    // XZ plane at Y=0 (separates defense above/below)
+    ctx.fillStyle = "rgba(59,130,246,0.05)";
+    const planeY = [[-3,0,-3],[3,0,-3],[3,0,3],[-3,0,3]]
+      .map(([x,y,z]) => project3D(x,y,z, yaw, pitch, W, H));
+    ctx.beginPath();
+    ctx.moveTo(planeY[0].sx, planeY[0].sy);
+    planeY.forEach(p => ctx.lineTo(p.sx, p.sy));
+    ctx.closePath(); ctx.fill();
+
+    // XY plane at Z=0 (separates scalability)
+    ctx.fillStyle = "rgba(249,115,22,0.04)";
+    const planeZ = [[-3,-3,0],[3,-3,0],[3,3,0],[-3,3,0]]
+      .map(([x,y,z]) => project3D(x,y,z, yaw, pitch, W, H));
+    ctx.beginPath();
+    ctx.moveTo(planeZ[0].sx, planeZ[0].sy);
+    planeZ.forEach(p => ctx.lineTo(p.sx, p.sy));
+    ctx.closePath(); ctx.fill();
+
+    // ── Axis labels ──────────────────────────────────────────
+    const axisLabels = [
+      { p:[3.5,0,0], label:"→ Creation", color:"#f97316" },
+      { p:[0,3.5,0], label:"↑ Defense", color:"#3b82f6" },
+      { p:[0,0,3.5], label:"✦ Scalability", color:"#22c55e" },
+    ];
+    ctx.font = "bold 11px sans-serif";
+    axisLabels.forEach(({ p: [x,y,z], label, color }) => {
+      const { sx, sy } = project3D(x,y,z, yaw, pitch, W, H);
+      ctx.fillStyle = color;
+      ctx.fillText(label, sx - 20, sy);
+    });
+
+    // ── Zone labels ──────────────────────────────────────────
+    const zones = [
+      { p:[2.5,2.5,2.5], label:"🌟 Unicorn", color:"#fbbf24" },
+      { p:[-1.5,2.0,2.0], label:"🔗 Glue", color:"#86efac" },
+      { p:[2.5,-2.5,-2.5], label:"💀 Empty Cal.", color:"#ef4444" },
+    ];
+    ctx.font = "9px sans-serif";
+    zones.forEach(({ p: [x,y,z], label, color }) => {
+      const { sx, sy } = project3D(x,y,z, yaw, pitch, W, H);
+      ctx.fillStyle = color + "aa";
+      ctx.fillText(label, sx - 25, sy);
+    });
+
+    // ── Project + sort points by depth ────────────────────────
+    const projected = points.map(pt => {
+      const { sx, sy, depth, scale } = project3D(pt.x, pt.y, pt.z, yaw, pitch, W, H);
+      const r = Math.max(4, Math.min(16, 5 + pt.bpm * 1.2));
+      return { ...pt, sx, sy, depth, r: r * scale * 8 };
+    }).sort((a,b) => a.depth - b.depth);
+
+    projRef.current = projected;
+
+    // ── Draw points ───────────────────────────────────────────
+    projected.forEach(pt => {
+      const isHov = hover?.name === pt.name;
+      ctx.beginPath();
+      ctx.arc(pt.sx, pt.sy, isHov ? pt.r + 2 : pt.r, 0, Math.PI * 2);
+      ctx.fillStyle = pt.color + (isHov ? "ff" : "cc");
+      ctx.fill();
+      if (isHov || pt.r > 8) {
+        ctx.strokeStyle = "#ffffff44";
+        ctx.lineWidth = isHov ? 2 : 1;
+        ctx.stroke();
+      }
+      // Name label for large points or hovered
+      if (isHov) {
+        ctx.font = "bold 11px sans-serif";
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(pt.name.split(" ").slice(-1)[0], pt.sx + pt.r + 3, pt.sy + 4);
+      }
+    });
+
+    // ── Hover tooltip ─────────────────────────────────────────
+    if (hover) {
+      const { sx, sy } = projected.find(p => p.name === hover.name) ?? {};
+      if (sx) {
+        const tx = Math.min(W - 130, sx + 12);
+        const ty = Math.max(60, sy - 10);
+        ctx.fillStyle = "#0f172a";
+        ctx.strokeStyle = "#374151";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(tx, ty - 10, 160, 80, 6);
+        ctx.fill(); ctx.stroke();
+        ctx.font = "bold 11px sans-serif"; ctx.fillStyle = "#e5e7eb";
+        ctx.fillText(hover.name, tx + 8, ty + 8);
+        ctx.font = "10px sans-serif"; ctx.fillStyle = "#9ca3af";
+        ctx.fillText(`${hover.team ?? "—"} · ${hover.pos}`, tx + 8, ty + 22);
+        ctx.fillText(`BPM: ${hover.bpm?.toFixed(1) ?? "—"}  Risk: ${hover.bustRisk}/10`, tx + 8, ty + 36);
+        ctx.fillText(`Tier: ${hover.tier}`, tx + 8, ty + 50);
+        ctx.fillText(`X:${hover.x.toFixed(1)} Y:${hover.y.toFixed(1)} Z:${hover.z.toFixed(1)}`, tx + 8, ty + 64);
+      }
+    }
+  }, [rot, points, hover]);
+
+  // Mouse handlers
+  const onMouseDown = (e) => {
+    const rect = canvasRef.current.getBoundingClientRect();
+    setDrag({ x: e.clientX - rect.left, y: e.clientY - rect.top, rot: { ...rot } });
+  };
+  const onMouseMove = (e) => {
+    if (!canvasRef.current) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    if (drag) {
+      setRot({
+        yaw:   drag.rot.yaw   + (mx - drag.x) * 0.008,
+        pitch: drag.rot.pitch + (my - drag.y) * 0.008,
+      });
+    }
+    // Hover detection
+    const pts = projRef.current;
+    let found = null, minD = 20;
+    pts.forEach(pt => {
+      const d = Math.hypot(pt.sx - mx, pt.sy - my);
+      if (d < Math.max(minD, pt.r + 4)) { minD = d; found = pt; }
+    });
+    setHover(found);
+  };
+  const onMouseUp = () => setDrag(null);
+
+  const canvasW = 680, canvasH = 500;
+
+  return (
+    <div className="space-y-4">
+      {/* Controls */}
+      <div className="flex flex-wrap gap-4 p-4 rounded-xl" style={{background:"#111827",border:"1px solid #1f2937"}}>
+        <div className="flex items-center gap-2">
+          <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Position:</span>
+          {["All","Playmaker","Wing","Big"].map(pos=>(
+            <button key={pos} onClick={()=>setPosFilter(pos)}
+              className="px-2.5 py-1 rounded-lg text-xs font-semibold transition-all"
+              style={{background:posFilter===pos?(posColors[pos]||"#f97316")+"dd":"#1f2937",
+                color:posFilter===pos?"#000":"#9ca3af",border:"1px solid "+(posFilter===pos?(posColors[pos]||"#f97316"):"#374151")}}>
+              {pos}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2 ml-auto">
+          <span className="text-xs" style={{color:"#6b7280"}}>Max Risk:</span>
+          <input type="range" min="1" max="10" value={riskFilter}
+            onChange={e=>setRiskFilter(Number(e.target.value))}
+            className="w-24" style={{accentColor:"#f97316"}}/>
+          <span className="text-xs font-mono w-4" style={{color:"#f97316"}}>{riskFilter}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs" style={{color:"#6b7280"}}>Age ≤</span>
+          <input type="range" min="17" max="28" value={ageFilter[1]}
+            onChange={e=>setAgeFilter([ageFilter[0], Number(e.target.value)])}
+            className="w-20" style={{accentColor:"#60a5fa"}}/>
+          <span className="text-xs font-mono w-4" style={{color:"#60a5fa"}}>{ageFilter[1]}</span>
+        </div>
+      </div>
+
+      {/* Axis legend */}
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          ["X · Initiation & Creation","AST%_z×0.6 + USG%_z×0.4","#f97316","→ Playmaker / Hub"],
+          ["Y · Defensive Activity",   "STL%_z×0.4 + BLK%_z×0.4 + DRB%_z×0.2","#3b82f6","↑ Defensive Anchor"],
+          ["Z · Offensive Scalability","TS%_z×0.5 + 3P Freq_z×0.5","#22c55e","✦ Modern NBA Efficiency"],
+        ].map(([title, formula, color, desc])=>(
+          <div key={title} className="p-3 rounded-xl" style={{background:"#111827",border:`1px solid ${color}33`}}>
+            <div className="text-xs font-bold mb-1" style={{color}}>{title}</div>
+            <div className="font-mono text-xs mb-1" style={{color:"#7dd3fc"}}>{formula}</div>
+            <div className="text-xs" style={{color:"#64748b"}}>{desc}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Canvas */}
+      <div className="rounded-2xl overflow-hidden relative" style={{background:"#080e1a",border:"1px solid #1e293b"}}>
+        <div className="absolute top-3 left-4 text-xs font-semibold z-10" style={{color:"#475569"}}>
+          🖱 Drag to rotate · {points.length} prospects
+        </div>
+        <div className="flex justify-center py-2">
+          <canvas ref={canvasRef} width={canvasW} height={canvasH}
+            style={{cursor:drag?"grabbing":"grab",maxWidth:"100%"}}
+            onMouseDown={onMouseDown} onMouseMove={onMouseMove}
+            onMouseUp={onMouseUp} onMouseLeave={onMouseUp}/>
+        </div>
+        {/* Point size legend */}
+        <div className="absolute bottom-3 right-4 flex items-center gap-3 text-xs" style={{color:"#475569"}}>
+          {[["🔵","Playmaker","#3b82f6"],["🟢","Wing","#22c55e"],["🟡","Big","#fbbf24"]].map(([icon,label,color])=>(
+            <span key={label} style={{color}}><span>{icon}</span> {label}</span>
+          ))}
+          <span style={{color:"#374151"}}>· Point size = BPM</span>
+        </div>
+      </div>
+
+      {/* Zone explanations */}
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          ["🌟 Unicorn Corner","High Creation + High Defense + High Efficiency","#fbbf24","Franchise player territory: Wembanyama, Giannis, Embiid type profiles. Top-right-front of cube."],
+          ["🔗 Glue-Guy Corner","Low Usage + High Defense + High Efficiency","#86efac","Mikal Bridges / Herb Jones archetype. Left-center-front. Highest NBA survival rate for role players."],
+          ["💀 Empty Calorie","High Usage + Low Defense + Low Efficiency","#ef4444","High creation but no defense or efficiency. Classic bust zone. Bottom-right-back of cube — GMs avoid."],
+        ].map(([name, sub, color, desc])=>(
+          <div key={name} className="p-3 rounded-xl" style={{background:"#111827",border:`1px solid ${color}22`}}>
+            <div className="font-bold text-sm mb-0.5" style={{color}}>{name}</div>
+            <div className="text-xs mb-2" style={{color:"#64748b"}}>{sub}</div>
+            <div className="text-xs leading-relaxed" style={{color:"#94a3b8"}}>{desc}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// CLASS OVERVIEW TAB
+// ═══════════════════════════════════════════════════════════
+function ClassOverviewTab({ players, yearFilter, onSelect }) {
+  const allPlayers = players.filter(p => p.confidence !== "very_low");
+
+  // ── Aggregate stats ───────────────────────────────────────
+  const stats = useMemo(() => {
+    if (!allPlayers.length) return null;
+    const byPos = { Playmaker:0, Wing:0, Big:0 };
+    allPlayers.forEach(p => { if (byPos[p.pos] != null) byPos[p.pos]++; });
+    const avgBpm = allPlayers.reduce((s,p)=>s+(p.bpm??0),0)/allPlayers.length;
+    const avgTs  = allPlayers.reduce((s,p)=>s+(p.ts??0),0)/allPlayers.length;
+    const pNbaAbove50 = allPlayers.filter(p=>(p.pNba??0)>0.50).length;
+    const tierCounts  = {};
+    allPlayers.forEach(p=>{
+      const t=p.predTier||p.actual||"Unknown";
+      tierCounts[t]=(tierCounts[t]||0)+1;
+    });
+    // Top 5 by cube dimension
+    const withCoords = allPlayers.map(p=>({...p,...cubeCoords(p)}));
+    const topX = [...withCoords].sort((a,b)=>b.x-a.x).slice(0,5);
+    const topY = [...withCoords].sort((a,b)=>b.y-a.y).slice(0,5);
+    const topZ = [...withCoords].sort((a,b)=>b.z-a.z).slice(0,5);
+    const topBpm= [...allPlayers].filter(p=>p.bpm!=null).sort((a,b)=>b.bpm-a.bpm).slice(0,5);
+    const topMu = [...allPlayers].filter(p=>p.mu!=null).sort((a,b)=>b.mu-a.mu).slice(0,5);
+    // Conference breakdown
+    const byConf = {};
+    allPlayers.forEach(p=>{const c=p.conf||"Unknown";byConf[c]=(byConf[c]||0)+1;});
+    const topConfs = Object.entries(byConf).sort((a,b)=>b[1]-a[1]).slice(0,8);
+    return { byPos, avgBpm, avgTs, pNbaAbove50, tierCounts, topX, topY, topZ, topBpm, topMu, topConfs, total:allPlayers.length };
+  }, [allPlayers]);
+
+  if (!stats) return <div className="text-center py-10" style={{color:"#6b7280"}}>No class data available.</div>;
+
+  const tierOrder = ["Superstar","All-Star","Starter","Role Player","Replacement","Negative","Never Made NBA","Unknown"];
+
+  return (
+    <div className="space-y-5">
+      {/* ── Class Header ─────────────────────────────────── */}
+      <div className="rounded-2xl p-6 relative overflow-hidden" style={{background:"linear-gradient(135deg,#0d1117 0%,#1a1040 100%)",border:"1px solid #1f2937"}}>
+        <div className="absolute top-0 right-0 w-64 h-64 opacity-5 blur-3xl rounded-full" style={{background:"radial-gradient(circle,#f97316,transparent)"}}/>
+        <div className="relative">
+          <div className="text-xs uppercase tracking-widest mb-2" style={{color:"#f97316"}}>ProspectTheory · Draft Intelligence</div>
+          <h2 className="text-4xl font-bold mb-1" style={{color:"#e5e7eb",fontFamily:"'Oswald',sans-serif"}}>
+            {yearFilter && yearFilter !== "All" ? yearFilter : "All Years"} Draft Class
+          </h2>
+          <p className="text-sm" style={{color:"#6b7280"}}>
+            {stats.total} eligible prospects · {stats.pNbaAbove50} with &gt;50% NBA probability
+          </p>
+          {/* Quick stats */}
+          <div className="grid grid-cols-4 gap-4 mt-5">
+            {[
+              ["Total Prospects", stats.total, "#e5e7eb"],
+              ["Avg BPM", stats.avgBpm.toFixed(1), "#f97316"],
+              ["Avg TS%", stats.avgTs.toFixed(1)+"%", "#22c55e"],
+              [">50% NBA Prob", stats.pNbaAbove50, "#fbbf24"],
+            ].map(([label,val,color])=>(
+              <div key={label} className="text-center">
+                <div className="text-2xl font-bold" style={{color,fontFamily:"'Oswald',sans-serif"}}>{val}</div>
+                <div className="text-xs mt-0.5" style={{color:"#6b7280"}}>{label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── 3D Draft Cube ────────────────────────────────── */}
+      <Sec icon="🧊" title="3D Draft Cube" sub="Drag to rotate · X: Creation · Y: Defense · Z: Scalability · Point size = BPM">
+        <DraftCube players={allPlayers}/>
+      </Sec>
+
+      {/* ── Position + Tier distribution ─────────────────── */}
+      <div className="grid grid-cols-2 gap-5">
+        <Sec icon="🏀" title="Position Breakdown">
+          {Object.entries(stats.byPos).map(([pos,count])=>{
+            const color={Playmaker:"#3b82f6",Wing:"#22c55e",Big:"#fbbf24"}[pos]||"#6b7280";
+            const pct = Math.round(count/stats.total*100);
+            return (
+              <div key={pos} className="flex items-center gap-3 mb-3">
+                <div className="w-20 text-xs text-right shrink-0" style={{color:"#9ca3af"}}>{pos}</div>
+                <div className="flex-1 h-5 rounded-full overflow-hidden" style={{background:"#1e293b"}}>
+                  <div className="h-full rounded-full flex items-center pl-2" style={{width:`${pct}%`,background:`linear-gradient(90deg,${color}88,${color})`}}>
+                    <span className="text-xs font-bold" style={{color:"#000"}}>{count}</span>
+                  </div>
+                </div>
+                <span className="text-xs w-8" style={{color}}>{pct}%</span>
+              </div>
+            );
+          })}
+        </Sec>
+        <Sec icon="◆" title="Tier Distribution">
+          <div className="space-y-2">
+            {tierOrder.filter(t=>stats.tierCounts[t]).map(t=>{
+              const count=stats.tierCounts[t]||0;
+              const color=TC[t]||"#6b7280";
+              const pct=Math.round(count/stats.total*100);
+              return (
+                <div key={t} className="flex items-center gap-2">
+                  <div className="w-20 text-xs text-right truncate shrink-0" style={{color:"#9ca3af"}}>{t}</div>
+                  <div className="flex-1 h-4 rounded-full overflow-hidden" style={{background:"#1e293b"}}>
+                    <div className="h-full rounded-full" style={{width:`${pct}%`,background:color+"88"}}/>
+                  </div>
+                  <span className="text-xs w-6 text-right font-mono" style={{color}}>{count}</span>
+                </div>
+              );
+            })}
+          </div>
+        </Sec>
+      </div>
+
+      {/* ── Top 5 by Cube Dimension ───────────────────────── */}
+      <div className="grid grid-cols-3 gap-4">
+        {[
+          ["🎯 Top Creators (X-Axis)","Initiation & Creation",stats.topX,"x","#f97316"],
+          ["🛡 Top Defenders (Y-Axis)","Defensive Activity",stats.topY,"y","#3b82f6"],
+          ["⚡ Top Scalability (Z-Axis)","Offensive Efficiency",stats.topZ,"z","#22c55e"],
+        ].map(([title,sub,list,dim,color])=>(
+          <div key={title} className="rounded-xl p-4" style={{background:"#111827",border:`1px solid ${color}22`}}>
+            <div className="font-bold text-sm mb-0.5" style={{color}}>{title}</div>
+            <div className="text-xs mb-3" style={{color:"#64748b"}}>{sub}</div>
+            <ol className="space-y-2">
+              {list.map((pl,i)=>(
+                <li key={pl.name} className="flex items-center gap-2 cursor-pointer rounded-lg px-2 py-1 transition-colors hover:bg-white hover:bg-opacity-5"
+                  onClick={()=>onSelect&&onSelect(pl.name)}>
+                  <span className="text-xs font-bold w-4 text-center" style={{color:"#475569"}}>{i+1}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-semibold truncate" style={{color:"#e5e7eb"}}>{pl.name}</div>
+                    <div className="text-xs" style={{color:"#64748b"}}>{pl.pos} · {pl.team}</div>
+                  </div>
+                  <span className="text-xs font-mono font-bold" style={{color}}>
+                    {(pl[dim]>=0?"+":"")+pl[dim].toFixed(2)}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Top by BPM and Peak PIE ───────────────────────── */}
+      <div className="grid grid-cols-2 gap-4">
+        {[
+          ["📊 Top BPM","Production Leaders",stats.topBpm,"bpm","#f97316"],
+          ["◆ Top Projected PIE","NBA Peak Projections",stats.topMu,"mu","#fbbf24"],
+        ].map(([title,sub,list,field,color])=>(
+          <div key={title} className="rounded-xl p-4" style={{background:"#111827",border:"1px solid #1f2937"}}>
+            <div className="font-bold text-sm mb-0.5" style={{color}}>{title}</div>
+            <div className="text-xs mb-3" style={{color:"#64748b"}}>{sub}</div>
+            <div className="space-y-2">
+              {list.map((pl,i)=>(
+                <div key={pl.name} className="flex items-center gap-3 cursor-pointer rounded-lg px-2 py-1.5 transition-colors hover:bg-white hover:bg-opacity-5"
+                  onClick={()=>onSelect&&onSelect(pl.name)}>
+                  <span className="text-sm font-bold w-4" style={{color:"#475569"}}>{i+1}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold truncate" style={{color:"#e5e7eb"}}>{pl.name}</div>
+                    <div className="text-xs" style={{color:"#64748b"}}>{pl.pos} · {pl.conf||pl.team}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-bold text-lg font-mono" style={{color,fontFamily:"'Oswald',sans-serif"}}>
+                      {field==="bpm"?pl.bpm?.toFixed(1):pl.mu?.toFixed(3)}
+                    </div>
+                    <div className="text-xs" style={{color:"#475569"}}>{field==="bpm"?"BPM":"Peak PIE"}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Conference breakdown ──────────────────────────── */}
+      <Sec icon="🏫" title="Conference Breakdown" sub="Prospects by college conference">
+        <div className="grid grid-cols-2 gap-x-8">
+          {stats.topConfs.map(([conf,count])=>{
+            const pct=Math.round(count/stats.total*100);
+            return (
+              <div key={conf} className="flex items-center gap-3 mb-2">
+                <div className="w-24 text-xs truncate shrink-0" style={{color:"#9ca3af"}}>{conf||"Unknown"}</div>
+                <div className="flex-1 h-3 rounded-full overflow-hidden" style={{background:"#1e293b"}}>
+                  <div className="h-full rounded-full" style={{width:`${pct}%`,background:"#f97316aa"}}/>
+                </div>
+                <span className="text-xs w-6 text-right" style={{color:"#6b7280"}}>{count}</span>
+              </div>
+            );
+          })}
+        </div>
+      </Sec>
+    </div>
+  );
+}
+
+
 const TABS = [
   {id:"overview",label:"Overview",icon:"▦"},
   {id:"shooting",label:"Shooting",icon:"🏀"},
@@ -1705,9 +2229,16 @@ const TABS = [
   {id:"methodology",label:"Method",icon:"📖"},
 ];
 
+// Top-level views (not player-profile tabs)
+const TOP_VIEWS = [
+  {id:"board",label:"Big Board",icon:"📋"},
+  {id:"classoverview",label:"Class",icon:"🧊"},
+];
+
 export default function App() {
   const [sel,setSel]=useState(null);
   const [tab,setTab]=useState("overview");
+  const [topView,setTopView]=useState("board"); // "board" | "classoverview"
   const [search,setSearch]=useState("");
   const [showS,setShowS]=useState(false);
   const [compTier,setCompTier]=useState("Replacement");
@@ -1821,10 +2352,22 @@ export default function App() {
     <div className="min-h-screen" style={{background:"#080b12",fontFamily:"'Barlow',sans-serif",color:"#e5e7eb"}}>
       <header className="sticky top-0 z-50 px-4 md:px-8 py-3" style={{background:"rgba(8,11,18,0.92)",backdropFilter:"blur(12px)",borderBottom:"1px solid #1f293744"}}>
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3 cursor-pointer" onClick={()=>{setSel(null);setTab("overview");}}>
+          <div className="flex items-center gap-3 cursor-pointer" onClick={()=>{setSel(null);setTab("overview");setTopView("board");}}>
             <div className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm" style={{background:"linear-gradient(135deg,#f97316,#ea580c)",color:"#000"}}>PT</div>
             <div><div className="font-bold text-sm tracking-wider" style={{fontFamily:"'Oswald',sans-serif",color:"#f97316"}}>PROSPECT THEORY</div><div className="text-xs" style={{color:"#6b7280"}}>NBA Draft Intelligence</div></div>
           </div>
+          {/* Top-level view switcher — only when no player selected */}
+          {!sel && (
+            <div className="flex items-center gap-1 rounded-xl p-1" style={{background:"#111827",border:"1px solid #1f2937"}}>
+              {TOP_VIEWS.map(v=>(
+                <button key={v.id} onClick={()=>setTopView(v.id)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                  style={{background:topView===v.id?"#f97316":"transparent",color:topView===v.id?"#000":"#6b7280"}}>
+                  <span>{v.icon}</span>{v.label}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="relative">
             <input className="w-48 md:w-72 px-4 py-2 rounded-lg text-sm outline-none" style={{background:"#111827",border:"1px solid #374151",color:"#e5e7eb"}} placeholder="Search players..." value={search}
               onChange={e=>{setSearch(e.target.value);setShowS(true)}} onFocus={()=>setShowS(true)} onBlur={()=>setTimeout(()=>setShowS(false),200)}/>
@@ -1838,12 +2381,14 @@ export default function App() {
       </header>
       <main className="max-w-7xl mx-auto px-4 md:px-8 py-6">
         {!sel ? (
-          /* ── BIG BOARD LANDING ── */
+          /* ── LANDING VIEWS ── */
           loading ? (
             <div className="flex flex-col items-center justify-center py-20">
               <div className="w-12 h-12 rounded-full border-4 border-t-transparent animate-spin mb-4" style={{borderColor:"#f97316",borderTopColor:"transparent"}}/>
               <p className="text-sm" style={{color:"#6b7280"}}>Loading prospects...</p>
             </div>
+          ) : topView === "classoverview" ? (
+            <ClassOverviewTab players={PLAYER_LIST.map(n=>PLAYERS[n]).filter(Boolean)} yearFilter={yearFilter} onSelect={selectPlayer}/>
           ) : (
             <BigBoardView onSelect={selectPlayer} boardData={boardData} setBoardData={setBoardData} loading={loading} setLoading={setLoading} availableYears={availableYears} yearFilter={yearFilter} setYearFilter={setYearFilter}/>
           )
