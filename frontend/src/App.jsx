@@ -152,23 +152,79 @@ const METHODS = {
 };
 
 // Badge definitions for tooltips
+// ── BADGE ENGINE (spec v2) ────────────────────────────────────────────────
+// Green = scalable NBA elite skills | Red = contextual warning signals
 const BADGE_DEFS = {
-  "Floor General Spacer": { rule: "3P% > 35 AND AST% > 20", desc: "Can shoot AND run an offense — the modern PG archetype." },
-  "Stretch Big": { rule: "Height ≥ 6'8\" AND 3P Freq > 25% AND 3P% > 32%", desc: "Tall player who spaces the floor. Premium NBA skill." },
-  "High Feel Athlete": { rule: "Func Athleticism > 70 AND Feel > 70", desc: "Athletic AND smart — rare combo that translates." },
-  "3-and-D": { rule: "3P% > 33 AND STL% > 2.0 AND Dunk% > 5", desc: "Can shoot threes and defend multiple positions." },
-  "Rim Pressure": { rule: "Rim Freq > 30% AND Dunk% > 10 AND FTR > 35", desc: "Attacks the basket relentlessly. Draws fouls." },
-  "Modern Big": { rule: "BLK% > 4.0 AND AST% > 12", desc: "Protects the rim AND creates for others — the new age center." },
-  "Efficient High Usage": { rule: "USG > 28 AND TO% < 15", desc: "Handles massive offensive load without coughing it up." },
-  "Elite Shooting": { rule: "FT% > 80 AND 3P% > 36", desc: "Top-tier shooting across both lines. Translatable." },
-  "Stocks Machine": { rule: "STL% > 2.5 AND BLK% > 2.5", desc: "Creates turnovers everywhere. Extremely rare." },
-  "High TO Wing": { rule: "Wing with TO% > 22", desc: "Wings shouldn't be turning it over this much. Limits ceiling." },
-  "Non-Blocking Big": { rule: "Big with BLK% < 2.0", desc: "Bigs without rim protection have lower NBA value floor." },
-  "Poor 3P Shooting PG": { rule: "PG with 3P% < 28 AND 3P Freq > 20%", desc: "Shoots threes but can't make them. Limits spacing." },
-  "Low Assist Playmaker": { rule: "PG with AST% < 15", desc: "Labeled playmaker but doesn't create for others." },
-  "FT Concern": { rule: "FT% < 60 AND USG > 25", desc: "Poor free throw shooting on high usage = Hack-a-Player risk." },
-  "Undersized": { rule: "Height < 6'2\" AND not a PG", desc: "Size disadvantage outside the point guard position." },
+  // KAT 1: GREEN FLAGS
+  "Elite Shooting":         { cat:"green", rule:"FT%>80 AND 3P%>36 AND 3P Freq>30%",          desc:"Top-tier shooting across both lines — most translatable skill in modern NBA." },
+  "Floor General Spacer":   { cat:"green", rule:"(G/W) 3P%>35 AND AST%>25 AND AST/TO>1.8",   desc:"Combines shooting, creation, and decision-making — ideal modern guard profile." },
+  "High-Feel Athlete":      { cat:"green", rule:"Feel>75 AND Func Ath>75",                     desc:"Rarest badge — elite IQ + elite athleticism. Almost always translates to NBA." },
+  "3-and-D Wing":           { cat:"green", rule:"(W) 3P%>34 AND STL%>2.5 AND Rim FG%>60",    desc:"Most coveted role player in modern NBA. Immediate starter value." },
+  "Modern Playmaking Big":  { cat:"green", rule:"(B) BLK%>4.0 AND AST%>15 AND AST/TO>1.0",   desc:"Rim protection + playmaking. Rare and elite — Draymond/Gobert hybrid." },
+  "Rim Pressure God":       { cat:"green", rule:"Rim Freq>40% AND FTR>40 AND Rim FG%>65",     desc:"Elite volume, efficiency, and free throws at rim. Generates offense by itself." },
+  "Stocks Machine":         { cat:"green", rule:"STL%>2.5 AND BLK%>2.5",                      desc:"Defensive range at both perimeter and rim. Historically rare combination." },
+  "Efficient High Usage":   { cat:"green", rule:"USG>28 AND TO%<12 AND TS%>58",               desc:"Handles elite volume without turnover collapse. The 'carry' badge." },
+  // KAT 2: RED FLAGS
+  "Passive Scorer":         { cat:"red",   rule:"USG>22 AND FTR<20 AND Rim Freq<20%",         desc:"High usage but avoids contact/paint. Jumper-dependent — hard to sustain in NBA." },
+  "All-Offense Big":        { cat:"red",   rule:"(B) BLK%<2.5 AND DBPM<1.5",                 desc:"Bigs without rim protection are a defensive liability at every level." },
+  "Non-Spacing Guard":      { cat:"red",   rule:"(G) 3P%<30 AND 3P Freq<20%",                desc:"Guards who don't threaten from three destroy NBA spacing." },
+  "High-TO Wing":           { cat:"red",   rule:"(W) USG>20 AND TO%>20",                      desc:"Wings taking on ball-handling load without ball security. Role regression risk." },
+  "FT Concern":             { cat:"red",   rule:"FT%<65 AND USG>25",                          desc:"Hack-a-Player target at high usage. Opposing coaches will exploit." },
+  "Small & Non-Elite":      { cat:"red",   rule:"(G) Height<6'2\" AND (Feel<60 OR Shooting<60)", desc:"Below-average size without elite skill compensation. Physical disadvantage at next level." },
+  "Foul Magnet":            { cat:"red",   rule:"Fouls/40>4.5",                               desc:"Foul trouble limits minutes. Signals poor mobility or defensive discipline." },
 };
+
+// ── Position group determination (spec-compliant, height-based) ───────────
+// Guard: Height < 6'4" (76") OR (Height < 6'6" (78") AND AST% > 20)
+// Big:   Height > 6'9" (81") OR (Height > 6'8" (80") AND TRB%/DRB% > 15)
+// Wing:  everything else
+function getBadgePos(p) {
+  const htIn = p.htIn ?? 78;
+  const astP  = p.astP  ?? 0;
+  const drbP  = p.drbP  ?? 0; // DRB% as TRB% proxy
+  if (htIn < 76 || (htIn < 78 && astP > 20)) return "G";
+  if (htIn > 81 || (htIn > 80 && drbP > 15)) return "B";
+  return "W";
+}
+
+// ── Client-side badge computation ─────────────────────────────────────────
+function computeBadges(p) {
+  const pos = getBadgePos(p);
+  const isG = pos === "G", isW = pos === "W", isB = pos === "B";
+
+  const ft=p.ft??0, tp=p.tp??0, threeF=p.threeF??0;
+  const astP=p.astP??0, astTov=p.astTov??0;
+  const stlP=p.stlP??0, blkP=p.blkP??0;
+  const usg=p.usg??0, toP=p.toP??0, ts=p.ts??0;
+  const ftr=p.ftr??0, rimF=p.rimF??0, rimPct=p.rimPct??0;
+  const dbpm=p.dbpm??0, feel=p.feel??0, funcAth=p.funcAth??0;
+  const htIn=p.htIn??78;
+
+  const green=[], red=[];
+  const addG=(n)=>{ if(!green.includes(n)) green.push(n); };
+  const addR=(n)=>{ if(!red.includes(n))   red.push(n);   };
+
+  // GREEN
+  if (ft>80 && tp>36 && threeF>30)                             addG("Elite Shooting");
+  if ((isG||isW) && tp>35 && astP>25 && astTov>1.8)            addG("Floor General Spacer");
+  if (feel>75 && funcAth>75)                                    addG("High-Feel Athlete");
+  if (isW && tp>34 && stlP>2.5 && rimPct>60)                   addG("3-and-D Wing");
+  if (isB && blkP>4.0 && astP>15 && astTov>1.0)                addG("Modern Playmaking Big");
+  if (rimF>40 && ftr>40 && rimPct>65)                          addG("Rim Pressure God");
+  if (stlP>2.5 && blkP>2.5)                                    addG("Stocks Machine");
+  if (usg>28 && toP<12 && ts>58)                               addG("Efficient High Usage");
+
+  // RED
+  if (usg>22 && ftr<20 && rimF<20)                             addR("Passive Scorer");
+  if (isB && blkP<2.5 && dbpm<1.5)                             addR("All-Offense Big");
+  if (isG && tp<30 && threeF<20)                               addR("Non-Spacing Guard");
+  if (isW && usg>20 && toP>20)                                 addR("High-TO Wing");
+  if (ft<65 && usg>25)                                         addR("FT Concern");
+  if (isG && htIn<74 && (feel<60||(p.shootScore??0)<60))       addR("Small & Non-Elite");
+  if ((p.redFlags??[]).includes("Foul Magnet"))                 addR("Foul Magnet");
+
+  return { green, red };
+}
 
 // ═══════════════════════════════════════════════════════════
 // SAMPLE DATA
@@ -770,158 +826,313 @@ function ProjectionTab({p}) {
 // ═══════════════════════════════════════════════════════════
 // TAB: SCOUTING
 // ═══════════════════════════════════════════════════════════
+// ── Z-score helpers for role ratings ──────────────────────
+// Converts 0-100 role score → approximate z-score (-3 to +3)
+const roleToZ = (score) => {
+  if (score == null) return 0;
+  // 50 → 0, 84 → +1, 97.5 → +2, 99.9 → +3
+  const p = Math.max(0.001, Math.min(0.999, score / 100));
+  const a = [-3.969683028665376e1,2.209460984245205e2,-2.759285104469687e2,1.383577518672690e2,-3.066479806614716e1,2.506628277459239];
+  const b = [-5.447609879822406e1,1.615858368580409e2,-1.556989798598866e2,6.680131188771972e1,-1.328068155288572e1];
+  const c = [-7.784894002430293e-3,-3.223964580411365e-1,-2.400758277161838,-2.549732539343734,4.374664141464968,2.938163982698783];
+  const d = [7.784695709041462e-3,3.223907427788357e-1,2.445134137142996,3.754408661907416];
+  const pLow=0.02425,pHigh=1-pLow;
+  let z;
+  if(p<pLow){const q=Math.sqrt(-2*Math.log(p));z=(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);}
+  else if(p<=pHigh){const q=p-0.5,r=q*q;z=(((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q/(((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);}
+  else{const q=Math.sqrt(-2*Math.log(1-p));z=-(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);}
+  return Math.round(Math.max(-3,Math.min(3,z))*10)/10;
+};
+
+// Z-score label and color
+const zLabel = (z) => z>=2.0?"Elite":z>=1.0?"Impact":z>=-0.9?"Neutral":"Liability";
+const zColor = (z) => z>=2.0?"#22c55e":z>=1.0?"#86efac":z>=-0.9?"#6b7280":"#ef4444";
+const zBg    = (z) => z>=2.0?"#22c55e18":z>=1.0?"#86efac11":z>=-0.9?"#1e293b":"#ef444418";
+
+// ── Swing Skill + Tier logic ───────────────────────────────
+function computeSwingSkill(p) {
+  const bpm = p.bpm ?? 0;
+  const usg = p.usg ?? 0;
+  const ts  = p.ts  ?? 0;
+  const ft  = p.ft  ?? 0;
+  const tp  = p.tp  ?? 0;
+  const pos = p.pos ?? "Wing";
+  const isBig   = pos === "Big";
+  const isGuard = pos === "Playmaker";
+  const isWing  = !isBig && !isGuard;
+
+  // Current Tier
+  let tier, tierColor, tierNum;
+  if      (bpm>10 && usg>28 && ts>60)  { tier="Franchise";        tierColor="#fbbf24"; tierNum=1; }
+  else if (bpm>=7)                       { tier="All-Star Potential";tierColor="#f97316"; tierNum=2; }
+  else if (bpm>=4)                       { tier="Starter";          tierColor="#3b82f6"; tierNum=3; }
+  else if (bpm>=1.5)                     { tier="Rotation/Specialist";tierColor="#06b6d4";tierNum=4; }
+  else                                   { tier="Depth/Bust";       tierColor="#6b7280"; tierNum=5; }
+
+  // Identify Swing Skill: biggest negative deviation with highest NBA leverage
+  const swingCandidates = [];
+  if (isWing || isGuard) {
+    const shootGap = 70 - (p.shootScore ?? 0); // wing/guard shooting leverage × 3.5
+    if (shootGap > 10) swingCandidates.push({ skill:"Shooting", gap:shootGap, mult:3.5,
+      current:`${fmt(tp)}% 3P / ${fmt(ft)}% FT`,
+      floor:`Non-shooter → Tier ${Math.min(5,tierNum+2)} ceiling`,
+      ceiling:`Elite shooter → Tier ${Math.max(1,tierNum-2)} floor`,
+      ftPrior: ft, hasTouch: ft > 78, hasDevWindow: (p.age??22) < 21, hasIQ: (p.feel??0) > 65,
+    });
+  }
+  if (isBig) {
+    const blkGap = 70 - (p.pctl?.blk ?? 50);
+    if (blkGap > 10) swingCandidates.push({ skill:"Rim Protection", gap:blkGap, mult:2.5,
+      current:`${fmt(p.blkP)}% BLK / DBPM ${fmt(p.dbpm)}`,
+      floor:"Non-rim-protector → Tier 4-5 Big",
+      ceiling:"Rim anchor → Tier 2 Big",
+      ftPrior: ft, hasTouch: ft > 70, hasDevWindow: (p.age??22) < 21, hasIQ: (p.feel??0) > 60,
+    });
+    const shootGap = 65 - (p.shootScore ?? 0);
+    if (shootGap > 15) swingCandidates.push({ skill:"Stretch Shooting", gap:shootGap, mult:2.0,
+      current:`${fmt(tp)}% 3P / ${fmt(p.threeF)}% 3P freq`,
+      floor:"Non-shooter Big → limited lineups",
+      ceiling:"Floor-spacing Big → premium value",
+      ftPrior: ft, hasTouch: ft > 72, hasDevWindow: (p.age??22) < 21, hasIQ: (p.feel??0) > 55,
+    });
+  }
+  {
+    const decGap = 70 - (p.feel ?? 0);
+    if (decGap > 15 && isGuard) swingCandidates.push({ skill:"Decision Making", gap:decGap, mult:3.0,
+      current:`AST/TO ${fmt(p.astTov)} / TO% ${fmt(p.toP)}%`,
+      floor:"Ball-handler who turns it over → backup PG",
+      ceiling:"Elite decision-maker → starter/initiator",
+      ftPrior: ft, hasTouch: ft > 75, hasDevWindow: (p.age??22) < 21, hasIQ: (p.feel??0) > 55,
+    });
+  }
+  if ((isBig || isWing) && (p.pctl?.blk ?? 50) < 40) {
+    const defGap = 65 - (p.defScore ?? 0);
+    if (defGap > 10 && !isBig) swingCandidates.push({ skill:"Perimeter Defense", gap:defGap, mult:2.0,
+      current:`STL% ${fmt(p.stlP)} / DBPM ${fmt(p.dbpm)}`,
+      floor:"Offensive-only wing → role player ceiling",
+      ceiling:"Two-way wing → All-Star potential",
+      ftPrior: ft, hasTouch: ft > 72, hasDevWindow: (p.age??22) < 21, hasIQ: (p.feel??0) > 60,
+    });
+  }
+
+  if (swingCandidates.length === 0) return { tier, tierColor, tierNum, swingSkill:null };
+
+  // Pick highest delta × multiplier
+  swingCandidates.sort((a,b) => (b.gap*b.mult) - (a.gap*a.mult));
+  const sw = swingCandidates[0];
+  const delta = Math.round((sw.gap / 100) * sw.mult * 10) / 10;
+
+  // Hitter probability
+  let hitProb = 0.30; // base
+  if (sw.hasTouch)     hitProb += 0.20; // FT% proxy for motor touch
+  if (sw.hasDevWindow) hitProb += 0.15; // age < 21
+  if (sw.hasIQ)        hitProb += 0.10; // high feel score
+  hitProb = Math.round(Math.min(0.85, hitProb) * 100);
+
+  const hitColor = hitProb >= 65 ? "#22c55e" : hitProb >= 45 ? "#fbbf24" : "#ef4444";
+  const hitLabel = hitProb >= 65 ? "Likely Hits" : hitProb >= 45 ? "Coinflip" : "Unlikely";
+
+  return { tier, tierColor, tierNum, swingSkill: sw.skill, delta, current:sw.current,
+    floor:sw.floor, ceiling:sw.ceiling, hitProb, hitColor, hitLabel };
+}
+
+// ── Bust / Sleeper assessment ──────────────────────────────
+function computeBustSleeper(p) {
+  const bpm    = p.bpm    ?? 0;
+  const usg    = p.usg    ?? 0;
+  const stlP   = p.stlP   ?? 0;
+  const blkP   = p.blkP   ?? 0;
+  const ft     = p.ft     ?? 0;
+  const astTov = p.astTov ?? 0;
+  const dunkR  = p.dunkR  ?? 0;
+  const rimF   = p.rimF   ?? 0;
+  const threeF = p.threeF ?? 0;
+  const ftr    = p.ftr    ?? 0;
+  const htIn   = p.htIn   ?? 78;
+  const feel   = p.feel   ?? 0;
+
+  const busts   = [];
+  const sleepers= [];
+
+  // BUST CLUSTERS
+  if (usg>25 && stlP<1.2 && blkP<1.0)
+    busts.push({ id:"A", label:"Defensive Immobility", desc:"High usage but no defensive activity — can't guard in NBA without athleticism signals." });
+  if ((dunkR>8||rimF>30) && ft<65 && astTov<0.9)
+    busts.push({ id:"B", label:"Athletic / No Skill", desc:"High athleticism but poor touch and decisions — hard to develop with low IQ signal." });
+  if (threeF>40 && ftr<20 && rimF<20)
+    busts.push({ id:"C", label:"One-Dimensional Shooter", desc:"Shoots only threes without rim or FT pressure — defenders can sag off." });
+
+  // SLEEPER CLUSTERS
+  if (bpm>8 && usg<20)
+    sleepers.push({ id:"D", label:"Elite Connector Potential", desc:"Massive BPM at low usage — efficiency explodes when usage is right-sized for his role." });
+  if (ft>85 && p.tp!=null && p.tp<34)
+    sleepers.push({ id:"E", label:"Shooting Breakout Risk", desc:"Elite FT% suggests the motor memory for NBA 3P translation — current low 3P% is misleading." });
+  if (stlP>3.0 && htIn>79)
+    sleepers.push({ id:"F", label:"Defensive Stopper Floor", desc:"Elite steal rate at large size is an extreme rarity — creates instant defensive value floor." });
+
+  // Risk score: 1 (safe/sleeper) to 10 (high bust)
+  let risk = 5;
+  risk += busts.length * 2;
+  risk -= sleepers.length * 1.5;
+  if (feel > 75) risk -= 1;
+  if (bpm > 8)   risk -= 1;
+  if (ft < 65)   risk += 1;
+  risk = Math.round(Math.max(1, Math.min(10, risk)));
+
+  const riskColor = risk >= 7 ? "#ef4444" : risk >= 5 ? "#fbbf24" : "#22c55e";
+  const riskLabel = risk >= 8 ? "High Bust Risk" : risk >= 6 ? "Elevated Risk" : risk <= 3 ? "Sleeper / Safe" : "Moderate Risk";
+
+  return { busts, sleepers, risk, riskColor, riskLabel };
+}
+
 function ScoutingTab({p}) {
 
-  // ═══ NBA ARCHETYPE CLASSIFICATION ENGINE ══════════════
+  // ── Archetype ─────────────────────────────────────────────
   const archetype = useMemo(() => {
-    const feel    = p.feel       ?? 0;
-    const funcAth = p.funcAth    ?? 0;
-    const shoot   = p.shootScore ?? 0;
-    const def     = p.defScore   ?? 0;
-    const usg     = p.usg        ?? 0;
-    const pos     = p.pos        ?? "Wing";
-    const blkPctl = p.pctl?.blk  ?? 50;
-    const astPctl = p.pctl?.ast  ?? 50;
-    const threePFreqPctl = p.threeF != null ? Math.min(99, p.threeF * 2.5) : 0;
-    const rimFreqPctl    = p.rimF   != null ? Math.min(99, p.rimF * 2.5)   : 0;
-    const dunkPctl       = p.dunkR  != null ? Math.min(99, p.dunkR * 4.0)  : 0;
-    const htIn           = p.htIn   ?? 78;
-    const isBig          = pos === "Big";
-    const isGuard        = pos === "Playmaker";
+    const feel=p.feel??0,funcAth=p.funcAth??0,shoot=p.shootScore??0,def=p.defScore??0;
+    const usg=p.usg??0,pos=p.pos??"Wing";
+    const blkPctl=p.pctl?.blk??50,astPctl=p.pctl?.ast??50;
+    const threeF=p.threeF??0,rimF=p.rimF??0,dunkR=p.dunkR??0,htIn=p.htIn??78;
+    const isBig=pos==="Big",isGuard=pos==="Playmaker",isWing=!isBig&&!isGuard;
+    const rimFreqPctl=Math.min(99,rimF*2.5),dunkPctl=Math.min(99,dunkR*4);
 
-    // A. Initiators
-    if (usg > 30 && feel >= 85 && shoot >= 75) return {
-      key:"helio", name:"Heliocentric Engine", group:"A · Initiators", groupColor:"#f97316", icon:"🔆", color:"#fbbf24",
-      comps:"Luka Dončić · James Harden",
-      desc:"Offense runs through this player. Elite IQ and shooting sustain elite usage without efficiency collapse. Needs the ball and a system built around his creation.",
-      strengths:["Elite feel & creation","High-volume shooting","Shot creation off dribble"],
-      risks:["Needs proper spacing","Usage regresses in NBA","Defensive liability possible"],
-      fit:"Primary offensive system — needs shooters around him.",
-    };
-    if (feel >= 80 && shoot >= 65 && (isGuard || usg >= 24)) return {
-      key:"initiator", name:"Primary Initiator", group:"A · Initiators", groupColor:"#f97316", icon:"🎯", color:"#f97316",
-      comps:"Tyrese Haliburton · Dejounte Murray",
-      desc:"Elite playmaker who can also score when needed. Translates via decision-making and court vision rather than pure athleticism. NBA floor is high because creation is real.",
-      strengths:["Playmaking lead","Good shooting base","Low-TO decisions"],
-      risks:["May not be primary scorer at next level","Finishing at rim needed"],
-      fit:"Starting PG or secondary initiator on contender.",
-    };
-    if (feel >= 65 && shoot >= 70 && usg >= 25) return {
-      key:"combo", name:"Combo Guard", group:"A · Initiators", groupColor:"#f97316", icon:"⚡", color:"#fb923c",
-      comps:"Jordan Clarkson · Gary Trent Jr.",
-      desc:"Scoring and passing mix at high usage. Not a pure playmaker but keeps defenses honest. Best fit as secondary ball-handler or sixth man scorer.",
-      strengths:["Versatile scoring","Can handle in spurts","Shooting off movement"],
-      risks:["Neither elite creator nor shooter","Role clarity needed at NBA level"],
-      fit:"6th man scorer or off-ball alongside elite PG.",
-    };
-
-    // B. Wings & Specialists
-    if (shoot >= 75 && def >= 75 && feel >= 50) return {
-      key:"3d", name:"3&D Wing", group:"B · Wings & Specialists", groupColor:"#3b82f6", icon:"🏹", color:"#22c55e",
-      comps:"Mikal Bridges · OG Anunoby",
-      desc:"The most coveted role player in the modern NBA. Translates immediately because both shooting and defense survive the transition. Does not need the ball to contribute.",
-      strengths:["Immediate NBA role","High floor","Two-way value"],
-      risks:["Limited creation / upside","Role player ceiling"],
-      fit:"Starting wing on any roster — ideal in any system.",
-    };
-    if (shoot >= 85 && threePFreqPctl >= 80 && feel < 60) return {
-      key:"mover", name:"Movement Shooter", group:"B · Wings & Specialists", groupColor:"#3b82f6", icon:"🎪", color:"#60a5fa",
-      comps:"Buddy Hield · Duncan Robinson",
-      desc:"Elite shooter off movement and pin-downs. Creates no offense himself but is always a threat in the right system. NBA value depends on landing with a quality playmaker.",
-      strengths:["Elite catch-and-shoot","Forces constant attention","Low-TO specialist"],
-      risks:["Zero creation","System-dependent","Defended off the ball"],
-      fit:"Off-ball specialist — needs a primary creator.",
-    };
-    if (funcAth >= 80 && rimFreqPctl >= 75 && shoot < 60) return {
-      key:"slasher", name:"Slasher", group:"B · Wings & Specialists", groupColor:"#3b82f6", icon:"⚔️", color:"#f87171",
-      comps:"Dorian Finney-Smith · Jalen McDaniels",
-      desc:"Athletic cutter and rim attacker who lives off others' creation. Effective in transition and off cuts but lacks the shooting to threaten from distance.",
-      strengths:["Rim finishing","Athletic plays","Drawing fouls"],
-      risks:["Shooting limits spacing","Predictable off-ball"],
-      fit:"Energy wing / backup — needs spacing around him.",
-    };
-    if (feel >= 75 && def >= 70 && shoot >= 60 && usg < 20) return {
-      key:"connector", name:"Connector / Glue Guy", group:"B · Wings & Specialists", groupColor:"#3b82f6", icon:"🔗", color:"#a78bfa",
-      comps:"Draymond Green (wing) · Kyle Anderson",
-      desc:"Versatile two-way player who makes teams better without doing any single thing at an elite level. High IQ compensates for modest athleticism.",
-      strengths:["Versatility","Smart decisions","Two-way competence"],
-      risks:["No elite skill — may be exposed","Usage too low to project"],
-      fit:"Starting piece on a smart, well-built team.",
-    };
-
-    // C. Frontcourt
-    if (isBig && def >= 85 && funcAth >= 75 && blkPctl >= 80) return {
-      key:"rimprotect", name:"Modern Rim Protector", group:"C · Frontcourt", groupColor:"#8b5cf6", icon:"🛡", color:"#818cf8",
-      comps:"Walker Kessler · Mark Williams",
-      desc:"Defensive anchor whose shot-altering presence alone justifies a roster spot. Must roll hard and set screens. Offensive role is catch-and-finish — and that is fine.",
-      strengths:["Immediate defensive value","Screen/roll threat","Lob target"],
-      risks:["Offensive limitations","Exploitable in space","P&R coverage"],
-      fit:"Starting center on a perimeter-heavy team.",
-    };
-    if (isBig && shoot >= 70 && blkPctl >= 60 && htIn >= 81) return {
-      key:"stretchbig", name:"Stretch Big", group:"C · Frontcourt", groupColor:"#8b5cf6", icon:"📐", color:"#c084fc",
-      comps:"Brook Lopez · Isaiah Hartenstein",
-      desc:"Floor-spacing big who can also protect the rim. The ideal modern center profile — opens the floor for guards while anchoring the paint on defense.",
-      strengths:["Rare skill combination","Opens 5-out lineups","Versatile defender"],
-      risks:["Shooting must translate","May be forced to choose a role"],
-      fit:"Starting center in modern scheme — extremely high value if both skills translate.",
-    };
-    if (isBig && funcAth >= 85 && dunkPctl >= 80 && feel < 50) return {
-      key:"rimrunner", name:"Rim Runner / Finisher", group:"C · Frontcourt", groupColor:"#8b5cf6", icon:"💥", color:"#fb7185",
-      comps:"Clint Capela · Isaiah Roby",
-      desc:"Pure athletic finisher who scores only via lobs, cuts, and offensive rebounds. No halfcourt creation needed — just run, catch, and dunk.",
-      strengths:["Elite athleticism","High-efficiency finishing","OREB"],
-      risks:["Zero creation","Narrow role","Dependent on elite playmakers"],
-      fit:"Backup or complementary starter — pairs best with elite playmakers.",
-    };
-    if (isBig && feel >= 75 && blkPctl >= 70 && astPctl >= 70) return {
-      key:"shortroll", name:"Short Roll Playmaker", group:"C · Frontcourt", groupColor:"#8b5cf6", icon:"🎲", color:"#34d399",
-      comps:"Draymond Green · Nikola Jokić profile",
-      desc:"Rare passing big who initiates from the elbow and punishes aggressive defenses. Translates via IQ rather than athleticism.",
-      strengths:["Unique passing skill","Forces tough rotations","Elite basketball IQ"],
-      risks:["Rare — hard to evaluate in college","Needs right system"],
-      fit:"Ideal in modern motion offense — franchise-altering if elite.",
-    };
-
-    // Fallback
-    return {
-      key:"raw", name:"Raw Prospect", group:"Unclassified", groupColor:"#6b7280", icon:"🔬", color:"#6b7280",
-      comps:"Profile incomplete", desc:"Scores do not clearly match any defined archetype — either multi-dimensional without a dominant skill cluster, a development prospect, or insufficient sample size.",
-      strengths:["Undefined dominant skill"], risks:["Role clarity needed","Projection uncertain"],
-      fit:"Evaluate on deeper film + secondary data.",
-    };
+    if(usg>30&&feel>=85&&shoot>=75)return{key:"helio",name:"Heliocentric Engine",group:"A · Initiators",groupColor:"#f97316",icon:"🔆",color:"#fbbf24",comps:"Luka Dončić · James Harden",desc:"Offense runs through this player. Elite IQ and shooting sustain elite usage without efficiency collapse. Needs the ball and a system built around his creation.",strengths:["Elite feel & creation","High-volume shooting","Dribble creation"],risks:["Spacing requirements","Usage regresses in NBA","Defensive questions"],fit:"Primary offensive system — needs shooters around him."};
+    if(feel>=80&&shoot>=65&&(isGuard||usg>=24))return{key:"initiator",name:"Primary Initiator",group:"A · Initiators",groupColor:"#f97316",icon:"🎯",color:"#f97316",comps:"Tyrese Haliburton · Dejounte Murray",desc:"Elite playmaker who also scores when needed. Translates via decision-making and court vision. High NBA floor because creation is real.",strengths:["Playmaking lead","Good shooting base","Low-TO decisions"],risks:["May not primary-score at next level","Rim finishing needed"],fit:"Starting PG or secondary initiator on contender."};
+    if(feel>=65&&shoot>=70&&usg>=25)return{key:"combo",name:"Combo Guard",group:"A · Initiators",groupColor:"#f97316",icon:"⚡",color:"#fb923c",comps:"Jordan Clarkson · Gary Trent Jr.",desc:"Scoring and passing mix at high usage. Best fit as secondary ball-handler or sixth man scorer.",strengths:["Versatile scoring","Handles in spurts","Off-movement shooting"],risks:["Neither elite creator nor shooter","Role clarity needed"],fit:"6th man scorer or alongside elite PG."};
+    if(shoot>=75&&def>=75&&feel>=50)return{key:"3d",name:"3&D Wing",group:"B · Wings & Specialists",groupColor:"#3b82f6",icon:"🏹",color:"#22c55e",comps:"Mikal Bridges · OG Anunoby",desc:"Most coveted role player in modern NBA. Both shooting and defense survive the college→NBA transition. Does not need the ball to contribute.",strengths:["Immediate NBA role","High floor","Two-way value"],risks:["Limited creation","Role player ceiling"],fit:"Starting wing on any roster."};
+    if(shoot>=85&&threeF>=50&&feel<60)return{key:"mover",name:"Movement Shooter",group:"B · Wings & Specialists",groupColor:"#3b82f6",icon:"🎪",color:"#60a5fa",comps:"Buddy Hield · Duncan Robinson",desc:"Elite shooter off movement and pin-downs. Always a threat in the right system — value depends on landing with a quality playmaker.",strengths:["Elite catch-and-shoot","Forces constant attention","Low-TO"],risks:["Zero creation","System-dependent"],fit:"Off-ball specialist — needs a primary creator."};
+    if(funcAth>=80&&rimFreqPctl>=75&&shoot<60)return{key:"slasher",name:"Slasher",group:"B · Wings & Specialists",groupColor:"#3b82f6",icon:"⚔️",color:"#f87171",comps:"Dorian Finney-Smith · Jalen McDaniels",desc:"Athletic cutter and rim attacker who lives off others' creation. Needs shooting development or specific system fit.",strengths:["Rim finishing","Athletic plays","Drawing fouls"],risks:["Shooting limits spacing","Predictable off-ball"],fit:"Energy wing — needs spacing around him."};
+    if(feel>=75&&def>=70&&shoot>=60&&usg<20)return{key:"connector",name:"Connector / Glue Guy",group:"B · Wings & Specialists",groupColor:"#3b82f6",icon:"🔗",color:"#a78bfa",comps:"Draymond Green (wing) · Kyle Anderson",desc:"Versatile two-way player who makes teams better. High IQ compensates for modest athleticism — holds up in playoff environments.",strengths:["Versatility","Smart decisions","Two-way competence"],risks:["No elite skill","May be exposed"],fit:"Starting piece on a smart team."};
+    if(isBig&&def>=85&&funcAth>=75&&blkPctl>=80)return{key:"rimprotect",name:"Modern Rim Protector",group:"C · Frontcourt",groupColor:"#8b5cf6",icon:"🛡",color:"#818cf8",comps:"Walker Kessler · Mark Williams",desc:"Defensive anchor whose shot-altering presence alone justifies a roster spot. Must roll hard and set screens too.",strengths:["Immediate defensive value","Screen/roll threat","Lob target"],risks:["Offensive limitations","Exploitable in space"],fit:"Starting center on a perimeter-heavy team."};
+    if(isBig&&shoot>=70&&blkPctl>=60&&htIn>=81)return{key:"stretchbig",name:"Stretch Big",group:"C · Frontcourt",groupColor:"#8b5cf6",icon:"📐",color:"#c084fc",comps:"Brook Lopez · Isaiah Hartenstein",desc:"Floor-spacing big who also protects the rim. Ideal modern center profile — extremely high value if both skills translate.",strengths:["Rare combo","5-out lineups","Versatile defender"],risks:["Shooting must translate","Role choice"],fit:"Starting center in modern scheme."};
+    if(isBig&&funcAth>=85&&dunkPctl>=80&&feel<50)return{key:"rimrunner",name:"Rim Runner / Finisher",group:"C · Frontcourt",groupColor:"#8b5cf6",icon:"💥",color:"#fb7185",comps:"Clint Capela · Isaiah Roby",desc:"Pure athletic finisher — scores only via lobs, cuts, and offensive rebounds. Narrow role but real value.",strengths:["Elite finishing","High-efficiency","OREB"],risks:["Zero creation","Narrow role"],fit:"Pairs best with elite playmakers."};
+    if(isBig&&feel>=75&&blkPctl>=70&&astPctl>=70)return{key:"shortroll",name:"Short Roll Playmaker",group:"C · Frontcourt",groupColor:"#8b5cf6",icon:"🎲",color:"#34d399",comps:"Draymond Green · Nikola Jokić profile",desc:"Rare passing big who initiates from the elbow. Translates via IQ rather than athleticism — franchise-altering if elite.",strengths:["Unique passing","Forces rotations","Elite IQ"],risks:["Hard to evaluate in college","Needs right system"],fit:"Ideal in modern motion offense."};
+    const bestGroup=isBig?"C · Frontcourt":isGuard?"A · Initiators":"B · Wings & Specialists";
+    return{key:"raw",name:"Raw Prospect",group:bestGroup,groupColor:"#6b7280",icon:"🔬",color:"#6b7280",comps:"Profile incomplete",desc:"Scores do not clearly match any defined archetype — multi-dimensional, development prospect, or insufficient sample size.",strengths:["Undefined dominant skill"],risks:["Role clarity needed","Projection uncertain"],fit:"Evaluate on deeper film + secondary data."};
   }, [p]);
 
-  const roleOff=[["Playmaker",p.roles.playmaker],["Scorer",p.roles.scorer],["Spacer",p.roles.spacer],["Driver",p.roles.driver],["Crasher",p.roles.crasher]];
-  const roleDef=[["On-Ball D",p.roles.onball],["Rim Protect",p.roles.rimProt],["Rebounder",p.roles.rebounder],["Switch Pot.",p.roles.switchPot]];
+  // ── 14 Role Z-scores ──────────────────────────────────────
+  const roles14 = useMemo(() => {
+    // ── Spec-compliant Z-score formulas from BartTorvik pctls ────────────
+    // pctl2z converts 0–100 percentile to z-score via inverse normal
+    // Weighted composites match the spec formulas exactly.
+    const pctls = p.pctl ?? {};
+    const clip = (z) => Math.round(Math.max(-3, Math.min(3, z)) * 10) / 10;
+
+    // Individual z-scores from pctls
+    const zUsg  = pctl2z(pctls.usg  ?? 50);
+    const zTs   = pctl2z(pctls.ts   ?? 50);
+    const zAst  = pctl2z(pctls.ast  ?? 50);
+    const zStl  = pctl2z(pctls.stl  ?? 50);
+    const zBlk  = pctl2z(pctls.blk  ?? 50);
+    const zOrb  = pctl2z(pctls.orb  ?? 50);
+    const zDrb  = pctl2z(pctls.drb  ?? 50);
+
+    // Stats not in pctls — derive z-scores from raw values vs. positional averages
+    const astTov= p.astTov ?? 0;
+    const rimF  = p.rimF   ?? 0;
+    const ftr   = p.ftr    ?? 0;
+    const threeF= p.threeF ?? 0;
+    const tp    = p.tp     ?? 0;
+    const dbpm  = p.dbpm   ?? 0;
+    const htIn  = p.htIn   ?? 78;
+    const astP  = p.astP   ?? 0;
+    const usg   = p.usg    ?? 0;
+    const ts    = p.ts     ?? 0;
+    const stlP  = p.stlP   ?? 0;
+    const blkP  = p.blkP   ?? 0;
+
+    // Derived raw z-scores (league avg / std from BartTorvik typical ranges)
+    const zAstTov= clip((astTov - 1.3) / 0.7);   // avg ~1.3, sd ~0.7
+    const zRimF  = clip((rimF   - 25)  / 12);    // avg ~25%, sd ~12
+    const zFtr   = clip((ftr    - 28)  / 12);    // avg ~28, sd ~12
+    const zThreeF= clip((threeF - 30)  / 15);    // avg ~30%, sd ~15
+    const zTp    = clip((tp     - 32)  / 7);     // avg ~32%, sd ~7
+    const zDbpm  = clip((dbpm   - (-1.5)) / 2.0);// avg ~-1.5, sd ~2.0
+    const zHt    = clip((htIn   - 78)  / 2);     // avg 6'6", sd ~2"
+
+    // ── OFFENSE (spec formulas) ───────────────────────────────────────────
+    const zScorer    = clip(zUsg * 0.6 + zTs * 0.4);
+    const zPlaymaker = clip(zAst * 0.7 + zAstTov * 0.3);
+    const zSpacer    = clip(zThreeF * 0.5 + zTp * 0.5);
+    const zDriver    = clip(zRimF * 0.6 + zFtr * 0.4);
+    const zCrasher   = clip(zOrb * 0.8);  // putback freq not available → ORB% * 1.0 weight
+
+    // ── DEFENSE (spec formulas) ───────────────────────────────────────────
+    const zOnBall    = clip(zStl * 0.7);  // foul rate inv not directly available
+    const zSwitch    = clip(zHt * 0.3 + zStl * 0.3 + zBlk * 0.4);
+    const zRimProt   = clip(zBlk * 0.8 + zDbpm * 0.2);
+    const zRebounder = clip(zDrb * 1.0);
+
+    // ── HYBRID (threshold → continuous z-score) ───────────────────────────
+    // Connector: AST% > 15 AND USG% < 20 AND AST/TO > 2.0
+    const connStrength = Math.min(1.5, (astP-15)/8 + (astTov-2.0)/0.5 + (20-usg)/5);
+    const zConnector = astP>15 && usg<20 && astTov>2.0
+      ? clip(1.0 + connStrength) : clip((zAst-0.5)*0.5);
+    // Helio-Scorer: USG% > 30 AND AST% < 12 AND TS% > 55
+    const helioStr = Math.min(1.5, (usg-30)/5 + (ts-55)/5);
+    const zHelio = usg>30 && astP<12 && ts>55 ? clip(1.0+helioStr) : clip(zScorer-1);
+    // Event Creator: STL% > 3.0 AND BLK% > 3.0
+    const evStr = Math.min(1.5, (stlP-3.0+blkP-3.0)/0.5);
+    const zEvent = stlP>3.0 && blkP>3.0 ? clip(1.0+evStr) : clip((zStl+zBlk)/2-0.5);
+    // Zone Pressure: Rim Freq > 45% AND Rim FG% > 65%
+    const rimPct = p.rimPct ?? 0;
+    const zoneStr = Math.min(1.5, (rimF-45)/10+(rimPct-65)/10);
+    const zZone = rimF>45 && rimPct>65 ? clip(1.0+zoneStr) : clip(zDriver-0.5);
+    // Micro-Spacer: 3P Freq > 55% AND 3P% > 38%
+    const microStr = Math.min(1.5, (threeF-55)/10+(tp-38)/5);
+    const zMicro = threeF>55 && tp>38 ? clip(1.0+microStr) : clip(zSpacer-0.5);
+
+    return [
+      { key:"Scorer",       z:zScorer,    cat:"offense", formula:"USG%_z×0.6 + TS%_z×0.4" },
+      { key:"Playmaker",    z:zPlaymaker, cat:"offense", formula:"AST%_z×0.7 + AST/TO_z×0.3" },
+      { key:"Spacer",       z:zSpacer,    cat:"offense", formula:"3P Freq_z×0.5 + 3P%_z×0.5" },
+      { key:"Driver",       z:zDriver,    cat:"offense", formula:"Rim Freq_z×0.6 + FTR_z×0.4" },
+      { key:"Crasher",      z:zCrasher,   cat:"offense", formula:"ORB%_z×0.8" },
+      { key:"On-Ball D",    z:zOnBall,    cat:"defense", formula:"STL%_z×0.7" },
+      { key:"Switch Pot.",  z:zSwitch,    cat:"defense", formula:"Ht_z×0.3 + STL%_z×0.3 + BLK%_z×0.4" },
+      { key:"Rim Protect",  z:zRimProt,   cat:"defense", formula:"BLK%_z×0.8 + DBPM_z×0.2" },
+      { key:"Rebounder",    z:zRebounder, cat:"defense", formula:"DRB%_z×1.0" },
+      { key:"Connector",    z:zConnector, cat:"hybrid",  formula:"AST%>15 AND USG%<20 AND AST/TO>2.0" },
+      { key:"Helio-Scorer", z:zHelio,     cat:"hybrid",  formula:"USG%>30 AND AST%<12 AND TS%>55" },
+      { key:"Event Creator",z:zEvent,     cat:"hybrid",  formula:"STL%>3.0 AND BLK%>3.0" },
+      { key:"Zone Pressure",z:zZone,      cat:"hybrid",  formula:"Rim Freq>45% AND Rim FG%>65%" },
+      { key:"Micro-Spacer", z:zMicro,     cat:"hybrid",  formula:"3P Freq>55% AND 3P%>38%" },
+    ];
+  }, [p]);
+
+  // Top 2 dominant roles
+  const top2 = [...roles14].sort((a,b)=>b.z-a.z).slice(0,2);
+
+  // ── Live badge compute ─────────────────────────────────────
+  const badges = useMemo(() => computeBadges(p), [p]);
+
+  // ── Swing skill ───────────────────────────────────────────
+  const swing = useMemo(() => computeSwingSkill(p), [p]);
+
+  // ── Bust/Sleeper ──────────────────────────────────────────
+  const bustSleeper = useMemo(() => computeBustSleeper(p), [p]);
+
+  const catColors = { offense:"#f97316", defense:"#3b82f6", hybrid:"#a78bfa" };
 
   return (
     <div className="space-y-5">
 
-      {/* ARCHETYPE CARD */}
-      <div className="rounded-2xl p-5 relative overflow-hidden" style={{
-        background:`linear-gradient(135deg, #0d1117 60%, ${archetype.color}18)`,
-        border:`1px solid ${archetype.color}44`,
-      }}>
+      {/* ── ARCHETYPE CARD ───────────────────────────────── */}
+      <div className="rounded-2xl p-5 relative overflow-hidden" style={{background:`linear-gradient(135deg,#0d1117 60%,${archetype.color}18)`,border:`1px solid ${archetype.color}44`}}>
         <div className="absolute top-0 right-0 w-40 h-40 rounded-full opacity-10 blur-3xl pointer-events-none" style={{background:archetype.color}}/>
         <div className="flex items-start gap-4 relative">
-          <div className="rounded-xl p-3 text-2xl shrink-0" style={{background:archetype.color+"22",border:`1px solid ${archetype.color}44`}}>
-            {archetype.icon}
-          </div>
+          <div className="rounded-xl p-3 text-2xl shrink-0" style={{background:archetype.color+"22",border:`1px solid ${archetype.color}44`}}>{archetype.icon}</div>
           <div className="flex-1 min-w-0">
             <div className="text-xs uppercase tracking-widest mb-1" style={{color:archetype.groupColor}}>{archetype.group}</div>
             <div className="text-2xl font-bold mb-0.5" style={{color:archetype.color,fontFamily:"'Oswald',sans-serif"}}>{archetype.name}</div>
             <div className="text-xs mb-3" style={{color:"#64748b"}}>NBA Comps: <span style={{color:"#94a3b8"}}>{archetype.comps}</span></div>
             <p className="text-sm leading-relaxed mb-3" style={{color:"#cbd5e1"}}>{archetype.desc}</p>
             <div className="grid grid-cols-2 gap-3 mb-3">
-              <div>
-                <div className="text-xs uppercase tracking-wider mb-1.5" style={{color:"#22c55e"}}>✓ Strengths</div>
-                <ul className="space-y-1">{archetype.strengths.map((s,i)=><li key={i} className="text-xs flex items-center gap-1.5" style={{color:"#86efac"}}><span style={{color:"#22c55e"}}>·</span>{s}</li>)}</ul>
-              </div>
-              <div>
-                <div className="text-xs uppercase tracking-wider mb-1.5" style={{color:"#f87171"}}>⚠ Risk Factors</div>
-                <ul className="space-y-1">{archetype.risks.map((r,i)=><li key={i} className="text-xs flex items-center gap-1.5" style={{color:"#fca5a5"}}><span style={{color:"#ef4444"}}>·</span>{r}</li>)}</ul>
-              </div>
+              <div><div className="text-xs uppercase tracking-wider mb-1.5" style={{color:"#22c55e"}}>✓ Strengths</div>
+                <ul className="space-y-1">{archetype.strengths.map((s,i)=><li key={i} className="text-xs flex items-center gap-1.5" style={{color:"#86efac"}}><span style={{color:"#22c55e"}}>·</span>{s}</li>)}</ul></div>
+              <div><div className="text-xs uppercase tracking-wider mb-1.5" style={{color:"#f87171"}}>⚠ Risk Factors</div>
+                <ul className="space-y-1">{archetype.risks.map((r,i)=><li key={i} className="text-xs flex items-center gap-1.5" style={{color:"#fca5a5"}}><span style={{color:"#ef4444"}}>·</span>{r}</li>)}</ul></div>
             </div>
             <div className="px-3 py-2 rounded-lg text-xs" style={{background:"#0d1117",border:`1px solid ${archetype.color}33`}}>
               <span style={{color:"#64748b"}}>Best Fit: </span><span style={{color:"#e2e8f0"}}>{archetype.fit}</span>
@@ -930,58 +1141,208 @@ function ScoutingTab({p}) {
         </div>
       </div>
 
-      {/* SCOUTING SCORES */}
+      {/* ── SCOUTING SCORES ──────────────────────────────── */}
       <Sec icon="⭐" title="Scouting Scores" sub="Hover any score for formula, inputs, and methodology ⓘ">
-        <ScoreGauge label="Overall" value={p.overall} color="#f97316" methodKey="overall" p={p}/>
-        <ScoreGauge label="Feel / IQ" value={p.feel} color="#fbbf24" methodKey="feel" p={p}/>
-        <ScoreGauge label="Func. Athleticism" value={p.funcAth} color="#ef4444" methodKey="funcAth" p={p}/>
-        <ScoreGauge label="Shooting" value={p.shootScore} color="#3b82f6" methodKey="shootScore" p={p}/>
-        <ScoreGauge label="Defense" value={p.defScore} color="#10b981" methodKey="defScore" p={p}/>
+        <ScoreGauge label="Overall"           value={p.overall}    color="#f97316" methodKey="overall"    p={p}/>
+        <ScoreGauge label="Feel / IQ"         value={p.feel}       color="#fbbf24" methodKey="feel"       p={p}/>
+        <ScoreGauge label="Func. Athleticism" value={p.funcAth}    color="#ef4444" methodKey="funcAth"    p={p}/>
+        <ScoreGauge label="Shooting"          value={p.shootScore} color="#3b82f6" methodKey="shootScore" p={p}/>
+        <ScoreGauge label="Defense"           value={p.defScore}   color="#10b981" methodKey="defScore"   p={p}/>
       </Sec>
 
-      {/* ROLES */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <Sec icon="⚔️" title="Offensive Roles">{roleOff.sort((a,b)=>b[1]-a[1]).map(([r,v])=><ScoreGauge key={r} label={r} value={v} color="#f97316"/>)}</Sec>
-        <Sec icon="🛡" title="Defensive Roles">{roleDef.sort((a,b)=>b[1]-a[1]).map(([r,v])=><ScoreGauge key={r} label={r} value={v} color="#3b82f6"/>)}</Sec>
-      </div>
+      {/* ── 14-ROLE Z-SCORE MATRIX ───────────────────────── */}
+      <Sec icon="🗂" title="Role-Inference Matrix" sub={`Primary Archetype: ${top2.map(r=>r.key).join(" + ")} · Scale: −3 (Liability) to +3 (Elite)`}>
+        {/* Top 2 dominant roles callout */}
+        <div className="flex gap-3 mb-4">
+          {top2.map((r,i)=>(
+            <div key={r.key} className="flex-1 rounded-xl px-4 py-3" style={{background:zBg(r.z),border:`1px solid ${zColor(r.z)}44`}}>
+              <div className="text-xs uppercase tracking-wider" style={{color:zColor(r.z)}}>{i===0?"#1 Dominant":"#2 Secondary"}</div>
+              <div className="font-bold mt-0.5" style={{color:zColor(r.z),fontFamily:"'Oswald',sans-serif",fontSize:18}}>{r.key}</div>
+              <div className="text-xs mt-0.5" style={{color:"#64748b"}}>{zLabel(r.z)} · z = {r.z>0?"+":""}{r.z}</div>
+            </div>
+          ))}
+        </div>
+        {/* Full matrix */}
+        {["offense","defense","hybrid"].map(cat=>(
+          <div key={cat} className="mb-3">
+            <div className="text-xs uppercase tracking-wider mb-2" style={{color:catColors[cat]}}>{cat}</div>
+            <div className="space-y-1">
+              {roles14.filter(r=>r.cat===cat).map(r=>(
+                <Tip key={r.key} content={<div><div className="font-bold mb-1" style={{color:zColor(r.z)}}>{r.key}</div><code className="text-xs block mb-1" style={{color:"#7dd3fc"}}>{r.formula}</code><div className="text-xs" style={{color:"#94a3b8"}}>z = {r.z > 0 ? "+" : ""}{r.z} → {zLabel(r.z)}</div></div>}>
+                <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-help" style={{background:zBg(r.z)}}>
+                  <div className="w-28 text-xs shrink-0" style={{color:"#9ca3af"}}>{r.key}</div>
+                  {/* Z-score bar: center is 0, left=negative, right=positive */}
+                  <div className="flex-1 relative h-2 rounded-full overflow-hidden" style={{background:"#1e293b"}}>
+                    <div className="absolute top-0 h-full rounded-full" style={{
+                      left: r.z >= 0 ? "50%" : `${Math.max(0,(r.z+3)/6*100)}%`,
+                      width: `${Math.abs(r.z)/3*50}%`,
+                      background: r.z >= 0 ? zColor(r.z) : "#ef4444",
+                    }}/>
+                    {/* Center line */}
+                    <div className="absolute top-0 bottom-0 w-px" style={{left:"50%",background:"#334155"}}/>
+                  </div>
+                  <div className="w-12 text-xs text-right font-mono font-bold" style={{color:zColor(r.z)}}>{r.z>0?"+":""}{r.z}</div>
+                  <div className="w-16 text-xs" style={{color:zColor(r.z)}}>{zLabel(r.z)}</div>
+                </div>
+                </Tip>
+              ))}
+            </div>
+          </div>
+        ))}
+      </Sec>
 
-      {/* MARGIN OF ERROR */}
+      {/* ── SWING SKILL + TIER DELTA ──────────────────────── */}
+      <Sec icon="📐" title="Swing Skill Analysis" sub="The one stat that decides this career — Tier-Delta Engineering">
+        {/* Current Tier */}
+        <div className="flex items-center gap-3 mb-4 p-3 rounded-xl" style={{background:"#0d1117",border:`1px solid ${swing.tierColor}44`}}>
+          <div className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Current Tier</div>
+          <div className="font-bold text-lg" style={{color:swing.tierColor,fontFamily:"'Oswald',sans-serif"}}>{swing.tier}</div>
+          <div className="ml-auto text-xs" style={{color:"#475569"}}>BPM {fmt(p.bpm)} / USG {fmt(p.usg)}% / TS {fmt(p.ts)}%</div>
+        </div>
+
+        {swing.swingSkill ? (
+          <>
+            {/* Swing Skill headline */}
+            <div className="rounded-xl p-4 mb-3" style={{background:"#0d1117",border:"1px solid #f9731644"}}>
+              <div className="flex items-center gap-3 mb-2">
+                <span className="text-xs uppercase tracking-wider" style={{color:"#f97316"}}>⚡ The Swing Skill</span>
+                <span className="font-bold text-lg" style={{color:"#fbbf24",fontFamily:"'Oswald',sans-serif"}}>{swing.swingSkill}</span>
+                <span className="ml-auto px-2 py-0.5 rounded text-xs" style={{background:"#1e293b",color:"#64748b"}}>Δ {swing.delta} tiers</span>
+              </div>
+              <div className="text-xs mb-2" style={{color:"#6b7280"}}>Current: <span style={{color:"#94a3b8"}}>{swing.current}</span></div>
+              {/* Floor / Ceiling bar */}
+              <div className="grid grid-cols-2 gap-2 mt-3">
+                <div className="rounded-lg p-3" style={{background:"#0a0f1a",border:"1px solid #ef444433"}}>
+                  <div className="text-xs uppercase mb-1" style={{color:"#ef4444"}}>▼ Worst Case (≤30th pctl)</div>
+                  <div className="text-xs" style={{color:"#fca5a5"}}>{swing.floor}</div>
+                </div>
+                <div className="rounded-lg p-3" style={{background:"#0a0f1a",border:"1px solid #22c55e33"}}>
+                  <div className="text-xs uppercase mb-1" style={{color:"#22c55e"}}>▲ Best Case (≥70th pctl)</div>
+                  <div className="text-xs" style={{color:"#86efac"}}>{swing.ceiling}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Hitter Probability */}
+            <div className="rounded-xl p-4" style={{background:"#0d1117",border:`1px solid ${swing.hitColor}44`}}>
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <div className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Hitter Probability</div>
+                  <div className="font-bold text-2xl" style={{color:swing.hitColor,fontFamily:"'Oswald',sans-serif"}}>{swing.hitProb}%</div>
+                  <div className="text-xs" style={{color:swing.hitColor}}>{swing.hitLabel}</div>
+                </div>
+                <div className="text-xs space-y-1" style={{color:"#64748b"}}>
+                  <div>Base: 30%</div>
+                  {p.ft>78&&<div style={{color:"#22c55e"}}>+20% FT% touch signal</div>}
+                  {(p.age??22)<21&&<div style={{color:"#22c55e"}}>+15% dev window (&lt;21)</div>}
+                  {(p.feel??0)>65&&<div style={{color:"#22c55e"}}>+10% IQ bonus</div>}
+                </div>
+              </div>
+              {/* Bayesian note */}
+              <div className="text-xs mt-2 pt-2" style={{borderTop:"1px solid #1e293b",color:"#475569"}}>
+                FT% used as Bayesian prior for motor touch (Berger 2022). High FT% + low 3P% ≠ non-shooter — it signals latent shooting potential.
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="text-center py-4 text-sm" style={{color:"#6b7280"}}>No dominant swing skill identified — profile is well-rounded or data insufficient.</div>
+        )}
+      </Sec>
+
+      {/* ── BUST / SLEEPER ASSESSMENT ─────────────────────── */}
+      <Sec icon="🎰" title="Bust / Sleeper Assessment" sub={`Risk Score: ${bustSleeper.risk}/10 — ${bustSleeper.riskLabel}`}>
+        <div className="flex items-center gap-4 mb-4">
+          {/* Risk meter */}
+          <div className="relative w-20 h-20 shrink-0">
+            <svg viewBox="0 0 80 80" className="w-full h-full">
+              <circle cx="40" cy="40" r="32" fill="none" stroke="#1e293b" strokeWidth="8"/>
+              <circle cx="40" cy="40" r="32" fill="none" stroke={bustSleeper.riskColor} strokeWidth="8"
+                strokeDasharray={`${bustSleeper.risk/10*200} 200`} strokeLinecap="round"
+                transform="rotate(-90 40 40)"/>
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="font-bold text-xl" style={{color:bustSleeper.riskColor,fontFamily:"'Oswald',sans-serif"}}>{bustSleeper.risk}</span>
+              <span className="text-xs" style={{color:"#475569"}}>/10</span>
+            </div>
+          </div>
+          <div>
+            <div className="font-bold text-lg mb-0.5" style={{color:bustSleeper.riskColor}}>{bustSleeper.riskLabel}</div>
+            <div className="text-xs" style={{color:"#64748b"}}>
+              {bustSleeper.busts.length} bust signal{bustSleeper.busts.length!==1?"s":""} · {bustSleeper.sleepers.length} sleeper signal{bustSleeper.sleepers.length!==1?"s":""}
+            </div>
+          </div>
+        </div>
+        {bustSleeper.busts.length>0&&(
+          <div className="mb-3">
+            <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#ef4444"}}>⚠ Bust Clusters</div>
+            <div className="space-y-2">
+              {bustSleeper.busts.map(b=>(
+                <div key={b.id} className="flex gap-3 p-3 rounded-lg" style={{background:"#ef444411",border:"1px solid #ef444433"}}>
+                  <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{background:"#ef444433",color:"#ef4444"}}>Cluster {b.id}</span>
+                  <div><div className="text-xs font-semibold mb-0.5" style={{color:"#fca5a5"}}>{b.label}</div>
+                  <div className="text-xs" style={{color:"#94a3b8"}}>{b.desc}</div></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {bustSleeper.sleepers.length>0&&(
+          <div>
+            <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#22c55e"}}>✦ Sleeper Signals</div>
+            <div className="space-y-2">
+              {bustSleeper.sleepers.map(s=>(
+                <div key={s.id} className="flex gap-3 p-3 rounded-lg" style={{background:"#22c55e11",border:"1px solid #22c55e33"}}>
+                  <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{background:"#22c55e33",color:"#22c55e"}}>Cluster {s.id}</span>
+                  <div><div className="text-xs font-semibold mb-0.5" style={{color:"#86efac"}}>{s.label}</div>
+                  <div className="text-xs" style={{color:"#94a3b8"}}>{s.desc}</div></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {bustSleeper.busts.length===0&&bustSleeper.sleepers.length===0&&(
+          <div className="text-center py-3 text-sm" style={{color:"#6b7280"}}>No clear bust or sleeper cluster signals. Average risk profile.</div>
+        )}
+      </Sec>
+
+      {/* ── MARGIN OF ERROR ──────────────────────────────── */}
       <Sec icon="🎯" title="Margin of Error" sub="Hover for formula ⓘ">
         <div className="grid grid-cols-3 gap-4 mb-4">
           <Tip wide content={<div><div className="font-bold mb-1" style={{color:"#22c55e"}}>{METHODS.floor.name}</div><code className="text-xs" style={{color:"#7dd3fc"}}>{METHODS.floor.formula}</code><div className="mt-1">{METHODS.floor.inputs(p)}</div><div className="mt-1" style={{color:"#cbd5e1"}}>{METHODS.floor.desc}</div></div>}>
             <div className="rounded-lg p-4 text-center cursor-help" style={{background:"#0d1117"}}>
               <div className="text-xs uppercase" style={{color:"#6b7280"}}>Floor <span style={{color:"#475569"}}>ⓘ</span></div>
-              <div className="text-3xl font-bold" style={{color:"#22c55e",fontFamily:"'Oswald',sans-serif"}}>{Math.round(p.floor)}</div>
+              <div className="text-3xl font-bold" style={{color:"#22c55e",fontFamily:"'Oswald',sans-serif"}}>{Math.round(p.floor??0)}</div>
             </div>
           </Tip>
           <Tip wide content={<div><div className="font-bold mb-1" style={{color:"#fbbf24"}}>{METHODS.ceiling.name}</div><code className="text-xs" style={{color:"#7dd3fc"}}>{METHODS.ceiling.formula}</code><div className="mt-1">{METHODS.ceiling.inputs(p)}</div><div className="mt-1" style={{color:"#cbd5e1"}}>{METHODS.ceiling.desc}</div></div>}>
             <div className="rounded-lg p-4 text-center cursor-help" style={{background:"#0d1117"}}>
               <div className="text-xs uppercase" style={{color:"#6b7280"}}>Ceiling <span style={{color:"#475569"}}>ⓘ</span></div>
-              <div className="text-3xl font-bold" style={{color:"#fbbf24",fontFamily:"'Oswald',sans-serif"}}>{Math.round(p.ceiling)}</div>
+              <div className="text-3xl font-bold" style={{color:"#fbbf24",fontFamily:"'Oswald',sans-serif"}}>{Math.round(p.ceiling??0)}</div>
             </div>
           </Tip>
           <div className="rounded-lg p-4 text-center" style={{background:"#0d1117"}}>
             <div className="text-xs uppercase" style={{color:"#6b7280"}}>Risk Profile</div>
-            <div className="text-sm font-bold mt-1" style={{color:p.risk?.includes("Low")?"#22c55e":p.risk?.includes("High Risk")?"#ef4444":"#fbbf24"}}>{p.risk}</div>
+            <div className="text-sm font-bold mt-1" style={{color:p.risk?.includes("Low")?"#22c55e":p.risk?.includes("High")?"#ef4444":"#fbbf24"}}>{p.risk}</div>
           </div>
         </div>
       </Sec>
 
-      {/* BADGES */}
-      <Sec icon="🏅" title="Skill Badges" sub="Hover badges for qualification criteria">
-        <div className="flex flex-wrap gap-2 mb-4">
-          {(p.badges||[]).map((b,i)=><BadgeChip key={i} text={b} color="#22c55e"/>)}
-          {(p.badges||[]).length===0&&<span className="text-sm" style={{color:"#6b7280"}}>No badges earned</span>}
-        </div>
-        {(p.redFlags||[]).length>0&&<><div className="text-xs uppercase tracking-wider mb-2 mt-4" style={{color:"#ef4444"}}>⚠️ Red Flags</div>
-          <div className="flex flex-wrap gap-2">{(p.redFlags||[]).map((f,i)=><BadgeChip key={i} text={f} color="#ef4444"/>)}</div>
+      {/* ── BADGES ───────────────────────────────────────── */}
+      <Sec icon="🏅" title="Skill Badges" sub="Green = scalable NBA skills · Red = warning signals">
+        {badges.green.length>0&&<>
+          <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#22c55e"}}>✓ Green Flags</div>
+          <div className="flex flex-wrap gap-2 mb-4">{badges.green.map((b,i)=><BadgeChip key={i} text={b} color="#22c55e"/>)}</div>
+        </>}
+        {badges.green.length===0&&<div className="text-sm mb-3" style={{color:"#6b7280"}}>No green flag badges earned</div>}
+        {badges.red.length>0&&<>
+          <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#ef4444"}}>⚠ Red Flags</div>
+          <div className="flex flex-wrap gap-2">{badges.red.map((f,i)=><BadgeChip key={i} text={f} color="#ef4444"/>)}</div>
         </>}
       </Sec>
     </div>
   );
 }
 
-// ═══════════════════════════════════════════════════════════
 // TAB: METHODOLOGY
 // ═══════════════════════════════════════════════════════════
 function MethodologyTab() {
@@ -1100,6 +1461,19 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
 
   const posColors = {Playmaker:"#3b82f6",Wing:"#f97316",Big:"#8b5cf6"};
 
+  // ── Inference Board: top prospects side-by-side role Z-scores ─────────
+  const inferenceBoard = useMemo(() => {
+    const top8 = filtered.slice(0, 8);
+    const roles14keys = [
+      {key:"Scorer",cat:"offense"},{key:"Playmaker",cat:"offense"},{key:"Spacer",cat:"offense"},
+      {key:"Driver",cat:"offense"},{key:"Crasher",cat:"offense"},
+      {key:"On-Ball D",cat:"defense"},{key:"Switch Pot.",cat:"defense"},{key:"Rim Protect",cat:"defense"},{key:"Rebounder",cat:"defense"},
+      {key:"Connector",cat:"hybrid"},{key:"Helio-Scorer",cat:"hybrid"},{key:"Event Creator",cat:"hybrid"},
+      {key:"Zone Pressure",cat:"hybrid"},{key:"Micro-Spacer",cat:"hybrid"},
+    ];
+    return { players: top8, roles: roles14keys };
+  }, [filtered]);
+
   return (
     <div className="space-y-5">
       <div className="text-center mb-6">
@@ -1195,6 +1569,127 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
         <div className="p-3 text-center text-xs" style={{color:"#6b7280",borderTop:"1px solid #1f2937"}}>
           Showing top {filtered.length} prospects (≥100 min sample) · ⚡ = limited sample · Click any row for full profile
         </div>
+
+      {/* ── CLASS OVERVIEW: INFERENCE BOARD ─────────────────────── */}
+      <div className="rounded-2xl overflow-hidden" style={{background:"#111827",border:"1px solid #1f2937"}}>
+        <div className="px-5 py-4" style={{background:"#0d1117",borderBottom:"1px solid #1f2937"}}>
+          <div className="text-xs uppercase tracking-widest mb-0.5" style={{color:"#f97316"}}>Class Overview</div>
+          <h3 className="text-lg font-bold" style={{color:"#e5e7eb",fontFamily:"'Oswald',sans-serif"}}>
+            NBA Role-Inference Board
+          </h3>
+          <p className="text-xs mt-1" style={{color:"#6b7280"}}>
+            Z-scores for all 14 roles (spec-compliant formulas). Elite ≥ +2.0 · Impact ≥ +1.0 · Neutral ≥ −0.9 · Liability &lt; −1.0
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr style={{borderBottom:"1px solid #1f2937"}}>
+                <th className="px-3 py-2 text-left w-28" style={{color:"#6b7280",position:"sticky",left:0,background:"#0d1117",zIndex:2}}>Role</th>
+                {inferenceBoard.players.map(pl=>(
+                  <th key={pl.name} className="px-2 py-2 text-center min-w-20" style={{color:"#9ca3af"}}>
+                    <div className="truncate max-w-20 mx-auto font-semibold" style={{color:"#e5e7eb"}}>{pl.name.split(" ").slice(-1)[0]}</div>
+                    <TierBadge tier={pl.predTier||pl.actual||"—"}/>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                {label:"─ OFFENSE ─",isHeader:true,cat:"offense"},
+                {key:"Scorer",       cat:"offense"},
+                {key:"Playmaker",    cat:"offense"},
+                {key:"Spacer",       cat:"offense"},
+                {key:"Driver",       cat:"offense"},
+                {key:"Crasher",      cat:"offense"},
+                {label:"─ DEFENSE ─",isHeader:true,cat:"defense"},
+                {key:"On-Ball D",    cat:"defense"},
+                {key:"Switch Pot.",  cat:"defense"},
+                {key:"Rim Protect",  cat:"defense"},
+                {key:"Rebounder",    cat:"defense"},
+                {label:"─ HYBRID ─", isHeader:true,cat:"hybrid"},
+                {key:"Connector",    cat:"hybrid"},
+                {key:"Helio-Scorer", cat:"hybrid"},
+                {key:"Event Creator",cat:"hybrid"},
+                {key:"Zone Pressure",cat:"hybrid"},
+                {key:"Micro-Spacer", cat:"hybrid"},
+              ].map((row,ri)=>{
+                if (row.isHeader) {
+                  const catClr = row.cat==="offense"?"#f97316":row.cat==="defense"?"#3b82f6":"#a78bfa";
+                  return (
+                    <tr key={ri} style={{background:"#0a0e17"}}>
+                      <td colSpan={inferenceBoard.players.length+1} className="px-3 py-1 text-xs uppercase tracking-widest font-bold" style={{color:catClr}}>{row.label}</td>
+                    </tr>
+                  );
+                }
+                return (
+                  <tr key={row.key} style={{borderBottom:"1px solid #1f293733"}} className="hover:bg-white hover:bg-opacity-5 transition-colors">
+                    <td className="px-3 py-2 font-semibold whitespace-nowrap" style={{color:"#9ca3af",position:"sticky",left:0,background:"#111827",zIndex:1}}>{row.key}</td>
+                    {inferenceBoard.players.map(pl=>{
+                      // Compute z for this role inline from player stats
+                      const pctls = pl.pctl ?? {};
+                      const pz = (p50) => {
+                        if (p50 == null) return 0;
+                        const pp = Math.max(0.001, Math.min(0.999, p50/100));
+                        const a=[-3.969683028665376e1,2.209460984245205e2,-2.759285104469687e2,1.383577518672690e2,-3.066479806614716e1,2.506628277459239];
+                        const b=[-5.447609879822406e1,1.615858368580409e2,-1.556989798598866e2,6.680131188771972e1,-1.328068155288572e1];
+                        const c=[-7.784894002430293e-3,-3.223964580411365e-1,-2.400758277161838,-2.549732539343734,4.374664141464968,2.938163982698783];
+                        const d=[7.784695709041462e-3,3.223907427788357e-1,2.445134137142996,3.754408661907416];
+                        const pLow=0.02425,pHigh=1-pLow;let z;
+                        if(pp<pLow){const q=Math.sqrt(-2*Math.log(pp));z=(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);}
+                        else if(pp<=pHigh){const q=pp-0.5,r=q*q;z=(((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q/(((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);}
+                        else{const q=Math.sqrt(-2*Math.log(1-pp));z=-(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);}
+                        return Math.round(Math.max(-3,Math.min(3,z))*10)/10;
+                      };
+                      const rawZ = (v,avg,sd)=>Math.round(Math.max(-3,Math.min(3,(v-avg)/sd))*10)/10;
+                      let z = 0;
+                      const zU=pz(pctls.usg??50),zT=pz(pctls.ts??50),zA=pz(pctls.ast??50);
+                      const zS=pz(pctls.stl??50),zB=pz(pctls.blk??50),zO=pz(pctls.orb??50),zD=pz(pctls.drb??50);
+                      const astTov=pl.astTov??0,rimF=pl.rimF??0,ftr=pl.ftr??0;
+                      const threeF=pl.threeF??0,tp=pl.tp??0,dbpm=pl.dbpm??0,htIn=pl.htIn??78;
+                      const astP=pl.astP??0,usg=pl.usg??0,ts=pl.ts??0,stlP=pl.stlP??0,blkP=pl.blkP??0;
+                      const rimPct=pl.rimPct??0;
+                      const zAt=rawZ(astTov,1.3,0.7),zRf=rawZ(rimF,25,12),zFtr=rawZ(ftr,28,12);
+                      const zTf=rawZ(threeF,30,15),zTp=rawZ(tp,32,7),zDb=rawZ(dbpm,-1.5,2.0),zHt=rawZ(htIn,78,2);
+                      const clip=(x)=>Math.round(Math.max(-3,Math.min(3,x))*10)/10;
+                      switch(row.key) {
+                        case "Scorer":       z=clip(zU*0.6+zT*0.4); break;
+                        case "Playmaker":    z=clip(zA*0.7+zAt*0.3); break;
+                        case "Spacer":       z=clip(zTf*0.5+zTp*0.5); break;
+                        case "Driver":       z=clip(zRf*0.6+zFtr*0.4); break;
+                        case "Crasher":      z=clip(zO*0.8); break;
+                        case "On-Ball D":    z=clip(zS*0.7); break;
+                        case "Switch Pot.":  z=clip(zHt*0.3+zS*0.3+zB*0.4); break;
+                        case "Rim Protect":  z=clip(zB*0.8+zDb*0.2); break;
+                        case "Rebounder":    z=clip(zD); break;
+                        case "Connector":    z=astP>15&&usg<20&&astTov>2.0?clip(1.0+Math.min(1.5,(astP-15)/8+(astTov-2.0)/0.5)):clip((zA-0.5)*0.5); break;
+                        case "Helio-Scorer": z=usg>30&&astP<12&&ts>55?clip(1.0+Math.min(1.5,(usg-30)/5)):clip(zU-1); break;
+                        case "Event Creator":z=stlP>3.0&&blkP>3.0?clip(1.0+Math.min(1.5,(stlP+blkP-6)/0.5)):clip((zS+zB)/2-0.5); break;
+                        case "Zone Pressure":z=rimF>45&&rimPct>65?clip(1.0+Math.min(1.5,(rimF-45)/10+(rimPct-65)/10)):clip(zRf-0.5); break;
+                        case "Micro-Spacer": z=threeF>55&&tp>38?clip(1.0+Math.min(1.5,(threeF-55)/10+(tp-38)/5)):clip((zTf+zTp)/2-0.5); break;
+                        default: z=0;
+                      }
+                      const color=z>=2.0?"#22c55e":z>=1.0?"#86efac":z>=-0.9?"#6b7280":"#ef4444";
+                      const bg=z>=2.0?"#22c55e18":z>=1.0?"#86efac11":z>=-0.9?"transparent":"#ef444418";
+                      const label=z>=2.0?"Elite":z>=1.0?"Impact":z>=-0.9?"Neutral":"Liability";
+                      return (
+                        <td key={pl.name} className="px-2 py-1.5 text-center" style={{background:bg}}>
+                          <div className="font-bold font-mono text-sm" style={{color}}>{z>0?"+":""}{z}</div>
+                          <div className="text-xs" style={{color,opacity:0.7}}>{label}</div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="px-3 py-2 text-xs" style={{color:"#475569",borderTop:"1px solid #1f2937"}}>
+          Showing top {inferenceBoard.players.length} players. Click a player row above to open their full profile.
+        </div>
+      </div>
+
       </div>
     </div>
   );
