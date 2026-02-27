@@ -227,47 +227,141 @@ function computeBadges(p) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SAMPLE DATA
+// DATA CLEANING LAYER
 // ═══════════════════════════════════════════════════════════
+// The BartTorvik pipeline has known data issues in the 2026 scrape:
+//   1. blk column is contaminated with pts values (~41% of 2026 players)
+//   2. reb doesn't match oreb+dreb (column shift)
+//   3. Shooting percentages are 0-1 scale (not 0-100) for some years
+//   4. DBPM can be unrealistically high when box-score stats are shifted
+//   5. Per-36 stats are corrupted when base stats are wrong
+// Historical data (≤2025) is clean.
+// ═══════════════════════════════════════════════════════════
+
+function cleanRawProfile(d) {
+  /* Apply data-quality fixes to raw API profile BEFORE mapping.
+     Returns a new object — never mutates the input. */
+  if (!d) return d;
+  const c = { ...d }; // shallow copy
+  c._fixes = [];       // track what we corrected
+
+  // ── 1. Fix REB: always prefer OREB + DREB ──
+  const oreb = c.oreb ?? 0;
+  const dreb = c.dreb ?? 0;
+  const computedReb = oreb + dreb;
+  if (computedReb > 0 && c.reb != null && Math.abs(c.reb - computedReb) > 1.5) {
+    c._fixes.push(`REB ${fmt(c.reb)}→${fmt(computedReb)} (oreb+dreb)`);
+    c.reb = computedReb;
+  } else if (computedReb > 0 && (c.reb == null || c.reb === 0)) {
+    c.reb = computedReb;
+  }
+
+  // ── 2. Fix BLK: detect pts contamination ──
+  if (c.blk != null && c.pts != null && c.blk > 5 && Math.abs(c.blk - c.pts) < 1.0) {
+    c._fixes.push(`BLK ${fmt(c.blk)}→null (=PTS, pipeline error)`);
+    c.blk = null;
+  }
+
+  // ── 3. Fix corrupted Per-36 stats ──
+  // BartTorvik min is ALWAYS % of team minutes (0-100), not actual mpg
+  // Convert to approximate mpg: (min% / 100) × 40 minutes per game
+  const minPct = c.min || 0;
+  const mpg = (minPct / 100) * 40;
+  if (mpg > 0) {
+    const per36 = (val) => val != null ? Math.round((val / mpg) * 36 * 100) / 100 : null;
+    // Only recompute if existing per-36 looks obviously wrong
+    if (c.blk36 != null && (c.blk36 > 15 || c.blk36 < -40)) {
+      c._fixes.push(`BLK36 ${fmt(c.blk36)}→recomputed`);
+      c.blk36 = c.blk != null ? per36(c.blk) : null;
+    }
+    if (c.reb36 != null && c.reb36 < -10) {
+      c._fixes.push(`REB36 ${fmt(c.reb36)}→recomputed`);
+      c.reb36 = per36(c.reb);
+    }
+    // Recompute all per-36 if base stats were corrected
+    if (c._fixes.length > 0) {
+      c.pts36 = per36(c.pts);
+      c.reb36 = per36(c.reb);
+      c.ast36 = per36(c.ast);
+      c.stl36 = per36(c.stl);
+      c.blk36 = c.blk != null ? per36(c.blk) : null;
+    }
+    c._mpg = mpg; // store computed mpg for downstream use
+  }
+
+  // ── 4. DBPM consistency: BPM should equal OBPM + DBPM ──
+  // When DBPM doesn't match BPM - OBPM, the column is contaminated
+  if (c.bpm != null && c.obpm != null && c.dbpm != null) {
+    const expectedDbpm = Math.round((c.bpm - c.obpm) * 100) / 100;
+    if (Math.abs(c.dbpm - expectedDbpm) > 1.0) {
+      c._fixes.push(`DBPM ${fmt(c.dbpm)}→${fmt(expectedDbpm)} (BPM-OBPM)`);
+      c.dbpm = expectedDbpm;
+    }
+  } else if (c.dbpm != null && c.dbpm > 15) {
+    c._fixes.push(`DBPM ${fmt(c.dbpm)}→null (unreliable)`);
+    c.dbpm = null;
+  }
+
+  // ── 5. Shooting percentage scale normalization ──
+  // Some fields come as 0-1 (e.g., tp_pct=0.37), others as 0-100 (ts=66.3)
+  // This is normal BartTorvik format — NOT a data issue, so don't add to _fixes
+  const maybeScale = (field) => {
+    if (c[field] != null && c[field] > 0 && c[field] < 1.0) {
+      c[field] = c[field] * 100;
+    }
+  };
+  maybeScale('rim_pct');
+  maybeScale('mid_pct');
+  maybeScale('two_pct');
+  maybeScale('tp_pct');
+  maybeScale('ft_pct');
+  maybeScale('fg_pct');
+
+  return c;
+}
+
 // ═══════════════════════════════════════════════════════════
 // API DATA LAYER
 // ═══════════════════════════════════════════════════════════
 const API_BASE = "/api";
 
-function mapProfile(d) {
-  /* Transform flat API profile → nested structure expected by components */
-  if(!d) return null;
-  // Auto-scale: if a percentage value is < 1.0, multiply by 100
-  const pct = (v) => v!=null && v < 1.0 && v > 0 ? v*100 : v;
-  // Same but for percentiles (should be 0-100)
+function mapProfile(rawD) {
+  /* Transform flat API profile → nested structure expected by components.
+     First applies data cleaning, then maps fields. */
+  if(!rawD) return null;
+  const d = cleanRawProfile(rawD);
+
+  // Percentile normalization (0-1 → 0-100)
   const p100 = (v) => v!=null && v <= 1.0 && v >= 0 ? Math.round(v*100) : (v!=null ? Math.round(v) : null);
   const badges = typeof d.badges==="string" ? d.badges.split("|").filter(Boolean) : (d.badges||[]);
   const redFlags = typeof d.red_flags==="string" ? d.red_flags.split("|").filter(Boolean) : (d.redFlags||d.red_flags||[]);
   // Recruit rank → percentile (lower rank = better, top 100 out of ~3500 eligible)
   const recPctl = d.recRank!=null ? Math.round(Math.max(0, (1 - d.recRank/350) * 100)) : null;
+  // Minutes: convert BartTorvik min% → mpg for display (always % format)
+  const mpg = d._mpg || ((d.min || 0) / 100 * 40);
   return {
     name:d.name, team:d.team, pos:d.pos, yr:d.yr, cls:d.cls||"",
     conf:d.conf||"", confTier:d.conf_tier||d.confTier||"",
     ht:d.ht!=null?`${Math.floor(d.ht/12)}'${Math.round(d.ht%12)}"`:null,
     htIn:d.ht, wt:d.wt, age:d.age, recRank:d.recRank, recPctl,
-    seasonsPlayed:d.seasons, gp:d.gp, min:d.min,
+    seasonsPlayed:d.seasons, gp:d.gp, min:d.min, mpg:Math.round(mpg*10)/10,
     pts:d.pts, reb:d.reb, ast:d.ast, stl:d.stl, blk:d.blk,
-    to:null, foul:null, mp:d.gp&&d.min?Math.round(d.gp*d.min):null,
+    to:null, foul:null, mp:d.gp&&mpg?Math.round(d.gp*mpg):null,
     p36:{pts:d.pts36,reb:d.reb36,ast:d.ast36,stl:d.stl36,blk:d.blk36},
     bpm:d.bpm, obpm:d.obpm, dbpm:d.dbpm, ortg:d.ortg, usg:d.usg,
     astP:d.ast_p, toP:d.to_p, orbP:d.orb_p, drbP:d.drb_p,
     stlP:d.stl_p, blkP:d.blk_p, astTov:d.ast_tov,
-    ts:d.ts, fg:pct(d.fg_pct), tp:pct(d.tp_pct), ft:pct(d.ft_pct), efg:d.efg,
-    rimF:d.rim_f, rimPct:pct(d.rim_pct), midF:d.mid_f, midPct:pct(d.mid_pct),
-    threeF:d.three_f, threePct:pct(d.tp_pct), dunkR:d.dunk_r, ftr:d.ftr,
+    ts:d.ts, fg:d.fg_pct, tp:d.tp_pct, ft:d.ft_pct, efg:d.efg,
+    rimF:d.rim_f, rimPct:d.rim_pct, midF:d.mid_f, midPct:d.mid_pct,
+    threeF:d.three_f, threePct:d.tp_pct, dunkR:d.dunk_r, ftr:d.ftr,
     threePar:d.three_par,
     // CFFR (Context-Free Four Factor Rating)
     cffr:{
-      score:pct(d.cffr)||pct(d.ff_comp),
+      score:d.cffr||d.ff_comp,
       zEfg:d.cffr_z_efg, zTov:d.cffr_z_tov, zOrb:d.cffr_z_orb, zFtr:d.cffr_z_ftr,
       reliability:d.cffr_reliability, usageRole:d.cffr_usage_role||"",
     },
-    ff:{efg:pct(d.ff_efg),tov:pct(d.ff_tov),orb:pct(d.ff_orb),ftr:pct(d.ff_ftr),comp:pct(d.ff_comp)},
+    ff:{efg:d.ff_efg,tov:d.ff_tov,orb:d.ff_orb,ftr:d.ff_ftr,comp:d.ff_comp},
     pctl:{bpm:p100(d.pctl_bpm),usg:p100(d.pctl_usg),ts:p100(d.pctl_ts),ast:p100(d.pctl_ast),
           to:p100(d.pctl_to),orb:p100(d.pctl_orb),drb:p100(d.pctl_drb),stl:p100(d.pctl_stl),blk:p100(d.pctl_blk),
           pts36:p100(d.pctl_pts36),ast36:p100(d.pctl_ast36),reb36:p100(d.pctl_reb36)},
@@ -301,6 +395,9 @@ function mapProfile(d) {
     madeNba:d.made_nba, draftYear:d.draft_year, draftPick:d.draft_pick,
     confidence:d.confidence||"full", sampleMin:d.sample_min, sampleGp:d.sample_gp,
     statComps:[], anthroComps:[], seasonLines:[],
+    // Data quality tracking
+    _dataFixes: d._fixes || [],
+    _hasDataIssues: (d._fixes || []).length > 0,
   };
 }
 
@@ -398,7 +495,7 @@ function OverviewTab({p, compTier, setCompTier}) {
     <div className="space-y-5">
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
         {[["Conference",p.conf,p.confTier==="Power"?"#10b981":"#f97316"],["Class",p.cls,"#e5e7eb"],
-          ["Age",p.age.toFixed(1),"#e5e7eb"],
+          ["Age",p.age!=null?p.age.toFixed(1):"—","#e5e7eb"],
           ["Recruit",p.recRank?`#${p.recRank}`+(p.recPctl!=null?` (${p.recPctl}th pctl)`:""):"Unranked",p.recPctl!=null&&p.recPctl>70?"#22c55e":"#e5e7eb"],
           ["Seasons",p.seasonsPlayed,"#e5e7eb"],["Conf Tier",p.confTier,p.confTier==="Power"?"#10b981":"#f97316"]
         ].map(([l,v,c])=>(
@@ -408,7 +505,7 @@ function OverviewTab({p, compTier, setCompTier}) {
           </div>
         ))}
       </div>
-      <Sec icon="▦" title="Box Score" sub={`${p.gp} GP · ${p.min} MIN/G · ${p.mp} Total MIN`}>
+      <Sec icon="▦" title="Box Score" sub={`${p.gp} GP · ${p.mpg||fmt(p.min)} MPG${p.mp?` · ~${p.mp} Total MIN`:""}`}>
         <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
           {[["PTS",p.pts,p.pctl.pts36],["REB",p.reb,p.pctl.reb36],["AST",p.ast,p.pctl.ast36],
             ["STL",p.stl,p.pctl.stl],["BLK",p.blk,p.pctl.blk],["A/TO",p.astTov,null],["FTR",p.ftr,null]
@@ -2433,12 +2530,17 @@ export default function App() {
             {/* Confidence Banner */}
             {p.confidence==="very_low"&&(
               <div className="mb-4 p-3 rounded-lg text-sm" style={{background:"#7f1d1d",border:"1px solid #991b1b",color:"#fca5a5"}}>
-                ⚠️ <strong>Insufficient Data</strong> — This player has only {Math.round(p.sample_min||0)} minutes of college play. Scouting scores and role classifications are not available.
+                ⚠️ <strong>Insufficient Data</strong> — This player has only {Math.round(p.sampleMin||0)} minutes of college play. Scouting scores and role classifications are not available.
               </div>
             )}
             {p.confidence==="limited"&&(
               <div className="mb-4 p-3 rounded-lg text-sm" style={{background:"#78350f",border:"1px solid #92400e",color:"#fcd34d"}}>
-                ⚡ <strong>Limited Sample</strong> — Based on {Math.round(p.sample_min||0)} minutes ({p.sample_gp||"?"} games). Scores should be interpreted with caution.
+                ⚡ <strong>Limited Sample</strong> — Based on {Math.round(p.sampleMin||0)} minutes ({p.sampleGp||"?"} games). Scores should be interpreted with caution.
+              </div>
+            )}
+            {p._hasDataIssues&&(
+              <div className="mb-4 p-3 rounded-lg text-sm" style={{background:"#1e1b4b",border:"1px solid #312e81",color:"#a5b4fc"}}>
+                🔧 <strong>Data Corrections Applied</strong> — {p._dataFixes.length} fix{p._dataFixes.length>1?"es":""} for known pipeline issues: {p._dataFixes.join(" · ")}
               </div>
             )}
             <div className="flex gap-1 mb-5 overflow-x-auto pb-2" style={{scrollbarWidth:"none"}}>
