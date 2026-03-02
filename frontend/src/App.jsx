@@ -283,8 +283,13 @@ function mapProfile(d) {
     btUrl:d.bt_url, btTeamUrl:d.bt_team_url,
     roles:{playmaker:d.role_playmaker,scorer:d.role_scorer,spacer:d.role_spacer,
       driver:d.role_driver,crasher:d.role_crasher,onball:d.role_onball,
-      rimProt:d.role_rim_prot,rebounder:d.role_rebounder,switchPot:d.role_switch},
+      rimProt:d.role_rim_prot,rebounder:d.role_rebounder,switchPot:d.role_switch,
+      connector:d.role_connector,helio:d.role_helio,event:d.role_event,
+      zone:d.role_zone,microSpacer:d.role_micro_spacer},
     roleVersatility:d.role_versatility,
+    archetype:d.archetype||"",
+    feas:{repl:d.feas_repl,rot:d.feas_rot,start:d.feas_start,allstar:d.feas_allstar,
+      cleared:d.feas_cleared||"",blocker:d.feas_blocker||""},
     floor:d.floor, ceiling:d.ceiling, margin:d.margin, risk:d.risk, safeBet:d.safe_bet,
     badges, redFlags,
     posPlaymaker:d.pos_playmaker, posWing:d.pos_wing, posBig:d.pos_big,
@@ -1000,6 +1005,7 @@ function computeBustSleeper(p) {
 function ScoutingTab({p}) {
 
   // ── Archetype ─────────────────────────────────────────────
+  // Prefer backend-computed archetype (Script 10), fallback to frontend logic
   const archetype = useMemo(() => {
     const feel=p.feel??0,funcAth=p.funcAth??0,shoot=p.shootScore??0,def=p.defScore??0;
     const usg=p.usg??0,pos=p.pos??"Wing";
@@ -1008,17 +1014,39 @@ function ScoutingTab({p}) {
     const isBig=pos==="Big",isGuard=pos==="Playmaker",isWing=!isBig&&!isGuard;
     const rimFreqPctl=Math.min(99,rimF*2.5),dunkPctl=Math.min(99,dunkR*4);
 
-    if(usg>30&&feel>=85&&shoot>=75)return{key:"helio",name:"Heliocentric Engine",group:"A · Initiators",groupColor:"#f97316",icon:"🔆",color:"#fbbf24",comps:"Luka Dončić · James Harden",desc:"Offense runs through this player. Elite IQ and shooting sustain elite usage without efficiency collapse. Needs the ball and a system built around his creation.",strengths:["Elite feel & creation","High-volume shooting","Dribble creation"],risks:["Spacing requirements","Usage regresses in NBA","Defensive questions"],fit:"Primary offensive system — needs shooters around him."};
-    if(feel>=80&&shoot>=65&&(isGuard||usg>=24))return{key:"initiator",name:"Primary Initiator",group:"A · Initiators",groupColor:"#f97316",icon:"🎯",color:"#f97316",comps:"Tyrese Haliburton · Dejounte Murray",desc:"Elite playmaker who also scores when needed. Translates via decision-making and court vision. High NBA floor because creation is real.",strengths:["Playmaking lead","Good shooting base","Low-TO decisions"],risks:["May not primary-score at next level","Rim finishing needed"],fit:"Starting PG or secondary initiator on contender."};
-    if(feel>=65&&shoot>=70&&usg>=25)return{key:"combo",name:"Combo Guard",group:"A · Initiators",groupColor:"#f97316",icon:"⚡",color:"#fb923c",comps:"Jordan Clarkson · Gary Trent Jr.",desc:"Scoring and passing mix at high usage. Best fit as secondary ball-handler or sixth man scorer.",strengths:["Versatile scoring","Handles in spurts","Off-movement shooting"],risks:["Neither elite creator nor shooter","Role clarity needed"],fit:"6th man scorer or alongside elite PG."};
-    if(shoot>=75&&def>=75&&feel>=50)return{key:"3d",name:"3&D Wing",group:"B · Wings & Specialists",groupColor:"#3b82f6",icon:"🏹",color:"#22c55e",comps:"Mikal Bridges · OG Anunoby",desc:"Most coveted role player in modern NBA. Both shooting and defense survive the college→NBA transition. Does not need the ball to contribute.",strengths:["Immediate NBA role","High floor","Two-way value"],risks:["Limited creation","Role player ceiling"],fit:"Starting wing on any roster."};
-    if(shoot>=85&&threeF>=50&&feel<60)return{key:"mover",name:"Movement Shooter",group:"B · Wings & Specialists",groupColor:"#3b82f6",icon:"🎪",color:"#60a5fa",comps:"Buddy Hield · Duncan Robinson",desc:"Elite shooter off movement and pin-downs. Always a threat in the right system — value depends on landing with a quality playmaker.",strengths:["Elite catch-and-shoot","Forces constant attention","Low-TO"],risks:["Zero creation","System-dependent"],fit:"Off-ball specialist — needs a primary creator."};
-    if(funcAth>=80&&rimFreqPctl>=75&&shoot<60)return{key:"slasher",name:"Slasher",group:"B · Wings & Specialists",groupColor:"#3b82f6",icon:"⚔️",color:"#f87171",comps:"Dorian Finney-Smith · Jalen McDaniels",desc:"Athletic cutter and rim attacker who lives off others' creation. Needs shooting development or specific system fit.",strengths:["Rim finishing","Athletic plays","Drawing fouls"],risks:["Shooting limits spacing","Predictable off-ball"],fit:"Energy wing — needs spacing around him."};
-    if(feel>=75&&def>=70&&shoot>=60&&usg<20)return{key:"connector",name:"Connector / Glue Guy",group:"B · Wings & Specialists",groupColor:"#3b82f6",icon:"🔗",color:"#a78bfa",comps:"Draymond Green (wing) · Kyle Anderson",desc:"Versatile two-way player who makes teams better. High IQ compensates for modest athleticism — holds up in playoff environments.",strengths:["Versatility","Smart decisions","Two-way competence"],risks:["No elite skill","May be exposed"],fit:"Starting piece on a smart team."};
-    if(isBig&&def>=85&&funcAth>=75&&blkPctl>=80)return{key:"rimprotect",name:"Modern Rim Protector",group:"C · Frontcourt",groupColor:"#8b5cf6",icon:"🛡",color:"#818cf8",comps:"Walker Kessler · Mark Williams",desc:"Defensive anchor whose shot-altering presence alone justifies a roster spot. Must roll hard and set screens too.",strengths:["Immediate defensive value","Screen/roll threat","Lob target"],risks:["Offensive limitations","Exploitable in space"],fit:"Starting center on a perimeter-heavy team."};
-    if(isBig&&shoot>=70&&blkPctl>=60&&htIn>=81)return{key:"stretchbig",name:"Stretch Big",group:"C · Frontcourt",groupColor:"#8b5cf6",icon:"📐",color:"#c084fc",comps:"Brook Lopez · Isaiah Hartenstein",desc:"Floor-spacing big who also protects the rim. Ideal modern center profile — extremely high value if both skills translate.",strengths:["Rare combo","5-out lineups","Versatile defender"],risks:["Shooting must translate","Role choice"],fit:"Starting center in modern scheme."};
-    if(isBig&&funcAth>=85&&dunkPctl>=80&&feel<50)return{key:"rimrunner",name:"Rim Runner / Finisher",group:"C · Frontcourt",groupColor:"#8b5cf6",icon:"💥",color:"#fb7185",comps:"Clint Capela · Isaiah Roby",desc:"Pure athletic finisher — scores only via lobs, cuts, and offensive rebounds. Narrow role but real value.",strengths:["Elite finishing","High-efficiency","OREB"],risks:["Zero creation","Narrow role"],fit:"Pairs best with elite playmakers."};
-    if(isBig&&feel>=75&&blkPctl>=70&&astPctl>=70)return{key:"shortroll",name:"Short Roll Playmaker",group:"C · Frontcourt",groupColor:"#8b5cf6",icon:"🎲",color:"#34d399",comps:"Draymond Green · Nikola Jokić profile",desc:"Rare passing big who initiates from the elbow. Translates via IQ rather than athleticism — franchise-altering if elite.",strengths:["Unique passing","Forces rotations","Elite IQ"],risks:["Hard to evaluate in college","Needs right system"],fit:"Ideal in modern motion offense."};
+    // All archetype definitions (display properties)
+    const ARCHETYPES = {
+      "Helio-Centric Engine":{key:"helio",name:"Heliocentric Engine",group:"A · Initiators",groupColor:"#f97316",icon:"🔆",color:"#fbbf24",comps:"Luka Dončić · James Harden",desc:"Offense runs through this player. Elite IQ and shooting sustain elite usage without efficiency collapse.",strengths:["Elite feel & creation","High-volume shooting","Dribble creation"],risks:["Spacing requirements","Usage regresses in NBA","Defensive questions"],fit:"Primary offensive system — needs shooters around him."},
+      "Primary Initiator":{key:"initiator",name:"Primary Initiator",group:"A · Initiators",groupColor:"#f97316",icon:"🎯",color:"#f97316",comps:"Tyrese Haliburton · Dejounte Murray",desc:"Elite playmaker who also scores when needed. Translates via decision-making and court vision.",strengths:["Playmaking lead","Good shooting base","Low-TO decisions"],risks:["May not primary-score at next level","Rim finishing needed"],fit:"Starting PG or secondary initiator on contender."},
+      "Combo Guard":{key:"combo",name:"Combo Guard",group:"A · Initiators",groupColor:"#f97316",icon:"⚡",color:"#fb923c",comps:"Jordan Clarkson · Gary Trent Jr.",desc:"Scoring and passing mix at high usage. Best fit as secondary ball-handler or sixth man scorer.",strengths:["Versatile scoring","Handles in spurts","Off-movement shooting"],risks:["Neither elite creator nor shooter","Role clarity needed"],fit:"6th man scorer or alongside elite PG."},
+      "3&D Wing":{key:"3d",name:"3&D Wing",group:"B · Wings & Specialists",groupColor:"#3b82f6",icon:"🏹",color:"#22c55e",comps:"Mikal Bridges · OG Anunoby",desc:"Most coveted role player in modern NBA. Both shooting and defense survive the college→NBA transition.",strengths:["Immediate NBA role","High floor","Two-way value"],risks:["Limited creation","Role player ceiling"],fit:"Starting wing on any roster."},
+      "Movement Shooter":{key:"mover",name:"Movement Shooter",group:"B · Wings & Specialists",groupColor:"#3b82f6",icon:"🎪",color:"#60a5fa",comps:"Buddy Hield · Duncan Robinson",desc:"Elite shooter off movement and pin-downs. Always a threat in the right system.",strengths:["Elite catch-and-shoot","Forces constant attention","Low-TO"],risks:["Zero creation","System-dependent"],fit:"Off-ball specialist — needs a primary creator."},
+      "Slasher":{key:"slasher",name:"Slasher",group:"B · Wings & Specialists",groupColor:"#3b82f6",icon:"⚔️",color:"#f87171",comps:"Dorian Finney-Smith · Jalen McDaniels",desc:"Athletic cutter and rim attacker who lives off others' creation. Needs shooting development.",strengths:["Rim finishing","Athletic plays","Drawing fouls"],risks:["Shooting limits spacing","Predictable off-ball"],fit:"Energy wing — needs spacing around him."},
+      "Connector":{key:"connector",name:"Connector / Glue Guy",group:"B · Wings & Specialists",groupColor:"#3b82f6",icon:"🔗",color:"#a78bfa",comps:"Draymond Green (wing) · Kyle Anderson",desc:"Versatile two-way player who makes teams better. High IQ compensates for modest athleticism.",strengths:["Versatility","Smart decisions","Two-way competence"],risks:["No elite skill","May be exposed"],fit:"Starting piece on a smart team."},
+      "Modern Rim Protector":{key:"rimprotect",name:"Modern Rim Protector",group:"C · Frontcourt",groupColor:"#8b5cf6",icon:"🛡",color:"#818cf8",comps:"Walker Kessler · Mark Williams",desc:"Defensive anchor whose shot-altering presence alone justifies a roster spot.",strengths:["Immediate defensive value","Screen/roll threat","Lob target"],risks:["Offensive limitations","Exploitable in space"],fit:"Starting center on a perimeter-heavy team."},
+      "Stretch Big":{key:"stretchbig",name:"Stretch Big",group:"C · Frontcourt",groupColor:"#8b5cf6",icon:"📐",color:"#c084fc",comps:"Brook Lopez · Isaiah Hartenstein",desc:"Floor-spacing big who also protects the rim. Ideal modern center profile.",strengths:["Rare combo","5-out lineups","Versatile defender"],risks:["Shooting must translate","Role choice"],fit:"Starting center in modern scheme."},
+      "Rim Runner":{key:"rimrunner",name:"Rim Runner / Finisher",group:"C · Frontcourt",groupColor:"#8b5cf6",icon:"💥",color:"#fb7185",comps:"Clint Capela · Isaiah Roby",desc:"Pure athletic finisher — scores only via lobs, cuts, and offensive rebounds.",strengths:["Elite finishing","High-efficiency","OREB"],risks:["Zero creation","Narrow role"],fit:"Pairs best with elite playmakers."},
+      "Short Roll Playmaker":{key:"shortroll",name:"Short Roll Playmaker",group:"C · Frontcourt",groupColor:"#8b5cf6",icon:"🎲",color:"#34d399",comps:"Draymond Green · Nikola Jokić profile",desc:"Rare passing big who initiates from the elbow. Translates via IQ rather than athleticism.",strengths:["Unique passing","Forces rotations","Elite IQ"],risks:["Hard to evaluate in college","Needs right system"],fit:"Ideal in modern motion offense."},
+    };
+
+    // Use backend archetype if available
+    if (p.archetype && ARCHETYPES[p.archetype]) {
+      return ARCHETYPES[p.archetype];
+    }
+
+    // Frontend fallback (same logic as backend Script 10)
+    if(usg>30&&feel>=85&&shoot>=75) return ARCHETYPES["Helio-Centric Engine"];
+    if(feel>=80&&shoot>=65&&(isGuard||usg>=24)) return ARCHETYPES["Primary Initiator"];
+    if(feel>=65&&shoot>=70&&usg>=25) return ARCHETYPES["Combo Guard"];
+    if(isBig&&def>=85&&funcAth>=75&&blkPctl>=80) return ARCHETYPES["Modern Rim Protector"];
+    if(isBig&&shoot>=70&&blkPctl>=60&&htIn>=81) return ARCHETYPES["Stretch Big"];
+    if(isBig&&funcAth>=85&&dunkPctl>=80&&feel<50) return ARCHETYPES["Rim Runner"];
+    if(isBig&&feel>=75&&blkPctl>=70&&astPctl>=70) return ARCHETYPES["Short Roll Playmaker"];
+    if(shoot>=75&&def>=75&&feel>=50) return ARCHETYPES["3&D Wing"];
+    if(shoot>=85&&threeF>=50&&feel<60) return ARCHETYPES["Movement Shooter"];
+    if(funcAth>=80&&rimFreqPctl>=75&&shoot<60) return ARCHETYPES["Slasher"];
+    if(feel>=75&&def>=70&&shoot>=60&&usg<20) return ARCHETYPES["Connector"];
+
     const bestGroup=isBig?"C · Frontcourt":isGuard?"A · Initiators":"B · Wings & Specialists";
     return{key:"raw",name:"Raw Prospect",group:bestGroup,groupColor:"#6b7280",icon:"🔬",color:"#6b7280",comps:"Profile incomplete",desc:"Scores do not clearly match any defined archetype — multi-dimensional, development prospect, or insufficient sample size.",strengths:["Undefined dominant skill"],risks:["Role clarity needed","Projection uncertain"],fit:"Evaluate on deeper film + secondary data."};
   }, [p]);
@@ -1152,6 +1180,35 @@ function ScoutingTab({p}) {
           </div>
         </div>
       </div>
+
+      {/* ── TIER FEASIBILITY (Replacement Threshold Model) ── */}
+      {p.feas&&(p.feas.repl!=null||p.feas.rot!=null)&&(
+        <Sec icon="🎯" title="Tier Feasibility" sub="Position-specific historical thresholds — 'Can this profile reach each tier?'">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+            {[["Replacement",p.feas.repl,"#6b7280"],["Rotation",p.feas.rot,"#60a5fa"],["Starter",p.feas.start,"#fbbf24"],["All-Star",p.feas.allstar,"#22c55e"]].map(([tier,val,color])=>{
+              const v=val??0;
+              const bg=v>=80?color+"22":v>=50?color+"11":"transparent";
+              const label=v>=80?"Feasible":v>=50?"Partial":v>=25?"Unlikely":"No Path";
+              return (
+                <div key={tier} className="rounded-xl p-3 text-center" style={{background:bg,border:`1px solid ${color}33`}}>
+                  <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#6b7280"}}>{tier}</div>
+                  <div className="text-2xl font-bold" style={{color:v>=50?color:"#374151",fontFamily:"'Oswald',sans-serif"}}>{fmt(v)}%</div>
+                  <div className="text-xs mt-0.5" style={{color:v>=50?color:"#4b5563"}}>{label}</div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex flex-wrap gap-3 text-xs" style={{color:"#6b7280"}}>
+            {p.feas.cleared&&<span>Thresholds cleared: <span style={{color:"#e5e7eb"}}>{p.feas.cleared}</span></span>}
+            {p.feas.blocker&&p.feas.blocker!=="None"&&(
+              <span>Biggest blocker: <span style={{color:"#ef4444"}}>{p.feas.blocker}</span></span>
+            )}
+          </div>
+          <div className="mt-2 text-xs" style={{color:"#475569"}}>
+            Based on position-specific 20th-percentile floors from BartTorvik 2008–2025. Philosophy: "Thresholds, not means" — a player must clear ALL critical minimums to be feasible for a tier. Partial clearing → probability estimate. Age-adjusted: &lt;20y gets +15%, &gt;22y gets −10%.
+          </div>
+        </Sec>
+      )}
 
       {/* ── SCOUTING SCORES ──────────────────────────────── */}
       <Sec icon="⭐" title="Scouting Scores" sub="Hover any score for formula, inputs, and methodology ⓘ">
@@ -2431,6 +2488,7 @@ export default function App() {
                     <h1 className="text-2xl md:text-3xl font-bold tracking-tight" style={{fontFamily:"'Oswald',sans-serif"}}>{sel}</h1>
                     <div className="flex flex-wrap items-center gap-2 mt-1 text-sm" style={{color:"#9ca3af"}}>
                       <span className="px-2 py-0.5 rounded text-xs font-semibold" style={{background:"#f9731622",color:"#f97316"}}>{p.pos}</span>
+                      {p.archetype&&<span className="px-2 py-0.5 rounded text-xs font-semibold" style={{background:"#3b82f622",color:"#60a5fa"}}>{p.archetype}</span>}
                       <span>{p.team}</span><span>·</span><span>{p.ht} · {p.wt?`${p.wt} lbs`:""}</span><span>·</span><span>Age {p.age!=null?Number(p.age).toFixed(1):"—"}</span>
                       {p.recRank&&<><span>·</span><span>#{p.recRank} Recruit</span></>}
                       {p.btUrl&&<><span>·</span><a href={p.btUrl} target="_blank" rel="noopener noreferrer" className="hover:underline" style={{color:"#60a5fa"}}>BartTorvik ↗</a></>}
