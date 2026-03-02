@@ -293,7 +293,7 @@ function mapProfile(d) {
     floor:d.floor, ceiling:d.ceiling, margin:d.margin, risk:d.risk, safeBet:d.safe_bet,
     badges, redFlags,
     posPlaymaker:d.pos_playmaker, posWing:d.pos_wing, posBig:d.pos_big,
-    mu:d.pred_mu, sigma:d.pred_sigma, pNba:d.pred_p_nba, predTier:d.pred_tier,
+    mu:d.pred_mu??d.mu, sigma:d.pred_sigma??d.sigma, pNba:d.pred_p_nba??d.pNba??d.pn, predTier:d.pred_tier??d.pred_tier,
     tiers:{
       Superstar:((d.prob_super||0)*100),
       "All-Star":((d.prob_allstar||0)*100),
@@ -1487,7 +1487,7 @@ function MethodologyTab() {
 // BIG BOARD LANDING PAGE
 // ═══════════════════════════════════════════════════════════
 function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, availableYears, yearFilter, setYearFilter}) {
-  const [sortBy,setSortBy]=useState("ceiling");
+  const [sortBy,setSortBy]=useState("mu");
   const [posFilter,setPosFilter]=useState("All");
 
   // Fetch board for a specific year
@@ -1532,14 +1532,11 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
     list = list.filter(p=>p.confidence!=="very_low");
     // Sort
     const sortFn = {
-      ceiling: (a,b)=>(b.ceiling||0)-(a.ceiling||0),
-      overall: (a,b)=>(b.overall||0)-(a.overall||0),
       mu: (a,b)=>(b.mu||0)-(a.mu||0),
       pNba: (a,b)=>(b.pNba||0)-(a.pNba||0),
-      floor: (a,b)=>(b.floor||0)-(a.floor||0),
       bpm: (a,b)=>(b.bpm||0)-(a.bpm||0),
     };
-    list = [...list].sort(sortFn[sortBy]||sortFn.ceiling);
+    list = [...list].sort(sortFn[sortBy]||sortFn.mu);
     return list.slice(0,60);
   },[allPlayers,sortBy,posFilter]);
 
@@ -1573,7 +1570,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
       <div className="flex flex-wrap items-center gap-3 p-4 rounded-xl" style={{background:"#111827",border:"1px solid #1f2937"}}>
         <div className="flex items-center gap-2">
           <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Sort:</span>
-          {[["ceiling","Ceiling"],["overall","Overall"],["mu","Peak PIE"],["pNba","NBA Prob"],["floor","Floor"],["bpm","BPM"]].map(([k,l])=>(
+          {[["mu","μ Peak PIE"],["pNba","NBA Prob"],["bpm","BPM"]].map(([k,l])=>(
             <button key={k} onClick={()=>setSortBy(k)} className="px-3 py-1 rounded-lg text-xs font-semibold"
               style={{background:sortBy===k?"#f97316":"#1f2937",color:sortBy===k?"#000":"#9ca3af",border:`1px solid ${sortBy===k?"#f97316":"#374151"}`}}>
               {l}
@@ -1606,8 +1603,8 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
           <table className="w-full text-sm">
             <thead>
               <tr style={{background:"#0c1222"}}>
-                {["#","Player","Pos","Team","Age","Ceiling","Floor","Overall","Peak PIE","NBA%","Risk"].map(h=>(
-                  <th key={h} className="px-3 py-3 text-xs uppercase tracking-wider text-left font-semibold" style={{color:"#6b7280",borderBottom:"2px solid #f9731633"}}>
+                {["#","Player","Pos","Class","Team","Age","μ PIE","⭐%","All★%","Start%","Role%","Repl%","Never%"].map(h=>(
+                  <th key={h} className="px-2 py-3 text-xs uppercase tracking-wider text-left font-semibold" style={{color:"#6b7280",borderBottom:"2px solid #f9731633"}}>
                     {h}
                   </th>
                 ))}
@@ -1616,34 +1613,37 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
             <tbody>
               {filtered.map((pl,idx)=>{
                 const rank=idx+1;
-                const riskColor = pl.risk?.includes("Low")?"#22c55e":pl.risk?.includes("High")&&pl.risk?.includes("Upside")?"#fbbf24":pl.risk?.includes("High")?"#ef4444":"#6b7280";
+                const t = pl.tiers || {};
+                const muVal = pl.mu != null ? (pl.mu * 100).toFixed(1) : "—";
+                const muColor = pl.mu > 0.14 ? "#22c55e" : pl.mu > 0.10 ? "#fbbf24" : pl.mu > 0.07 ? "#f97316" : "#ef4444";
+                const tc = (v) => v > 20 ? "#22c55e" : v > 10 ? "#86efac" : v > 5 ? "#fbbf24" : v > 1 ? "#6b7280" : "#374151";
+                const tf = (v) => v != null && v > 0.5 ? `${Math.round(v)}%` : "—";
                 return (
                   <tr key={pl.name} className="cursor-pointer hover:bg-white hover:bg-opacity-5 transition-colors"
                     onClick={()=>onSelect(pl.name)}
                     style={{borderBottom:"1px solid #1f293744"}}>
-                    <td className="px-3 py-2.5 font-bold" style={{color:rank<=10?"#f97316":rank<=30?"#e5e7eb":"#9ca3af",fontFamily:"'Oswald',sans-serif",fontSize:rank<=3?"1.1rem":"0.875rem"}}>
+                    <td className="px-2 py-2.5 font-bold" style={{color:rank<=10?"#f97316":rank<=30?"#e5e7eb":"#9ca3af",fontFamily:"'Oswald',sans-serif",fontSize:rank<=3?"1.1rem":"0.875rem"}}>
                       {rank}
                     </td>
-                    <td className="px-3 py-2.5">
+                    <td className="px-2 py-2.5">
                       <div className="font-semibold" style={{color:"#e5e7eb"}}>{pl.name}</div>
                       {pl.recRank && <div className="text-xs" style={{color:"#6b7280"}}>#{pl.recRank} Recruit</div>}
                     </td>
-                    <td className="px-3 py-2.5">
+                    <td className="px-2 py-2.5">
                       <span className="px-2 py-0.5 rounded text-xs font-semibold" style={{background:(posColors[pl.pos]||"#6b7280")+"22",color:posColors[pl.pos]||"#6b7280"}}>
                         {pl.pos}
                       </span>
                     </td>
-                    <td className="px-3 py-2.5 text-xs" style={{color:"#9ca3af"}}>{pl.team}</td>
-                    <td className="px-3 py-2.5" style={{color:"#e5e7eb"}}>{pl.age?.toFixed(1)}</td>
-                    <td className="px-3 py-2.5 font-bold" style={{color:valColor(pl.ceiling),fontFamily:"'Oswald',sans-serif"}}>{pl.ceiling!=null?Math.round(pl.ceiling):"—"}</td>
-                    <td className="px-3 py-2.5 font-bold" style={{color:valColor(pl.floor),fontFamily:"'Oswald',sans-serif"}}>{pl.floor!=null?Math.round(pl.floor):"—"}</td>
-                    <td className="px-3 py-2.5 font-bold" style={{color:valColor(pl.overall),fontFamily:"'Oswald',sans-serif"}}>{pl.overall!=null?Math.round(pl.overall):"—"}</td>
-                    <td className="px-3 py-2.5" style={{color:"#e5e7eb"}}>{pl.mu?.toFixed(3)||"—"}</td>
-                    <td className="px-3 py-2.5" style={{color:pl.pNba>0.7?"#22c55e":pl.pNba>0.4?"#fbbf24":"#ef4444"}}>{pl.pNba?(pl.pNba*100).toFixed(0)+"%":"—"}</td>
-                    <td className="px-3 py-2.5 text-xs" style={{color:riskColor}}>
-                      {pl.risk||"—"}
-                      {pl.confidence==="limited"&&<span title="Limited sample size" style={{color:"#fbbf24"}}> ⚡</span>}
-                    </td>
+                    <td className="px-2 py-2.5 text-xs" style={{color:"#9ca3af"}}>{pl.cls||"—"}</td>
+                    <td className="px-2 py-2.5 text-xs" style={{color:"#9ca3af"}}>{pl.team}</td>
+                    <td className="px-2 py-2.5 text-xs" style={{color:"#e5e7eb"}}>{pl.age!=null?Number(pl.age).toFixed(1):"—"}</td>
+                    <td className="px-2 py-2.5 font-bold" style={{color:muColor,fontFamily:"'Oswald',sans-serif"}}>{muVal}</td>
+                    <td className="px-2 py-2.5 text-xs font-mono" style={{color:tc(t.Superstar)}}>{tf(t.Superstar)}</td>
+                    <td className="px-2 py-2.5 text-xs font-mono" style={{color:tc(t["All-Star"])}}>{tf(t["All-Star"])}</td>
+                    <td className="px-2 py-2.5 text-xs font-mono" style={{color:tc(t.Starter)}}>{tf(t.Starter)}</td>
+                    <td className="px-2 py-2.5 text-xs font-mono" style={{color:tc(t["Role Player"])}}>{tf(t["Role Player"])}</td>
+                    <td className="px-2 py-2.5 text-xs font-mono" style={{color:tc(t.Replacement)}}>{tf(t.Replacement)}</td>
+                    <td className="px-2 py-2.5 text-xs font-mono" style={{color:tc(t["Never NBA"])}}>{tf(t["Never NBA"])}</td>
                   </tr>
                 );
               })}
@@ -1651,7 +1651,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
           </table>
         </div>
         <div className="p-3 text-center text-xs" style={{color:"#6b7280",borderTop:"1px solid #1f2937"}}>
-          Showing top {filtered.length} prospects (≥100 min sample) · ⚡ = limited sample · Click any row for full profile
+          {filtered.length} prospects · Sorted by {sortBy==="mu"?"Predicted Peak PIE (μ)":sortBy==="pNba"?"NBA Probability":"BPM"} · μ PIE ×100 for readability · ⚡ = limited sample
         </div>
 
       {/* ── CLASS OVERVIEW: INFERENCE BOARD ─────────────────────── */}
