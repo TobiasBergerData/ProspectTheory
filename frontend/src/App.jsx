@@ -114,28 +114,28 @@ const METHODS = {
     desc: "Proxy for how much scoring comes from self-created opportunities vs assisted baskets. Higher usage combined with lower assist dependency = more self-creation. Scale 0-100.",
   },
   projNba3p: {
-    name: "Projected NBA 3P%",
-    formula: "22.0 + 0.15 × college_3P% + 0.12 × FT% + 0.05 × Midrange%",
-    inputs: (p) => `3P%: ${fmt(p.tp)} | FT%: ${fmt(p.ft)} | Mid%: ${fmt(p.midPct)}`,
-    desc: "Regression-based projection calibrated to NBA outcomes (typical range 30-42%). FT% is the strongest single predictor of NBA 3P translation (Berger, 2023). Midrange shooting shows touch/craft. Intercept 22 centers output around league average. Clipped to 28-44% range.",
+    name: "Projected NBA 3P% (Bayesian Beta-Binomial)",
+    formula: "Posterior = (κ·μ₀ + 3PM) / (κ + 3PA)  where μ₀ = 0.20 + 0.18·FT% + 0.05·Mid%, κ=200",
+    inputs: (p) => `FT%: ${fmt(p.ft)} | Mid%: ${fmt(p.midPct)} | Prior: ${fmt(p.projPrior)}% | College 3P%: ${fmt(p.tp)}`,
+    desc: "Bayesian conjugate update (Berger 2022). The prior μ₀ encodes FT%-based motor touch — the neuromuscular consistency that predicts NBA shooting. κ=200 pseudo-attempts means low-volume shooters regress heavily toward their FT%-derived prior (the 'Blake Griffin Check': 12 college 3PA → 94% prior weight). High-volume shooters (300+ 3PA) let the data dominate. Range: 28-44%.",
   },
   projNba3pa: {
     name: "Projected NBA 3PA/game",
-    formula: "college_3PA/G × 1.2 + FT% Bonus (if FT>75: (FT-75)×0.05) + 1.5 (era)",
-    inputs: (p) => `College 3PA/G: ${fmt(p.projNba3pa)} | FT%: ${fmt(p.ft)} | 3P Freq: ${fmt(p.threeF)}`,
-    desc: "Base: college attempts × 1.2 (NBA spacing effect). FT% bonus: good shooters (>75%) evolve to shoot more 3s. Era adjustment +1.5 for modern NBA three-point inflation.",
+    formula: "Proj. 3PAr / 100 × 10.5 FGA/G (NBA rotation avg)",
+    inputs: (p) => `3P Freq: ${fmt(p.threeF)}% | FT%: ${fmt(p.ft)} | Proj. 3PAr: ${fmt(p.projNba3par)}%`,
+    desc: "Derived from projected 3-point attempt rate × NBA rotation-player shot volume (10.5 FGA/G). Low-volume college shooters (<5% 3PAr) get conservative projections driven by FT% touch signal rather than college volume.",
   },
   projNba3par: {
     name: "Projected NBA 3P Attempt Rate",
-    formula: "3P_freq × 0.8 + FT% Bonus (if >75: (FT%-75)×0.3) + 5 (era)",
-    inputs: (p) => `3P Freq: ${fmt(p.threeF)} | FT%: ${fmt(p.ft)}`,
-    desc: "What % of NBA shots will be threes. College 3P frequency as base, adjusted for FT% shooting signal and modern NBA three-point inflation.",
+    formula: "3P_freq × 0.80 + FT% touch bonus + 5 (NBA era).  If college 3PAr < 5%: 5 + touch bonus × 0.5",
+    inputs: (p) => `3P Freq: ${fmt(p.threeF)}% | FT%: ${fmt(p.ft)}`,
+    desc: "What % of NBA shots will be threes. College 3P frequency as base, scaled 0.8× for shot selection maturity. FT% touch bonus (if >75%) reflects coaches green-lighting good shooters for more 3s. Blake Griffin adjustment: extremely low-volume college shooters (<5% 3PAr) get minimal volume projection regardless of touch.",
   },
   projNbaTs: {
     name: "Projected NBA TS%",
-    formula: "0.50 × college_TS% + 0.25 × FT% + 0.10 × 3P% + 10.0",
-    inputs: (p) => `TS%: ${fmt(p.ts)} | FT%: ${fmt(p.ft)} | 3P%: ${fmt(p.tp)}`,
-    desc: "Overall efficiency projection. College TS% as anchor, boosted by FT% (free throws are free points) and 3P shooting. Clipped to 40-70%.",
+    formula: "FT% × 0.30 + Bayesian_3P% × 0.25 + college_TS% × 0.20 + Rim% × 0.10 + 8.0",
+    inputs: (p) => `FT%: ${fmt(p.ft)} | Bayes 3P%: ${fmt(p.projNba3p)} | TS%: ${fmt(p.ts)} | Rim%: ${fmt(p.rimPct)}`,
+    desc: "Overall efficiency projection using Bayesian 3P% (not raw college 3P%). FT% is the strongest component (free throws = free points). Rim finishing transfers well to NBA. Spacing/pace uplift of +8pp reflects modern NBA environment. Range: 45-68%.",
   },
   fourFactors: {
     name: "Context-Free Four Factor Rating (CFFR)",
@@ -227,141 +227,47 @@ function computeBadges(p) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// DATA CLEANING LAYER
+// SAMPLE DATA
 // ═══════════════════════════════════════════════════════════
-// The BartTorvik pipeline has known data issues in the 2026 scrape:
-//   1. blk column is contaminated with pts values (~41% of 2026 players)
-//   2. reb doesn't match oreb+dreb (column shift)
-//   3. Shooting percentages are 0-1 scale (not 0-100) for some years
-//   4. DBPM can be unrealistically high when box-score stats are shifted
-//   5. Per-36 stats are corrupted when base stats are wrong
-// Historical data (≤2025) is clean.
-// ═══════════════════════════════════════════════════════════
-
-function cleanRawProfile(d) {
-  /* Apply data-quality fixes to raw API profile BEFORE mapping.
-     Returns a new object — never mutates the input. */
-  if (!d) return d;
-  const c = { ...d }; // shallow copy
-  c._fixes = [];       // track what we corrected
-
-  // ── 1. Fix REB: always prefer OREB + DREB ──
-  const oreb = c.oreb ?? 0;
-  const dreb = c.dreb ?? 0;
-  const computedReb = oreb + dreb;
-  if (computedReb > 0 && c.reb != null && Math.abs(c.reb - computedReb) > 1.5) {
-    c._fixes.push(`REB ${fmt(c.reb)}→${fmt(computedReb)} (oreb+dreb)`);
-    c.reb = computedReb;
-  } else if (computedReb > 0 && (c.reb == null || c.reb === 0)) {
-    c.reb = computedReb;
-  }
-
-  // ── 2. Fix BLK: detect pts contamination ──
-  if (c.blk != null && c.pts != null && c.blk > 5 && Math.abs(c.blk - c.pts) < 1.0) {
-    c._fixes.push(`BLK ${fmt(c.blk)}→null (=PTS, pipeline error)`);
-    c.blk = null;
-  }
-
-  // ── 3. Fix corrupted Per-36 stats ──
-  // BartTorvik min is ALWAYS % of team minutes (0-100), not actual mpg
-  // Convert to approximate mpg: (min% / 100) × 40 minutes per game
-  const minPct = c.min || 0;
-  const mpg = (minPct / 100) * 40;
-  if (mpg > 0) {
-    const per36 = (val) => val != null ? Math.round((val / mpg) * 36 * 100) / 100 : null;
-    // Only recompute if existing per-36 looks obviously wrong
-    if (c.blk36 != null && (c.blk36 > 15 || c.blk36 < -40)) {
-      c._fixes.push(`BLK36 ${fmt(c.blk36)}→recomputed`);
-      c.blk36 = c.blk != null ? per36(c.blk) : null;
-    }
-    if (c.reb36 != null && c.reb36 < -10) {
-      c._fixes.push(`REB36 ${fmt(c.reb36)}→recomputed`);
-      c.reb36 = per36(c.reb);
-    }
-    // Recompute all per-36 if base stats were corrected
-    if (c._fixes.length > 0) {
-      c.pts36 = per36(c.pts);
-      c.reb36 = per36(c.reb);
-      c.ast36 = per36(c.ast);
-      c.stl36 = per36(c.stl);
-      c.blk36 = c.blk != null ? per36(c.blk) : null;
-    }
-    c._mpg = mpg; // store computed mpg for downstream use
-  }
-
-  // ── 4. DBPM consistency: BPM should equal OBPM + DBPM ──
-  // When DBPM doesn't match BPM - OBPM, the column is contaminated
-  if (c.bpm != null && c.obpm != null && c.dbpm != null) {
-    const expectedDbpm = Math.round((c.bpm - c.obpm) * 100) / 100;
-    if (Math.abs(c.dbpm - expectedDbpm) > 1.0) {
-      c._fixes.push(`DBPM ${fmt(c.dbpm)}→${fmt(expectedDbpm)} (BPM-OBPM)`);
-      c.dbpm = expectedDbpm;
-    }
-  } else if (c.dbpm != null && c.dbpm > 15) {
-    c._fixes.push(`DBPM ${fmt(c.dbpm)}→null (unreliable)`);
-    c.dbpm = null;
-  }
-
-  // ── 5. Shooting percentage scale normalization ──
-  // Some fields come as 0-1 (e.g., tp_pct=0.37), others as 0-100 (ts=66.3)
-  // This is normal BartTorvik format — NOT a data issue, so don't add to _fixes
-  const maybeScale = (field) => {
-    if (c[field] != null && c[field] > 0 && c[field] < 1.0) {
-      c[field] = c[field] * 100;
-    }
-  };
-  maybeScale('rim_pct');
-  maybeScale('mid_pct');
-  maybeScale('two_pct');
-  maybeScale('tp_pct');
-  maybeScale('ft_pct');
-  maybeScale('fg_pct');
-
-  return c;
-}
-
 // ═══════════════════════════════════════════════════════════
 // API DATA LAYER
 // ═══════════════════════════════════════════════════════════
 const API_BASE = "/api";
 
-function mapProfile(rawD) {
-  /* Transform flat API profile → nested structure expected by components.
-     First applies data cleaning, then maps fields. */
-  if(!rawD) return null;
-  const d = cleanRawProfile(rawD);
-
-  // Percentile normalization (0-1 → 0-100)
+function mapProfile(d) {
+  /* Transform flat API profile → nested structure expected by components */
+  if(!d) return null;
+  // Auto-scale: if a percentage value is < 1.0, multiply by 100
+  const pct = (v) => v!=null && v < 1.0 && v > 0 ? v*100 : v;
+  // Same but for percentiles (should be 0-100)
   const p100 = (v) => v!=null && v <= 1.0 && v >= 0 ? Math.round(v*100) : (v!=null ? Math.round(v) : null);
   const badges = typeof d.badges==="string" ? d.badges.split("|").filter(Boolean) : (d.badges||[]);
   const redFlags = typeof d.red_flags==="string" ? d.red_flags.split("|").filter(Boolean) : (d.redFlags||d.red_flags||[]);
   // Recruit rank → percentile (lower rank = better, top 100 out of ~3500 eligible)
   const recPctl = d.recRank!=null ? Math.round(Math.max(0, (1 - d.recRank/350) * 100)) : null;
-  // Minutes: convert BartTorvik min% → mpg for display (always % format)
-  const mpg = d._mpg || ((d.min || 0) / 100 * 40);
   return {
     name:d.name, team:d.team, pos:d.pos, yr:d.yr, cls:d.cls||"",
     conf:d.conf||"", confTier:d.conf_tier||d.confTier||"",
     ht:d.ht!=null?`${Math.floor(d.ht/12)}'${Math.round(d.ht%12)}"`:null,
     htIn:d.ht, wt:d.wt, age:d.age, recRank:d.recRank, recPctl,
-    seasonsPlayed:d.seasons, gp:d.gp, min:d.min, mpg:Math.round(mpg*10)/10,
+    seasonsPlayed:d.seasons, gp:d.gp, min:d.min,
     pts:d.pts, reb:d.reb, ast:d.ast, stl:d.stl, blk:d.blk,
-    to:null, foul:null, mp:d.gp&&mpg?Math.round(d.gp*mpg):null,
+    to:null, foul:null, mp:d.gp&&d.min?Math.round(d.gp*d.min):null,
     p36:{pts:d.pts36,reb:d.reb36,ast:d.ast36,stl:d.stl36,blk:d.blk36},
     bpm:d.bpm, obpm:d.obpm, dbpm:d.dbpm, ortg:d.ortg, usg:d.usg,
     astP:d.ast_p, toP:d.to_p, orbP:d.orb_p, drbP:d.drb_p,
     stlP:d.stl_p, blkP:d.blk_p, astTov:d.ast_tov,
-    ts:d.ts, fg:d.fg_pct, tp:d.tp_pct, ft:d.ft_pct, efg:d.efg,
-    rimF:d.rim_f, rimPct:d.rim_pct, midF:d.mid_f, midPct:d.mid_pct,
-    threeF:d.three_f, threePct:d.tp_pct, dunkR:d.dunk_r, ftr:d.ftr,
+    ts:d.ts, fg:pct(d.fg_pct), tp:pct(d.tp_pct), ft:pct(d.ft_pct), efg:d.efg,
+    rimF:d.rim_f, rimPct:pct(d.rim_pct), midF:d.mid_f, midPct:pct(d.mid_pct),
+    threeF:d.three_f, threePct:pct(d.tp_pct), dunkR:d.dunk_r, ftr:d.ftr,
     threePar:d.three_par,
     // CFFR (Context-Free Four Factor Rating)
     cffr:{
-      score:d.cffr||d.ff_comp,
+      score:pct(d.cffr)||pct(d.ff_comp),
       zEfg:d.cffr_z_efg, zTov:d.cffr_z_tov, zOrb:d.cffr_z_orb, zFtr:d.cffr_z_ftr,
       reliability:d.cffr_reliability, usageRole:d.cffr_usage_role||"",
     },
-    ff:{efg:d.ff_efg,tov:d.ff_tov,orb:d.ff_orb,ftr:d.ff_ftr,comp:d.ff_comp},
+    ff:{efg:pct(d.ff_efg),tov:pct(d.ff_tov),orb:pct(d.ff_orb),ftr:pct(d.ff_ftr),comp:pct(d.ff_comp)},
     pctl:{bpm:p100(d.pctl_bpm),usg:p100(d.pctl_usg),ts:p100(d.pctl_ts),ast:p100(d.pctl_ast),
           to:p100(d.pctl_to),orb:p100(d.pctl_orb),drb:p100(d.pctl_drb),stl:p100(d.pctl_stl),blk:p100(d.pctl_blk),
           pts36:p100(d.pctl_pts36),ast36:p100(d.pctl_ast36),reb36:p100(d.pctl_reb36)},
@@ -373,7 +279,8 @@ function mapProfile(rawD) {
     deltaBpm:d.delta_bpm, deltaTs:d.delta_ts,
     feel:d.feel, funcAth:d.func_ath, shootScore:d.shoot_score, defScore:d.def_score,
     overall:d.overall, selfCreation:d.self_creation,
-    projNba3p:d.proj_3p, projNba3pa:d.proj_3pa, projNba3par:d.proj_3par, projNbaTs:d.proj_ts,
+    projNba3p:d.proj_3p, projNba3pa:d.proj_3pa, projNba3par:d.proj_3par, projNbaTs:d.proj_ts, projPrior:d.proj_prior,
+    btUrl:d.bt_url, btTeamUrl:d.bt_team_url,
     roles:{playmaker:d.role_playmaker,scorer:d.role_scorer,spacer:d.role_spacer,
       driver:d.role_driver,crasher:d.role_crasher,onball:d.role_onball,
       rimProt:d.role_rim_prot,rebounder:d.role_rebounder,switchPot:d.role_switch},
@@ -395,9 +302,6 @@ function mapProfile(rawD) {
     madeNba:d.made_nba, draftYear:d.draft_year, draftPick:d.draft_pick,
     confidence:d.confidence||"full", sampleMin:d.sample_min, sampleGp:d.sample_gp,
     statComps:[], anthroComps:[], seasonLines:[],
-    // Data quality tracking
-    _dataFixes: d._fixes || [],
-    _hasDataIssues: (d._fixes || []).length > 0,
   };
 }
 
@@ -495,7 +399,7 @@ function OverviewTab({p, compTier, setCompTier}) {
     <div className="space-y-5">
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
         {[["Conference",p.conf,p.confTier==="Power"?"#10b981":"#f97316"],["Class",p.cls,"#e5e7eb"],
-          ["Age",p.age!=null?p.age.toFixed(1):"—","#e5e7eb"],
+          ["Age",p.age.toFixed(1),"#e5e7eb"],
           ["Recruit",p.recRank?`#${p.recRank}`+(p.recPctl!=null?` (${p.recPctl}th pctl)`:""):"Unranked",p.recPctl!=null&&p.recPctl>70?"#22c55e":"#e5e7eb"],
           ["Seasons",p.seasonsPlayed,"#e5e7eb"],["Conf Tier",p.confTier,p.confTier==="Power"?"#10b981":"#f97316"]
         ].map(([l,v,c])=>(
@@ -505,7 +409,7 @@ function OverviewTab({p, compTier, setCompTier}) {
           </div>
         ))}
       </div>
-      <Sec icon="▦" title="Box Score" sub={`${p.gp} GP · ${p.mpg||fmt(p.min)} MPG${p.mp?` · ~${p.mp} Total MIN`:""}`}>
+      <Sec icon="▦" title="Box Score" sub={`${p.gp} GP · ${p.min} MIN/G · ${p.mp} Total MIN`}>
         <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
           {[["PTS",p.pts,p.pctl.pts36],["REB",p.reb,p.pctl.reb36],["AST",p.ast,p.pctl.ast36],
             ["STL",p.stl,p.pctl.stl],["BLK",p.blk,p.pctl.blk],["A/TO",p.astTov,null],["FTR",p.ftr,null]
@@ -696,6 +600,17 @@ function ShootingTab({p}) {
             </Tip>
           ))}
         </div>
+        {/* Bayesian Prior Transparency */}
+        {p.projPrior!=null&&(
+          <div className="mt-3 px-3 py-2 rounded-lg text-xs" style={{background:"#0d1117",border:"1px solid #1e293b"}}>
+            <span style={{color:"#6b7280"}}>Touch Prior (μ₀): </span>
+            <span className="font-bold" style={{color:p.projPrior>37?"#22c55e":p.projPrior>34?"#fbbf24":"#ef4444"}}>{fmt(p.projPrior)}%</span>
+            <span style={{color:"#475569"}}> — from FT% ({fmt(p.ft)}%) + Mid% ({fmt(p.midPct)}%). κ=200. </span>
+            <Tip content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>Bayesian Beta-Binomial (Berger 2022)</div><div style={{color:"#cbd5e1"}}>The prior encodes motor "touch" — the neuromuscular consistency that predicts NBA shooting. A player with 85% FT + 28% 3P has vastly more latent 3P potential than one with 65% FT + 35% 3P. The posterior blends this prior with observed college makes/attempts: more 3PA → less prior influence, more data dominance.</div></div>}>
+              <span className="cursor-help" style={{color:"#475569"}}>ⓘ</span>
+            </Tip>
+          </div>
+        )}
       </Sec>
     </div>
   );
@@ -2518,6 +2433,7 @@ export default function App() {
                       <span className="px-2 py-0.5 rounded text-xs font-semibold" style={{background:"#f9731622",color:"#f97316"}}>{p.pos}</span>
                       <span>{p.team}</span><span>·</span><span>{p.ht} · {p.wt?`${p.wt} lbs`:""}</span><span>·</span><span>Age {p.age!=null?Number(p.age).toFixed(1):"—"}</span>
                       {p.recRank&&<><span>·</span><span>#{p.recRank} Recruit</span></>}
+                      {p.btUrl&&<><span>·</span><a href={p.btUrl} target="_blank" rel="noopener noreferrer" className="hover:underline" style={{color:"#60a5fa"}}>BartTorvik ↗</a></>}
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
@@ -2530,17 +2446,12 @@ export default function App() {
             {/* Confidence Banner */}
             {p.confidence==="very_low"&&(
               <div className="mb-4 p-3 rounded-lg text-sm" style={{background:"#7f1d1d",border:"1px solid #991b1b",color:"#fca5a5"}}>
-                ⚠️ <strong>Insufficient Data</strong> — This player has only {Math.round(p.sampleMin||0)} minutes of college play. Scouting scores and role classifications are not available.
+                ⚠️ <strong>Insufficient Data</strong> — This player has only {Math.round(p.sample_min||0)} minutes of college play. Scouting scores and role classifications are not available.
               </div>
             )}
             {p.confidence==="limited"&&(
               <div className="mb-4 p-3 rounded-lg text-sm" style={{background:"#78350f",border:"1px solid #92400e",color:"#fcd34d"}}>
-                ⚡ <strong>Limited Sample</strong> — Based on {Math.round(p.sampleMin||0)} minutes ({p.sampleGp||"?"} games). Scores should be interpreted with caution.
-              </div>
-            )}
-            {p._hasDataIssues&&(
-              <div className="mb-4 p-3 rounded-lg text-sm" style={{background:"#1e1b4b",border:"1px solid #312e81",color:"#a5b4fc"}}>
-                🔧 <strong>Data Corrections Applied</strong> — {p._dataFixes.length} fix{p._dataFixes.length>1?"es":""} for known pipeline issues: {p._dataFixes.join(" · ")}
+                ⚡ <strong>Limited Sample</strong> — Based on {Math.round(p.sample_min||0)} minutes ({p.sample_gp||"?"} games). Scores should be interpreted with caution.
               </div>
             )}
             <div className="flex gap-1 mb-5 overflow-x-auto pb-2" style={{scrollbarWidth:"none"}}>
