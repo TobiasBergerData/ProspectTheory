@@ -404,7 +404,7 @@ function OverviewTab({p, compTier, setCompTier}) {
     <div className="space-y-5">
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
         {[["Conference",p.conf,p.confTier==="Power"?"#10b981":"#f97316"],["Class",p.cls,"#e5e7eb"],
-          ["Age",p.age.toFixed(1),"#e5e7eb"],
+          ["Age",p.age!=null?Number(p.age).toFixed(1):"—","#e5e7eb"],
           ["Recruit",p.recRank?`#${p.recRank}`+(p.recPctl!=null?` (${p.recPctl}th pctl)`:""):"Unranked",p.recPctl!=null&&p.recPctl>70?"#22c55e":"#e5e7eb"],
           ["Seasons",p.seasonsPlayed,"#e5e7eb"],["Conf Tier",p.confTier,p.confTier==="Power"?"#10b981":"#f97316"]
         ].map(([l,v,c])=>(
@@ -2431,6 +2431,8 @@ export default function App() {
   },[search]);
 
   const p = sel ? (profileCache[sel] || PLAYERS[sel] || null) : null;
+  // Guard: search stubs have no real data — treat as "not loaded yet"
+  const pReady = p && p.pctl != null;
 
   return (
     <div className="min-h-screen" style={{background:"#080b12",fontFamily:"'Barlow',sans-serif",color:"#e5e7eb"}}>
@@ -2476,12 +2478,12 @@ export default function App() {
           ) : (
             <BigBoardView onSelect={selectPlayer} boardData={boardData} setBoardData={setBoardData} loading={loading} setLoading={setLoading} availableYears={availableYears} yearFilter={yearFilter} setYearFilter={setYearFilter}/>
           )
-        ) : profileLoading && !p ? (
+        ) : profileLoading && !pReady ? (
           <div className="flex flex-col items-center justify-center py-20">
             <div className="w-12 h-12 rounded-full border-4 border-t-transparent animate-spin mb-4" style={{borderColor:"#f97316",borderTopColor:"transparent"}}/>
             <p className="text-sm" style={{color:"#6b7280"}}>Loading profile...</p>
           </div>
-        ) : !p ? (
+        ) : !pReady ? (
           <div className="text-center py-20">
             <p style={{color:"#6b7280"}}>Player not found</p>
             <button onClick={()=>setSel(null)} className="mt-4 px-4 py-2 rounded-lg text-sm" style={{background:"#f97316",color:"#000"}}>Back to Board</button>
