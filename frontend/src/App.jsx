@@ -132,91 +132,191 @@ const METHODS = {
 };
 
 // ═══════════════════════════════════════════════════════════
-// BADGE DEFINITIONS (Expanded — 30+ badges)
+// BADGE DEFINITIONS (Expanded — 40+ badges with International & Youth Engine)
 // ═══════════════════════════════════════════════════════════
 const BADGE_DEFS = {
-  // GREEN — Elite NBA-scalable skills
-  "Elite Shooting":         { cat:"green", rule:"FT%>82 & 3P%>38 & 3PA/40>5.0",       desc:"Top-tier shooting across both lines + volume. Most translatable skill in modern NBA. Berger (2023): FT% is the #1 predictor." },
+  // ── GREEN — Elite NBA-scalable skills ──
+  "Elite Shooting":         { cat:"green", rule:"3P%>40 & 3PA/40>6.0 & FT%>85",        desc:"Top-tier shooting across both lines + elite volume. Most translatable skill in modern NBA. Berger (2023): FT% is the #1 predictor." },
   "Floor General":          { cat:"green", rule:"(G) AST/TO>2.2 & AST%>25",            desc:"Elite decision-making with vision. Creates for others without turnovers — the rarest guard skill." },
   "Two-Way Wing":           { cat:"green", rule:"(W) 3P%>35 & (STL%>2.2 OR DBPM>2.0)",desc:"Shooting + perimeter defense. Most coveted role player archetype in modern NBA. Immediate starter value." },
   "Modern Rim Anchor":      { cat:"green", rule:"(B) BLK%>4.0 & DBPM>2.5",            desc:"Elite rim protection with overall defensive impact. Anchors a top-10 defense by itself." },
-  "Point Big":              { cat:"green", rule:"(B) AST%>18 & AST/TO>1.2",            desc:"Playmaking big — Jokić/Draymond archetype. Creates from the post/elbow with low turnovers. Extremely rare." },
+  "Point Big":              { cat:"green", rule:"(B) AST%>18 & AST/TO>1.2",            desc:"Playmaking big — Jokic/Draymond archetype. Creates from the post/elbow with low turnovers. Extremely rare." },
   "Stocks Machine":         { cat:"green", rule:"(STL%+BLK%)>4.8",                     desc:"Defensive disruption at both perimeter and rim. Historically rare combination that warps opposing offense." },
-  "Versatile Stopper":      { cat:"green", rule:"(W/B) Ht≥6'7\" & STL%>1.6 & BLK%>1.8",desc:"Length + perimeter + rim. Can guard 1-through-5 in switching schemes. Premium defensive versatility." },
-  "Transition Terror":      { cat:"green", rule:"(G/W) STL%>2.5 & Dunk%>60th pctl",   desc:"Creates fast breaks via steals and finishes above the rim. Free points in transition." },
+  "Versatile Stopper":      { cat:"green", rule:"(W/B) Ht>=6'7\" & STL%>1.6 & BLK%>1.8",desc:"Length + perimeter + rim. Can guard 1-through-5 in switching schemes. Premium defensive versatility." },
+  "Transition Terror":      { cat:"green", rule:"(G/W) STL%>2.5 & Dunk%>60th pctl",   desc:"Creates fast breaks via steals and finishes above the rim. Free points in transition. Fallback: STL%>2.8 & 2P%>55 (for intl without dunk data)." },
   "FT Grifter":             { cat:"green", rule:"FTr>45 & (Rim%>40th pctl OR USG%>24)",desc:"Elite at drawing fouls through contact. Free throws = free points. High FTr at volume is extremely valuable." },
   "Efficient High Usage":   { cat:"green", rule:"USG>28 & TO%<12 & TS%>58",            desc:"Handles elite volume without efficiency collapse. The 'carry' badge — this player IS the offense." },
   "High-Feel Athlete":      { cat:"green", rule:"Feel>75 & Func Ath>75",               desc:"Rarest badge — elite IQ + elite athleticism. Almost always translates to NBA." },
+  "Lurking Elite":          { cat:"green", rule:"USG%<20 & BPM>7.0 & TS%>62",          desc:"The Haliburton-Effect: Massively underutilized talent. Low usage masks star-level production. Efficiency explodes in a larger NBA role." },
+  "Analytics Darling":      { cat:"green", rule:"BPM>8.0 & TS%>60 & USG%<22",          desc:"Maximum efficiency at moderate volume — the analytics dream. Statistical impact far exceeds perception." },
+  "Efficiency Monster":     { cat:"green", rule:"eFG%>60 & AST/TO>2.0 & STL%>2.0",    desc:"Elite efficiency + elite decision-making + defensive activity. Multi-pillar excellence that guarantees NBA value." },
+  "Defensive Stopper Floor":{ cat:"green", rule:"Ht>=6'8\" & STL%>2.5",                desc:"Elite steal rate at plus size. Guaranteed defensive value in any NBA lineup — switchable perimeter stopper." },
+  "Glue-Guy Connector":     { cat:"green", rule:"AST/TO>2.5 & DBPM>2.0 & USG%<16",    desc:"High-end role player archetype. Connects offense without mistakes, contributes defensively. Every contender needs this." },
 
-  // YELLOW — Potential / Swing skills
-  "Latent Touch":           { cat:"yellow", rule:"FT%>80 & 3P%<32",                    desc:"Elite FT% signals neuromuscular shooting consistency that hasn't yet translated to 3P volume. Bayesian prior strongly favors breakout." },
+  // ── GREEN — International & Youth Dominance ──
+  "International Prodigy":  { cat:"green", rule:"Age < Avg-1.5yr & EFF top 10 pctl",   desc:"1.5+ years younger than tournament peers while statistically dominating. Historically the strongest predictor of NBA stardom. Precociousness multiplier: 1.5x risk reduction.", icon:"globe" },
+  "Pro-Ready Teen":         { cat:"green", rule:"Pro League & Age<19 & BPM>2.0",       desc:"Positive impact as a teenager in a professional men's league (ACB, EuroLeague, BBL). Physically and mentally NBA-ready before most prospects enter college.", icon:"globe" },
+
+  // ── YELLOW — Potential / Swing skills ──
+  "Latent Sniper":          { cat:"yellow", rule:"FT%>85 & 3P%<33",                    desc:"Elite FT% signals neuromuscular shooting consistency that hasn't yet translated to 3P range. Bayesian prior strongly favors breakout — mechanics are there, volume will follow." },
+  "Latent Touch":           { cat:"yellow", rule:"FT%>80 & 3P%<32",                    desc:"Good FT% with weak 3P%. The gap suggests development potential — motor memory is trainable. Watch for improvement trajectory." },
   "Raw Project":            { cat:"yellow", rule:"Age<19.5 & IQ_Pillar<40",            desc:"Young + raw = massive development runway. IQ can be taught with reps. Physical tools are already there." },
-  "Interior Engine":        { cat:"yellow", rule:"(W/B) Rim_Proxy>80th & AST%>15",     desc:"Rim pressure + playmaking from the paint. If shooting develops, this becomes a franchise cornerstone." },
+  "Interior Engine":        { cat:"yellow", rule:"(W/B) Rim_Proxy>80th & AST%>15",     desc:"Rim pressure + playmaking from the paint. If shooting develops, this becomes a franchise cornerstone. Fallback: FTr>45 & AST%>15." },
 
-  // RED — Warning signals
+  // ── RED — Warning signals (Bust Signals) ──
   "Spacing Killer":         { cat:"red",   rule:"(G/W) 3P%<30 & 3PA/40<3.5",           desc:"Guards/wings who don't threaten from three destroy NBA spacing. Defenders sag off, clogging paint for teammates." },
-  "Efficiency Trap":        { cat:"red",   rule:"USG%>26 & TS%<52",                    desc:"High volume, low efficiency. Scoring a lot but hurting the team. Usage will drop in NBA → production collapses." },
+  "Efficiency Trap":        { cat:"red",   rule:"USG%>26 & TS%<52",                    desc:"High volume, low efficiency. Scoring a lot but hurting the team. Usage will drop in NBA — production collapses." },
+  "Empty Calorie Scorer":   { cat:"red",   rule:"USG%>28 & TS%<52 & AST%<15",          desc:"Bust signal: Inefficient ball-dominant scorer who doesn't create for others. Volume without value — the most dangerous profile in the draft." },
+  "One-Way Project":        { cat:"red",   rule:"OBPM>3.0 & DBPM<-1.5 & STL%<1.0",    desc:"Offensive hype, defensive liability. All-offense players get benched in playoff rotations when coaching tightens up." },
+  "Soft Interior":          { cat:"red",   rule:"(B) FTr<22 & BLK%<2.0",               desc:"Center without physicality or rim protection. No paint presence, no foul drawing. Can't anchor a defense at any level." },
+  "Non-Processing Guard":   { cat:"red",   rule:"(G) AST/TO<0.8 & TOV%>20",            desc:"Athleticism without processing speed. High turnover rate with poor assist ratios = decision-making doesn't project to NBA pace." },
   "Tunnel Vision":          { cat:"red",   rule:"(G/W) AST/TO<0.7 & USG%>22",         desc:"Ball-dominant without creating for others. NBA defenses will scheme against predictable scorers." },
   "Passive Scorer":         { cat:"red",   rule:"FTr<20",                              desc:"Avoids contact entirely. Jump-shot dependent offense is hard to sustain in NBA when contested." },
   "Foul Magnet":            { cat:"red",   rule:"Fouls/40>4.8",                        desc:"Foul trouble limits minutes. Signals poor mobility, discipline, or defensive IQ at the next level." },
   "Liability Big":          { cat:"red",   rule:"(B) DRB%<15 OR BLK%<1.5",            desc:"Bigs without rebounding or rim protection are a defensive sinkhole. Can't stay on the floor in playoffs." },
-  "Defensive Target":       { cat:"red",   rule:"(G) Ht<6'1\" & DBPM<-0.5",           desc:"Small guards with negative defensive impact get hunted in playoffs. Size + poor defense = unplayable." },
-  "Non-Spacing Guard":      { cat:"red",   rule:"(G) 3P%<30 & 3P Freq<20%",           desc:"Guards who don't shoot threes can't play off-ball in modern NBA. Limits lineup construction." },
+  "Defensive Target":       { cat:"red",   rule:"(G) Ht<6'2\" & DBPM<-1.0",           desc:"Small guards with negative defensive impact get hunted in playoffs. Physical weakness that coaching can't fix." },
+  "Non-Spacing Guard":      { cat:"red",   rule:"(G) 3P%<30 & 3P Freq<20%",           desc:"Guards who don't shoot threes can't play off-ball in modern NBA. Limits lineup construction severely." },
   "All-Offense Big":        { cat:"red",   rule:"(B) BLK%<2.5 & DBPM<1.5",            desc:"Bigs without rim protection are a defensive liability at every level. Offense doesn't compensate." },
   "FT Concern":             { cat:"red",   rule:"FT%<65 & USG>25",                    desc:"Hack-a-Player target at high usage. Opposing coaches will exploit this in close games." },
 };
 
-// ── Position group for badge logic ────────────────────────
+// ── Position group for badge logic (consistent with resolvePosition) ──
 function getBadgePos(p) {
+  // If pos is already resolved to Playmaker/Wing/Big, use that
+  const resolved = p.pos;
+  if (resolved === "Playmaker") return "G";
+  if (resolved === "Big") return "B";
+  if (resolved === "Wing") return "W";
+
+  // Fallback: height-based (for tmpP objects that don't have pos)
   const htIn = p.htIn ?? 78;
-  const astP  = p.astP  ?? 0;
-  const drbP  = p.drbP  ?? 0;
-  if (htIn < 76 || (htIn < 78 && astP > 20)) return "G";
-  if (htIn > 81 || (htIn > 80 && drbP > 15)) return "B";
+  const astP = p.astP ?? 0;
+  const usg = p.usg ?? 0;
+  // Ball-handler override
+  if (astP > 25 && usg > 22) return "G";
+  if (astP > 30) return "G";
+  if (htIn <= 75) return "G";
+  if (htIn >= 82) return "B";
   return "W";
 }
 
-// ── Client-side badge computation ─────────────────────────
+// ── Client-side badge computation (with International Adjuster + Fallbacks) ──
 function computeBadges(p) {
   const pos = getBadgePos(p);
   const isG = pos === "G", isW = pos === "W", isB = pos === "B";
-  const ft=p.ft??0, tp=p.tp??0, threeF=p.threeF??0;
-  const astP=p.astP??0, astTov=p.astTov??0;
-  const stlP=p.stlP??0, blkP=p.blkP??0;
-  const usg=p.usg??0, toP=p.toP??0, ts=p.ts??0;
-  const ftr=p.ftr??0, rimF=p.rimF??0, rimPct=p.rimPct??0;
-  const dbpm=p.dbpm??0, feel=p.feel??0, funcAth=p.funcAth??0;
-  const htIn=p.htIn??78, drbP=p.drbP??0;
-  const tpa40 = (threeF/100)*(p.min??30)*(p.pts??15)/((p.fg??45)/100)/40;
+  const isIntl = (p.source && p.source !== "ncaa") || (p.league && p.league !== "NCAA");
 
-  const green=[], yellow=[], red=[];
-  // GREEN
-  if (ft>82 && tp>38 && threeF>25)                           green.push("Elite Shooting");
-  if (isG && astTov>2.2 && astP>25)                          green.push("Floor General");
-  if (isW && tp>35 && (stlP>2.2||dbpm>2.0))                 green.push("Two-Way Wing");
-  if (isB && blkP>4.0 && dbpm>2.5)                           green.push("Modern Rim Anchor");
-  if (isB && astP>18 && astTov>1.2)                          green.push("Point Big");
-  if ((stlP+blkP)>4.8)                                      green.push("Stocks Machine");
-  if ((isW||isB) && htIn>=79 && stlP>1.6 && blkP>1.8)      green.push("Versatile Stopper");
-  if ((isG||isW) && stlP>2.5 && (p.dunkR??0)>8)             green.push("Transition Terror");
-  if (ftr>45 && (rimF>25||usg>24))                           green.push("FT Grifter");
-  if (usg>28 && toP<12 && ts>58)                             green.push("Efficient High Usage");
-  if (feel>75 && funcAth>75)                                 green.push("High-Feel Athlete");
-  // YELLOW
-  if (ft>80 && tp<32)                                        yellow.push("Latent Touch");
-  if ((p.age??22)<19.5 && feel<40)                           yellow.push("Raw Project");
-  if ((isW||isB) && rimF>30 && astP>15)                      yellow.push("Interior Engine");
-  // RED
-  if ((isG||isW) && tp<30 && threeF<18)                      red.push("Spacing Killer");
-  if (usg>26 && ts<52)                                       red.push("Efficiency Trap");
-  if ((isG||isW) && astTov<0.7 && usg>22)                    red.push("Tunnel Vision");
-  if (ftr<20 && usg>20)                                      red.push("Passive Scorer");
-  if ((p.fouls40??0)>4.8)                                     red.push("Foul Magnet");
-  if (isB && (drbP<15||blkP<1.5))                            red.push("Liability Big");
-  if (isG && htIn<73 && dbpm<-0.5)                           red.push("Defensive Target");
-  if (isG && tp<30 && threeF<20)                             red.push("Non-Spacing Guard");
-  if (isB && blkP<2.5 && dbpm<1.5)                           red.push("All-Offense Big");
-  if (ft<65 && usg>25)                                       red.push("FT Concern");
+  // ── International Adjuster: scale up stats for badge checks ──
+  const intlMult = isIntl ? 1.25 : 1.0;
+  const badgeStocksMult = isIntl ? 1.15 : 1.0; // extra multiplier for STL%/BLK% in badge checks
+
+  const ft = p.ft ?? 0, tp = p.tp ?? 0, threeF = p.threeF ?? 0;
+  const astP = (p.astP ?? 0) * intlMult;
+  const astTov = p.astTov ?? 0;
+  const stlP = (p.stlP ?? 0) * intlMult * badgeStocksMult;
+  const blkP = (p.blkP ?? 0) * intlMult * badgeStocksMult;
+  const usg = (p.usg ?? 0) * intlMult;
+  const toP = p.toP ?? 0, ts = p.ts ?? 0;
+  const ftr = p.ftr ?? 0, rimF = p.rimF ?? 0, rimPct = p.rimPct ?? 0;
+  const dbpm = (p.dbpm ?? 0) * intlMult;
+  const obpm = (p.obpm ?? 0) * intlMult;
+  const bpm = (p.bpm ?? 0) * intlMult;
+  const feel = p.feel ?? 0, funcAth = p.funcAth ?? 0;
+  const htIn = p.htIn ?? 78, drbP = (p.drbP ?? 0) * intlMult;
+  const efg = p.efg ?? (ts > 0 ? ts - 3 : 0); // rough eFG proxy
+  const tovP = toP;
+  const twoPct = p.twoPct ?? (p.fg ?? 45); // 2P% fallback
+  const age = p.age ?? 22;
+
+  // ── Proxies ──
+  const creationProxy = (usg * 0.7) + (astP * 0.3);
+  const rimProxy = (ftr * 0.8) + (twoPct * 0.2);
+  const dunkR = p.dunkR ?? 0;
+  const tpa40 = (threeF / 100) * ((p.min ?? 30) * (p.pts ?? 15) / ((p.fg ?? 45) / 100)) / 40;
+
+  const green = [], yellow = [], red = [];
+
+  // ═══ GREEN BADGES ═══
+  // Elite Shooting (tighter thresholds)
+  if (tp > 40 && threeF > 30 && ft > 85)                            green.push("Elite Shooting");
+  else if (ft > 82 && tp > 38 && threeF > 25)                       green.push("Elite Shooting"); // legacy threshold as fallback
+  // Floor General
+  if (isG && astTov > 2.2 && astP > 25)                             green.push("Floor General");
+  // Two-Way Wing
+  if (isW && tp > 35 && (stlP > 2.2 || dbpm > 2.0))                green.push("Two-Way Wing");
+  // Modern Rim Anchor
+  if (isB && blkP > 4.0 && dbpm > 2.5)                              green.push("Modern Rim Anchor");
+  // Point Big
+  if (isB && astP > 18 && astTov > 1.2)                             green.push("Point Big");
+  // Stocks Machine
+  if ((stlP + blkP) > 4.8)                                          green.push("Stocks Machine");
+  // Versatile Stopper (with intl fallback: heavier DBPM weighting)
+  if ((isW || isB) && htIn >= 79 && stlP > 1.6 && blkP > 1.8)      green.push("Versatile Stopper");
+  else if (isIntl && (isW || isB) && htIn >= 79 && dbpm > 3.0)      green.push("Versatile Stopper");
+  // Transition Terror (with fallback for no dunk data)
+  if ((isG || isW) && stlP > 2.5 && dunkR > 8)                      green.push("Transition Terror");
+  else if ((isG || isW) && stlP > 2.8 && twoPct > 55)               green.push("Transition Terror");
+  // FT Grifter
+  if (ftr > 45 && (rimF > 25 || usg > 24))                          green.push("FT Grifter");
+  // Efficient High Usage
+  if (usg > 28 && toP < 12 && ts > 58)                              green.push("Efficient High Usage");
+  // High-Feel Athlete
+  if (feel > 75 && funcAth > 75)                                     green.push("High-Feel Athlete");
+  // Lurking Elite (Haliburton-Effekt)
+  if (usg < 20 && bpm > 7.0 && ts > 62)                             green.push("Lurking Elite");
+  // Analytics Darling
+  if (bpm > 8.0 && ts > 60 && usg < 22)                             green.push("Analytics Darling");
+  // Efficiency Monster
+  if (efg > 60 && astTov > 2.0 && stlP > 2.0)                      green.push("Efficiency Monster");
+  // Defensive Stopper Floor
+  if (htIn >= 80 && stlP > 2.5)                                     green.push("Defensive Stopper Floor");
+  // Glue-Guy Connector
+  if (astTov > 2.5 && dbpm > 2.0 && usg < 16)                      green.push("Glue-Guy Connector");
+  // International Prodigy (age gap badges — simplified check)
+  if (isIntl && age < 18.5 && bpm > 4.0)                            green.push("International Prodigy");
+  // Pro-Ready Teen
+  if (isIntl && age < 19 && bpm > 2.0)                              green.push("Pro-Ready Teen");
+
+  // ═══ YELLOW BADGES ═══
+  // Latent Sniper (stricter)
+  if (ft > 85 && tp < 33)                                           yellow.push("Latent Sniper");
+  // Latent Touch (broader)
+  else if (ft > 80 && tp < 32)                                      yellow.push("Latent Touch");
+  // Raw Project
+  if (age < 19.5 && feel < 40)                                      yellow.push("Raw Project");
+  // Interior Engine (with FTr fallback for no rim tracking)
+  if ((isW || isB) && rimF > 30 && astP > 15)                       yellow.push("Interior Engine");
+  else if ((isW || isB) && ftr > 45 && astP > 15)                   yellow.push("Interior Engine");
+
+  // ═══ RED BADGES ═══
+  // Spacing Killer
+  if ((isG || isW) && tp < 30 && threeF < 18)                       red.push("Spacing Killer");
+  // Efficiency Trap
+  if (usg > 26 && ts < 52)                                          red.push("Efficiency Trap");
+  // Empty Calorie Scorer (stricter bust signal)
+  if (usg > 28 && ts < 52 && astP < 15)                             red.push("Empty Calorie Scorer");
+  // One-Way Project
+  if (obpm > 3.0 && dbpm < -1.5 && stlP < 1.0)                     red.push("One-Way Project");
+  // Soft Interior
+  if (isB && ftr < 22 && blkP < 2.0)                                red.push("Soft Interior");
+  // Non-Processing Guard
+  if (isG && astTov < 0.8 && tovP > 20)                             red.push("Non-Processing Guard");
+  // Tunnel Vision
+  if ((isG || isW) && astTov < 0.7 && usg > 22)                     red.push("Tunnel Vision");
+  // Passive Scorer
+  if (ftr < 20 && usg > 20)                                         red.push("Passive Scorer");
+  // Foul Magnet
+  if ((p.fouls40 ?? 0) > 4.8)                                       red.push("Foul Magnet");
+  // Liability Big
+  if (isB && (drbP < 15 || blkP < 1.5))                             red.push("Liability Big");
+  // Defensive Target (adjusted)
+  if (isG && htIn < 74 && dbpm < -1.0)                              red.push("Defensive Target");
+  // Non-Spacing Guard
+  if (isG && tp < 30 && threeF < 20)                                red.push("Non-Spacing Guard");
+  // All-Offense Big
+  if (isB && blkP < 2.5 && dbpm < 1.5)                              red.push("All-Offense Big");
+  // FT Concern
+  if (ft < 65 && usg > 25)                                          red.push("FT Concern");
 
   return { green, yellow, red };
 }
@@ -245,6 +345,53 @@ const zBg = (z) => z>=2.0?"#22c55e18":z>=1.0?"#86efac11":z>=0?"#1e293b":z>=-1.0?
 // ═══════════════════════════════════════════════════════════
 // API BASE & DATA MAPPING
 // ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// POSITION RESOLUTION (BartTorvik functional_pos + International letters)
+// ═══════════════════════════════════════════════════════════
+function resolvePosition(d) {
+  // Priority 1: If already mapped to Playmaker/Wing/Big, trust it
+  const existing = d.pos ?? d.position;
+  if (existing === "Playmaker" || existing === "Wing" || existing === "Big") return existing;
+
+  // Priority 2: BartTorvik functional_pos (PG, CG, WG, WF, PF, C, Wing G, Stretch 4, etc.)
+  const funcPos = (d.functional_pos ?? d.func_pos ?? "").toLowerCase().trim();
+  if (funcPos) {
+    // Point guards / combo guards → Playmaker
+    if (/^(pg|point|combo.?g|cg)/.test(funcPos)) return "Playmaker";
+    // Pure centers → Big
+    if (/^(c|center|big|pure.?c)$/.test(funcPos)) return "Big";
+    // Everything between → Wing (WG, SG, SF, WF, PF, Wing, Forward, Stretch 4, etc.)
+    if (/^(sg|wg|sf|wf|pf|f|wing|forward|guard|stretch|small|power|swingman)/.test(funcPos)) return "Wing";
+  }
+
+  // Priority 3: International letter positions (from scraper data)
+  const rawPos = (d.raw_pos ?? d.intl_pos ?? d.position ?? d.pos ?? "").toUpperCase().trim();
+  if (rawPos) {
+    if (rawPos === "PG" || rawPos === "POINT GUARD") return "Playmaker";
+    if (rawPos === "C" || rawPos === "CENTER") return "Big";
+    // SG, G, SF, PF, F, G/F, F/C → Wing
+    if (/^(SG|G|SF|PF|F|G\/F|F\/G|SF\/PF|PF\/SF|SG\/SF|G\/F|F\/C|GUARD|FORWARD|SHOOTING|SMALL|POWER)/.test(rawPos)) return "Wing";
+  }
+
+  // Priority 4: Height-based fallback (from 10c logic, only as last resort)
+  const ht = d.ht ?? d.height_in ?? d.college_height_inches;
+  const astP = d.ast_p ?? d.astP ?? 0;
+  const usg = d.usg ?? 0;
+  if (ht != null) {
+    // Ball-handler override: high AST% + USG% = Playmaker regardless of size
+    if (astP > 25 && usg > 22) return "Playmaker";
+    if (astP > 30) return "Playmaker";
+    // Height cutoffs (relaxed from old 10c: was 74/81, now using stat signals too)
+    if (ht <= 75) return "Playmaker";
+    if (ht >= 82) return "Big";
+    // Tweeners: 76-81 → check 3P shooting for stretch detection
+    const tpPer = d.three_freq ?? d.tp_per ?? d.threeF ?? 0;
+    if (ht >= 79 && ht <= 82 && tpPer > 28) return "Wing"; // Stretch 4 → Wing, not Big
+  }
+
+  return "Wing"; // Default
+}
+
 const API_BASE = "https://api.prospecttheory.io/api";
 
 function mapProfile(d) {
@@ -265,22 +412,28 @@ function mapProfile(d) {
   const redList = (d.red_flags && typeof d.red_flags === "string") ? d.red_flags.split("|").filter(Boolean) : (d.red_flags || []);
 
   // Compute client badges as fallback
+  const resolvedPos = resolvePosition(d);
   const tmpP = {
+    pos: resolvedPos, // pass resolved position for badge checks
     ft:d.ft_pct??d.ft, tp:d.tp_pct??d.tp, threeF:d.three_freq??d.threeF,
     astP:d.ast_p??d.astP, astTov:d.ast_to??d.astTov, stlP:d.stl_p??d.stlP,
     blkP:d.blk_p??d.blkP, usg:d.usg??d.usg_p, toP:d.to_p??d.toP,
     ts:d.ts_pct??d.ts, ftr:d.ftr??d.ft_rate, rimF:d.rim_freq??d.rimF,
-    rimPct:d.rim_pct??d.rimPct, dbpm:d.dbpm, feel:d.feel??0,
-    funcAth:d.func_ath??0, htIn:d.ht??d.height_in??d.college_height_inches,
-    drbP:d.drb_p??d.drbP, dunkR:d.dunk_rate??d.dunkR, age:d.age, shootScore:d.shoot_score,
+    rimPct:d.rim_pct??d.rimPct, dbpm:d.dbpm, obpm:d.obpm, bpm:d.bpm,
+    feel:d.feel??0, funcAth:d.func_ath??0,
+    htIn:d.ht??d.height_in??d.college_height_inches,
+    drbP:d.drb_p??d.drbP, dunkR:d.dunk_rate??d.dunkR, age:d.age,
+    shootScore:d.shoot_score, efg:d.efg_pct??d.efg,
+    twoPct:d.two_p_pct??d.fg_pct??d.fg,
     fouls40:d.fouls_40??0, min:d.min??0, pts:d.pts??0, fg:d.fg_pct??0,
+    source:d.source, league:d.league,
   };
   const computed = computeBadges(tmpP);
   const badges = badgeList.length > 0 ? badgeList : computed.green;
   const redFlags = redList.length > 0 ? redList : computed.red;
 
   return {
-    name: d.name, pos: d.pos ?? d.position ?? d.functional_pos ?? "Wing",
+    name: d.name, pos: resolvePosition(d),
     team: d.team ?? d.college_team ?? "", conf: d.conf ?? d.college_conf ?? "",
     confTier: d.conf_tier ?? d.confTier ?? "", cls: d.cls ?? d.class ?? "",
     yr: d.yr ?? d.season_year ?? d.draft_year ?? 2026,
@@ -332,7 +485,7 @@ function mapProfile(d) {
     pNba:d.pred_p_nba??d.pNba??d.pn,
     predTier:d.pred_tier??d.predicted_tier??d.tier,
     ups: d.ups ?? d.ups_raw,
-    war: d.war ?? d.projected_war ?? 0,
+    war: d.war ?? d.projected_war ?? d.war_score ?? null,
     humble: d.humble ?? d.f_humble ?? d.hmb ?? null,
     aspm: d.aspm ?? d.aspm_adj,
     production: d.production ?? d.prod,
@@ -378,10 +531,11 @@ const Sec = ({children,icon,title,sub}) => (
 
 const BadgeChip = ({text,color="#22c55e"}) => {
   const def = BADGE_DEFS[text];
-  const inner = <span className="px-2 py-0.5 rounded-full text-xs font-semibold inline-block" style={{background:color+"22",color,border:`1px solid ${color}44`}}>{text}</span>;
+  const isIntlBadge = def?.icon === "globe";
+  const inner = <span className="px-2 py-0.5 rounded-full text-xs font-semibold inline-block" style={{background:color+"22",color,border:`1px solid ${color}44`}}>{isIntlBadge?"🌐 ":""}{text}</span>;
   if (!def) return inner;
   return (
-    <Tip content={<div><div className="font-bold mb-1" style={{color}}>{text}</div><div className="mb-1"><span style={{color:"#94a3b8"}}>Trigger:</span> {def.rule}</div><div style={{color:"#cbd5e1"}}>{def.desc}</div></div>}>
+    <Tip content={<div><div className="font-bold mb-1" style={{color}}>{isIntlBadge?"🌐 ":""}{text}</div><div className="mb-1"><span style={{color:"#94a3b8"}}>Trigger:</span> {def.rule}</div><div style={{color:"#cbd5e1"}}>{def.desc}</div></div>}>
       {inner}
     </Tip>
   );
@@ -516,98 +670,242 @@ function OverviewTab({p, compTier, setCompTier}) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// TAB: SHOOTING (Overhauled)
+// TAB: SHOOTING (Overhauled v2 — bigger court, intl support, level bars)
 // ═══════════════════════════════════════════════════════════
 function ShootingTab({p}) {
-  const zoneOpacity = (freq) => freq > 30 ? 1.0 : freq > 15 ? 0.8 : freq > 5 ? 0.6 : 0.35;
-  // Shot mix data for bar chart
-  const shotMix = [
-    {zone:"Dunks",freq:p.dunkR||0,color:"#ef4444"},
-    {zone:"@Rim",freq:(p.rimF||0)-(p.dunkR||0),color:"#f97316"},
-    {zone:"Mid",freq:p.midF||0,color:"#fbbf24"},
-    {zone:"3PT",freq:p.threeF||0,color:"#3b82f6"},
-  ].filter(z=>z.freq>0);
+  const isIntl = p.source && p.source !== "ncaa";
 
-  // Touch prior calculation
-  const touchPrior = p.projPrior ?? ((0.20 + 0.18*(p.ft??75)/100 + 0.05*(p.midPct??40)/100)*100);
+  // ── Normalize values: ensure xx.x format (not 0.xxx) ──
+  const norm = (v) => {
+    if (v == null) return null;
+    const n = Number(v);
+    if (n > 0 && n < 1) return Math.round(n * 1000) / 10; // 0.xxx → xx.x
+    return Math.round(n * 10) / 10;
+  };
+  const rimPct = norm(p.rimPct);
+  const midPct = norm(p.midPct);
+  const tp = norm(p.tp);
+  const ft = norm(p.ft);
+  const fg = norm(p.fg);
+  const ts = norm(p.ts);
+  const efg = norm(p.efg);
+  const ftr = norm(p.ftr);
+  const rimF = norm(p.rimF);
+  const midF = norm(p.midF);
+  const threeF = norm(p.threeF);
+  const dunkR = norm(p.dunkR);
+
+  // ── Detect data availability ──
+  const hasRimData = rimF != null && rimF > 0;
+  const hasMidData = midF != null && midF > 0;
+  const hasDunkData = dunkR != null && dunkR > 0;
+  const hasTrackingData = hasRimData || hasMidData;
+
+  // ── Shot zones with availability checks ──
+  const zones = [
+    {key:"dunks", label:"Dunks", pct:hasDunkData ? dunkR : null, freq:hasDunkData ? dunkR : null, color:"#ef4444", available:hasDunkData},
+    {key:"rim", label:"@Rim", pct:rimPct, freq:hasRimData ? (rimF - (dunkR||0)) : null, color:"#f97316", available:hasRimData},
+    {key:"mid", label:"Mid-Range", pct:midPct, freq:midF, color:"#fbbf24", available:hasMidData},
+    {key:"ft", label:"Free Throw", pct:ft, freq:null, color:"#8b5cf6", available:ft != null},
+    {key:"3pt", label:"3-Point", pct:tp, freq:threeF, color:"#3b82f6", available:tp != null || threeF != null},
+  ];
+
+  // ── Shot mix for level bar chart (only zones with frequency data) ──
+  const shotLevels = [
+    {level:"Dunks", freq:hasDunkData ? (dunkR||0) : 0, pct:null, color:"#ef4444"},
+    {level:"@Rim (non-dunk)", freq:hasRimData ? Math.max(0, (rimF||0) - (dunkR||0)) : 0, pct:rimPct, color:"#f97316"},
+    {level:"Mid-Range", freq:hasMidData ? (midF||0) : 0, pct:midPct, color:"#fbbf24"},
+    {level:"3-Point", freq:threeF||0, pct:tp, color:"#3b82f6"},
+  ].filter(z => z.freq > 0);
+
+  // For intl players with no shot distribution, show simplified view
+  const totalFreq = shotLevels.reduce((s,z) => s + z.freq, 0);
+
+  // ── Touch prior calculation (works for all players — only needs FT%) ──
+  const midPctForPrior = midPct ?? (hasMidData ? midPct : (fg ? fg * 0.95 : 40)); // rough mid% proxy from FG%
+  const touchPrior = p.projPrior ?? ((0.20 + 0.18 * (ft ?? 75) / 100 + 0.05 * (midPctForPrior ?? 40) / 100) * 100);
+
+  // ── NBA shooting projection (with fallback computation for intl) ──
+  const projNba3p = p.projNba3p ?? (() => {
+    // Bayesian Beta-Binomial: posterior = (kappa*mu0 + 3PM) / (kappa + 3PA)
+    if (ft == null) return null;
+    const mu0 = 0.20 + 0.18 * (ft / 100) + 0.05 * ((midPctForPrior ?? 40) / 100);
+    const kappa = 200;
+    // Estimate 3PA from threeF and minutes
+    const est3PA = threeF != null && threeF > 0 ? Math.round(threeF * 2.5) : 50; // rough season 3PA
+    const est3PM = tp != null ? Math.round(est3PA * tp / 100) : Math.round(est3PA * mu0);
+    return Math.round(((kappa * mu0 + est3PM) / (kappa + est3PA)) * 1000) / 10;
+  })();
+
+  // Elastic FGA projection
+  const usg = p.usg ?? 20;
+  const projFGA = 8.5 + (Math.min(30, Math.max(15, usg)) - 15) * (15.0 - 8.5) / 15;
+  const proj3PAr = p.projNba3par ?? (threeF != null ? Math.round(threeF * 0.8 + (ft ?? 75 > 80 ? 3 : 0) + 5) : null);
+  const projNba3pa = p.projNba3pa ?? (proj3PAr != null ? Math.round(projFGA * proj3PAr / 100 * 10) / 10 : null);
+
+  // Self-creation proxy
+  const selfCreation = p.selfCreation ?? Math.round(((usg) / 100) * (1 - ((p.astP ?? 20) / 100)) * 200);
+
+  // ── Zone opacity based on data availability + frequency ──
+  const zoneOpacity = (freq, available) => {
+    if (!available) return 0.25;
+    if (freq == null) return 0.6;
+    return freq > 30 ? 1.0 : freq > 15 ? 0.8 : freq > 5 ? 0.6 : 0.4;
+  };
+
+  // ── Color helpers for values ──
+  const shotColor = (pct, type) => {
+    if (pct == null) return "#6b7280";
+    if (type === "3pt") return pct > 38 ? "#22c55e" : pct > 34 ? "#86efac" : pct > 30 ? "#fbbf24" : "#ef4444";
+    if (type === "ft") return pct > 80 ? "#22c55e" : pct > 72 ? "#86efac" : pct > 65 ? "#fbbf24" : "#ef4444";
+    if (type === "mid") return pct > 45 ? "#22c55e" : pct > 40 ? "#86efac" : pct > 35 ? "#fbbf24" : "#ef4444";
+    if (type === "rim") return pct > 65 ? "#22c55e" : pct > 58 ? "#86efac" : pct > 50 ? "#fbbf24" : "#ef4444";
+    return "#e5e7eb";
+  };
 
   return (
     <div className="space-y-5">
+      {/* ── International data notice ── */}
+      {isIntl && !hasTrackingData && (
+        <div className="p-3 rounded-lg text-sm" style={{background:"#1e3a5f33",border:"1px solid #3b82f644",color:"#93c5fd"}}>
+          International prospect — shot-type tracking (Rim%, Mid%, Dunks) not available. Showing FT%, 3P%, and FG% data. NBA projections computed from Bayesian priors.
+        </div>
+      )}
+
+      {/* ── 3.5 LEVEL SCORING — BIGGER COURT ── */}
       <Sec icon="🏀" title="3.5 Level Scoring" sub="Shot distribution, accuracy, and volume across all scoring zones">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Court Visualization */}
-          <div className="md:col-span-2 relative mx-auto" style={{maxWidth:420,aspectRatio:"1/0.85"}}>
-            <svg viewBox="0 0 420 357" className="w-full h-full">
-              <rect x="0" y="0" width="420" height="357" rx="8" fill="#0d1117"/>
-              <line x1="10" y1="10" x2="410" y2="10" stroke="#1f2937" strokeWidth="2"/>
-              <path d="M 47 10 L 47 85 A 170 170 0 0 0 373 85 L 373 10" fill="none" stroke="#3b82f688" strokeWidth="2"/>
-              <rect x="130" y="10" width="160" height="190" fill="none" stroke="#1f2937" strokeWidth="1.5" rx="2"/>
-              <circle cx="210" cy="200" r="60" fill="none" stroke="#1f293766" strokeWidth="1"/>
-              <line x1="130" y1="200" x2="290" y2="200" stroke="#8b5cf644" strokeWidth="1.5" strokeDasharray="6,3"/>
-              <circle cx="210" cy="42" r="18" fill="none" stroke="#ef444466" strokeWidth="2"/>
-              <line x1="190" y1="22" x2="230" y2="22" stroke="#6b7280" strokeWidth="3"/>
-              {/* Dunk zone (right of rim) */}
-              <g opacity={zoneOpacity(p.dunkR||0)}>
-                <text x="290" y="55" textAnchor="middle" fill="#ef4444" style={{fontSize:11,fontWeight:"bold"}}>DUNKS</text>
-                <text x="290" y="75" textAnchor="middle" fill="#e5e7eb" style={{fontSize:16,fontWeight:"bold"}}>{fmt(p.dunkR)}%</text>
-                <text x="290" y="88" textAnchor="middle" fill="#6b7280" style={{fontSize:10}}>of shots</text>
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
+          {/* Court Visualization — MUCH BIGGER */}
+          <div className="lg:col-span-3 relative mx-auto w-full" style={{maxWidth:580}}>
+            <svg viewBox="0 0 580 480" className="w-full" style={{minHeight:380}}>
+              {/* Background */}
+              <rect x="0" y="0" width="580" height="480" rx="12" fill="#0d1117"/>
+
+              {/* Court lines */}
+              <line x1="15" y1="15" x2="565" y2="15" stroke="#1f2937" strokeWidth="2.5"/>
+              {/* 3-point arc */}
+              <path d="M 62 15 L 62 110 A 235 235 0 0 0 518 110 L 518 15" fill="none" stroke="#3b82f644" strokeWidth="2.5"/>
+              {/* Paint */}
+              <rect x="175" y="15" width="230" height="260" fill="none" stroke="#1f2937" strokeWidth="2" rx="3"/>
+              {/* FT circle */}
+              <circle cx="290" cy="275" r="78" fill="none" stroke="#1f293744" strokeWidth="1.5"/>
+              {/* FT line */}
+              <line x1="175" y1="275" x2="405" y2="275" stroke="#8b5cf644" strokeWidth="2" strokeDasharray="8,4"/>
+              {/* Rim */}
+              <circle cx="290" cy="55" r="24" fill="none" stroke="#ef444466" strokeWidth="2.5"/>
+              <line x1="264" y1="28" x2="316" y2="28" stroke="#6b7280" strokeWidth="4"/>
+
+              {/* ── DUNK ZONE (right of rim) ── */}
+              <g opacity={zoneOpacity(dunkR, hasDunkData)}>
+                <text x="400" y="55" textAnchor="middle" fill="#ef4444" style={{fontSize:13,fontWeight:"bold",letterSpacing:"0.5px"}}>DUNKS</text>
+                <text x="400" y="82" textAnchor="middle" fill="#e5e7eb" style={{fontSize:22,fontWeight:"bold"}}>{hasDunkData ? `${fmt(dunkR)}%` : "N/A"}</text>
+                <text x="400" y="98" textAnchor="middle" fill="#6b7280" style={{fontSize:11}}>{hasDunkData ? "of shots" : "no tracking"}</text>
               </g>
-              {/* @Rim zone (left of rim) */}
-              <g opacity={zoneOpacity(p.rimF||0)}>
-                <text x="130" y="55" textAnchor="middle" fill="#f97316" style={{fontSize:11,fontWeight:"bold"}}>@RIM</text>
-                <text x="130" y="75" textAnchor="middle" fill="#e5e7eb" style={{fontSize:18,fontWeight:"bold"}}>{fmt(p.rimPct)}%</text>
-                <text x="130" y="90" textAnchor="middle" fill="#6b7280" style={{fontSize:10}}>{p.rimF}% freq</text>
+
+              {/* ── @RIM ZONE (left of rim) ── */}
+              <g opacity={zoneOpacity(rimF, hasRimData)}>
+                <text x="175" y="55" textAnchor="middle" fill="#f97316" style={{fontSize:13,fontWeight:"bold",letterSpacing:"0.5px"}}>@RIM</text>
+                <text x="175" y="85" textAnchor="middle" fill={shotColor(rimPct,"rim")} style={{fontSize:26,fontWeight:"bold"}}>{rimPct != null ? `${fmt(rimPct)}%` : "N/A"}</text>
+                <text x="175" y="104" textAnchor="middle" fill="#6b7280" style={{fontSize:12}}>{hasRimData ? `${fmt(rimF)}% freq` : "no tracking"}</text>
               </g>
-              {/* FT zone */}
+
+              {/* ── FT ZONE (center paint) ── */}
               <g>
-                <text x="210" y="185" textAnchor="middle" fill="#8b5cf6" style={{fontSize:12,fontWeight:"bold"}}>FREE THROW</text>
-                <text x="210" y="216" textAnchor="middle" fill="#e5e7eb" style={{fontSize:18,fontWeight:"bold"}}>{fmt(p.ft)}%</text>
-                <text x="210" y="232" textAnchor="middle" fill="#6b7280" style={{fontSize:11}}>FTR: {fmt(p.ftr)}</text>
+                <text x="290" y="244" textAnchor="middle" fill="#8b5cf6" style={{fontSize:14,fontWeight:"bold",letterSpacing:"0.5px"}}>FREE THROW</text>
+                <text x="290" y="278" textAnchor="middle" fill={shotColor(ft,"ft")} style={{fontSize:28,fontWeight:"bold"}}>{ft != null ? `${fmt(ft)}%` : "—"}</text>
+                <text x="290" y="298" textAnchor="middle" fill="#6b7280" style={{fontSize:13}}>FTR: {ftr != null ? fmt(ftr) : "—"}</text>
               </g>
-              {/* Mid zone */}
-              <g opacity={zoneOpacity(p.midF||0)}>
-                <text x="85" y="145" textAnchor="middle" fill="#fbbf24" style={{fontSize:12,fontWeight:"bold"}}>MID</text>
-                <text x="85" y="168" textAnchor="middle" fill="#e5e7eb" style={{fontSize:18,fontWeight:"bold"}}>{fmt(p.midPct)}%</text>
-                <text x="85" y="183" textAnchor="middle" fill="#6b7280" style={{fontSize:10}}>{p.midF}% freq</text>
+
+              {/* ── MID ZONE (left side paint) ── */}
+              <g opacity={zoneOpacity(midF, hasMidData)}>
+                <text x="100" y="185" textAnchor="middle" fill="#fbbf24" style={{fontSize:14,fontWeight:"bold",letterSpacing:"0.5px"}}>MID</text>
+                <text x="100" y="215" textAnchor="middle" fill={shotColor(midPct,"mid")} style={{fontSize:26,fontWeight:"bold"}}>{midPct != null ? `${fmt(midPct)}%` : "N/A"}</text>
+                <text x="100" y="234" textAnchor="middle" fill="#6b7280" style={{fontSize:12}}>{hasMidData ? `${fmt(midF)}% freq` : "no tracking"}</text>
               </g>
-              {/* 3PT zone */}
-              <g opacity={zoneOpacity(p.threeF||0)}>
-                <text x="210" y="295" textAnchor="middle" fill="#3b82f6" style={{fontSize:14,fontWeight:"bold"}}>3-POINT</text>
-                <text x="210" y="322" textAnchor="middle" fill="#e5e7eb" style={{fontSize:22,fontWeight:"bold"}}>{fmt(p.tp)}%</text>
-                <text x="210" y="340" textAnchor="middle" fill="#6b7280" style={{fontSize:11}}>{p.threeF}% freq</text>
+
+              {/* ── 3PT ZONE (beyond arc) ── */}
+              <g opacity={zoneOpacity(threeF, tp != null)}>
+                <text x="290" y="385" textAnchor="middle" fill="#3b82f6" style={{fontSize:18,fontWeight:"bold",letterSpacing:"1px"}}>3-POINT</text>
+                <text x="290" y="420" textAnchor="middle" fill={shotColor(tp,"3pt")} style={{fontSize:34,fontWeight:"bold"}}>{tp != null ? `${fmt(tp)}%` : "—"}</text>
+                <text x="290" y="445" textAnchor="middle" fill="#6b7280" style={{fontSize:14}}>{threeF != null ? `${fmt(threeF)}% freq` : ""}</text>
+              </g>
+
+              {/* ── FG% in corner ── */}
+              <g>
+                <text x="510" y="200" textAnchor="middle" fill="#6b7280" style={{fontSize:11}}>Overall</text>
+                <text x="510" y="222" textAnchor="middle" fill="#9ca3af" style={{fontSize:18,fontWeight:"bold"}}>FG% {fg != null ? fmt(fg) : "—"}</text>
+                <text x="510" y="242" textAnchor="middle" fill="#6b7280" style={{fontSize:11}}>TS% {ts != null ? fmt(ts) : "—"}</text>
               </g>
             </svg>
           </div>
-          {/* Shot Mix bar chart */}
-          <div>
-            <div className="text-xs uppercase tracking-wider mb-3" style={{color:"#6b7280"}}>Shot Mix (Frequency)</div>
-            {shotMix.map(z=>(
-              <div key={z.zone} className="mb-3">
-                <div className="flex justify-between text-xs mb-1">
-                  <span style={{color:z.color}}>{z.zone}</span>
-                  <span style={{color:"#9ca3af"}}>{fmt(z.freq,0)}%</span>
-                </div>
-                <div className="h-5 rounded-full overflow-hidden" style={{background:"#1f2937"}}>
-                  <div className="h-full rounded-full" style={{width:`${z.freq}%`,background:`linear-gradient(90deg,${z.color}88,${z.color})`}}/>
+
+          {/* ── SHOT DISTRIBUTION LEVEL BARS ── */}
+          <div className="lg:col-span-2">
+            <div className="text-xs uppercase tracking-wider mb-3 font-semibold" style={{color:"#6b7280"}}>Shot Distribution by Level</div>
+
+            {totalFreq > 0 ? (
+              <div className="space-y-3">
+                {shotLevels.map(z => {
+                  const barWidth = Math.max(4, (z.freq / Math.max(1, ...shotLevels.map(s=>s.freq))) * 100);
+                  return (
+                    <div key={z.level}>
+                      <div className="flex justify-between items-baseline mb-1">
+                        <span className="text-xs font-semibold" style={{color:z.color}}>{z.level}</span>
+                        <div className="flex items-baseline gap-2">
+                          {z.pct != null && <span className="text-xs font-bold" style={{color:z.color}}>{fmt(z.pct)}%</span>}
+                          <span className="text-xs" style={{color:"#6b7280"}}>{fmt(z.freq,0)}% freq</span>
+                        </div>
+                      </div>
+                      <div className="h-7 rounded-lg overflow-hidden relative" style={{background:"#1f2937"}}>
+                        <div className="h-full rounded-lg flex items-center pl-2" style={{width:`${barWidth}%`,background:`linear-gradient(90deg,${z.color}66,${z.color})`}}>
+                          {z.freq > 12 && <span className="text-xs font-bold text-white">{fmt(z.freq,0)}%</span>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {/* Total stacked summary */}
+                <div className="mt-3 pt-3" style={{borderTop:"1px solid #1f2937"}}>
+                  <div className="text-xs mb-2" style={{color:"#6b7280"}}>Shot Mix (stacked)</div>
+                  <div className="h-8 rounded-lg overflow-hidden flex" style={{background:"#1f2937"}}>
+                    {shotLevels.map(z => (
+                      <Tip key={z.level} content={<div><span style={{color:z.color}}>{z.level}</span>: {fmt(z.freq,0)}% of shots{z.pct != null ? ` at ${fmt(z.pct)}%` : ""}</div>}>
+                        <div className="h-full flex items-center justify-center cursor-help" style={{width:`${(z.freq/totalFreq)*100}%`,background:z.color,minWidth:z.freq>3?20:4}}>
+                          {z.freq > 8 && <span className="text-xs font-bold text-white" style={{textShadow:"0 1px 2px rgba(0,0,0,0.5)"}}>{fmt(z.freq,0)}</span>}
+                        </div>
+                      </Tip>
+                    ))}
+                  </div>
                 </div>
               </div>
-            ))}
-            <div className="mt-4 text-xs" style={{color:"#6b7280"}}>
+            ) : (
+              <div className="py-6 text-center rounded-lg" style={{background:"#0d1117",color:"#6b7280"}}>
+                <div className="text-sm mb-1">No shot distribution data</div>
+                <div className="text-xs">International leagues typically don't track shot-type frequencies. FT%, 3P%, and FG% shown on court.</div>
+              </div>
+            )}
+
+            {/* Self-Creation */}
+            <div className="mt-4 p-3 rounded-lg" style={{background:"#0d1117"}}>
               <Tip content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>{METHODS.selfCreation.name}</div><code className="text-xs" style={{color:"#7dd3fc"}}>{METHODS.selfCreation.formula}</code><div className="mt-1" style={{color:"#cbd5e1"}}>{METHODS.selfCreation.desc}</div></div>}>
-                <span>Self-Creation: <span className="font-bold" style={{color:"#f97316"}}>{p.selfCreation} <span style={{color:"#475569"}}>ⓘ</span></span></span>
+                <div className="flex justify-between items-center cursor-help">
+                  <span className="text-xs" style={{color:"#6b7280"}}>Self-Creation Index <span style={{color:"#475569"}}>ⓘ</span></span>
+                  <span className="font-bold text-lg" style={{color:"#f97316",fontFamily:"'Oswald',sans-serif"}}>{selfCreation}</span>
+                </div>
               </Tip>
             </div>
           </div>
         </div>
       </Sec>
 
-      {/* NBA Shooting Projection */}
-      <Sec icon="🔮" title="NBA Shooting Projection">
+      {/* ── NBA SHOOTING PROJECTION ── */}
+      <Sec icon="🔮" title="NBA Shooting Projection" sub={isIntl ? "Computed from Bayesian priors (FT%-based motor touch) — no college shot-tracking available" : "Bayesian Beta-Binomial model (Berger 2022)"}>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-          {[["projNba3p","Proj. 3P%",p.projNba3p,p.projNba3p>36?"#22c55e":p.projNba3p>32?"#fbbf24":"#ef4444"],
-            ["projNba3pa","Proj. 3PA/G",p.projNba3pa,p.projNba3pa>5?"#3b82f6":"#6b7280"],
-            ["projNba3par","Proj. 3PAr",p.projNba3par,p.projNba3par>30?"#3b82f6":"#6b7280"],
-            ["touchPrior","Touch Prior",touchPrior,touchPrior>37?"#22c55e":touchPrior>34?"#fbbf24":"#ef4444"],
+          {[
+            ["projNba3p","Proj. 3P%", projNba3p, projNba3p != null ? (projNba3p > 36 ? "#22c55e" : projNba3p > 32 ? "#fbbf24" : "#ef4444") : "#6b7280"],
+            ["projNba3pa","Proj. 3PA/G", projNba3pa, projNba3pa != null ? (projNba3pa > 5 ? "#3b82f6" : "#6b7280") : "#6b7280"],
+            ["projNba3par","Proj. 3PAr", proj3PAr, proj3PAr != null ? (proj3PAr > 30 ? "#3b82f6" : "#6b7280") : "#6b7280"],
+            ["touchPrior","Touch Prior", touchPrior, touchPrior > 37 ? "#22c55e" : touchPrior > 34 ? "#fbbf24" : "#ef4444"],
           ].map(([key,l,v,c])=>{
             const m = METHODS[key] || METHODS.touchPrior;
             return (
@@ -618,22 +916,28 @@ function ShootingTab({p}) {
               }>
                 <div className="rounded-lg p-4 text-center cursor-help" style={{background:"#0d1117"}}>
                   <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#6b7280"}}>{l} <span style={{color:"#475569"}}>ⓘ</span></div>
-                  <div className="text-3xl font-bold" style={{color:c,fontFamily:"'Oswald',sans-serif"}}>{fmt(v)}{key==="touchPrior"?"%":""}</div>
+                  <div className="text-3xl font-bold" style={{color:c,fontFamily:"'Oswald',sans-serif"}}>{v != null ? fmt(v) : "—"}{key==="touchPrior"?"%":""}</div>
+                  {v == null && <div className="text-xs mt-1" style={{color:"#475569"}}>insufficient data</div>}
                 </div>
               </Tip>
             );
           })}
         </div>
+
         {/* Prior transparency */}
         <div className="px-3 py-2 rounded-lg text-xs" style={{background:"#0d1117",border:"1px solid #1e293b"}}>
-          <Tip wide content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>Bayesian Beta-Binomial (Berger 2022)</div><div style={{color:"#cbd5e1"}}>The prior encodes motor "touch" — neuromuscular consistency predicting NBA shooting. A player with 85% FT + 28% 3P has vastly more latent 3P potential than one with 65% FT + 35% 3P. κ=200 pseudo-attempts: more 3PA → less prior influence.</div></div>}>
-            <span style={{color:"#6b7280"}}>Touch Prior breakdown: FT% (<span style={{color:"#8b5cf6"}}>{fmt(p.ft)}</span>) × 0.18 + Mid% (<span style={{color:"#fbbf24"}}>{fmt(p.midPct)}</span>) × 0.05 + 0.20 = <span className="font-bold" style={{color:touchPrior>37?"#22c55e":"#fbbf24"}}>{fmt(touchPrior)}%</span> <span style={{color:"#475569"}}>ⓘ</span></span>
+          <Tip wide content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>Bayesian Beta-Binomial (Berger 2022)</div><div style={{color:"#cbd5e1"}}>The prior encodes motor "touch" — neuromuscular consistency predicting NBA shooting. A player with 85% FT + 28% 3P has vastly more latent 3P potential than one with 65% FT + 35% 3P. kappa=200 pseudo-attempts: more 3PA = less prior influence.</div></div>}>
+            <span style={{color:"#6b7280"}}>Touch Prior: FT% (<span style={{color:"#8b5cf6"}}>{ft != null ? fmt(ft) : "—"}</span>) x 0.18 + Mid% (<span style={{color:"#fbbf24"}}>{midPct != null ? fmt(midPct) : `~${fmt(midPctForPrior)} est`}</span>) x 0.05 + 0.20 = <span className="font-bold" style={{color:touchPrior>37?"#22c55e":"#fbbf24"}}>{fmt(touchPrior)}%</span> <span style={{color:"#475569"}}>ⓘ</span></span>
           </Tip>
         </div>
+
+        {/* Reference stats */}
         <div className="mt-2 flex flex-wrap gap-3 text-xs" style={{color:"#6b7280"}}>
-          <span>Self-Creation: <span style={{color:"#f97316"}}>{p.selfCreation}</span></span>
-          <span>FG%: <span style={{color:"#e5e7eb"}}>{fmt(p.fg)}</span></span>
-          <span>TS%: <span style={{color:"#e5e7eb"}}>{fmt(p.ts)}</span></span>
+          <span>Self-Creation: <span style={{color:"#f97316"}}>{selfCreation}</span></span>
+          <span>FG%: <span style={{color:"#e5e7eb"}}>{fg != null ? fmt(fg) : "—"}</span></span>
+          <span>TS%: <span style={{color:"#e5e7eb"}}>{ts != null ? fmt(ts) : "—"}</span></span>
+          {efg != null && <span>eFG%: <span style={{color:"#e5e7eb"}}>{fmt(efg)}</span></span>}
+          {isIntl && <span className="px-2 py-0.5 rounded" style={{background:"#3b82f622",color:"#60a5fa"}}>Intl Data</span>}
         </div>
       </Sec>
     </div>
@@ -795,10 +1099,11 @@ function ProjectionTab({p}) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// TAB: SCOUTING (Pillars + Roles + Archetypes + Four Factors + Badges)
+// TAB: SCOUTING (Pillars + Roles + Archetypes + Possession Impact + Full Badges)
 // ═══════════════════════════════════════════════════════════
 function ScoutingTab({p}) {
   const badges = useMemo(() => computeBadges(p), [p]);
+  const allBadges = [...badges.green, ...badges.yellow, ...badges.red];
 
   // ── Pillar Scores ──
   const pillars = [
@@ -836,17 +1141,81 @@ function ScoutingTab({p}) {
 
   // ── Archetype ──
   const archetype = p.archetype || "Unknown";
+  const ARCHETYPE_MAP = {
+    "Helio-Centric Engine":  {desc:"Ball-dominant offensive engine. The offense runs through this player.",color:"#fbbf24"},
+    "Primary Initiator":     {desc:"Lead playmaker who creates for others. Half-court orchestrator.",color:"#f97316"},
+    "Scoring Combo Guard":   {desc:"Versatile scoring guard. Can play on/off-ball with shooting.",color:"#22c55e"},
+    "3&D Wing":              {desc:"Shoot and defend. The most valuable role player archetype in the NBA.",color:"#3b82f6"},
+    "Versatile Forward":     {desc:"Multi-positional forward. Defends, shoots, and connects plays.",color:"#8b5cf6"},
+    "Point Forward":         {desc:"Oversized playmaker. Creates mismatches with size + passing.",color:"#06b6d4"},
+    "Stretch Big":           {desc:"Shooting big who spaces the floor. Gravity from the 5 position.",color:"#10b981"},
+    "Rim-Running Big":       {desc:"Vertical threat. Finishes lobs, protects the rim, boards.",color:"#ef4444"},
+    "Two-Way Anchor":        {desc:"Defensive anchor with offensive polish. Anchors playoff rotations.",color:"#60a5fa"},
+    "Micro-Ball 5":          {desc:"Undersized center who defends with IQ. Switching specialist.",color:"#a78bfa"},
+    "Shot Creator":          {desc:"Can generate own shot off the dribble. Self-creation specialist.",color:"#fb923c"},
+    "Athletic Slasher":      {desc:"Attacks the rim with explosiveness. Transition weapon.",color:"#f43f5e"},
+  };
+  const allArchetypes = Object.entries(ARCHETYPE_MAP);
 
-  // ── Four Factors / Possession Impact ──
+  // ── Four Factors / Possession Impact & Carefree Playability ──
+  // Convert percentiles to Z-scores for bidirectional display
+  const ffEfg = p.ff?.efg ?? 50;
+  const ffTov = p.ff?.tov ?? 50;
+  const ffOrb = p.ff?.orb ?? 50;
+  const ffFtr = p.ff?.ftr ?? 50;
   const npv = p.ff?.comp ?? 50;
-  const npvLabel = npv > 70 ? "Elite Floor Raiser" : npv > 55 ? "Winning Piece" : npv > 40 ? "Role Dependent" : "High Maintenance";
-  const npvColor = npv > 70 ? "#22c55e" : npv > 55 ? "#86efac" : npv > 40 ? "#fbbf24" : "#ef4444";
+
+  // Convert percentile (0-100) to Z-score (-3 to +3) for bar display
+  const pToZ = (pctl) => {
+    if (pctl == null) return 0;
+    return Math.max(-3, Math.min(3, (pctl - 50) / 16.67));
+  };
+
+  const ffFactors = [
+    {key:"efg",label:"Shot Quality (eFG%)",z:pToZ(ffEfg),pctl:ffEfg,weight:"40%",color:"#fbbf24",
+     desc:"Shooting efficiency adjusted for 3-point value. Positive = better than role-peers. Negative = below-average efficiency."},
+    {key:"tov",label:"Ball Security (TO%)",z:pToZ(ffTov),pctl:ffTov,weight:"25%",color:"#3b82f6",
+     desc:"Turnover control inverted: positive = fewer turnovers than peers. This factor rewards careful ball-handlers."},
+    {key:"orb",label:"Extra Possessions (ORB%)",z:pToZ(ffOrb),pctl:ffOrb,weight:"20%",color:"#06b6d4",
+     desc:"Offensive rebounding creates second-chance points. Positive = elite glass work for their role."},
+    {key:"ftr",label:"Foul Pressure (FTr)",z:pToZ(ffFtr),pctl:ffFtr,weight:"15%",color:"#8b5cf6",
+     desc:"Drawing fouls generates free points and creates foul trouble. Positive = aggressive rim attacker."},
+  ];
+
+  const npvZ = pToZ(npv);
+  const npvLabel = npvZ >= 1.2 ? "Elite Floor Raiser" : npvZ >= 0.3 ? "Winning Piece" : npvZ >= -0.3 ? "Role Dependent" : "High Maintenance";
+  const npvColor = npvZ >= 1.2 ? "#22c55e" : npvZ >= 0.3 ? "#86efac" : npvZ >= -0.3 ? "#fbbf24" : "#ef4444";
+  const npvDesc = npvZ >= 1.2
+    ? "Makes every team immediately more stable and efficient. Every possession is protected and optimized."
+    : npvZ >= 0.3
+    ? "Highly efficient contributor who avoids costly mistakes. A reliable building block for any roster."
+    : npvZ >= -0.3
+    ? "Gets the job done within structure, but needs a system around him. Neither helps nor hurts possession math."
+    : "Consumes more possessions than he generates value. High talent may compensate, but it's expensive for coaches.";
 
   return (
     <div className="space-y-5">
+      {/* ── BADGES (ALL — no limit on scouting page) ────── */}
+      <Sec icon="🏅" title="Skill Badges" sub="Computed from stats with international adjustments. Hover each badge for trigger rules and scouting context.">
+        {p.source !== "ncaa" && <div className="mb-3 px-3 py-1.5 rounded-lg inline-block text-xs" style={{background:"#3b82f622",color:"#60a5fa",border:"1px solid #3b82f644"}}>International Adjuster Active: Stats scaled x1.25, STL%/BLK% x1.15 for badge evaluation</div>}
+        {badges.red.length > 0 && <>
+          <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#ef4444"}}>⚠ Red Flags ({badges.red.length})</div>
+          <div className="flex flex-wrap gap-2 mb-4">{badges.red.map((f,i)=><BadgeChip key={`r${i}`} text={f} color="#ef4444"/>)}</div>
+        </>}
+        {badges.green.length > 0 && <>
+          <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#22c55e"}}>✓ Green Flags ({badges.green.length})</div>
+          <div className="flex flex-wrap gap-2 mb-4">{badges.green.map((b,i)=><BadgeChip key={`g${i}`} text={b} color="#22c55e"/>)}</div>
+        </>}
+        {badges.yellow.length > 0 && <>
+          <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#fbbf24"}}>⚡ Swing Skills ({badges.yellow.length})</div>
+          <div className="flex flex-wrap gap-2 mb-4">{badges.yellow.map((b,i)=><BadgeChip key={`y${i}`} text={b} color="#fbbf24"/>)}</div>
+        </>}
+        {allBadges.length === 0 && <div className="text-sm" style={{color:"#6b7280"}}>No badges earned — average or data-insufficient profile.</div>}
+      </Sec>
+
       {/* ── PILLARS (5 DNA scores) ─────────────────────── */}
       <Sec icon="🔬" title="The 5 Pillars" sub="Prospect DNA — position-adjusted percentile scores (0-100)">
-        {p.source !== "ncaa" && <div className="mb-3 px-3 py-1.5 rounded-lg inline-block text-xs" style={{background:"#3b82f622",color:"#60a5fa",border:"1px solid #3b82f644"}}>League-Adjusted (×1.25 for international stats)</div>}
+        {p.source !== "ncaa" && <div className="mb-3 px-3 py-1.5 rounded-lg inline-block text-xs" style={{background:"#3b82f622",color:"#60a5fa",border:"1px solid #3b82f644"}}>League-Adjusted (x1.25 for international stats)</div>}
         <div className="grid grid-cols-5 gap-3">
           {pillars.map(pl=>(
             <Tip key={pl.key} wide content={
@@ -867,8 +1236,80 @@ function ScoutingTab({p}) {
         </div>
       </Sec>
 
+      {/* ── POSSESSION IMPACT & CAREFREE PLAYABILITY ────── */}
+      <Sec icon="↗" title="Possession Impact & Carefree Playability" sub="">
+        <Tip wide content={
+          <div>
+            <div className="font-bold mb-1" style={{color:"#f97316"}}>{METHODS.fourFactors.name}</div>
+            <div className="mb-1"><span style={{color:"#94a3b8"}}>Formula:</span><br/><code className="text-xs" style={{color:"#7dd3fc"}}>{METHODS.fourFactors.formula}</code></div>
+            <div style={{color:"#cbd5e1"}}>{METHODS.fourFactors.desc}</div>
+          </div>
+        }>
+          <div className="text-xs mb-4 cursor-help" style={{color:"#6b7280"}}>
+            The NPV is not a talent rating — it's an efficiency index measuring how 'expensive' it is for a coach to keep this player on the floor. <span style={{color:"#475569"}}>ⓘ hover for formula</span>
+          </div>
+        </Tip>
+
+        {/* Central NPV card */}
+        <div className="flex items-center gap-4 mb-5 p-5 rounded-xl" style={{background:"#0d1117",border:`1px solid ${npvColor}33`}}>
+          <div className="flex-1">
+            <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#6b7280"}}>Net Possession Value</div>
+            <div className="text-4xl font-bold" style={{color:npvColor,fontFamily:"'Oswald',sans-serif"}}>{Math.round(npv)}</div>
+          </div>
+          <div className="text-right">
+            <div className="px-4 py-2 rounded-lg text-sm font-bold mb-1" style={{background:npvColor+"22",color:npvColor,border:`1px solid ${npvColor}44`}}>{npvLabel}</div>
+            <div className="text-xs max-w-xs" style={{color:"#6b7280"}}>{npvDesc}</div>
+          </div>
+          {p.cffr?.usageRole && <div className="ml-auto text-xs text-right" style={{color:"#6b7280"}}>Usage Role:<br/><span className="font-semibold" style={{color:"#f97316"}}>{p.cffr.usageRole}</span></div>}
+        </div>
+
+        {/* Bidirectional Z-Score Bars ("Why" bars) */}
+        <div className="text-xs uppercase tracking-wider mb-3 font-semibold" style={{color:"#6b7280"}}>Factor Breakdown</div>
+        <div className="space-y-3">
+          {ffFactors.map(f => {
+            const barPct = Math.abs(f.z) / 3 * 50; // 50% = max extent from center
+            const isPositive = f.z >= 0;
+            return (
+              <Tip key={f.key} content={<div><div className="font-bold mb-1" style={{color:f.color}}>{f.label}</div><div className="mb-1 text-xs" style={{color:"#94a3b8"}}>Weight: {f.weight}</div><div style={{color:"#cbd5e1"}}>{f.desc}</div></div>}>
+                <div className="cursor-help">
+                  <div className="flex justify-between items-center mb-1">
+                    <div className="text-xs font-semibold" style={{color:f.color}}>{f.label} <span style={{color:"#475569"}}>ⓘ</span></div>
+                    <div className="text-xs" style={{color:"#6b7280"}}>Wt: {f.weight}</div>
+                  </div>
+                  <div className="relative h-6 rounded-full overflow-hidden" style={{background:"#1f2937"}}>
+                    {/* Center line */}
+                    <div className="absolute top-0 bottom-0 w-px z-10" style={{left:"50%",background:"#ffffff44"}}/>
+                    {/* Bar extending from center */}
+                    {isPositive ? (
+                      <div className="absolute top-0 bottom-0 rounded-r-full" style={{
+                        left:"50%",width:`${barPct}%`,
+                        background:`linear-gradient(90deg,${f.color}66,${f.color})`
+                      }}/>
+                    ) : (
+                      <div className="absolute top-0 bottom-0 rounded-l-full" style={{
+                        right:"50%",width:`${barPct}%`,
+                        background:`linear-gradient(270deg,${f.color}66,${f.color})`
+                      }}/>
+                    )}
+                    {/* Labels on bar */}
+                    <div className="absolute inset-0 flex items-center justify-between px-3 text-xs font-semibold" style={{color:"#9ca3af"}}>
+                      <span style={{fontSize:9}}>- Drain</span>
+                      <span style={{fontSize:9}}>+ Impact</span>
+                    </div>
+                  </div>
+                  <div className="flex justify-between mt-0.5">
+                    <div className="text-xs" style={{color:f.z >= 0 ? f.color : "#ef4444"}}>{f.z > 0 ? "+" : ""}{f.z.toFixed(1)}σ</div>
+                    <div className="text-xs" style={{color:"#475569"}}>Pctl: {Math.round(f.pctl)}</div>
+                  </div>
+                </div>
+              </Tip>
+            );
+          })}
+        </div>
+      </Sec>
+
       {/* ── ROLE INFERENCE MATRIX ─────────────────────── */}
-      <Sec icon="📊" title="Role Inference Matrix" sub="Z-scores: ≥+2.0 = Elite, ≥+1.0 = Impact, <-1.0 = Liability">
+      <Sec icon="📊" title="Role Inference Matrix" sub="Z-scores: >=+2.0 = Elite, >=+1.0 = Impact, <-1.0 = Liability">
         {roleGroups.map(grp=>(
           <div key={grp.label} className="mb-4">
             <div className="text-xs uppercase tracking-widest font-bold mb-2" style={{color:grp.color}}>{grp.label}</div>
@@ -885,246 +1326,354 @@ function ScoutingTab({p}) {
         ))}
       </Sec>
 
-      {/* ── ARCHETYPE ─────────────────────────────────── */}
-      <Sec icon="🏷" title="NBA Archetype" sub="Best-fit NBA player template based on pillar + role combination">
-        <div className="rounded-xl p-5 text-center" style={{background:"#0d1117",border:"1px solid #f9731644"}}>
-          <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#6b7280"}}>Primary Archetype</div>
-          <div className="text-2xl font-bold" style={{color:"#f97316",fontFamily:"'Oswald',sans-serif"}}>{archetype}</div>
-          {p.roleVersatility!=null&&<div className="text-xs mt-2" style={{color:"#475569"}}>Role Versatility: {Math.round(p.roleVersatility)}/100</div>}
-        </div>
-      </Sec>
-
-      {/* ── FOUR FACTORS / POSSESSION IMPACT ─────────── */}
-      <Sec icon="↗" title="Possession Impact & Carefree Playability" sub="">
-        <Tip wide content={
-          <div>
-            <div className="font-bold mb-1" style={{color:"#f97316"}}>{METHODS.fourFactors.name}</div>
-            <div className="mb-1"><span style={{color:"#94a3b8"}}>Formula:</span><br/><code className="text-xs" style={{color:"#7dd3fc"}}>{METHODS.fourFactors.formula}</code></div>
-            <div style={{color:"#cbd5e1"}}>{METHODS.fourFactors.desc}</div>
-          </div>
-        }>
-          <div className="text-xs mb-4 cursor-help" style={{color:"#6b7280"}}>The NPV is not a talent rating — it's an efficiency index measuring how 'expensive' it is for a coach to keep this player on the floor. <span style={{color:"#475569"}}>ⓘ hover for formula</span></div>
-        </Tip>
-        <div className="flex items-center gap-4 mb-4 p-4 rounded-xl" style={{background:"#0d1117",border:`1px solid ${npvColor}33`}}>
-          <div>
-            <div className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Net Possession Value</div>
-            <div className="text-3xl font-bold" style={{color:npvColor,fontFamily:"'Oswald',sans-serif"}}>{Math.round(npv)}</div>
-          </div>
-          <div className="px-3 py-1.5 rounded-lg text-sm font-semibold" style={{background:npvColor+"22",color:npvColor,border:`1px solid ${npvColor}44`}}>{npvLabel}</div>
-          {p.cffr?.usageRole && <div className="ml-auto text-xs" style={{color:"#6b7280"}}>Usage Role: <span style={{color:"#f97316"}}>{p.cffr.usageRole}</span></div>}
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[["eFG%","Shot Quality",p.ff.efg,"#fbbf24","40% weight — shooting efficiency adjusted for 3-point value"],
-            ["TO Control","Ball Security",p.ff.tov,"#3b82f6","25% weight — turnover rate (inverted: lower = better). Positive z-score = fewer turnovers than peers."],
-            ["ORB%","Extra Possessions",p.ff.orb,"#06b6d4","20% weight — offensive rebounding creates second-chance points."],
-            ["FT Rate","Foul Pressure",p.ff.ftr,"#8b5cf6","15% weight — drawing fouls generates free points and creates foul trouble."]
-          ].map(([l,d,v,c,desc])=>(
-            <Tip key={l} content={<div><div className="font-bold mb-1" style={{color:c}}>{l}</div><div style={{color:"#cbd5e1"}}>{desc}</div></div>}>
-              <div key={l} className="cursor-help">
-                <div className="text-sm font-semibold mb-1" style={{color:"#e5e7eb"}}>{l} <span style={{color:"#475569"}}>ⓘ</span></div>
-                <div className="text-xs mb-2" style={{color:"#6b7280"}}>{d}</div>
-                <HBar value={v} color={c} right={`${v}`}/>
-              </div>
-            </Tip>
-          ))}
-        </div>
-      </Sec>
-
-      {/* ── BADGES ─────────────────────────────────────── */}
-      <Sec icon="🏅" title="Skill Badges" sub="Green = elite NBA skills · Yellow = swing/potential · Red = warning signals. Max 5 displayed, red priority.">
-        {badges.green.length>0&&<>
-          <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#22c55e"}}>✓ Green Flags</div>
-          <div className="flex flex-wrap gap-2 mb-4">{badges.green.map((b,i)=><BadgeChip key={i} text={b} color="#22c55e"/>)}</div>
-        </>}
-        {badges.yellow?.length>0&&<>
-          <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#fbbf24"}}>⚡ Swing Skills</div>
-          <div className="flex flex-wrap gap-2 mb-4">{badges.yellow.map((b,i)=><BadgeChip key={i} text={b} color="#fbbf24"/>)}</div>
-        </>}
-        {badges.red.length>0&&<>
-          <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#ef4444"}}>⚠ Red Flags</div>
-          <div className="flex flex-wrap gap-2">{badges.red.map((f,i)=><BadgeChip key={i} text={f} color="#ef4444"/>)}</div>
-        </>}
-        {badges.green.length===0&&badges.red.length===0&&<div className="text-sm" style={{color:"#6b7280"}}>No badges earned — average or data-insufficient profile.</div>}
-      </Sec>
-
-      {/* ── BUST / SLEEPER ASSESSMENT ─────────────────── */}
-      <Sec icon="🎰" title="Bust / Sleeper Clusters" sub="Pattern-matched risk signals from historical data">
-        {(() => {
-          const busts=[], sleepers=[];
-          const bpm=p.bpm??0,usg=p.usg??0,stlP=p.stlP??0,blkP=p.blkP??0,ft=p.ft??0,astTov=p.astTov??0,dunkR=p.dunkR??0,rimF=p.rimF??0,threeF=p.threeF??0,ftr=p.ftr??0,htIn=p.htIn??78;
-          if (usg>25 && stlP<1.2 && blkP<1.0) busts.push({label:"Defensive Immobility",desc:"High usage but no defensive activity — can't guard in NBA."});
-          if ((dunkR>8||rimF>30) && ft<65 && astTov<0.9) busts.push({label:"Athletic / No Skill",desc:"High athleticism but poor touch and decisions."});
-          if (threeF>40 && ftr<20 && rimF<20) busts.push({label:"One-Dimensional Shooter",desc:"Only shoots threes without rim or FT pressure."});
-          if (bpm>8 && usg<20) sleepers.push({label:"Elite Connector Potential",desc:"Massive BPM at low usage — efficiency explodes in right role."});
-          if (ft>85 && (p.tp??34)<34) sleepers.push({label:"Shooting Breakout Risk",desc:"Elite FT% signals motor memory for 3P translation — current low 3P% is misleading."});
-          if (stlP>3.0 && htIn>79) sleepers.push({label:"Defensive Stopper Floor",desc:"Elite steal rate at large size creates instant defensive value."});
-          return (
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#ef4444"}}>⚠ Bust Clusters ({busts.length})</div>
-                {busts.length > 0 ? busts.map((b,i)=>(
-                  <div key={i} className="p-3 rounded-lg mb-2" style={{background:"#ef444411",border:"1px solid #ef444433"}}>
-                    <div className="text-xs font-semibold mb-0.5" style={{color:"#fca5a5"}}>{b.label}</div>
-                    <div className="text-xs" style={{color:"#94a3b8"}}>{b.desc}</div>
+      {/* ── ARCHETYPE (all 12 shown, primary highlighted) ─ */}
+      <Sec icon="🏷" title="NBA Archetype Fit" sub="All 12 archetypes — primary match highlighted. Based on pillar + role combination.">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+          {allArchetypes.map(([name, info]) => {
+            const isPrimary = archetype === name;
+            return (
+              <Tip key={name} content={<div><div className="font-bold mb-1" style={{color:info.color}}>{name}</div><div style={{color:"#cbd5e1"}}>{info.desc}</div></div>}>
+                <div className={`rounded-lg p-3 cursor-help transition-all ${isPrimary ? "ring-2" : ""}`}
+                  style={{
+                    background: isPrimary ? info.color + "18" : "#0d1117",
+                    border: `1px solid ${isPrimary ? info.color : "#1f2937"}`,
+                    ringColor: isPrimary ? info.color : "transparent",
+                    opacity: isPrimary ? 1 : 0.55,
+                  }}>
+                  <div className="flex items-center gap-2">
+                    {isPrimary && <span className="text-xs px-1.5 py-0.5 rounded font-bold" style={{background:info.color+"33",color:info.color}}>PRIMARY</span>}
+                    <div className="text-xs font-semibold truncate" style={{color: isPrimary ? info.color : "#9ca3af"}}>{name} <span style={{color:"#475569"}}>ⓘ</span></div>
                   </div>
-                )) : <div className="text-xs" style={{color:"#6b7280"}}>No bust signals detected.</div>}
-              </div>
-              <div>
-                <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#22c55e"}}>✦ Sleeper Signals ({sleepers.length})</div>
-                {sleepers.length > 0 ? sleepers.map((s,i)=>(
-                  <div key={i} className="p-3 rounded-lg mb-2" style={{background:"#22c55e11",border:"1px solid #22c55e33"}}>
-                    <div className="text-xs font-semibold mb-0.5" style={{color:"#86efac"}}>{s.label}</div>
-                    <div className="text-xs" style={{color:"#94a3b8"}}>{s.desc}</div>
-                  </div>
-                )) : <div className="text-xs" style={{color:"#6b7280"}}>No sleeper signals detected.</div>}
-              </div>
-            </div>
-          );
-        })()}
+                </div>
+              </Tip>
+            );
+          })}
+        </div>
+        {p.roleVersatility != null && (
+          <div className="mt-3 text-xs" style={{color:"#475569"}}>Role Versatility: <span className="font-semibold" style={{color:"#f97316"}}>{Math.round(p.roleVersatility)}/100</span></div>
+        )}
       </Sec>
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════
-// TAB: BODY (Anthropometric comps + proxy engine)
+// TAB: BODY (Physical Profile + Anthro Comps + Interactive Sliders)
 // ═══════════════════════════════════════════════════════════
 function BodyTab({p}) {
   const [wsAdj,setWsAdj]=useState(0);
   const [wtAdj,setWtAdj]=useState(0);
 
-  // Wingspan proxy
-  const apeIndex = p.pos==="Playmaker"?1.04:p.pos==="Big"?1.06:1.05;
-  const estimatedWs = p.ws || Math.round((p.htIn||78)*apeIndex*10)/10;
-  const isEstimated = !p.ws;
+  // ── Wingspan proxy (Ape Index by position) ──
+  const apeIndex = p.pos==="Playmaker" ? 1.04 : p.pos==="Big" ? 1.06 : 1.05;
+  const estimatedWs = p.ws || Math.round((p.htIn||78) * apeIndex * 10) / 10;
+  const isWsEstimated = !p.ws;
 
-  // BMI-based weight proxy
-  const htM = (p.htIn||78)*0.0254;
-  const posBmi = p.pos==="Playmaker"?23.5:p.pos==="Big"?26.5:24.8;
-  const estimatedWt = p.wt || Math.round(posBmi*htM*htM*2.205);
+  // ── BMI-based weight proxy ──
+  const htM = (p.htIn||78) * 0.0254;
+  const posBmi = p.pos==="Playmaker" ? 23.5 : p.pos==="Big" ? 26.5 : 24.8;
+  const estimatedWt = p.wt || Math.round(posBmi * htM * htM * 2.205);
   const isWtEstimated = !p.wt;
 
   const adjWs = estimatedWs + wsAdj;
   const adjWt = estimatedWt + wtAdj;
   const wsDelta = adjWs - (p.htIn||78);
+  const apeRatio = adjWs / (p.htIn||78);
 
-  // Labels
-  const wsLabel = wsDelta > 6 ? "Elite Length / Disruptor Frame" : wsDelta > 3 ? "Above Average Length" : wsDelta > 1 ? "Neutral Wingspan" : "Negative Wingspan / Tactical Limitations";
-  const wtLabel = adjWt > estimatedWt + 15 ? "High Strength / Power Build" : adjWt < estimatedWt - 15 ? "Slight Frame / Needs Development" : "Average Frame";
+  // ── Dynamic labels ──
+  const wsLabel = wsDelta > 6 ? "Elite Length / Disruptor Frame"
+    : wsDelta > 3 ? "Above Average Length"
+    : wsDelta > 1 ? "Neutral Wingspan"
+    : "Negative Wingspan / Tactical Limitations";
+  const wsLabelColor = wsDelta > 6 ? "#22c55e" : wsDelta > 3 ? "#86efac" : wsDelta > 1 ? "#6b7280" : "#ef4444";
 
-  // Dynamic anthro comps
-  const dynamicAnthro = useMemo(()=>{
-    return (p.anthroComps||[]).map(c=>{
-      const wtDiff=Math.abs((c.wt||0)-adjWt);
-      const wsDiff=Math.abs((c.ws||0)-adjWs);
-      const htDiff=Math.abs((c.ht||0)-(p.htIn||0));
-      const rawDist=Math.sqrt(htDiff*htDiff*0.6 + wtDiff*0.2*wtDiff*0.2 + wsDiff*0.2*wsDiff*0.2*1.5*1.5);
-      const sim=Math.max(0,Math.round((1-rawDist/25)*100));
-      return {...c,sim,rawDist};
-    }).sort((a,b)=>b.sim-a.sim).slice(0,10);
-  },[p,wsAdj,wtAdj]);
+  // Weight label relative to position median (not slider-adjusted base)
+  const posMedianWt = p.pos==="Playmaker" ? 190 : p.pos==="Big" ? 240 : 215;
+  const wtDeviation = adjWt - posMedianWt;
+  const wtLabel = wtDeviation > 15 ? "High Strength / Power Build"
+    : wtDeviation < -15 ? "Slight Frame / Needs Development"
+    : "Average Frame";
+  const wtLabelColor = wtDeviation > 15 ? "#22c55e" : wtDeviation < -15 ? "#ef4444" : "#6b7280";
+
+  // ── Combine data (if available) ──
+  const hasCombine = p.comb != null;
+
+  // ── Dynamic anthro comps (recomputed on slider change) ──
+  const dynamicAnthro = useMemo(() => {
+    return (p.anthroComps || []).map(c => {
+      const cHt = c.ht || (p.htIn || 78);
+      const cWt = c.wt || adjWt;
+      const cWs = c.ws || adjWs;
+
+      // Weighted Euclidean distance: Height 60%, Weight 20%, Wingspan 20%
+      const htDiff = (cHt - (p.htIn || 78));
+      const wtDiff = (cWt - adjWt) * 0.5;  // scale weight to comparable units
+      const wsDiff = (cWs - adjWs) * 1.5;  // wingspan differences matter more
+
+      const dist = Math.sqrt(
+        htDiff * htDiff * 0.6 +
+        wtDiff * wtDiff * 0.2 +
+        wsDiff * wsDiff * 0.2
+      );
+
+      // Similarity as 100% - distance%, capped at 0-100
+      const sim = Math.max(0, Math.min(100, Math.round(100 - dist * 4)));
+
+      // Physical deviation check (>10% different in any dimension)
+      const physWarn = Math.abs(htDiff) > (p.htIn||78) * 0.03 || // ~2.5" for a 78" player
+                       Math.abs(cWt - adjWt) > adjWt * 0.1 ||
+                       Math.abs(cWs - adjWs) > adjWs * 0.05;
+
+      return { ...c, sim, dist, physWarn };
+    }).sort((a, b) => b.sim - a.sim).slice(0, 10);
+  }, [p, wsAdj, wtAdj]);
+
+  // Height display
+  const htDisplay = p.ht || (p.htIn ? `${Math.floor(p.htIn/12)}'${p.htIn%12}"` : "—");
 
   return (
     <div className="space-y-5">
-      <Sec icon="📏" title="Physical Profile" sub={isEstimated?"Some measurements estimated from position averages (marked ≈)":""}>
+      {/* ── PHYSICAL PROFILE ── */}
+      <Sec icon="📏" title="Physical Profile" sub={isWsEstimated || isWtEstimated ? "Some measurements estimated from position averages (marked ≈)" : ""}>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
           {[
-            ["Height",p.ht||`${Math.floor((p.htIn||78)/12)}'${(p.htIn||78)%12}"`,false],
-            ["Weight",`${adjWt} lbs`,isWtEstimated],
-            ["Wingspan",`${adjWs.toFixed(1)}"`,isEstimated],
-            ["WS Delta",`${wsDelta>0?"+":""}${wsDelta.toFixed(1)}"`,false],
-            ["Ape Index",((adjWs/(p.htIn||78))).toFixed(3),false],
-          ].map(([l,v,est])=>(
-            <div key={l} className="rounded-lg p-3 text-center" style={{background:"#0d1117"}}>
-              <div className="text-xs uppercase" style={{color:"#6b7280"}}>{l}{est?" ≈":""}</div>
-              <div className="font-bold text-lg" style={{color:"#e5e7eb",fontFamily:"'Oswald',sans-serif"}}>{v}</div>
+            ["Height", htDisplay, false, null],
+            ["Weight", `${adjWt} lbs`, isWtEstimated, wtLabelColor],
+            ["Wingspan", `${adjWs.toFixed(1)}"`, isWsEstimated, wsLabelColor],
+            ["WS Delta", `${wsDelta > 0 ? "+" : ""}${wsDelta.toFixed(1)}"`, false, wsLabelColor],
+            ["Ape Index", apeRatio.toFixed(3), false, apeRatio > 1.06 ? "#22c55e" : apeRatio < 1.02 ? "#ef4444" : "#6b7280"],
+          ].map(([l, v, est, accent]) => (
+            <div key={l} className="rounded-lg p-3 text-center" style={{background:"#0d1117", border: accent ? `1px solid ${accent}22` : "1px solid #1f2937"}}>
+              <div className="text-xs uppercase" style={{color:"#6b7280"}}>{l}{est ? " ≈" : ""}</div>
+              <div className="font-bold text-lg" style={{color: accent || "#e5e7eb", fontFamily:"'Oswald',sans-serif"}}>{v}</div>
             </div>
           ))}
         </div>
-        {/* Labels */}
-        <div className="flex gap-3 mb-4">
-          <span className="px-3 py-1 rounded-lg text-xs" style={{background:wsDelta>3?"#22c55e22":wsDelta>1?"#1f2937":"#ef444422",color:wsDelta>3?"#22c55e":wsDelta>1?"#9ca3af":"#ef4444"}}>{wsLabel}</span>
-          <span className="px-3 py-1 rounded-lg text-xs" style={{background:"#1f2937",color:"#9ca3af"}}>{wtLabel}</span>
+
+        {/* Frame labels */}
+        <div className="flex flex-wrap gap-2 mb-4">
+          <Tip content={<div><div className="font-bold mb-1" style={{color:wsLabelColor}}>Wingspan Assessment</div><div style={{color:"#cbd5e1"}}>Wingspan delta = Wingspan - Height. NBA average is +3" to +4". Elite length (6+") creates defensive disruption. Negative wingspan limits defensive versatility.</div></div>}>
+            <span className="px-3 py-1 rounded-lg text-xs cursor-help" style={{background:wsLabelColor+"22",color:wsLabelColor,border:`1px solid ${wsLabelColor}44`}}>{wsLabel}</span>
+          </Tip>
+          <Tip content={<div><div className="font-bold mb-1" style={{color:wtLabelColor}}>Frame Assessment</div><div style={{color:"#cbd5e1"}}>Weight relative to position median ({p.pos}: ~{posMedianWt} lbs). Heavy frames absorb contact; light frames need development to handle NBA physicality.</div></div>}>
+            <span className="px-3 py-1 rounded-lg text-xs cursor-help" style={{background:wtLabelColor+"22",color:wtLabelColor,border:`1px solid ${wtLabelColor}44`}}>{wtLabel}</span>
+          </Tip>
         </div>
-        {/* Scout adjustment sliders */}
-        <div className="flex gap-6 p-3 rounded-lg" style={{background:"#0d1117"}}>
+
+        {/* ── Combine data (if available) ── */}
+        {hasCombine && (
+          <div className="mb-4 p-3 rounded-lg" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+            <div className="text-xs uppercase tracking-wider mb-2 font-semibold" style={{color:"#f97316"}}>NBA Combine Measurements</div>
+            <div className="grid grid-cols-3 md:grid-cols-6 gap-2 text-center">
+              {[
+                ["No-Shoes Ht", p.comb.height_ns],
+                ["Shoes Ht", p.comb.height_ws],
+                ["Weight", p.comb.weight ? `${p.comb.weight} lbs` : null],
+                ["Wingspan", p.comb.wingspan ? `${p.comb.wingspan}"` : null],
+                ["Reach", p.comb.reach ? `${p.comb.reach}"` : null],
+                ["Body Fat", p.comb.body_fat ? `${p.comb.body_fat}%` : null],
+              ].map(([l,v]) => v != null && (
+                <div key={l} className="rounded p-2" style={{background:"#111827"}}>
+                  <div className="text-xs" style={{color:"#6b7280"}}>{l}</div>
+                  <div className="text-sm font-semibold" style={{color:"#e5e7eb"}}>{v}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Scout adjustment sliders ── */}
+        <div className="flex gap-6 p-4 rounded-lg" style={{background:"#0d1117"}}>
           <div className="flex-1">
-            <div className="flex justify-between text-xs mb-1"><span style={{color:"#9ca3af"}}>Weight Adjust</span><span style={{color:"#f97316"}}>{wtAdj>0?"+":""}{wtAdj} lbs</span></div>
+            <div className="flex justify-between text-xs mb-1">
+              <span style={{color:"#9ca3af"}}>Weight Adjust</span>
+              <span style={{color:"#f97316"}}>{wtAdj > 0 ? "+" : ""}{wtAdj} lbs</span>
+            </div>
             <input type="range" min={-20} max={20} value={wtAdj} onChange={e=>setWtAdj(+e.target.value)} className="w-full" style={{accentColor:"#f97316"}}/>
           </div>
           <div className="flex-1">
-            <div className="flex justify-between text-xs mb-1"><span style={{color:"#9ca3af"}}>Wingspan Adjust</span><span style={{color:"#f97316"}}>{wsAdj>0?"+":""}{wsAdj}"</span></div>
+            <div className="flex justify-between text-xs mb-1">
+              <span style={{color:"#9ca3af"}}>Wingspan Adjust</span>
+              <span style={{color:"#f97316"}}>{wsAdj > 0 ? "+" : ""}{wsAdj}"</span>
+            </div>
             <input type="range" min={-4} max={4} step={0.25} value={wsAdj} onChange={e=>setWsAdj(+e.target.value)} className="w-full" style={{accentColor:"#f97316"}}/>
           </div>
         </div>
-        {(wsAdj!==0||wtAdj!==0)&&<div className="mt-2 text-xs" style={{color:"#fbbf24"}}>⚡ User Projected Matches — showing comps based on adjusted measurements</div>}
+        {(wsAdj !== 0 || wtAdj !== 0) && (
+          <div className="mt-2 text-xs" style={{color:"#fbbf24"}}>
+            User Projected Matches — showing comps based on adjusted measurements
+          </div>
+        )}
       </Sec>
-      <Sec icon="👥" title="Anthropometric Comps" sub="Physical similarity (Height 60% + Weight 20% + Wingspan 20%). Adjust sliders above to project.">
+
+      {/* ── ANTHROPOMETRIC COMPS ── */}
+      <Sec icon="👥" title="Anthropometric Comps" sub="Physical similarity (Height 60% + Weight 20% + Wingspan 20%). Adjust sliders above to refine.">
         {dynamicAnthro.length > 0 ? (
           <div className="space-y-2">
-            {dynamicAnthro.map((c,i)=>(
+            {dynamicAnthro.map((c, i) => (
               <div key={i} className="flex items-center gap-3 p-3 rounded-lg" style={{background:"#0d1117"}}>
-                <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{background:"#1f2937",color:"#9ca3af"}}>{i+1}</div>
-                <div className="flex-1"><div className="font-semibold text-sm" style={{color:"#e5e7eb"}}>{c.name}</div><div className="text-xs" style={{color:"#6b7280"}}>{c.ht}" · {c.wt} lbs · WS {c.ws}"</div></div>
-                <div className="text-sm font-bold" style={{color:"#3b82f6"}}>{c.sim}%</div>
-                {c.tier&&<TierBadge tier={c.tier}/>}
+                <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0" style={{background: i < 3 ? "#f9731622" : "#1f2937", color: i < 3 ? "#f97316" : "#9ca3af"}}>{i+1}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-sm" style={{color:"#e5e7eb"}}>{c.name}</span>
+                    {c.physWarn && (
+                      <Tip content={<div style={{color:"#fbbf24"}}>Physical mismatch: Size differs &gt;10% from this prospect. Interpret with caution.</div>}>
+                        <span className="text-xs cursor-help" style={{color:"#fbbf24"}}>⚠</span>
+                      </Tip>
+                    )}
+                  </div>
+                  <div className="text-xs" style={{color:"#6b7280"}}>
+                    {c.ht ? `${Math.floor(c.ht/12)}'${c.ht%12}"` : "—"} · {c.wt ? `${c.wt} lbs` : "—"} · WS {c.ws ? `${c.ws}"` : "—"}
+                  </div>
+                </div>
+                {/* Similarity bar */}
+                <div className="w-24 shrink-0">
+                  <div className="h-3 rounded-full overflow-hidden" style={{background:"#1f2937"}}>
+                    <div className="h-full rounded-full" style={{width:`${c.sim}%`, background: c.sim > 80 ? "#22c55e" : c.sim > 60 ? "#3b82f6" : c.sim > 40 ? "#fbbf24" : "#ef4444"}}/>
+                  </div>
+                </div>
+                <div className="w-12 text-sm font-bold text-right shrink-0" style={{color: c.sim > 80 ? "#22c55e" : c.sim > 60 ? "#3b82f6" : c.sim > 40 ? "#fbbf24" : "#ef4444"}}>{c.sim}%</div>
+                {c.tier && <TierBadge tier={c.tier}/>}
               </div>
             ))}
           </div>
-        ) : <div className="text-center py-6" style={{color:"#6b7280"}}>No combine/anthropometric data available for comparison.</div>}
+        ) : (
+          <div className="text-center py-8 rounded-lg" style={{background:"#0d1117",color:"#6b7280"}}>
+            <div className="text-lg mb-1">No anthropometric data</div>
+            <div className="text-xs">Combine/measurement data not available for this prospect. Physical comparison requires height, weight, or wingspan data.</div>
+          </div>
+        )}
       </Sec>
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════
-// TAB: COMPS (Statistical only — anthro moved to Body)
+// TAB: COMPS (Statistical Prospect-to-Prospect — anthro in Body tab)
 // ═══════════════════════════════════════════════════════════
 function CompsTab({p}) {
-  const [nbaOnly,setNbaOnly]=useState(false);
-  const fStat=nbaOnly?(p.statComps||[]).filter(c=>c.nba):(p.statComps||[]);
+  const [nbaOnly, setNbaOnly] = useState(false);
+  const allComps = p.statComps || [];
+  const fStat = nbaOnly ? allComps.filter(c => c.nba) : allComps;
+
+  // Normalize similarity: if raw values look like distances (low numbers), invert
+  const normSim = (raw) => {
+    if (raw == null) return null;
+    if (raw > 1 && raw <= 100) return Math.round(raw); // already percentage
+    if (raw > 0 && raw <= 1) return Math.round(raw * 100); // 0-1 → percentage
+    // Negative or very high = distance. Convert: 100 - distance%
+    return Math.max(0, Math.round(100 - Math.abs(raw) * 5));
+  };
+
+  // Physical check: flag comps where height differs >3 inches
+  const physCheck = (comp) => {
+    const compHt = comp.ht || comp.htIn;
+    const playerHt = p.htIn || 78;
+    if (!compHt) return false;
+    return Math.abs(compHt - playerHt) > 3;
+  };
+
+  const simColor = (s) => s > 85 ? "#22c55e" : s > 70 ? "#86efac" : s > 55 ? "#3b82f6" : s > 40 ? "#fbbf24" : "#ef4444";
 
   return (
     <div className="space-y-5">
-      <div className="flex justify-between items-center">
-        <Tip content={<div style={{color:"#cbd5e1"}}>Comps use only pre-draft seasons (Freshman/Sophomore for NCAA, age ≤21 for international). You're comparing against what these players looked like BEFORE the NBA, not their prime stats.</div>}>
-          <div className="text-xs cursor-help" style={{color:"#6b7280"}}>Age/stage-filtered: only pre-draft seasons used <span style={{color:"#475569"}}>ⓘ</span></div>
+      {/* Header + controls */}
+      <div className="flex flex-wrap justify-between items-center gap-3">
+        <Tip content={<div style={{color:"#cbd5e1"}}>Comps use only pre-draft seasons (Freshman/Sophomore for NCAA, age 21 or younger for international). You're comparing against what these players looked like BEFORE the NBA, not their prime stats. Statistics are era-adjusted and league-translated for cross-league comparison.</div>}>
+          <div className="text-xs cursor-help" style={{color:"#6b7280"}}>Age/stage-filtered: only pre-draft seasons used. League-adjusted stats. <span style={{color:"#475569"}}>ⓘ</span></div>
         </Tip>
-        <button onClick={()=>setNbaOnly(!nbaOnly)} className="px-4 py-2 rounded-lg text-sm font-semibold" style={{background:nbaOnly?"#f97316":"#1f2937",color:nbaOnly?"#000":"#9ca3af"}}>
-          {nbaOnly?"★ NBA Stars Only":"All Prospects"}
+        <button onClick={() => setNbaOnly(!nbaOnly)} className="px-4 py-2 rounded-lg text-sm font-semibold transition-all"
+          style={{background: nbaOnly ? "#f97316" : "#1f2937", color: nbaOnly ? "#000" : "#9ca3af"}}>
+          {nbaOnly ? "★ NBA Stars Only" : "All Prospects"}
         </button>
       </div>
-      <Sec icon="📊" title="Statistical Comps" sub="Weighted Euclidean distance on era-adjusted percentiles. 'Reached Tier' shows what each comp achieved in the NBA.">
+
+      {/* ── STATISTICAL COMPS TABLE ── */}
+      <Sec icon="📊" title="Statistical Comps" sub="Weighted Euclidean distance on era-adjusted percentiles (USG%, AST%, STL%, eFG% weighted highest). 'Reached Tier' shows actual NBA outcome.">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm"><thead><tr>
-            {["Name","Pos","Sim","BPM","USG","TS%","AST%","STL%","BLK%","3P%","FT%","Reached"].map(h=><th key={h} className="text-left px-2 py-1.5 text-xs uppercase" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>{h}</th>)}
-          </tr></thead><tbody>
-            <tr style={{background:"#f9731611"}}>
-              <td className="px-2 py-2 font-bold" style={{color:"#f97316"}}>{p.nbaName||p.name||"Selected"}</td>
-              <td className="px-2" style={{color:"#9ca3af"}}>{p.pos}</td><td className="px-2" style={{color:"#f97316"}}>—</td>
-              <td className="px-2 font-semibold" style={{color:valColor(p.pctl?.bpm)}}>{fmt(p.bpm)}</td>
-              <td className="px-2">{fmt(p.usg)}</td><td className="px-2">{fmt(p.ts)}</td>
-              <td className="px-2">{fmt(p.astP)}</td><td className="px-2">{fmt(p.stlP)}</td>
-              <td className="px-2">{fmt(p.blkP)}</td><td className="px-2">{fmt(p.tp)}</td>
-              <td className="px-2">{fmt(p.ft)}</td>
-              <td className="px-2">{p.actual?<TierBadge tier={p.actual}/>:"—"}</td>
-            </tr>
-            {fStat.map((c,i)=>(
-              <tr key={i} className="hover:bg-white hover:bg-opacity-5" style={{borderBottom:"1px solid #1f293744"}}>
-                <td className="px-2 py-2 font-semibold" style={{color:"#e5e7eb"}}>{c.name}</td>
-                <td className="px-2" style={{color:"#6b7280"}}>{c.pos}</td>
-                <td className="px-2 font-bold" style={{color:"#f97316"}}>{c.sim}%</td>
-                <td className="px-2" style={{color:valColor(c.bpm>10?90:c.bpm>5?65:35)}}>{fmt(c.bpm)}</td>
-                <td className="px-2">{fmt(c.usg)}</td><td className="px-2">{fmt(c.ts)}</td>
-                <td className="px-2">{fmt(c.astP)}</td><td className="px-2">{fmt(c.stlP)}</td>
-                <td className="px-2">{fmt(c.blkP)}</td><td className="px-2">{fmt(c.tp)}</td>
-                <td className="px-2">{fmt(c.ft)}</td>
-                <td className="px-2"><TierBadge tier={c.tier}/></td>
+          <table className="w-full text-sm">
+            <thead>
+              <tr>
+                {["#","Name","Pos","Match","BPM","USG","TS%","AST%","STL%","BLK%","3P%","FT%","Reached"].map(h => (
+                  <th key={h} className="text-left px-2 py-1.5 text-xs uppercase" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>{h}</th>
+                ))}
               </tr>
-            ))}
-          </tbody></table>
+            </thead>
+            <tbody>
+              {/* Current player row */}
+              <tr style={{background:"#f9731611"}}>
+                <td className="px-2 py-2 text-xs" style={{color:"#475569"}}>—</td>
+                <td className="px-2 py-2 font-bold" style={{color:"#f97316"}}>{p.nbaName || p.name || "Selected"}</td>
+                <td className="px-2" style={{color:"#9ca3af"}}>{p.pos}</td>
+                <td className="px-2" style={{color:"#f97316"}}>—</td>
+                <td className="px-2 font-semibold" style={{color:valColor(p.pctl?.bpm)}}>{fmt(p.bpm)}</td>
+                <td className="px-2">{fmt(p.usg)}</td>
+                <td className="px-2">{fmt(p.ts)}</td>
+                <td className="px-2">{fmt(p.astP)}</td>
+                <td className="px-2">{fmt(p.stlP)}</td>
+                <td className="px-2">{fmt(p.blkP)}</td>
+                <td className="px-2">{fmt(p.tp)}</td>
+                <td className="px-2">{fmt(p.ft)}</td>
+                <td className="px-2">{p.actual ? <TierBadge tier={p.actual}/> : "—"}</td>
+              </tr>
+
+              {/* Comp rows */}
+              {fStat.map((c, i) => {
+                const sim = normSim(c.sim);
+                const hasPhysWarn = physCheck(c);
+                return (
+                  <tr key={i} className="hover:bg-white hover:bg-opacity-5" style={{borderBottom:"1px solid #1f293744"}}>
+                    <td className="px-2 py-2 text-xs" style={{color:"#475569"}}>{i+1}</td>
+                    <td className="px-2 py-2">
+                      <div className="flex items-center gap-1">
+                        <span className="font-semibold" style={{color:"#e5e7eb"}}>{c.name}</span>
+                        {hasPhysWarn && (
+                          <Tip content={<div style={{color:"#fbbf24"}}>Physical mismatch: Height differs more than 3" from this prospect. Statistical similarity may not translate due to different size profiles.</div>}>
+                            <span className="cursor-help text-xs" style={{color:"#fbbf24"}}>⚠</span>
+                          </Tip>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-2" style={{color:"#6b7280"}}>{c.pos}</td>
+                    <td className="px-2">
+                      <div className="flex items-center gap-1">
+                        <div className="w-12 h-2 rounded-full overflow-hidden" style={{background:"#1f2937"}}>
+                          <div className="h-full rounded-full" style={{width:`${sim||0}%`, background:simColor(sim||0)}}/>
+                        </div>
+                        <span className="font-bold text-xs" style={{color:simColor(sim||0)}}>{sim != null ? `${sim}%` : "—"}</span>
+                      </div>
+                    </td>
+                    <td className="px-2" style={{color:valColor(c.bpm>10?90:c.bpm>5?65:35)}}>{fmt(c.bpm)}</td>
+                    <td className="px-2">{fmt(c.usg)}</td>
+                    <td className="px-2">{fmt(c.ts)}</td>
+                    <td className="px-2">{fmt(c.astP)}</td>
+                    <td className="px-2">{fmt(c.stlP)}</td>
+                    <td className="px-2">{fmt(c.blkP)}</td>
+                    <td className="px-2">{fmt(c.tp)}</td>
+                    <td className="px-2">{fmt(c.ft)}</td>
+                    <td className="px-2"><TierBadge tier={c.tier}/></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
-        {fStat.length===0&&<div className="text-center py-6" style={{color:"#6b7280"}}>No statistical comps available.</div>}
+
+        {fStat.length === 0 && (
+          <div className="text-center py-8 rounded-lg" style={{background:"#0d1117",color:"#6b7280"}}>
+            <div className="text-sm mb-1">{nbaOnly ? "No NBA star comps available" : "No statistical comps available"}</div>
+            <div className="text-xs">{nbaOnly ? "Try switching to 'All Prospects' for a broader comparison pool." : "Comparison data not generated for this prospect."}</div>
+          </div>
+        )}
+
+        {/* Legend */}
+        {fStat.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-3 text-xs" style={{color:"#475569"}}>
+            <span>Match: statistical similarity (100% = identical profile)</span>
+            <span>⚠ = physical mismatch (&gt;3" height diff)</span>
+            <span>Stats from pre-draft season only</span>
+          </div>
+        )}
       </Sec>
     </div>
   );
@@ -1170,7 +1719,7 @@ function MethodologyTab() {
           </div>
         </Sec>
       ))}
-      <Sec icon="🏅" title="Badge Definitions" sub="Green = elite NBA skills · Yellow = swing/potential · Red = warning signals">
+      <Sec icon="🏅" title="Badge Definitions" sub="Green = elite NBA skills · Yellow = swing/potential · Red = warning signals. International players receive stat adjustments (x1.25 base, x1.15 STL%/BLK%).">
         <div className="space-y-3">
           {Object.entries(BADGE_DEFS).map(([name,def])=>{
             const c = def.cat==="green"?"#22c55e":def.cat==="yellow"?"#fbbf24":"#ef4444";
@@ -1191,7 +1740,7 @@ function MethodologyTab() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// BIG BOARD (cleaned — no inference board, no 3D cube)
+// BIG BOARD (No class overview — single view)
 // ═══════════════════════════════════════════════════════════
 function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, availableYears, yearFilter, setYearFilter}) {
   const [sortBy,setSortBy]=useState("war");
@@ -1229,20 +1778,42 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
 
   const filtered = useMemo(()=>{
     let list = allPlayers;
-    if(posFilter!=="All") list = list.filter(p=>p.pos===posFilter);
-    list = list.filter(p=>p.confidence!=="very_low");
-    const sortFn = {
-      war: (a,b)=>(b.war||0)-(a.war||0),
-      ups: (a,b)=>(b.ups||b.mu||0)-(a.ups||a.mu||0),
-      mu: (a,b)=>(b.mu||0)-(a.mu||0),
-      pNba: (a,b)=>(b.pNba||0)-(a.pNba||0),
-      bpm: (a,b)=>(b.bpm||0)-(a.bpm||0),
-    };
-    list = [...list].sort(sortFn[sortBy]||sortFn.war);
-    return list.slice(0,60);
-  },[allPlayers,sortBy,posFilter]);
+    // Position + International filter
+    if (posFilter === "International") {
+      list = list.filter(p => p.source && p.source !== "ncaa");
+    } else if (posFilter !== "All") {
+      list = list.filter(p => p.pos === posFilter);
+    }
+    list = list.filter(p => p.confidence !== "very_low");
 
-  const posColors = {Playmaker:"#3b82f6",Wing:"#f97316",Big:"#8b5cf6","Jumbo Creator":"#fbbf24","Stretch Big":"#22c55e"};
+    // Sort functions — including tier columns
+    const sortFn = {
+      war: (a,b) => (b.war ?? -999) - (a.war ?? -999),
+      age: (a,b) => (a.age ?? 99) - (b.age ?? 99), // youngest first
+      bpm: (a,b) => (b.bpm ?? -999) - (a.bpm ?? -999),
+      super: (a,b) => (b.tiers?.Superstar ?? 0) - (a.tiers?.Superstar ?? 0),
+      allstar: (a,b) => (b.tiers?.["All-Star"] ?? 0) - (a.tiers?.["All-Star"] ?? 0),
+      starter: (a,b) => (b.tiers?.Starter ?? 0) - (a.tiers?.Starter ?? 0),
+      role: (a,b) => (b.tiers?.["Role Player"] ?? 0) - (a.tiers?.["Role Player"] ?? 0),
+      repl: (a,b) => (b.tiers?.Replacement ?? 0) - (a.tiers?.Replacement ?? 0),
+    };
+    list = [...list].sort(sortFn[sortBy] || sortFn.war);
+    return list.slice(0, 60);
+  }, [allPlayers, sortBy, posFilter]);
+
+  const posColors = {Playmaker:"#3b82f6", Wing:"#f97316", Big:"#8b5cf6"};
+
+  // Sort label for header
+  const sortLabels = {war:"WAR", age:"Age (youngest)", bpm:"BPM", super:"Star %", allstar:"All-Star %", starter:"Starter %", role:"Role %", repl:"Repl %"};
+
+  // Clickable column header
+  const SortTh = ({sortKey, children, align="left"}) => (
+    <th className={`px-3 py-2.5 text-${align} text-xs uppercase tracking-wider font-semibold cursor-pointer select-none transition-colors`}
+      style={{color: sortBy === sortKey ? "#f97316" : "#6b7280", borderBottom:"1px solid #1f2937"}}
+      onClick={() => setSortBy(sortKey)}>
+      {children}{sortBy === sortKey ? " ▼" : ""}
+    </th>
+  );
 
   return (
     <div className="space-y-5">
@@ -1255,13 +1826,14 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
             {yearFilter && yearFilter !== "All" ? yearFilter : "All Years"} Big Board
           </h2>
           <p className="text-sm mt-1" style={{color:"#6b7280"}}>
-            Probabilistic ranking · {filtered.length} prospects shown · Sort: {sortBy==="war"?"WAR":sortBy.toUpperCase()}
+            Probabilistic ranking · {filtered.length} prospects · Sort: {sortLabels[sortBy] || "WAR"}
           </p>
         </div>
       </div>
 
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3">
+        {/* Year selector */}
         <div className="flex gap-1">
           {availableYears.map(yr=>(
             <button key={yr} onClick={()=>handleYearChange(yr)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
@@ -1270,16 +1842,24 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
             </button>
           ))}
         </div>
+        {/* Position filter (with International) */}
         <div className="flex gap-1 ml-auto">
-          {["All","Playmaker","Wing","Big"].map(pos=>(
+          {[
+            ["All", null],
+            ["Playmaker", "#3b82f6"],
+            ["Wing", "#f97316"],
+            ["Big", "#8b5cf6"],
+            ["International", "#10b981"],
+          ].map(([pos, color]) => (
             <button key={pos} onClick={()=>setPosFilter(pos)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
-              style={{background:posFilter===pos?(posColors[pos]||"#f97316"):"#1f2937",color:posFilter===pos?"#000":"#9ca3af"}}>
+              style={{background:posFilter===pos?(color||"#f97316"):"#1f2937",color:posFilter===pos?"#000":"#9ca3af"}}>
               {pos}
             </button>
           ))}
         </div>
+        {/* Sort buttons */}
         <div className="flex gap-1">
-          {[["war","WAR"],["ups","UPS"],["mu","Peak"],["bpm","BPM"]].map(([k,l])=>(
+          {[["war","WAR"],["age","Age"],["bpm","BPM"]].map(([k,l])=>(
             <button key={k} onClick={()=>setSortBy(k)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
               style={{background:sortBy===k?"#f97316":"#1f2937",color:sortBy===k?"#000":"#9ca3af"}}>
               {l}
@@ -1294,27 +1874,44 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
           <table className="w-full text-sm">
             <thead>
               <tr style={{background:"#0a0e17"}}>
-                {["#","Player","Pos","Team","Age","WAR","Hmb","⭐%","All★%","Start%","Role%","Repl%","Tier"].map(h=>(
-                  <th key={h} className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>{h}</th>
-                ))}
+                <th className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>#</th>
+                <th className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>Player</th>
+                <th className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>Pos</th>
+                <th className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>Team</th>
+                <SortTh sortKey="age">Age</SortTh>
+                <SortTh sortKey="war">WAR</SortTh>
+                <SortTh sortKey="bpm">BPM</SortTh>
+                <SortTh sortKey="super">⭐%</SortTh>
+                <SortTh sortKey="allstar">All★%</SortTh>
+                <SortTh sortKey="starter">Start%</SortTh>
+                <SortTh sortKey="role">Role%</SortTh>
+                <SortTh sortKey="repl">Repl%</SortTh>
+                <th className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>Tier</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((p,i)=>{
-                const tierPctColor = (v) => v>20?"#22c55e":v>10?"#86efac":v>5?"#fbbf24":v>1?"#6b7280":"#374151";
+              {filtered.map((p, i) => {
+                const tierPctColor = (v) => v > 20 ? "#22c55e" : v > 10 ? "#86efac" : v > 5 ? "#fbbf24" : v > 1 ? "#6b7280" : "#374151";
+                const isIntl = p.source && p.source !== "ncaa";
                 return (
                   <tr key={p.name} className="cursor-pointer hover:bg-white hover:bg-opacity-5 transition-colors" onClick={()=>onSelect(p.name)}
                     style={{borderBottom:"1px solid #1f293744"}}>
                     <td className="px-3 py-2.5 font-bold text-xs" style={{color:"#475569"}}>{i+1}</td>
                     <td className="px-3 py-2.5">
-                      <div className="font-semibold" style={{color:"#e5e7eb"}}>{p.name}</div>
-                      <div className="flex gap-1 mt-0.5">{(p.badges||[]).slice(0,2).map((b,j)=><span key={j} className="text-xs px-1.5 py-0 rounded" style={{background:"#22c55e22",color:"#22c55e",fontSize:9}}>{b}</span>)}</div>
+                      <div className="flex items-center gap-1">
+                        <span className="font-semibold" style={{color:"#e5e7eb"}}>{p.name}</span>
+                        {isIntl && <span className="text-xs" style={{color:"#10b981"}}>🌐</span>}
+                      </div>
+                      <div className="flex gap-1 mt-0.5">
+                        {(p.badges||[]).slice(0,2).map((b,j)=><span key={j} className="text-xs px-1.5 py-0 rounded" style={{background:"#22c55e22",color:"#22c55e",fontSize:9}}>{b}</span>)}
+                        {(p.redFlags||[]).slice(0,1).map((f,j)=><span key={`r${j}`} className="text-xs px-1.5 py-0 rounded" style={{background:"#ef444422",color:"#ef4444",fontSize:9}}>{f}</span>)}
+                      </div>
                     </td>
                     <td className="px-3 py-2.5"><span className="px-2 py-0.5 rounded text-xs font-semibold" style={{background:(posColors[p.pos]||"#6b7280")+"22",color:posColors[p.pos]||"#6b7280"}}>{p.pos}</span></td>
                     <td className="px-3 py-2.5 text-xs" style={{color:"#9ca3af"}}>{p.team||p.conf}</td>
-                    <td className="px-3 py-2.5 text-xs" style={{color:"#9ca3af"}}>{p.age!=null?Number(p.age).toFixed(1):"—"}</td>
-                    <td className="px-3 py-2.5 font-bold" style={{color:"#fbbf24",fontFamily:"'Oswald',sans-serif"}}>{fmt(p.war,1)}</td>
-                    <td className="px-3 py-2.5 text-xs" style={{color:p.humble!=null&&p.humble>0.5?"#9ca3af":p.humble!=null&&p.humble>0?"#6b7280":"#374151"}}>{p.humble!=null&&p.humble>-0.05?fmt(p.humble,2):"—"}</td>
+                    <td className="px-3 py-2.5 text-xs" style={{color: p.age != null && p.age < 20 ? "#86efac" : "#9ca3af"}}>{p.age != null ? Number(p.age).toFixed(1) : "—"}</td>
+                    <td className="px-3 py-2.5 font-bold" style={{color: p.war != null ? "#fbbf24" : "#374151", fontFamily:"'Oswald',sans-serif"}}>{p.war != null ? fmt(p.war, 1) : "—"}</td>
+                    <td className="px-3 py-2.5 text-xs font-semibold" style={{color: p.bpm != null ? (p.bpm > 8 ? "#22c55e" : p.bpm > 4 ? "#86efac" : "#9ca3af") : "#374151"}}>{p.bpm != null ? fmt(p.bpm, 1) : "—"}</td>
                     <td className="px-3 py-2.5 text-xs font-semibold" style={{color:tierPctColor(p.tiers?.Superstar)}}>{fmt(p.tiers?.Superstar,0)}%</td>
                     <td className="px-3 py-2.5 text-xs font-semibold" style={{color:tierPctColor(p.tiers?.["All-Star"])}}>{fmt(p.tiers?.["All-Star"],0)}%</td>
                     <td className="px-3 py-2.5 text-xs font-semibold" style={{color:tierPctColor(p.tiers?.Starter)}}>{fmt(p.tiers?.Starter,0)}%</td>
@@ -1333,62 +1930,6 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
 }
 
 // ═══════════════════════════════════════════════════════════
-// CLASS OVERVIEW (simplified — no 3D cube)
-// ═══════════════════════════════════════════════════════════
-function ClassOverviewTab({ players, yearFilter, onSelect }) {
-  const allPlayers = players.filter(p => p?.confidence !== "very_low");
-  const stats = useMemo(() => {
-    if (!allPlayers.length) return null;
-    const byPos = {};
-    allPlayers.forEach(p => { byPos[p.pos] = (byPos[p.pos]||0)+1; });
-    const avgBpm = allPlayers.reduce((s,p)=>s+(p.bpm??0),0)/allPlayers.length;
-    const pNbaAbove50 = allPlayers.filter(p=>(p.pNba??0)>0.50).length;
-    const tierCounts = {};
-    allPlayers.forEach(p=>{const t=p.predTier||p.actual||"Unknown";tierCounts[t]=(tierCounts[t]||0)+1;});
-    const topUps = [...allPlayers].filter(p=>p.war!=null||p.ups!=null||p.mu!=null).sort((a,b)=>(b.war||b.ups||b.mu||0)-(a.war||a.ups||a.mu||0)).slice(0,5);
-    const topBpm = [...allPlayers].filter(p=>p.bpm!=null).sort((a,b)=>b.bpm-a.bpm).slice(0,5);
-    return { byPos, avgBpm, pNbaAbove50, tierCounts, topUps, topBpm, total:allPlayers.length };
-  }, [allPlayers]);
-
-  if (!stats) return <div className="text-center py-10" style={{color:"#6b7280"}}>No class data available.</div>;
-
-  return (
-    <div className="space-y-5">
-      <div className="rounded-2xl p-6" style={{background:"linear-gradient(135deg,#0d1117 0%,#1a1040 100%)",border:"1px solid #1f2937"}}>
-        <div className="text-xs uppercase tracking-widest mb-2" style={{color:"#f97316"}}>ProspectTheory · Draft Intelligence</div>
-        <h2 className="text-4xl font-bold mb-1" style={{color:"#e5e7eb",fontFamily:"'Oswald',sans-serif"}}>
-          {yearFilter && yearFilter !== "All" ? yearFilter : "All Years"} Draft Class
-        </h2>
-        <p className="text-sm" style={{color:"#6b7280"}}>{stats.total} eligible prospects · {stats.pNbaAbove50} with >50% NBA probability</p>
-        <div className="grid grid-cols-3 gap-4 mt-5">
-          {[["Total",stats.total,"#e5e7eb"],["Avg BPM",stats.avgBpm.toFixed(1),"#f97316"],[">50% NBA",stats.pNbaAbove50,"#fbbf24"]].map(([l,v,c])=>(
-            <div key={l} className="text-center"><div className="text-2xl font-bold" style={{color:c,fontFamily:"'Oswald',sans-serif"}}>{v}</div><div className="text-xs" style={{color:"#6b7280"}}>{l}</div></div>
-          ))}
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        {[["🎯 Top UPS","Unified Prospect Score",stats.topUps,"ups","#fbbf24"],
-          ["📊 Top BPM","Production Leaders",stats.topBpm,"bpm","#f97316"]
-        ].map(([title,sub,list,field,color])=>(
-          <Sec key={title} icon="" title={title}>
-            <div className="text-xs mb-3" style={{color:"#64748b"}}>{sub}</div>
-            <div className="space-y-2">
-              {list.map((pl,i)=>(
-                <div key={pl.name} className="flex items-center gap-3 cursor-pointer rounded-lg px-2 py-1.5 hover:bg-white hover:bg-opacity-5" onClick={()=>onSelect&&onSelect(pl.name)}>
-                  <span className="text-sm font-bold w-4" style={{color:"#475569"}}>{i+1}</span>
-                  <div className="flex-1 min-w-0"><div className="text-sm font-semibold truncate" style={{color:"#e5e7eb"}}>{pl.name}</div><div className="text-xs" style={{color:"#64748b"}}>{pl.pos} · {pl.conf||pl.team}</div></div>
-                  <div className="font-bold text-lg font-mono" style={{color,fontFamily:"'Oswald',sans-serif"}}>{field==="bpm"?fmt(pl.bpm):(pl.ups!=null?fmt(pl.ups,0):fmt(pl.mu,3))}</div>
-                </div>
-              ))}
-            </div>
-          </Sec>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════
 // MAIN APP
 // ═══════════════════════════════════════════════════════════
 const TABS = [
@@ -1401,15 +1942,9 @@ const TABS = [
   {id:"methodology",label:"Method",icon:"📖"},
 ];
 
-const TOP_VIEWS = [
-  {id:"board",label:"Big Board",icon:"📋"},
-  {id:"classoverview",label:"Class Overview",icon:"📊"},
-];
-
 export default function App() {
   const [sel,setSel]=useState(null);
   const [tab,setTab]=useState("overview");
-  const [topView,setTopView]=useState("board");
   const [search,setSearch]=useState("");
   const [showS,setShowS]=useState(false);
   const [compTier,setCompTier]=useState("Replacement");
@@ -1510,21 +2045,11 @@ export default function App() {
     <div className="min-h-screen" style={{background:"#080b12",fontFamily:"'Barlow',sans-serif",color:"#e5e7eb"}}>
       <header className="sticky top-0 z-50 px-4 md:px-8 py-3" style={{background:"rgba(8,11,18,0.92)",backdropFilter:"blur(12px)",borderBottom:"1px solid #1f293744"}}>
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3 cursor-pointer" onClick={()=>{setSel(null);setTab("overview");setTopView("board");}}>
+          <div className="flex items-center gap-3 cursor-pointer" onClick={()=>{setSel(null);setTab("overview");}}>
             <div className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm" style={{background:"linear-gradient(135deg,#f97316,#ea580c)",color:"#000"}}>PT</div>
             <div><div className="font-bold text-sm tracking-wider" style={{fontFamily:"'Oswald',sans-serif",color:"#f97316"}}>PROSPECT THEORY</div><div className="text-xs" style={{color:"#6b7280"}}>NBA Draft Intelligence</div></div>
           </div>
-          {!sel && (
-            <div className="flex items-center gap-1 rounded-xl p-1" style={{background:"#111827",border:"1px solid #1f2937"}}>
-              {TOP_VIEWS.map(v=>(
-                <button key={v.id} onClick={()=>setTopView(v.id)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
-                  style={{background:topView===v.id?"#f97316":"transparent",color:topView===v.id?"#000":"#6b7280"}}>
-                  <span>{v.icon}</span>{v.label}
-                </button>
-              ))}
-            </div>
-          )}
+          {/* No toggle needed — Big Board only */}
           <div className="relative">
             <input className="w-48 md:w-72 px-4 py-2 rounded-lg text-sm outline-none" style={{background:"#111827",border:"1px solid #374151",color:"#e5e7eb"}} placeholder="Search players..." value={search}
               onChange={e=>{setSearch(e.target.value);setShowS(true)}} onFocus={()=>setShowS(true)} onBlur={()=>setTimeout(()=>setShowS(false),200)}/>
@@ -1543,8 +2068,6 @@ export default function App() {
               <div className="w-12 h-12 rounded-full border-4 border-t-transparent animate-spin mb-4" style={{borderColor:"#f97316",borderTopColor:"transparent"}}/>
               <p className="text-sm" style={{color:"#6b7280"}}>Loading prospects...</p>
             </div>
-          ) : topView === "classoverview" ? (
-            <ClassOverviewTab players={PLAYER_LIST.map(n=>PLAYERS[n]).filter(Boolean)} yearFilter={yearFilter} onSelect={selectPlayer}/>
           ) : (
             <BigBoardView onSelect={selectPlayer} boardData={boardData} setBoardData={setBoardData} loading={loading} setLoading={setLoading} availableYears={availableYears} yearFilter={yearFilter} setYearFilter={setYearFilter}/>
           )
@@ -1579,8 +2102,13 @@ export default function App() {
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
-                    {(p.badges||[]).slice(0,3).map((b,i)=><BadgeChip key={i} text={b}/>)}
-                    {(p.redFlags||[]).slice(0,2).map((f,i)=><BadgeChip key={`rf${i}`} text={f} color="#ef4444"/>)}
+                    {(() => {
+                      // Max 5 badges in header, red priority
+                      const reds = (p.redFlags||[]).slice(0,3);
+                      const greens = (p.badges||[]).slice(0, 5 - reds.length);
+                      return [...reds.map((f,i)=><BadgeChip key={`rf${i}`} text={f} color="#ef4444"/>),
+                              ...greens.map((b,i)=><BadgeChip key={i} text={b}/>)];
+                    })()}
                   </div>
                 </div>
               </div>
