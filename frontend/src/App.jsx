@@ -255,8 +255,10 @@ function mapProfile(d) {
     blk: d.pctl_blk, pts36: d.pctl_pts36, reb36: d.pctl_reb36, ast36: d.pctl_ast36,
   };
   const ff = d.cffr || d.ff || {
-    efg: d.cffr_efg ?? d.ff_efg ?? 50, tov: d.cffr_tov ?? d.ff_tov ?? 50,
-    orb: d.cffr_orb ?? d.ff_orb ?? 50, ftr: d.cffr_ftr ?? d.ff_ftr ?? 50,
+    efg: d.cffr_efg ?? d.ff_efg ?? d.pctl_ts ?? 50,
+    tov: d.cffr_tov ?? d.ff_tov ?? (d.pctl_to != null ? 100 - d.pctl_to : 50),
+    orb: d.cffr_orb ?? d.ff_orb ?? d.pctl_orb ?? 50,
+    ftr: d.cffr_ftr ?? d.ff_ftr ?? d.pctl_ftr ?? 50,
     comp: d.cffr_comp ?? d.ff_comp ?? 50,
   };
   const badgeList = (d.badges && typeof d.badges === "string") ? d.badges.split("|").filter(Boolean) : (d.badges || []);
@@ -290,7 +292,9 @@ function mapProfile(d) {
     seasonsPlayed: d.seasons_played ?? d.seasonsPlayed ?? 1,
     gp: d.gp ?? d.games, min: d.min ?? d.minutes,
     mp: d.mp ?? d.total_min ?? d.sample_min,
-    pts: d.pts, reb: d.reb, ast: d.ast, stl: d.stl, blk: d.blk,
+    pts: d.pts ?? d.college_pts, reb: d.reb ?? d.college_treb, ast: d.ast ?? d.college_ast,
+    stl: d.stl ?? d.college_stl, blk: d.blk ?? d.college_blk,
+    astTov: d.ast_to ?? d.astTov ?? d.ast_tov ?? d.college_ast_tov,
     bpm: d.bpm, obpm: d.obpm, dbpm: d.dbpm, ortg: d.ortg,
     usg: d.usg ?? d.usg_p, ts: d.ts_pct ?? d.ts,
     fg: d.fg_pct ?? d.fg, efg: d.efg_pct ?? d.efg,
@@ -323,11 +327,13 @@ function mapProfile(d) {
     feas:{repl:d.feas_repl,rot:d.feas_rot,start:d.feas_start,allstar:d.feas_allstar,
       cleared:d.feas_cleared||"",blocker:d.feas_blocker||""},
     // Projection — handle BOTH old (PIE) and new (ASPM) formats
-    mu:d.pred_mu??d.mu??d.aspm_adj??d.aspm,
-    sigma:d.pred_sigma??d.sigma??d.mc_sigma,
+    mu:d.pred_mu??d.mu??d.projected_pie??d.pred_mu_pie??d.aspm_adj??d.aspm,
+    sigma:d.pred_sigma??d.sigma??d.mc_sigma??d.volatility,
     pNba:d.pred_p_nba??d.pNba??d.pn,
     predTier:d.pred_tier??d.predicted_tier??d.tier,
     ups: d.ups ?? d.ups_raw,
+    war: d.war ?? d.projected_war ?? 0,
+    humble: d.humble ?? d.f_humble ?? d.hmb ?? null,
     aspm: d.aspm ?? d.aspm_adj,
     production: d.production ?? d.prod,
     impact: d.impact,
@@ -1188,7 +1194,7 @@ function MethodologyTab() {
 // BIG BOARD (cleaned — no inference board, no 3D cube)
 // ═══════════════════════════════════════════════════════════
 function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, availableYears, yearFilter, setYearFilter}) {
-  const [sortBy,setSortBy]=useState("ups");
+  const [sortBy,setSortBy]=useState("war");
   const [posFilter,setPosFilter]=useState("All");
 
   const fetchBoard = (year) => {
@@ -1226,12 +1232,13 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
     if(posFilter!=="All") list = list.filter(p=>p.pos===posFilter);
     list = list.filter(p=>p.confidence!=="very_low");
     const sortFn = {
+      war: (a,b)=>(b.war||0)-(a.war||0),
       ups: (a,b)=>(b.ups||b.mu||0)-(a.ups||a.mu||0),
       mu: (a,b)=>(b.mu||0)-(a.mu||0),
       pNba: (a,b)=>(b.pNba||0)-(a.pNba||0),
       bpm: (a,b)=>(b.bpm||0)-(a.bpm||0),
     };
-    list = [...list].sort(sortFn[sortBy]||sortFn.ups);
+    list = [...list].sort(sortFn[sortBy]||sortFn.war);
     return list.slice(0,60);
   },[allPlayers,sortBy,posFilter]);
 
@@ -1248,7 +1255,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
             {yearFilter && yearFilter !== "All" ? yearFilter : "All Years"} Big Board
           </h2>
           <p className="text-sm mt-1" style={{color:"#6b7280"}}>
-            Probabilistic ranking · {filtered.length} prospects shown · Sort: {sortBy.toUpperCase()}
+            Probabilistic ranking · {filtered.length} prospects shown · Sort: {sortBy==="war"?"WAR":sortBy.toUpperCase()}
           </p>
         </div>
       </div>
@@ -1272,7 +1279,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
           ))}
         </div>
         <div className="flex gap-1">
-          {[["ups","UPS"],["mu","Peak"],["bpm","BPM"]].map(([k,l])=>(
+          {[["war","WAR"],["ups","UPS"],["mu","Peak"],["bpm","BPM"]].map(([k,l])=>(
             <button key={k} onClick={()=>setSortBy(k)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
               style={{background:sortBy===k?"#f97316":"#1f2937",color:sortBy===k?"#000":"#9ca3af"}}>
               {l}
@@ -1287,7 +1294,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
           <table className="w-full text-sm">
             <thead>
               <tr style={{background:"#0a0e17"}}>
-                {["#","Player","Pos","Team","Age","UPS","Peak","⭐%","All★%","Start%","Role%","Repl%","Path"].map(h=>(
+                {["#","Player","Pos","Team","Age","WAR","Hmb","⭐%","All★%","Start%","Role%","Repl%","Tier"].map(h=>(
                   <th key={h} className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>{h}</th>
                 ))}
               </tr>
@@ -1306,14 +1313,14 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
                     <td className="px-3 py-2.5"><span className="px-2 py-0.5 rounded text-xs font-semibold" style={{background:(posColors[p.pos]||"#6b7280")+"22",color:posColors[p.pos]||"#6b7280"}}>{p.pos}</span></td>
                     <td className="px-3 py-2.5 text-xs" style={{color:"#9ca3af"}}>{p.team||p.conf}</td>
                     <td className="px-3 py-2.5 text-xs" style={{color:"#9ca3af"}}>{p.age!=null?Number(p.age).toFixed(1):"—"}</td>
-                    <td className="px-3 py-2.5 font-bold" style={{color:"#fbbf24",fontFamily:"'Oswald',sans-serif"}}>{p.ups!=null?fmt(p.ups,0):fmt(p.mu,3)}</td>
-                    <td className="px-3 py-2.5 font-semibold" style={{color:"#f97316",fontFamily:"'Oswald',sans-serif"}}>{fmt(p.aspm||p.mu)}</td>
+                    <td className="px-3 py-2.5 font-bold" style={{color:"#fbbf24",fontFamily:"'Oswald',sans-serif"}}>{fmt(p.war,1)}</td>
+                    <td className="px-3 py-2.5 text-xs" style={{color:p.humble!=null&&p.humble>0.5?"#9ca3af":p.humble!=null&&p.humble>0?"#6b7280":"#374151"}}>{p.humble!=null&&p.humble>-0.05?fmt(p.humble,2):"—"}</td>
                     <td className="px-3 py-2.5 text-xs font-semibold" style={{color:tierPctColor(p.tiers?.Superstar)}}>{fmt(p.tiers?.Superstar,0)}%</td>
                     <td className="px-3 py-2.5 text-xs font-semibold" style={{color:tierPctColor(p.tiers?.["All-Star"])}}>{fmt(p.tiers?.["All-Star"],0)}%</td>
                     <td className="px-3 py-2.5 text-xs font-semibold" style={{color:tierPctColor(p.tiers?.Starter)}}>{fmt(p.tiers?.Starter,0)}%</td>
                     <td className="px-3 py-2.5 text-xs" style={{color:tierPctColor(p.tiers?.["Role Player"])}}>{fmt(p.tiers?.["Role Player"],0)}%</td>
                     <td className="px-3 py-2.5 text-xs" style={{color:"#6b7280"}}>{fmt(p.tiers?.Replacement,0)}%</td>
-                    <td className="px-3 py-2.5 text-xs" style={{color:p.careerPath==="NBA"?"#22c55e":"#60a5fa"}}>{p.careerPath||"NBA"}</td>
+                    <td className="px-3 py-2.5 text-xs font-semibold" style={{color:TC[p.predTier]||"#6b7280"}}>{p.predTier||"—"}</td>
                   </tr>
                 );
               })}
@@ -1338,7 +1345,7 @@ function ClassOverviewTab({ players, yearFilter, onSelect }) {
     const pNbaAbove50 = allPlayers.filter(p=>(p.pNba??0)>0.50).length;
     const tierCounts = {};
     allPlayers.forEach(p=>{const t=p.predTier||p.actual||"Unknown";tierCounts[t]=(tierCounts[t]||0)+1;});
-    const topUps = [...allPlayers].filter(p=>p.ups!=null||p.mu!=null).sort((a,b)=>(b.ups||b.mu||0)-(a.ups||a.mu||0)).slice(0,5);
+    const topUps = [...allPlayers].filter(p=>p.war!=null||p.ups!=null||p.mu!=null).sort((a,b)=>(b.war||b.ups||b.mu||0)-(a.war||a.ups||a.mu||0)).slice(0,5);
     const topBpm = [...allPlayers].filter(p=>p.bpm!=null).sort((a,b)=>b.bpm-a.bpm).slice(0,5);
     return { byPos, avgBpm, pNbaAbove50, tierCounts, topUps, topBpm, total:allPlayers.length };
   }, [allPlayers]);
