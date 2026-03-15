@@ -349,47 +349,47 @@ const zBg = (z) => z>=2.0?"#22c55e18":z>=1.0?"#86efac11":z>=0?"#1e293b":z>=-1.0?
 // POSITION RESOLUTION (BartTorvik functional_pos + International letters)
 // ═══════════════════════════════════════════════════════════
 function resolvePosition(d) {
-  // Priority 1: If already mapped to Playmaker/Wing/Big, trust it
-  const existing = d.pos ?? d.position;
-  if (existing === "Playmaker" || existing === "Wing" || existing === "Big") return existing;
+  // ── Stat-based overrides FIRST (fixes Curry, Harden, Boozer, Markkanen) ──
+  const ht = d.ht ?? d.height_in ?? d.college_height_inches;
+  const astP = d.ast_p ?? d.astP ?? 0;
+  const usg = d.usg ?? d.usg_p ?? 0;
+  const tpFreq = d.three_freq ?? d.threeF ?? d.tp_per ?? 0;
+  const tp = d.tp_pct ?? d.tp ?? 0;
 
-  // Priority 2: BartTorvik functional_pos (PG, CG, WG, WF, PF, C, Wing G, Stretch 4, etc.)
+  // Ball-handler override: high AST% = Playmaker regardless of height/pipeline
+  if (astP > 25 && usg > 22) return "Playmaker";
+  if (astP > 30) return "Playmaker";
+
+  // Stretch/shooting forward override: 6'7"-6'10" with shooting = Wing, not Big
+  if (ht != null && ht >= 79 && ht <= 82 && (tp > 30 || tpFreq > 25)) return "Wing";
+
+  // Priority 2: BartTorvik functional_pos
   const funcPos = (d.functional_pos ?? d.func_pos ?? "").toLowerCase().trim();
   if (funcPos) {
-    // Point guards / combo guards → Playmaker
     if (/^(pg|point|combo.?g|cg)/.test(funcPos)) return "Playmaker";
-    // Pure centers → Big
-    if (/^(c|center|big|pure.?c)$/.test(funcPos)) return "Big";
-    // Everything between → Wing (WG, SG, SF, WF, PF, Wing, Forward, Stretch 4, etc.)
+    if (/^(c|center|pure.?c)$/.test(funcPos)) return "Big";
     if (/^(sg|wg|sf|wf|pf|f|wing|forward|guard|stretch|small|power|swingman)/.test(funcPos)) return "Wing";
   }
 
-  // Priority 3: International letter positions (from scraper data)
-  const rawPos = (d.raw_pos ?? d.intl_pos ?? d.position ?? d.pos ?? "").toUpperCase().trim();
+  // Priority 3: International letter positions
+  const rawPos = (d.raw_pos ?? d.intl_pos ?? "").toUpperCase().trim();
   if (rawPos) {
     if (rawPos === "PG" || rawPos === "POINT GUARD") return "Playmaker";
     if (rawPos === "C" || rawPos === "CENTER") return "Big";
-    // SG, G, SF, PF, F, G/F, F/C → Wing
-    if (/^(SG|G|SF|PF|F|G\/F|F\/G|SF\/PF|PF\/SF|SG\/SF|G\/F|F\/C|GUARD|FORWARD|SHOOTING|SMALL|POWER)/.test(rawPos)) return "Wing";
+    if (/^(SG|G|SF|PF|F|G\/F|F\/G|SF\/PF|PF\/SF|SG\/SF|F\/C|GUARD|FORWARD|SHOOTING|SMALL|POWER)/.test(rawPos)) return "Wing";
   }
 
-  // Priority 4: Height-based fallback (from 10c logic, only as last resort)
-  const ht = d.ht ?? d.height_in ?? d.college_height_inches;
-  const astP = d.ast_p ?? d.astP ?? 0;
-  const usg = d.usg ?? 0;
+  // Priority 4: Trust pipeline pos IF it's one of our three
+  const existing = d.pos ?? d.position;
+  if (existing === "Playmaker" || existing === "Wing" || existing === "Big") return existing;
+
+  // Priority 5: Height fallback
   if (ht != null) {
-    // Ball-handler override: high AST% + USG% = Playmaker regardless of size
-    if (astP > 25 && usg > 22) return "Playmaker";
-    if (astP > 30) return "Playmaker";
-    // Height cutoffs (relaxed from old 10c: was 74/81, now using stat signals too)
     if (ht <= 75) return "Playmaker";
     if (ht >= 82) return "Big";
-    // Tweeners: 76-81 → check 3P shooting for stretch detection
-    const tpPer = d.three_freq ?? d.tp_per ?? d.threeF ?? 0;
-    if (ht >= 79 && ht <= 82 && tpPer > 28) return "Wing"; // Stretch 4 → Wing, not Big
   }
 
-  return "Wing"; // Default
+  return "Wing";
 }
 
 const API_BASE = "https://api.prospecttheory.io/api";
@@ -400,23 +400,36 @@ function mapProfile(d) {
     bpm: d.pctl_bpm, usg: d.pctl_usg, ts: d.pctl_ts, ast: d.pctl_ast,
     to: d.pctl_to, orb: d.pctl_orb, drb: d.pctl_drb, stl: d.pctl_stl,
     blk: d.pctl_blk, pts36: d.pctl_pts36, reb36: d.pctl_reb36, ast36: d.pctl_ast36,
+    ftr: d.pctl_ftr, efg: d.pctl_efg,
   };
+
+  // Four factors — compute from percentiles if cffr fields missing
+  const rawFfEfg = d.cffr_efg ?? d.ff_efg;
+  const rawFfTov = d.cffr_tov ?? d.ff_tov;
+  const rawFfOrb = d.cffr_orb ?? d.ff_orb;
+  const rawFfFtr = d.cffr_ftr ?? d.ff_ftr;
+  const rawFfComp = d.cffr_comp ?? d.ff_comp;
   const ff = d.cffr || d.ff || {
-    efg: d.cffr_efg ?? d.ff_efg ?? d.pctl_ts ?? 50,
-    tov: d.cffr_tov ?? d.ff_tov ?? (d.pctl_to != null ? 100 - d.pctl_to : 50),
-    orb: d.cffr_orb ?? d.ff_orb ?? d.pctl_orb ?? 50,
-    ftr: d.cffr_ftr ?? d.ff_ftr ?? d.pctl_ftr ?? 50,
-    comp: d.cffr_comp ?? d.ff_comp ?? 50,
+    efg: rawFfEfg ?? pctl.efg ?? pctl.ts ?? 50,
+    tov: rawFfTov ?? (pctl.to != null ? 100 - pctl.to : 50),
+    orb: rawFfOrb ?? pctl.orb ?? 50,
+    ftr: rawFfFtr ?? pctl.ftr ?? 50,
+    comp: rawFfComp ?? null,  // will compute below if null
   };
+  // Compute composite if not provided
+  if (ff.comp == null) {
+    ff.comp = Math.round(ff.efg * 0.40 + ff.tov * 0.25 + ff.orb * 0.20 + ff.ftr * 0.15);
+  }
+
   const badgeList = (d.badges && typeof d.badges === "string") ? d.badges.split("|").filter(Boolean) : (d.badges || []);
   const redList = (d.red_flags && typeof d.red_flags === "string") ? d.red_flags.split("|").filter(Boolean) : (d.red_flags || []);
 
-  // Compute client badges as fallback
+  // Always compute client badges (for consistency board↔profile)
   const resolvedPos = resolvePosition(d);
   const tmpP = {
-    pos: resolvedPos, // pass resolved position for badge checks
+    pos: resolvedPos,
     ft:d.ft_pct??d.ft, tp:d.tp_pct??d.tp, threeF:d.three_freq??d.threeF,
-    astP:d.ast_p??d.astP, astTov:d.ast_to??d.astTov, stlP:d.stl_p??d.stlP,
+    astP:d.ast_p??d.astP, astTov:d.ast_to??d.astTov??d.ast_tov, stlP:d.stl_p??d.stlP,
     blkP:d.blk_p??d.blkP, usg:d.usg??d.usg_p, toP:d.to_p??d.toP,
     ts:d.ts_pct??d.ts, ftr:d.ftr??d.ft_rate, rimF:d.rim_freq??d.rimF,
     rimPct:d.rim_pct??d.rimPct, dbpm:d.dbpm, obpm:d.obpm, bpm:d.bpm,
@@ -429,11 +442,16 @@ function mapProfile(d) {
     source:d.source, league:d.league,
   };
   const computed = computeBadges(tmpP);
-  const badges = badgeList.length > 0 ? badgeList : computed.green;
-  const redFlags = redList.length > 0 ? redList : computed.red;
+
+  // Merge: server badges + client badges (dedup), server takes priority for ordering
+  const serverGreen = badgeList.filter(b => BADGE_DEFS[b]?.cat === "green" || (!BADGE_DEFS[b]));
+  const serverRed = redList.filter(b => BADGE_DEFS[b]?.cat === "red" || (!BADGE_DEFS[b]));
+  const allGreen = [...new Set([...serverGreen, ...computed.green])];
+  const allYellow = computed.yellow; // server doesn't send yellow
+  const allRed = [...new Set([...serverRed, ...computed.red])];
 
   return {
-    name: d.name, pos: resolvePosition(d),
+    name: d.name, pos: resolvedPos,
     team: d.team ?? d.college_team ?? "", conf: d.conf ?? d.college_conf ?? "",
     confTier: d.conf_tier ?? d.confTier ?? "", cls: d.cls ?? d.class ?? "",
     yr: d.yr ?? d.season_year ?? d.draft_year ?? 2026,
@@ -443,10 +461,14 @@ function mapProfile(d) {
     wt: d.wt ?? d.weight, ws: d.ws ?? d.wingspan,
     recRank: d.recRank ?? d.rec_rank, recPctl: d.recPctl ?? d.rec_pctl,
     seasonsPlayed: d.seasons_played ?? d.seasonsPlayed ?? 1,
-    gp: d.gp ?? d.games, min: d.min ?? d.minutes,
+    gp: d.gp ?? d.games ?? d.g, min: d.min ?? d.minutes ?? d.mpg,
     mp: d.mp ?? d.total_min ?? d.sample_min,
-    pts: d.pts ?? d.college_pts, reb: d.reb ?? d.college_treb, ast: d.ast ?? d.college_ast,
-    stl: d.stl ?? d.college_stl, blk: d.blk ?? d.college_blk,
+    // Box score — extended fallback chains for old/intl profiles
+    pts: d.pts ?? d.college_pts ?? d.ppg,
+    reb: d.reb ?? d.college_treb ?? d.trb ?? d.treb ?? d.rpg,
+    ast: d.ast ?? d.college_ast ?? d.apg,
+    stl: d.stl ?? d.college_stl ?? d.spg,
+    blk: d.blk ?? d.college_blk ?? d.bpg,
     astTov: d.ast_to ?? d.astTov ?? d.ast_tov ?? d.college_ast_tov,
     bpm: d.bpm, obpm: d.obpm, dbpm: d.dbpm, ortg: d.ortg,
     usg: d.usg ?? d.usg_p, ts: d.ts_pct ?? d.ts,
@@ -455,20 +477,17 @@ function mapProfile(d) {
     orbP: d.orb_p ?? d.orbP, drbP: d.drb_p ?? d.drbP,
     stlP: d.stl_p ?? d.stlP, blkP: d.blk_p ?? d.blkP,
     ft: d.ft_pct ?? d.ft, tp: d.tp_pct ?? d.tp,
-    ftr: d.ftr ?? d.ft_rate, astTov: d.ast_to ?? d.astTov,
-    rimF: d.rim_freq ?? d.rimF, rimPct: d.rim_pct ?? d.rimPct,
-    midF: d.mid_freq ?? d.midF, midPct: d.mid_pct ?? d.midPct,
-    threeF: d.three_freq ?? d.threeF, threePar: d.three_par ?? d.threePar,
-    dunkR: d.dunk_rate ?? d.dunkR,
+    ftr: d.ftr ?? d.ft_rate, 
+    rimF: d.rim_freq ?? d.rimF ?? d.rim_fga_pct, rimPct: d.rim_pct ?? d.rimPct ?? d.rim_fg_pct,
+    midF: d.mid_freq ?? d.midF ?? d.mid_fga_pct, midPct: d.mid_pct ?? d.midPct ?? d.mid_fg_pct,
+    threeF: d.three_freq ?? d.threeF ?? d.three_fga_pct, threePar: d.three_par ?? d.threePar,
+    dunkR: d.dunk_rate ?? d.dunkR ?? d.dunk_pct,
     selfCreation: d.self_creation ?? Math.round(((d.usg??20)/100)*(1-(d.ast_p??d.astP??20)/100)*200),
     pctl,
     ff: { efg: ff.efg??50, tov: ff.tov??50, orb: ff.orb??50, ftr: ff.ftr??50, comp: ff.comp??50 },
     cffr: d.cffr || { usageRole: d.cffr_role ?? d.usage_role, reliability: d.cffr_rel },
-    // Shooting projections
     projNba3p:d.proj_3p, projNba3pa:d.proj_3pa, projNba3par:d.proj_3par, projNbaTs:d.proj_ts, projPrior:d.proj_prior,
-    // Scouting scores
     feel:d.feel, funcAth:d.func_ath, shootScore:d.shoot_score, defScore:d.def_score, overall:d.overall,
-    // Roles
     roles:{playmaker:d.role_playmaker,scorer:d.role_scorer,spacer:d.role_spacer,
       driver:d.role_driver,crasher:d.role_crasher,onball:d.role_onball,
       rimProt:d.role_rim_prot,rebounder:d.role_rebounder,switchPot:d.role_switch,
@@ -476,10 +495,8 @@ function mapProfile(d) {
       zone:d.role_zone,microSpacer:d.role_micro_spacer},
     roleVersatility:d.role_versatility,
     archetype:d.archetype||"",
-    // Tier feasibility
     feas:{repl:d.feas_repl,rot:d.feas_rot,start:d.feas_start,allstar:d.feas_allstar,
       cleared:d.feas_cleared||"",blocker:d.feas_blocker||""},
-    // Projection — handle BOTH old (PIE) and new (ASPM) formats
     mu:d.pred_mu??d.mu??d.projected_pie??d.pred_mu_pie??d.aspm_adj??d.aspm,
     sigma:d.pred_sigma??d.sigma??d.mc_sigma??d.volatility,
     pNba:d.pred_p_nba??d.pNba??d.pn,
@@ -500,7 +517,7 @@ function mapProfile(d) {
       "Out":((d.prob_neg??d.prob_negative??d.prob_never??d.probs?.out??0)*100),
     },
     ceiling: d.ceiling, floor: d.floor, volatility: d.volatility ?? d.mc_sigma,
-    badges, redFlags,
+    badges: allGreen, redFlags: allRed, yellowBadges: allYellow,
     btUrl:d.bt_url, btTeamUrl:d.bt_team_url,
     actual:d.tier, peakPie:d.peak_pie??d.nba_peak_actual, nbaName:d.nba_name||"",
     madeNba:d.made_nba, draftYear:d.draft_year, draftPick:d.draft_pick,
@@ -675,11 +692,13 @@ function OverviewTab({p, compTier, setCompTier}) {
 function ShootingTab({p}) {
   const isIntl = p.source && p.source !== "ncaa";
 
-  // ── Normalize values: ensure xx.x format (not 0.xxx) ──
+  // ── Normalize values: ensure xx.x format ──
   const norm = (v) => {
-    if (v == null) return null;
+    if (v == null || v === "" || v === "—") return null;
     const n = Number(v);
-    if (n > 0 && n < 1) return Math.round(n * 1000) / 10; // 0.xxx → xx.x
+    if (isNaN(n)) return null;
+    // Values 0-1 that look like ratios → convert to percentage
+    if (n > 0 && n < 1 && n !== 0) return Math.round(n * 1000) / 10;
     return Math.round(n * 10) / 10;
   };
   const rimPct = norm(p.rimPct);
@@ -746,11 +765,10 @@ function ShootingTab({p}) {
   // Self-creation proxy
   const selfCreation = p.selfCreation ?? Math.round(((usg) / 100) * (1 - ((p.astP ?? 20) / 100)) * 200);
 
-  // ── Zone opacity based on data availability + frequency ──
-  const zoneOpacity = (freq, available) => {
-    if (!available) return 0.25;
-    if (freq == null) return 0.6;
-    return freq > 30 ? 1.0 : freq > 15 ? 0.8 : freq > 5 ? 0.6 : 0.4;
+  // ── Zone opacity — only dim if truly no data ──
+  const zoneOpacity = (val, available) => {
+    if (!available || val == null) return 0.3;
+    return 1.0; // if data exists, show it full opacity
   };
 
   // ── Color helpers for values ──
@@ -1102,7 +1120,8 @@ function ProjectionTab({p}) {
 // TAB: SCOUTING (Pillars + Roles + Archetypes + Possession Impact + Full Badges)
 // ═══════════════════════════════════════════════════════════
 function ScoutingTab({p}) {
-  const badges = useMemo(() => computeBadges(p), [p]);
+  // Use merged badges from mapProfile (server + client-computed, deduped)
+  const badges = { green: p.badges || [], yellow: p.yellowBadges || [], red: p.redFlags || [] };
   const allBadges = [...badges.green, ...badges.yellow, ...badges.red];
 
   // ── Pillar Scores ──
@@ -1198,10 +1217,6 @@ function ScoutingTab({p}) {
       {/* ── BADGES (ALL — no limit on scouting page) ────── */}
       <Sec icon="🏅" title="Skill Badges" sub="Computed from stats with international adjustments. Hover each badge for trigger rules and scouting context.">
         {p.source !== "ncaa" && <div className="mb-3 px-3 py-1.5 rounded-lg inline-block text-xs" style={{background:"#3b82f622",color:"#60a5fa",border:"1px solid #3b82f644"}}>International Adjuster Active: Stats scaled x1.25, STL%/BLK% x1.15 for badge evaluation</div>}
-        {badges.red.length > 0 && <>
-          <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#ef4444"}}>⚠ Red Flags ({badges.red.length})</div>
-          <div className="flex flex-wrap gap-2 mb-4">{badges.red.map((f,i)=><BadgeChip key={`r${i}`} text={f} color="#ef4444"/>)}</div>
-        </>}
         {badges.green.length > 0 && <>
           <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#22c55e"}}>✓ Green Flags ({badges.green.length})</div>
           <div className="flex flex-wrap gap-2 mb-4">{badges.green.map((b,i)=><BadgeChip key={`g${i}`} text={b} color="#22c55e"/>)}</div>
@@ -1209,6 +1224,10 @@ function ScoutingTab({p}) {
         {badges.yellow.length > 0 && <>
           <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#fbbf24"}}>⚡ Swing Skills ({badges.yellow.length})</div>
           <div className="flex flex-wrap gap-2 mb-4">{badges.yellow.map((b,i)=><BadgeChip key={`y${i}`} text={b} color="#fbbf24"/>)}</div>
+        </>}
+        {badges.red.length > 0 && <>
+          <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#ef4444"}}>⚠ Red Flags ({badges.red.length})</div>
+          <div className="flex flex-wrap gap-2 mb-4">{badges.red.map((f,i)=><BadgeChip key={`r${i}`} text={f} color="#ef4444"/>)}</div>
         </>}
         {allBadges.length === 0 && <div className="text-sm" style={{color:"#6b7280"}}>No badges earned — average or data-insufficient profile.</div>}
       </Sec>
@@ -1556,13 +1575,12 @@ function CompsTab({p}) {
   const allComps = p.statComps || [];
   const fStat = nbaOnly ? allComps.filter(c => c.nba) : allComps;
 
-  // Normalize similarity: if raw values look like distances (low numbers), invert
+  // Similarity values are pre-normalized in selectPlayer (0-100%)
   const normSim = (raw) => {
     if (raw == null) return null;
-    if (raw > 1 && raw <= 100) return Math.round(raw); // already percentage
-    if (raw > 0 && raw <= 1) return Math.round(raw * 100); // 0-1 → percentage
-    // Negative or very high = distance. Convert: 100 - distance%
-    return Math.max(0, Math.round(100 - Math.abs(raw) * 5));
+    const n = Number(raw);
+    if (isNaN(n)) return null;
+    return Math.max(0, Math.min(100, Math.round(n)));
   };
 
   // Physical check: flag comps where height differs >3 inches
@@ -1998,15 +2016,26 @@ export default function App() {
       ]);
       if(profRes?.profile){
         const mapped = mapProfile(profRes.profile);
-        if(statsRes?.comps) mapped.statComps = statsRes.comps.map(c=>({
-          name:c.name,pos:c.position||c.pos,
-          sim: c.similarity!=null ? (c.similarity > 1 ? Math.round(c.similarity) : Math.round(c.similarity*100)) : null,
-          tier:c.tier||"",nba:!!c.made_nba,bpm:c.bpm,usg:c.usg,ts:c.ts,
-          astP:c.ast_p,toP:c.to_p,orbP:c.orb_p,drbP:c.drb_p,
-          stlP:c.stl_p,blkP:c.blk_p,ftr:c.ftr,
-          rimPct:c.rim_pct,tp:c.tp_pct,ft:c.ft_pct,dunkR:c.dunk_r,
-          badges:c.badges?c.badges.split("|").filter(Boolean):[],
-        }));
+        if(statsRes?.comps) mapped.statComps = statsRes.comps.map(c=>{
+          // API similarity: could be 0-1 (similarity), 0-100 (%), or distance (lower=closer)
+          let sim = null;
+          if (c.similarity != null) {
+            const raw = Number(c.similarity);
+            if (raw > 100) sim = Math.max(0, Math.round(100 - raw / 5)); // large distance → invert
+            else if (raw > 1 && raw <= 100) sim = Math.round(raw); // already percentage
+            else if (raw >= 0 && raw <= 1) sim = Math.round(raw * 100); // 0-1 ratio
+            else sim = Math.max(0, Math.round(100 - Math.abs(raw) * 2)); // negative or other
+          }
+          return {
+            name:c.name, pos:c.position||c.pos, sim,
+            tier:c.tier||"", nba:!!c.made_nba, bpm:c.bpm, usg:c.usg, ts:c.ts,
+            astP:c.ast_p, toP:c.to_p, orbP:c.orb_p, drbP:c.drb_p,
+            stlP:c.stl_p, blkP:c.blk_p, ftr:c.ftr,
+            rimPct:c.rim_pct, tp:c.tp_pct, ft:c.ft_pct, dunkR:c.dunk_r,
+            ht:c.height||c.ht,
+            badges:c.badges?c.badges.split("|").filter(Boolean):[],
+          };
+        });
         if(anthroRes?.comps) mapped.anthroComps = anthroRes.comps.map(c=>({
           name:c.name,dist:c.distance,sim:Math.round(c.similarity||0),
           ht:c.height||c.ht,wt:c.weight||c.wt,ws:c.wingspan||c.ws,
