@@ -407,20 +407,15 @@ function mapProfile(d) {
     ftr: d.pctl_ftr, efg: d.pctl_efg,
   };
 
-  // Four factors — compute from percentiles if cffr fields missing
-  const rawFfEfg = d.cffr_efg ?? d.ff_efg;
-  const rawFfTov = d.cffr_tov ?? d.ff_tov;
-  const rawFfOrb = d.cffr_orb ?? d.ff_orb;
-  const rawFfFtr = d.cffr_ftr ?? d.ff_ftr;
-  const rawFfComp = d.cffr_comp ?? d.ff_comp;
-  const ff = d.cffr || d.ff || {
-    efg: rawFfEfg ?? pctl.efg ?? pctl.ts ?? 50,
-    tov: rawFfTov ?? (pctl.to != null ? 100 - pctl.to : 50),
-    orb: rawFfOrb ?? pctl.orb ?? 50,
-    ftr: rawFfFtr ?? pctl.ftr ?? 50,
-    comp: rawFfComp ?? null,  // will compute below if null
+  // Four factors — API sends flat fields (ff_efg, ff_tov etc), NOT nested objects
+  // CRITICAL: d.cffr is a NUMBER (64.6), NOT an object! Don't use d.cffr || d.ff
+  const ff = {
+    efg: d.ff_efg ?? d.cffr_efg ?? pctl.efg ?? pctl.ts ?? 50,
+    tov: d.ff_tov ?? d.cffr_tov ?? (pctl.to != null ? 100 - pctl.to : 50),
+    orb: d.ff_orb ?? d.cffr_orb ?? pctl.orb ?? 50,
+    ftr: d.ff_ftr ?? d.cffr_ftr ?? pctl.ftr ?? 50,
+    comp: d.ff_comp ?? (typeof d.cffr === 'number' ? d.cffr : null),
   };
-  // Compute composite if not provided
   if (ff.comp == null) {
     ff.comp = Math.round(ff.efg * 0.40 + ff.tov * 0.25 + ff.orb * 0.20 + ff.ftr * 0.15);
   }
@@ -489,7 +484,7 @@ function mapProfile(d) {
     selfCreation: d.self_creation ?? Math.round(((d.usg??20)/100)*(1-(d.ast_p??d.astP??20)/100)*200),
     pctl,
     ff: { efg: ff.efg??50, tov: ff.tov??50, orb: ff.orb??50, ftr: ff.ftr??50, comp: ff.comp??50 },
-    cffr: d.cffr || { usageRole: d.cffr_role ?? d.usage_role, reliability: d.cffr_rel },
+    cffr: { usageRole: d.cffr_usage_role ?? d.cffr_role ?? d.usage_role, reliability: d.cffr_reliability ?? d.cffr_rel, raw: typeof d.cffr === 'number' ? d.cffr : null },
     projNba3p:d.proj_3p, projNba3pa:d.proj_3pa, projNba3par:d.proj_3par, projNbaTs:d.proj_ts, projPrior:d.proj_prior,
     feel:d.feel, funcAth:d.func_ath, shootScore:d.shoot_score, defScore:d.def_score, overall:d.overall,
     roles:{playmaker:d.role_playmaker,scorer:d.role_scorer,spacer:d.role_spacer,
@@ -2072,7 +2067,7 @@ export default function App() {
   },[search]);
 
   const p = sel ? (profileCache[sel] || PLAYERS[sel] || null) : null;
-  const pReady = p && p.pctl != null;
+  const pReady = p && p.pctl != null && (p.pts != null || p.usg != null || p.feel != null);
 
   return (
     <div className="min-h-screen" style={{background:"#080b12",fontFamily:"'Barlow',sans-serif",color:"#e5e7eb"}}>
