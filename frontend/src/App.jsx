@@ -192,9 +192,10 @@ function getBadgePos(p) {
   const htIn = p.htIn ?? 78;
   const astP = p.astP ?? 0;
   const usg = p.usg ?? 0;
-  // Ball-handler override
-  if (astP > 25 && usg > 22) return "G";
-  if (astP > 30) return "G";
+  // Ball-handler override (with height guard)
+  if (htIn < 79 && astP > 25 && usg > 22) return "G";
+  if (htIn < 79 && astP > 30) return "G";
+  if (astP > 32) return "G"; // True point-big
   if (htIn <= 75) return "G";
   if (htIn >= 82) return "B";
   return "W";
@@ -356,9 +357,12 @@ function resolvePosition(d) {
   const tpFreq = d.three_freq ?? d.threeF ?? d.tp_per ?? 0;
   const tp = d.tp_pct ?? d.tp ?? 0;
 
-  // Ball-handler override: high AST% = Playmaker regardless of height/pipeline
-  if (astP > 25 && usg > 22) return "Playmaker";
-  if (astP > 30) return "Playmaker";
+  // Ball-handler override: high AST% = Playmaker, WITH height guard
+  // Guards (< 79"): AST% > 25 + USG% > 22 (Curry, Harden, Smart)
+  // Taller: need AST% > 32 (true point-forwards only)
+  if (ht != null && ht < 79 && astP > 25 && usg > 22) return "Playmaker";
+  if (ht != null && ht < 79 && astP > 30) return "Playmaker";
+  if (astP > 32) return "Playmaker"; // Any height — true point-big
 
   // Stretch/shooting forward override: 6'7"-6'10" with shooting = Wing, not Big
   if (ht != null && ht >= 79 && ht <= 82 && (tp > 30 || tpFreq > 25)) return "Wing";
