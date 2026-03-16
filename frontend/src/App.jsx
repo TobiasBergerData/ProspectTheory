@@ -605,17 +605,58 @@ const ScoreGauge = ({label,value,max=100,color="#f97316",methodKey,p}) => {
 };
 
 // ═══════════════════════════════════════════════════════════
-// TAB: OVERVIEW
+// TAB: OVERVIEW (v3 — Tier Feasibility Engine)
 // ═══════════════════════════════════════════════════════════
 function OverviewTab({p, compTier, setCompTier}) {
   const tierData = TIER_THRESHOLDS[compTier] || TIER_THRESHOLDS.Replacement;
-  const repl = tierData[p.pos]||tierData.Wing;
-  const compData = [
-    {s:"BPM",v:p.bpm,r:repl.bpm,pc:p.pctl?.bpm},{s:"USG",v:p.usg,r:repl.usg,pc:p.pctl?.usg},
-    {s:"TS%",v:p.ts,r:repl.ts,pc:p.pctl?.ts},{s:"AST%",v:p.astP,r:repl.ast_p,pc:p.pctl?.ast},
-    {s:"STL%",v:p.stlP,r:repl.stl_p,pc:p.pctl?.stl},{s:"BLK%",v:p.blkP,r:repl.blk_p,pc:p.pctl?.blk},
-    {s:"ORB%",v:p.orbP,r:repl.orb_p,pc:p.pctl?.orb},{s:"DRB%",v:p.drbP,r:repl.drb_p,pc:p.pctl?.drb},
+  const posRef = tierData[p.pos]||tierData.Wing;
+
+  // ── Tier Feasibility Engine: compute corridors + compensation ──
+  const metrics = [
+    {cat:"Shot Making", id:"ts",  label:"TS%",  val:p.ts,   p50:posRef.ts,    core:p.pos==="Wing",      invert:false, desc:"True shooting — accounts for 3s and FTs"},
+    {cat:"Shot Making", id:"tp",  label:"3P%",  val:p.tp,   p50:p.pos==="Big"?30:p.pos==="Playmaker"?35:34, core:p.pos==="Wing", invert:false, desc:"Three-point shooting accuracy"},
+    {cat:"Creation",    id:"ast", label:"AST%", val:p.astP, p50:posRef.ast_p, core:p.pos==="Playmaker",  invert:false, desc:"Assist rate — % of team FG assisted while on floor"},
+    {cat:"Creation",    id:"usg", label:"USG%", val:p.usg,  p50:posRef.usg,   core:false,                invert:false, desc:"Usage rate — % of team possessions used"},
+    {cat:"Possession",  id:"tov", label:"TO%",  val:p.toP,  p50:posRef.to_p,  core:false,                invert:true,  desc:"Turnover rate — lower = better"},
+    {cat:"Possession",  id:"orb", label:"ORB%", val:p.orbP, p50:posRef.orb_p, core:p.pos==="Big",        invert:false, desc:"Offensive rebound rate — motor indicator"},
+    {cat:"Possession",  id:"ftr", label:"FTr",  val:p.ftr,  p50:p.pos==="Big"?42:p.pos==="Playmaker"?36:30, core:false, invert:false, desc:"Free throw rate (FTA/FGA) — rim pressure proxy"},
+    {cat:"Defense",     id:"stl", label:"STL%", val:p.stlP, p50:posRef.stl_p, core:false,                invert:false, desc:"Steal rate — perimeter disruption"},
+    {cat:"Defense",     id:"blk", label:"BLK%", val:p.blkP, p50:posRef.blk_p, core:p.pos==="Big",        invert:false, desc:"Block rate — rim protection"},
+    {cat:"Defense",     id:"drb", label:"DRB%", val:p.drbP, p50:posRef.drb_p, core:false,                invert:false, desc:"Defensive rebound rate"},
   ];
+
+  const coreMetrics = metrics.filter(m => m.core);
+  const hasEliteCore = coreMetrics.some(m => {
+    if (m.val == null) return false;
+    const p75 = m.invert ? m.p50 * 0.75 : m.p50 * 1.30;
+    return m.invert ? m.val < p75 : m.val > p75;
+  });
+
+  const assessed = metrics.map(m => {
+    const p25 = m.invert ? m.p50 * 1.25 : m.p50 * 0.75;
+    const p75 = m.invert ? m.p50 * 0.75 : m.p50 * 1.30;
+    if (m.val == null) return {...m, p25, p75, status:"unknown", statusColor:"#4b5563", pctOfP50:null};
+    let inRange, belowFloor;
+    if (m.invert) { inRange = m.val <= m.p50; belowFloor = m.val > p25; }
+    else { inRange = m.val >= m.p50; belowFloor = m.val < p25; }
+    let status, statusColor;
+    if (inRange) { status = "In-Range"; statusColor = "#22c55e"; }
+    else if (belowFloor && !m.core && hasEliteCore) { status = "Compensated"; statusColor = "#fbbf24"; }
+    else if (belowFloor) { status = "Critical Gap"; statusColor = "#ef4444"; }
+    else { status = "Below Median"; statusColor = "#f97316"; }
+    const range = Math.abs(p75 - p25) || 1;
+    const dist = m.invert ? (p25 - Math.max(p75, Math.min(p25, m.val))) / range : (Math.max(p25, Math.min(p75, m.val)) - p25) / range;
+    return {...m, p25, p75, status, statusColor, pctOfP50: Math.round(Math.max(0, Math.min(100, dist * 100)))};
+  });
+
+  const validM = assessed.filter(m => m.pctOfP50 != null);
+  const feasScore = validM.length > 0 ? Math.round(validM.reduce((s,m) => s + m.pctOfP50 * (m.core?1.5:1), 0) / validM.reduce((s,m) => s + (m.core?1.5:1), 0)) : null;
+  const feasColor = feasScore >= 70 ? "#22c55e" : feasScore >= 45 ? "#fbbf24" : "#ef4444";
+  const nG = assessed.filter(m => m.status==="In-Range").length;
+  const nY = assessed.filter(m => m.status==="Compensated").length;
+  const nR = assessed.filter(m => m.status==="Critical Gap").length;
+  const cats = ["Shot Making","Creation","Possession","Defense"];
+
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
@@ -627,19 +668,19 @@ function OverviewTab({p, compTier, setCompTier}) {
         ].map(([l,v,c])=>(
           <div key={l} className="rounded-lg p-3" style={{background:"#111827"}}>
             <div className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>{l}</div>
-            <div className="font-semibold mt-0.5" style={{color:c,fontFamily:"'Oswald',sans-serif"}}>{v}</div>
+            <div className="font-semibold mt-0.5" style={{color:c,fontFamily:"'Oswald',sans-serif"}}>{v||"—"}</div>
           </div>
         ))}
       </div>
       <Sec icon="▦" title="Box Score" sub={`${p.gp??0} GP · ${fmt(p.min)} MIN/G`}>
-        <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
+        <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
           {[["PTS",p.pts,p.pctl?.pts36],["REB",p.reb,p.pctl?.reb36],["AST",p.ast,p.pctl?.ast36],
-            ["STL",p.stl,p.pctl?.stl],["BLK",p.blk,p.pctl?.blk],["A/TO",p.astTov,null],["FTR",p.ftr,null]
+            ["STL",p.stl,p.pctl?.stl],["BLK",p.blk,p.pctl?.blk],["A/TO",p.astTov,null],["FTR",p.ftr,null],["TO%",p.toP,p.pctl?.to]
           ].map(([l,v,pc])=><StatCell key={l} label={l} val={v} pctl={pc}/>)}
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs" style={{color:"#6b7280"}}>
           <span>Efficiency:</span>
-          {[["TS%",p.ts,p.pctl?.ts],["FG%",p.fg,null],["3P%",p.tp,null],["FT%",p.ft,null]].map(([l,v,pc])=>(
+          {[["TS%",p.ts,p.pctl?.ts],["FG%",p.fg,null],["3P%",p.tp,null],["FT%",p.ft,null],["eFG%",p.efg,null]].map(([l,v,pc])=>(
             <span key={l} className="px-2 py-0.5 rounded" style={{background:valBg(pc),color:pc?valColor(pc):"#e5e7eb"}}>{l} {fmt(v)}</span>
           ))}
         </div>
@@ -652,33 +693,70 @@ function OverviewTab({p, compTier, setCompTier}) {
           ].map(([l,v,pc])=><StatCell key={l} label={l} val={v} pctl={pc}/>)}
         </div>
       </Sec>
-      <Sec icon="📊" title={`vs. NBA ${compTier} (${p.pos})`} sub="Green = clears the bar. Red = below threshold.">
-        <div className="flex items-center gap-3 mb-4 pb-3" style={{borderBottom:"1px solid #1f2937"}}>
-          <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Compare against:</span>
+
+      {/* ═══ TIER FEASIBILITY — Corridors + Compensation ═══ */}
+      <Sec icon="📊" title={`vs. NBA ${compTier} (${p.pos})`} sub="">
+        <div className="flex items-center gap-3 mb-3">
+          <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Compare:</span>
           <div className="flex gap-1">
             {["Replacement","Role Player","Starter","All-Star"].map(tier=>(
               <button key={tier} onClick={()=>setCompTier(tier)} className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
-                style={{background:compTier===tier?"#f97316":"#1f2937",color:compTier===tier?"#000":"#9ca3af"}}>
-                {tier}
-              </button>
+                style={{background:compTier===tier?TC[tier]||"#f97316":"#1f2937",color:compTier===tier?"#000":"#9ca3af"}}>{tier}</button>
             ))}
           </div>
         </div>
-        <div className="space-y-2">
-          {compData.map(({s,v,r})=>{
-            const pctV=r>0?(v/r)*100:100; const above=v>=r; const c=above?"#22c55e":"#ef4444";
-            return (
-              <div key={s} className="flex items-center gap-3">
-                <div className="w-12 text-xs font-semibold text-right" style={{color:"#9ca3af"}}>{s}</div>
-                <div className="flex-1 h-6 rounded-full relative overflow-hidden" style={{background:"#1f2937"}}>
-                  <div className="absolute top-0 bottom-0 w-0.5" style={{left:"50%",background:"#ffffff33",zIndex:2}}/>
-                  <div className="h-full rounded-full" style={{width:`${Math.min(100,pctV*0.5)}%`,background:`linear-gradient(90deg,${c}88,${c})`}}/>
-                </div>
-                <div className="w-16 text-sm font-bold text-right" style={{color:c}}>{fmt(v)}</div>
-                <div className="w-12 text-xs text-right" style={{color:"#6b7280"}}>({fmt(r)})</div>
-              </div>
-            );
-          })}
+        <div className="flex items-center gap-4 mb-4 p-3 rounded-lg" style={{background:"#0d111788"}}>
+          <div className="text-center px-3">
+            <div className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Feasibility</div>
+            <div className="text-3xl font-bold" style={{color:feasColor,fontFamily:"'Oswald',sans-serif"}}>{feasScore ?? "—"}</div>
+          </div>
+          <div className="flex-1 text-xs leading-relaxed" style={{color:"#9ca3af"}}>
+            <span style={{color:"#22c55e"}}>●</span> {nG} In-Range <span style={{color:"#fbbf24"}}>●</span> {nY} Compensated <span style={{color:"#ef4444"}}>●</span> {nR} Critical
+            <div className="mt-1" style={{color:"#4b5563"}}>
+              Shadow = p25–p75 corridor. | = median. ★ = core for {p.pos}.
+              {hasEliteCore && <span style={{color:"#fbbf24"}}> Elite core detected — secondary gaps compensated.</span>}
+            </div>
+          </div>
+        </div>
+        {cats.map(cat => {
+          const cm = assessed.filter(m => m.cat === cat);
+          if (!cm.length) return null;
+          return (
+            <div key={cat} className="mb-3">
+              <div className="text-xs uppercase tracking-wider font-semibold mb-1.5 flex items-center gap-2" style={{color:"#6b7280"}}>{cat}</div>
+              {cm.map(m => {
+                const maxB = m.invert ? m.p25 * 1.4 : m.p75 * 1.3;
+                const toX = v => Math.max(0, Math.min(100, (v / maxB) * 100));
+                return (
+                  <Tip key={m.id} wide content={
+                    <div>
+                      <div className="font-bold mb-1" style={{color:m.statusColor}}>{m.label}: {m.status}{m.core?" (Core ★)":""}</div>
+                      <div style={{color:"#94a3b8"}}>{m.desc}</div>
+                      <div className="mt-1 text-xs" style={{color:"#cbd5e1"}}>Floor (p25): {fmt(m.p25)} · Median (p50): {fmt(m.p50)} · Elite (p75): {fmt(m.p75)}</div>
+                      {m.status==="Compensated"&&<div className="mt-1" style={{color:"#fbbf24"}}>Below floor, but compensated by elite core skill.</div>}
+                    </div>
+                  }>
+                    <div className="flex items-center gap-2 py-1 cursor-help">
+                      <div className="w-12 text-xs font-semibold text-right" style={{color:"#9ca3af"}}>{m.core&&<span style={{color:TC[compTier]}}>★</span>}{m.label}</div>
+                      <div className="flex-1 h-6 rounded relative overflow-hidden" style={{background:"#0d1117"}}>
+                        <div className="absolute top-0 bottom-0 rounded" style={{left:`${toX(Math.min(m.p25,m.p75))}%`,width:`${Math.abs(toX(m.p75)-toX(m.p25))}%`,background:"#ffffff0d"}}/>
+                        <div className="absolute top-0 bottom-0 w-px" style={{left:`${toX(m.p50)}%`,background:"#ffffff33"}}/>
+                        {m.val!=null&&<div className="absolute top-0.5 bottom-0.5 rounded" style={{left:0,width:`${toX(m.val)}%`,background:`linear-gradient(90deg,${m.statusColor}33,${m.statusColor}88)`}}/>}
+                        {m.val!=null&&<div className="absolute top-0 bottom-0 w-1 rounded" style={{left:`${toX(m.val)}%`,background:m.statusColor}}/>}
+                      </div>
+                      <div className="w-12 text-sm font-bold text-right" style={{color:m.statusColor}}>{m.val!=null?fmt(m.val):"—"}</div>
+                      <div className="w-10 text-xs text-right" style={{color:"#4b5563"}}>({fmt(m.p50)})</div>
+                      <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{background:m.statusColor}}/>
+                    </div>
+                  </Tip>
+                );
+              })}
+            </div>
+          );
+        })}
+        <div className="mt-2 p-2 rounded text-xs" style={{color:"#3b4252"}}>
+          Shadow = p25–p75 range for NBA {compTier}s at {p.pos}. Green ≥ median. Yellow = below floor, compensated by ★ elite core.
+          Red = critical gap. Feasibility = weighted proximity to median (★ core 1.5× weight).
         </div>
       </Sec>
     </div>
@@ -686,7 +764,7 @@ function OverviewTab({p, compTier, setCompTier}) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// TAB: SHOOTING (Overhauled v2 — bigger court, intl support, level bars)
+// TAB: SHOOTING (v3 — court fix, shot diet, role-based projection)
 // ═══════════════════════════════════════════════════════════
 function ShootingTab({p}) {
   const isIntl = p.source && p.source !== "ncaa";
@@ -696,7 +774,6 @@ function ShootingTab({p}) {
     if (v == null || v === "" || v === "—") return null;
     const n = Number(v);
     if (isNaN(n)) return null;
-    // Values 0-1 that look like ratios → convert to percentage
     if (n > 0 && n < 1 && n !== 0) return Math.round(n * 1000) / 10;
     return Math.round(n * 10) / 10;
   };
@@ -704,77 +781,72 @@ function ShootingTab({p}) {
   const midPct = norm(p.midPct);
   const tp = norm(p.tp);
   const ft = norm(p.ft);
-  const fg = norm(p.fg);
-  const ts = norm(p.ts);
   const efg = norm(p.efg);
   const ftr = norm(p.ftr);
+  const ts = norm(p.ts);
   const rimF = norm(p.rimF);
   const midF = norm(p.midF);
   const threeF = norm(p.threeF);
   const dunkR = norm(p.dunkR);
 
-  // ── Detect data availability ──
   const hasRimData = rimF != null && rimF > 0;
   const hasMidData = midF != null && midF > 0;
   const hasDunkData = dunkR != null && dunkR > 0;
   const hasTrackingData = hasRimData || hasMidData;
 
-  // ── Shot zones with availability checks ──
-  const zones = [
-    {key:"dunks", label:"Dunks", pct:hasDunkData ? dunkR : null, freq:hasDunkData ? dunkR : null, color:"#ef4444", available:hasDunkData},
-    {key:"rim", label:"@Rim", pct:rimPct, freq:hasRimData ? (rimF - (dunkR||0)) : null, color:"#f97316", available:hasRimData},
-    {key:"mid", label:"Mid-Range", pct:midPct, freq:midF, color:"#fbbf24", available:hasMidData},
-    {key:"ft", label:"Free Throw", pct:ft, freq:null, color:"#8b5cf6", available:ft != null},
-    {key:"3pt", label:"3-Point", pct:tp, freq:threeF, color:"#3b82f6", available:tp != null || threeF != null},
-  ];
+  // ── Estimate absolute attempts from GP, minutes, pts, TS% ──
+  const gp = p.gp ?? 0;
+  const estFgaPerGame = (p.pts && ts) ? p.pts / (2 * ts / 100) : null;
+  const totalFga = estFgaPerGame && gp ? Math.round(estFgaPerGame * gp) : null;
+  const estAttempts = (freq) => (freq != null && totalFga) ? Math.round(totalFga * freq / 100) : null;
+  const estMade = (freq, pct) => (freq != null && pct != null && totalFga) ? Math.round(totalFga * freq / 100 * pct / 100) : null;
 
-  // ── Shot mix for level bar chart (only zones with frequency data) ──
-  const shotLevels = [
-    {level:"Dunks", freq:hasDunkData ? (dunkR||0) : 0, pct:null, color:"#ef4444"},
-    {level:"@Rim (non-dunk)", freq:hasRimData ? Math.max(0, (rimF||0) - (dunkR||0)) : 0, pct:rimPct, color:"#f97316"},
-    {level:"Mid-Range", freq:hasMidData ? (midF||0) : 0, pct:midPct, color:"#fbbf24"},
-    {level:"3-Point", freq:threeF||0, pct:tp, color:"#3b82f6"},
+  // ── Shot diet for stacked bar (% of FGA per zone) ──
+  const shotDiet = [
+    {label:"@Rim",  freq:hasRimData ? (rimF - (dunkR||0)) : 0, pct:rimPct,  color:"#f97316"},
+    {label:"Dunks", freq:hasDunkData ? dunkR : 0,               pct:null,    color:"#ef4444"},
+    {label:"Mid",   freq:hasMidData ? midF : 0,                 pct:midPct,  color:"#fbbf24"},
+    {label:"3PT",   freq:threeF||0,                              pct:tp,      color:"#3b82f6"},
   ].filter(z => z.freq > 0);
+  const totalDiet = shotDiet.reduce((s,z) => s + z.freq, 0);
 
-  // For intl players with no shot distribution, show simplified view
-  const totalFreq = shotLevels.reduce((s,z) => s + z.freq, 0);
+  // ── Self-Creation: % of FGA that were unassisted ──
+  // Proxy: %UAST ≈ 1 - (team_ast_share for this player's shots)
+  // Best available: if we had AST'd% per zone we'd use it. Without it:
+  // Estimate: USG * (1 - AST%_of_teammates) ≈ simplified to USG-weighted unassisted ratio
+  const usg = p.usg ?? 20;
+  const astP = p.astP ?? 15;
+  // Rough proxy: higher USG + lower AST% on team = more self-created shots
+  // This is NOT the same as BartTorvik's play-by-play AST'D column
+  const selfCreatedPct = Math.min(95, Math.max(10, Math.round(usg * 1.8 - astP * 0.3)));
 
-  // ── Touch prior calculation (works for all players — only needs FT%) ──
-  const midPctForPrior = midPct ?? (hasMidData ? midPct : (fg ? fg * 0.95 : 40)); // rough mid% proxy from FG%
+  // ── Touch prior (Bayesian motor touch) ──
+  const midPctForPrior = midPct ?? (ft ? ft * 0.55 : 40);
   const touchPrior = p.projPrior ?? ((0.20 + 0.18 * (ft ?? 75) / 100 + 0.05 * (midPctForPrior ?? 40) / 100) * 100);
 
-  // ── NBA shooting projection (with fallback computation for intl) ──
+  // ── NBA 3P projection (Bayesian Beta-Binomial + role volume) ──
   const projNba3p = p.projNba3p ?? (() => {
-    // Bayesian Beta-Binomial: posterior = (kappa*mu0 + 3PM) / (kappa + 3PA)
     if (ft == null) return null;
-    const mu0 = 0.20 + 0.18 * (ft / 100) + 0.05 * ((midPctForPrior ?? 40) / 100);
+    const mu0 = 0.20 + 0.18 * (ft / 100) + 0.05 * ((midPctForPrior) / 100);
     const kappa = 200;
-    // Estimate 3PA from threeF and minutes
-    const est3PA = threeF != null && threeF > 0 ? Math.round(threeF * 2.5) : 50; // rough season 3PA
+    const est3PA = threeF != null && estFgaPerGame ? Math.round(estFgaPerGame * gp * threeF / 100) : 50;
     const est3PM = tp != null ? Math.round(est3PA * tp / 100) : Math.round(est3PA * mu0);
     return Math.round(((kappa * mu0 + est3PM) / (kappa + est3PA)) * 1000) / 10;
   })();
 
-  // Elastic FGA projection
-  const usg = p.usg ?? 20;
-  const projFGA = 8.5 + (Math.min(30, Math.max(15, usg)) - 15) * (15.0 - 8.5) / 15;
-  const proj3PAr = p.projNba3par ?? (threeF != null ? Math.round(threeF * 0.8 + (ft ?? 75 > 80 ? 3 : 0) + 5) : null);
+  // Role-based NBA FGA projection
+  const tierIdx = {"Superstar":18,"All-Star":15.5,"Starter":13,"Role Player":10.5,"Replacement":8.5};
+  const bestTier = p.predTier || "Starter";
+  const projFGA = tierIdx[bestTier] || (8.5 + (Math.min(30, Math.max(15, usg)) - 15) * 6.5 / 15);
+  // 3PAr: college 3P frequency * NBA translation factor (slightly more 3s in NBA)
+  const proj3PAr = p.projNba3par ?? (threeF != null ? Math.min(55, Math.round(threeF * 0.85 + (ft > 80 ? 3 : 0) + 5)) : null);
   const projNba3pa = p.projNba3pa ?? (proj3PAr != null ? Math.round(projFGA * proj3PAr / 100 * 10) / 10 : null);
 
-  // Self-creation proxy
-  const selfCreation = p.selfCreation ?? Math.round(((usg) / 100) * (1 - ((p.astP ?? 20) / 100)) * 200);
-
-  // ── Zone opacity — only dim if truly no data ──
-  const zoneOpacity = (val, available) => {
-    if (!available || val == null) return 0.3;
-    return 1.0; // if data exists, show it full opacity
-  };
-
-  // ── Color helpers for values ──
+  // ── Color helpers ──
   const shotColor = (pct, type) => {
     if (pct == null) return "#6b7280";
     if (type === "3pt") return pct > 38 ? "#22c55e" : pct > 34 ? "#86efac" : pct > 30 ? "#fbbf24" : "#ef4444";
-    if (type === "ft") return pct > 80 ? "#22c55e" : pct > 72 ? "#86efac" : pct > 65 ? "#fbbf24" : "#ef4444";
+    if (type === "ft")  return pct > 80 ? "#22c55e" : pct > 72 ? "#86efac" : pct > 65 ? "#fbbf24" : "#ef4444";
     if (type === "mid") return pct > 45 ? "#22c55e" : pct > 40 ? "#86efac" : pct > 35 ? "#fbbf24" : "#ef4444";
     if (type === "rim") return pct > 65 ? "#22c55e" : pct > 58 ? "#86efac" : pct > 50 ? "#fbbf24" : "#ef4444";
     return "#e5e7eb";
@@ -782,113 +854,100 @@ function ShootingTab({p}) {
 
   return (
     <div className="space-y-5">
-      {/* ── International data notice ── */}
       {isIntl && !hasTrackingData && (
         <div className="p-3 rounded-lg text-sm" style={{background:"#1e3a5f33",border:"1px solid #3b82f644",color:"#93c5fd"}}>
-          International prospect — shot-type tracking (Rim%, Mid%, Dunks) not available. Showing FT%, 3P%, and FG% data. NBA projections computed from Bayesian priors.
+          International prospect — shot-type tracking not available. FT%, 3P%, and efficiency data shown. NBA projections use Bayesian priors.
         </div>
       )}
 
-      {/* ── 3.5 LEVEL SCORING — BIGGER COURT ── */}
+      {/* ═══ 3.5 LEVEL SCORING — COURT + SHOT DIET ═══ */}
       <Sec icon="🏀" title="3.5 Level Scoring" sub="Shot distribution, accuracy, and volume across all scoring zones">
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
-          {/* Court Visualization — MUCH BIGGER */}
+          {/* ── Court Visualization ── */}
           <div className="lg:col-span-3 relative mx-auto w-full" style={{maxWidth:580}}>
-            <svg viewBox="0 0 580 480" className="w-full" style={{minHeight:380}}>
-              {/* Background */}
-              <rect x="0" y="0" width="580" height="480" rx="12" fill="#0d1117"/>
-
-              {/* Court lines */}
+            <svg viewBox="0 0 580 460" className="w-full" style={{minHeight:360}}>
+              <rect x="0" y="0" width="580" height="460" rx="12" fill="#0d1117"/>
               <line x1="15" y1="15" x2="565" y2="15" stroke="#1f2937" strokeWidth="2.5"/>
-              {/* 3-point arc */}
               <path d="M 62 15 L 62 110 A 235 235 0 0 0 518 110 L 518 15" fill="none" stroke="#3b82f644" strokeWidth="2.5"/>
-              {/* Paint */}
               <rect x="175" y="15" width="230" height="260" fill="none" stroke="#1f2937" strokeWidth="2" rx="3"/>
-              {/* FT circle */}
               <circle cx="290" cy="275" r="78" fill="none" stroke="#1f293744" strokeWidth="1.5"/>
-              {/* FT line */}
               <line x1="175" y1="275" x2="405" y2="275" stroke="#8b5cf644" strokeWidth="2" strokeDasharray="8,4"/>
-              {/* Rim */}
               <circle cx="290" cy="55" r="24" fill="none" stroke="#ef444466" strokeWidth="2.5"/>
               <line x1="264" y1="28" x2="316" y2="28" stroke="#6b7280" strokeWidth="4"/>
 
-              {/* ── DUNK ZONE (right of rim) ── */}
-              <g opacity={zoneOpacity(dunkR, hasDunkData)}>
-                <text x="400" y="55" textAnchor="middle" fill="#ef4444" style={{fontSize:13,fontWeight:"bold",letterSpacing:"0.5px"}}>DUNKS</text>
-                <text x="400" y="82" textAnchor="middle" fill="#e5e7eb" style={{fontSize:22,fontWeight:"bold"}}>{hasDunkData ? `${fmt(dunkR)}%` : "N/A"}</text>
-                <text x="400" y="98" textAnchor="middle" fill="#6b7280" style={{fontSize:11}}>{hasDunkData ? "of shots" : "no tracking"}</text>
+              {/* @RIM */}
+              <g opacity={hasRimData ? 1 : 0.35}>
+                <text x="160" y="50" textAnchor="middle" fill="#f97316" style={{fontSize:13,fontWeight:"bold"}}>@RIM</text>
+                <text x="160" y="78" textAnchor="middle" fill={shotColor(rimPct,"rim")} style={{fontSize:24,fontWeight:"bold"}}>{rimPct!=null?`${fmt(rimPct)}%`:"N/A"}</text>
+                {hasRimData && estMade(rimF,rimPct)!=null && <text x="160" y="96" textAnchor="middle" fill="#9ca3af" style={{fontSize:12}}>{estMade(rimF,rimPct)}-{estAttempts(rimF)} FGA</text>}
+                {!hasRimData && <text x="160" y="96" textAnchor="middle" fill="#4b5563" style={{fontSize:11}}>no tracking</text>}
               </g>
 
-              {/* ── @RIM ZONE (left of rim) ── */}
-              <g opacity={zoneOpacity(rimF, hasRimData)}>
-                <text x="175" y="55" textAnchor="middle" fill="#f97316" style={{fontSize:13,fontWeight:"bold",letterSpacing:"0.5px"}}>@RIM</text>
-                <text x="175" y="85" textAnchor="middle" fill={shotColor(rimPct,"rim")} style={{fontSize:26,fontWeight:"bold"}}>{rimPct != null ? `${fmt(rimPct)}%` : "N/A"}</text>
-                <text x="175" y="104" textAnchor="middle" fill="#6b7280" style={{fontSize:12}}>{hasRimData ? `${fmt(rimF)}% freq` : "no tracking"}</text>
+              {/* DUNKS */}
+              <g opacity={hasDunkData ? 1 : 0.35}>
+                <text x="410" y="50" textAnchor="middle" fill="#ef4444" style={{fontSize:13,fontWeight:"bold"}}>DUNKS</text>
+                <text x="410" y="78" textAnchor="middle" fill="#e5e7eb" style={{fontSize:22,fontWeight:"bold"}}>{hasDunkData?`${fmt(dunkR)}%`:"N/A"}</text>
+                {hasDunkData && estAttempts(dunkR)!=null && <text x="410" y="96" textAnchor="middle" fill="#9ca3af" style={{fontSize:12}}>{estAttempts(dunkR)} att.</text>}
               </g>
 
-              {/* ── FT ZONE (center paint) ── */}
+              {/* MID */}
+              <g opacity={hasMidData ? 1 : 0.35}>
+                <text x="100" y="180" textAnchor="middle" fill="#fbbf24" style={{fontSize:13,fontWeight:"bold"}}>MID</text>
+                <text x="100" y="208" textAnchor="middle" fill={shotColor(midPct,"mid")} style={{fontSize:24,fontWeight:"bold"}}>{midPct!=null?`${fmt(midPct)}%`:"N/A"}</text>
+                {hasMidData && estMade(midF,midPct)!=null && <text x="100" y="226" textAnchor="middle" fill="#9ca3af" style={{fontSize:12}}>{estMade(midF,midPct)}-{estAttempts(midF)} FGA</text>}
+                {!hasMidData && <text x="100" y="226" textAnchor="middle" fill="#4b5563" style={{fontSize:11}}>no tracking</text>}
+              </g>
+
+              {/* FREE THROW */}
               <g>
-                <text x="290" y="244" textAnchor="middle" fill="#8b5cf6" style={{fontSize:14,fontWeight:"bold",letterSpacing:"0.5px"}}>FREE THROW</text>
-                <text x="290" y="278" textAnchor="middle" fill={shotColor(ft,"ft")} style={{fontSize:28,fontWeight:"bold"}}>{ft != null ? `${fmt(ft)}%` : "—"}</text>
-                <text x="290" y="298" textAnchor="middle" fill="#6b7280" style={{fontSize:13}}>FTR: {ftr != null ? fmt(ftr) : "—"}</text>
+                <text x="290" y="238" textAnchor="middle" fill="#8b5cf6" style={{fontSize:14,fontWeight:"bold"}}>FREE THROW</text>
+                <text x="290" y="270" textAnchor="middle" fill={shotColor(ft,"ft")} style={{fontSize:26,fontWeight:"bold"}}>{ft!=null?`${fmt(ft)}%`:"—"}</text>
+                <text x="290" y="290" textAnchor="middle" fill="#6b7280" style={{fontSize:12}}>FTR: {ftr!=null?fmt(ftr):"—"}</text>
               </g>
 
-              {/* ── MID ZONE (left side paint) ── */}
-              <g opacity={zoneOpacity(midF, hasMidData)}>
-                <text x="100" y="185" textAnchor="middle" fill="#fbbf24" style={{fontSize:14,fontWeight:"bold",letterSpacing:"0.5px"}}>MID</text>
-                <text x="100" y="215" textAnchor="middle" fill={shotColor(midPct,"mid")} style={{fontSize:26,fontWeight:"bold"}}>{midPct != null ? `${fmt(midPct)}%` : "N/A"}</text>
-                <text x="100" y="234" textAnchor="middle" fill="#6b7280" style={{fontSize:12}}>{hasMidData ? `${fmt(midF)}% freq` : "no tracking"}</text>
-              </g>
-
-              {/* ── 3PT ZONE (beyond arc) ── */}
-              <g opacity={zoneOpacity(threeF, tp != null)}>
-                <text x="290" y="385" textAnchor="middle" fill="#3b82f6" style={{fontSize:18,fontWeight:"bold",letterSpacing:"1px"}}>3-POINT</text>
-                <text x="290" y="420" textAnchor="middle" fill={shotColor(tp,"3pt")} style={{fontSize:34,fontWeight:"bold"}}>{tp != null ? `${fmt(tp)}%` : "—"}</text>
-                <text x="290" y="445" textAnchor="middle" fill="#6b7280" style={{fontSize:14}}>{threeF != null ? `${fmt(threeF)}% freq` : ""}</text>
-              </g>
-
-              {/* ── FG% in corner ── */}
-              <g>
-                <text x="510" y="200" textAnchor="middle" fill="#6b7280" style={{fontSize:11}}>Overall</text>
-                <text x="510" y="222" textAnchor="middle" fill="#9ca3af" style={{fontSize:18,fontWeight:"bold"}}>FG% {fg != null ? fmt(fg) : "—"}</text>
-                <text x="510" y="242" textAnchor="middle" fill="#6b7280" style={{fontSize:11}}>TS% {ts != null ? fmt(ts) : "—"}</text>
+              {/* 3-POINT */}
+              <g opacity={tp!=null ? 1 : 0.35}>
+                <text x="290" y="370" textAnchor="middle" fill="#3b82f6" style={{fontSize:17,fontWeight:"bold"}}>3-POINT</text>
+                <text x="290" y="405" textAnchor="middle" fill={shotColor(tp,"3pt")} style={{fontSize:32,fontWeight:"bold"}}>{tp!=null?`${fmt(tp)}%`:"—"}</text>
+                {threeF!=null && estMade(threeF,tp)!=null && <text x="290" y="425" textAnchor="middle" fill="#9ca3af" style={{fontSize:13}}>{estMade(threeF,tp)}-{estAttempts(threeF)} 3PA</text>}
               </g>
             </svg>
           </div>
 
-          {/* ── SHOT DISTRIBUTION LEVEL BARS ── */}
+          {/* ── SHOT DIET (stacked bar) + summary ── */}
           <div className="lg:col-span-2">
             <div className="text-xs uppercase tracking-wider mb-3 font-semibold" style={{color:"#6b7280"}}>Shot Distribution by Level</div>
 
-            {totalFreq > 0 ? (
+            {totalDiet > 0 ? (
               <div className="space-y-3">
-                {shotLevels.map(z => {
-                  const barWidth = Math.max(4, (z.freq / Math.max(1, ...shotLevels.map(s=>s.freq))) * 100);
+                {/* Individual zone bars */}
+                {shotDiet.map(z => {
+                  const barW = Math.max(4, (z.freq / Math.max(1, ...shotDiet.map(s=>s.freq))) * 100);
                   return (
-                    <div key={z.level}>
+                    <div key={z.label}>
                       <div className="flex justify-between items-baseline mb-1">
-                        <span className="text-xs font-semibold" style={{color:z.color}}>{z.level}</span>
+                        <span className="text-xs font-semibold" style={{color:z.color}}>{z.label}</span>
                         <div className="flex items-baseline gap-2">
                           {z.pct != null && <span className="text-xs font-bold" style={{color:z.color}}>{fmt(z.pct)}%</span>}
-                          <span className="text-xs" style={{color:"#6b7280"}}>{fmt(z.freq,0)}% freq</span>
+                          <span className="text-xs" style={{color:"#6b7280"}}>{fmt(z.freq,0)}% of FGA</span>
                         </div>
                       </div>
-                      <div className="h-7 rounded-lg overflow-hidden relative" style={{background:"#1f2937"}}>
-                        <div className="h-full rounded-lg flex items-center pl-2" style={{width:`${barWidth}%`,background:`linear-gradient(90deg,${z.color}66,${z.color})`}}>
+                      <div className="h-6 rounded-lg overflow-hidden relative" style={{background:"#1f2937"}}>
+                        <div className="h-full rounded-lg flex items-center pl-2" style={{width:`${barW}%`,background:`linear-gradient(90deg,${z.color}55,${z.color})`}}>
                           {z.freq > 12 && <span className="text-xs font-bold text-white">{fmt(z.freq,0)}%</span>}
                         </div>
                       </div>
                     </div>
                   );
                 })}
-                {/* Total stacked summary */}
+                {/* Stacked summary */}
                 <div className="mt-3 pt-3" style={{borderTop:"1px solid #1f2937"}}>
-                  <div className="text-xs mb-2" style={{color:"#6b7280"}}>Shot Mix (stacked)</div>
-                  <div className="h-8 rounded-lg overflow-hidden flex" style={{background:"#1f2937"}}>
-                    {shotLevels.map(z => (
-                      <Tip key={z.level} content={<div><span style={{color:z.color}}>{z.level}</span>: {fmt(z.freq,0)}% of shots{z.pct != null ? ` at ${fmt(z.pct)}%` : ""}</div>}>
-                        <div className="h-full flex items-center justify-center cursor-help" style={{width:`${(z.freq/totalFreq)*100}%`,background:z.color,minWidth:z.freq>3?20:4}}>
-                          {z.freq > 8 && <span className="text-xs font-bold text-white" style={{textShadow:"0 1px 2px rgba(0,0,0,0.5)"}}>{fmt(z.freq,0)}</span>}
+                  <div className="text-xs mb-1.5" style={{color:"#6b7280"}}>Shot Diet (stacked)</div>
+                  <div className="h-7 rounded-lg overflow-hidden flex" style={{background:"#1f2937"}}>
+                    {shotDiet.map(z => (
+                      <Tip key={z.label} content={<div><span style={{color:z.color}}>{z.label}</span>: {fmt(z.freq,0)}% of FGA{z.pct!=null?` at ${fmt(z.pct)}%`:""}</div>}>
+                        <div className="h-full flex items-center justify-center cursor-help" style={{width:`${(z.freq/Math.max(1,totalDiet))*100}%`,background:z.color,minWidth:z.freq>3?18:4}}>
+                          {z.freq>8&&<span className="text-xs font-bold text-white">{fmt(z.freq,0)}</span>}
                         </div>
                       </Tip>
                     ))}
@@ -902,59 +961,56 @@ function ShootingTab({p}) {
               </div>
             )}
 
-            {/* Self-Creation */}
-            <div className="mt-4 p-3 rounded-lg" style={{background:"#0d1117"}}>
-              <Tip content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>{METHODS.selfCreation.name}</div><code className="text-xs" style={{color:"#7dd3fc"}}>{METHODS.selfCreation.formula}</code><div className="mt-1" style={{color:"#cbd5e1"}}>{METHODS.selfCreation.desc}</div></div>}>
-                <div className="flex justify-between items-center cursor-help">
+            {/* ── Self-Creation (proxy) ── */}
+            <Tip wide content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>Self-Creation (proxy)</div><div style={{color:"#cbd5e1"}}>Estimated % of field goal attempts that were self-created (no assist). Proxy: USG×1.8 − AST%×0.3. Not the same as BartTorvik's play-by-play AST'D column — would need shot-level data for exact values.</div></div>}>
+              <div className="mt-4 p-3 rounded-lg cursor-help" style={{background:"#0d1117"}}>
+                <div className="flex justify-between items-center">
                   <span className="text-xs" style={{color:"#6b7280"}}>Self-Creation Index <span style={{color:"#475569"}}>ⓘ</span></span>
-                  <span className="font-bold text-lg" style={{color:"#f97316",fontFamily:"'Oswald',sans-serif"}}>{selfCreation}</span>
+                  <span className="font-bold text-lg" style={{color:"#f97316",fontFamily:"'Oswald',sans-serif"}}>{selfCreatedPct}%</span>
                 </div>
-              </Tip>
-            </div>
+              </div>
+            </Tip>
           </div>
+        </div>
+        {/* ── Summary line below court: TS% + eFG% ── */}
+        <div className="mt-3 flex items-center gap-4 text-sm" style={{color:"#9ca3af"}}>
+          <span>TS%: <strong style={{color:shotColor(ts,"ft")}}>{ts!=null?fmt(ts):"—"}</strong></span>
+          <span>eFG%: <strong style={{color:shotColor(efg,"mid")}}>{efg!=null?fmt(efg):"—"}</strong></span>
+          <span>Self-Created: <strong style={{color:"#f97316"}}>{selfCreatedPct}%</strong> <span style={{color:"#4b5563"}}>(estimated)</span></span>
         </div>
       </Sec>
 
-      {/* ── NBA SHOOTING PROJECTION ── */}
-      <Sec icon="🔮" title="NBA Shooting Projection" sub={isIntl ? "Computed from Bayesian priors (FT%-based motor touch) — no college shot-tracking available" : "Bayesian Beta-Binomial model (Berger 2022)"}>
+      {/* ═══ NBA SHOOTING PROJECTION ═══ */}
+      <Sec icon="🔮" title="NBA Shooting Projection" sub={isIntl ? "Bayesian priors (FT%-based touch) — no college shot-tracking" : "Bayesian Beta-Binomial model (Berger 2022)"}>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
           {[
-            ["projNba3p","Proj. 3P%", projNba3p, projNba3p != null ? (projNba3p > 36 ? "#22c55e" : projNba3p > 32 ? "#fbbf24" : "#ef4444") : "#6b7280"],
-            ["projNba3pa","Proj. 3PA/G", projNba3pa, projNba3pa != null ? (projNba3pa > 5 ? "#3b82f6" : "#6b7280") : "#6b7280"],
-            ["projNba3par","Proj. 3PAr", proj3PAr, proj3PAr != null ? (proj3PAr > 30 ? "#3b82f6" : "#6b7280") : "#6b7280"],
-            ["touchPrior","Touch Prior", touchPrior, touchPrior > 37 ? "#22c55e" : touchPrior > 34 ? "#fbbf24" : "#ef4444"],
+            ["projNba3p","Proj. 3P%", projNba3p, projNba3p!=null?(projNba3p>36?"#22c55e":projNba3p>32?"#fbbf24":"#ef4444"):"#6b7280"],
+            ["projNba3pa","Proj. 3PA/G", projNba3pa, projNba3pa!=null?(projNba3pa>5?"#3b82f6":"#6b7280"):"#6b7280"],
+            ["projNba3par","Proj. 3PAr", proj3PAr, proj3PAr!=null?(proj3PAr>30?"#3b82f6":"#6b7280"):"#6b7280"],
+            ["touchPrior","Touch Prior", touchPrior, touchPrior>37?"#22c55e":touchPrior>34?"#fbbf24":"#ef4444"],
           ].map(([key,l,v,c])=>{
             const m = METHODS[key] || METHODS.touchPrior;
             return (
               <Tip key={key} wide content={
-                <div><div className="font-bold mb-1" style={{color:"#f97316"}}>{m.name}</div>
-                <div className="mb-1"><span style={{color:"#94a3b8"}}>Formula:</span><br/><code className="text-xs" style={{color:"#7dd3fc"}}>{m.formula}</code></div>
-                <div style={{color:"#cbd5e1"}}>{m.desc}</div></div>
+                <div><div className="font-bold mb-1" style={{color:"#f97316"}}>{m?.name||l}</div>
+                {m?.formula&&<div className="mb-1"><span style={{color:"#94a3b8"}}>Formula:</span><br/><code className="text-xs" style={{color:"#7dd3fc"}}>{m.formula}</code></div>}
+                {m?.desc&&<div style={{color:"#cbd5e1"}}>{m.desc}</div>}
+                {key==="projNba3pa"&&<div className="mt-1" style={{color:"#94a3b8"}}>Volume scaled to projected role: {bestTier} → {projFGA.toFixed(1)} FGA/game.</div>}
+                </div>
               }>
                 <div className="rounded-lg p-4 text-center cursor-help" style={{background:"#0d1117"}}>
                   <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#6b7280"}}>{l} <span style={{color:"#475569"}}>ⓘ</span></div>
-                  <div className="text-3xl font-bold" style={{color:c,fontFamily:"'Oswald',sans-serif"}}>{v != null ? fmt(v) : "—"}{key==="touchPrior"?"%":""}</div>
-                  {v == null && <div className="text-xs mt-1" style={{color:"#475569"}}>insufficient data</div>}
+                  <div className="text-3xl font-bold" style={{color:c,fontFamily:"'Oswald',sans-serif"}}>{v!=null?fmt(v):"—"}{key==="touchPrior"?"%":""}</div>
+                  {v==null&&<div className="text-xs mt-1" style={{color:"#475569"}}>insufficient data</div>}
                 </div>
               </Tip>
             );
           })}
         </div>
-
-        {/* Prior transparency */}
         <div className="px-3 py-2 rounded-lg text-xs" style={{background:"#0d1117",border:"1px solid #1e293b"}}>
-          <Tip wide content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>Bayesian Beta-Binomial (Berger 2022)</div><div style={{color:"#cbd5e1"}}>The prior encodes motor "touch" — neuromuscular consistency predicting NBA shooting. A player with 85% FT + 28% 3P has vastly more latent 3P potential than one with 65% FT + 35% 3P. kappa=200 pseudo-attempts: more 3PA = less prior influence.</div></div>}>
-            <span style={{color:"#6b7280"}}>Touch Prior: FT% (<span style={{color:"#8b5cf6"}}>{ft != null ? fmt(ft) : "—"}</span>) x 0.18 + Mid% (<span style={{color:"#fbbf24"}}>{midPct != null ? fmt(midPct) : `~${fmt(midPctForPrior)} est`}</span>) x 0.05 + 0.20 = <span className="font-bold" style={{color:touchPrior>37?"#22c55e":"#fbbf24"}}>{fmt(touchPrior)}%</span> <span style={{color:"#475569"}}>ⓘ</span></span>
+          <Tip wide content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>Bayesian Beta-Binomial (Berger 2022)</div><div style={{color:"#cbd5e1"}}>Prior encodes motor "touch" — neuromuscular consistency. 85% FT + 28% 3P has more latent 3P potential than 65% FT + 35% 3P. kappa=200 pseudo-attempts: more actual 3PA = less prior influence. Volume projection uses projected tier ({bestTier} → {projFGA.toFixed(1)} FGA/game).</div></div>}>
+            <span style={{color:"#6b7280"}}>Touch Prior: FT% (<span style={{color:"#8b5cf6"}}>{ft!=null?fmt(ft):"—"}</span>) × 0.18 + Mid% (<span style={{color:"#fbbf24"}}>{midPct!=null?fmt(midPct):`~${fmt(midPctForPrior)} est`}</span>) × 0.05 + 0.20 = <span className="font-bold" style={{color:touchPrior>37?"#22c55e":"#fbbf24"}}>{fmt(touchPrior)}%</span> <span style={{color:"#475569"}}>ⓘ</span></span>
           </Tip>
-        </div>
-
-        {/* Reference stats */}
-        <div className="mt-2 flex flex-wrap gap-3 text-xs" style={{color:"#6b7280"}}>
-          <span>Self-Creation: <span style={{color:"#f97316"}}>{selfCreation}</span></span>
-          <span>FG%: <span style={{color:"#e5e7eb"}}>{fg != null ? fmt(fg) : "—"}</span></span>
-          <span>TS%: <span style={{color:"#e5e7eb"}}>{ts != null ? fmt(ts) : "—"}</span></span>
-          {efg != null && <span>eFG%: <span style={{color:"#e5e7eb"}}>{fmt(efg)}</span></span>}
-          {isIntl && <span className="px-2 py-0.5 rounded" style={{background:"#3b82f622",color:"#60a5fa"}}>Intl Data</span>}
         </div>
       </Sec>
     </div>
