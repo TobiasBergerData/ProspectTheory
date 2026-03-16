@@ -479,14 +479,23 @@ function mapProfile(d) {
     seasonsPlayed: d.seasons_played ?? d.seasonsPlayed ?? 1,
     gp: d.gp ?? d.games ?? d.g, min: d.min ?? d.minutes ?? d.mpg,
     mp: d.mp ?? d.total_min ?? d.sample_min,
-    // Box score — extended fallback chains for old/intl profiles
-    pts: d.pts ?? d.college_pts ?? d.ppg,
-    reb: d.reb ?? d.college_treb ?? d.trb ?? d.treb ?? d.rpg,
-    ast: d.ast ?? d.college_ast ?? d.apg,
-    stl: d.stl ?? d.college_stl ?? d.spg,
-    blk: d.blk ?? d.college_blk ?? d.bpg,
-    astTov: d.ast_to ?? d.astTov ?? d.ast_tov ?? d.college_ast_tov ?? d["ast/tov"] ?? null,
-    bpm: d.bpm, obpm: d.obpm, dbpm: d.dbpm, ortg: d.ortg,
+    // Box score — extended fallback chains + per-36 conversion
+    pts: d.pts ?? d.college_pts ?? d.ppg ?? d.PPG ?? (d.pts36 && d.min ? Math.round(d.pts36 * d.min / 36 * 10) / 10 : null),
+    reb: d.reb ?? d.college_treb ?? d.trb ?? d.treb ?? d.rpg ?? d.RPG ?? d.college_reb ?? (d.reb36 && d.min ? Math.round(d.reb36 * d.min / 36 * 10) / 10 : null),
+    ast: d.ast ?? d.college_ast ?? d.apg ?? d.APG ?? (d.ast36 && d.min ? Math.round(d.ast36 * d.min / 36 * 10) / 10 : null),
+    stl: d.stl ?? d.college_stl ?? d.spg ?? d.SPG ?? (d.stl36 && d.min ? Math.round(d.stl36 * d.min / 36 * 10) / 10 : null),
+    blk: d.blk ?? d.college_blk ?? d.bpg ?? d.BPG ?? (d.blk36 && d.min ? Math.round(d.blk36 * d.min / 36 * 10) / 10 : null),
+    astTov: d.ast_to ?? d.astTov ?? d.ast_tov ?? d.college_ast_tov ?? d["ast/tov"] ?? (() => {
+      // Client-side compute: AST per game / TOV per game
+      const a = d.ast ?? d.college_ast ?? d.apg;
+      const t = d.tov ?? d.college_tov ?? d.topg;
+      if (a != null && t != null && t > 0) return Math.round(a / t * 100) / 100;
+      // From AST% and TO%: rough proxy AST%/TO% (not exact but directionally correct)
+      const ap = d.ast_p ?? d.astP; const tp2 = d.to_p ?? d.toP;
+      if (ap != null && tp2 != null && tp2 > 0) return Math.round(ap / tp2 * 100) / 100;
+      return null;
+    })(),
+    bpm: d.bpm, obpm: d.obpm, dbpm: d.dbpm, ortg: d.ortg ?? d.ORtg ?? d.offensive_rating,
     usg: d.usg ?? d.usg_p,
     // Normalize percentages that might come as 0-1 from old profiles
     ts: (() => { const v = d.ts_pct ?? d.ts; if (v==null) return null; const n=Number(v); return n>0&&n<1?Math.round(n*1000)/10:Math.round(n*10)/10; })(),
@@ -749,12 +758,15 @@ function OverviewTab({p, compTier, setCompTier}) {
                 <div className="text-xs uppercase tracking-widest font-bold mb-3" style={{color:"#9ca3af"}}>{cat}</div>
                 <div className="space-y-4">
                   {cm.map(m=>{
-                    const minP = Math.min(m.p25, m.p75);
-                    const maxP = Math.max(m.p25, m.p75);
-                    const valOrP75 = Math.max(maxP, m.val || 0);
-                    // Scale so shadow band is always 30-60% of bar width
-                    const maxB = Math.max(valOrP75 * 1.15, maxP + (maxP - minP) * 0.8);
-                    const toX = v => Math.max(0, Math.min(100, (v / maxB) * 100));
+                    // Scale: p25 at 20%, p75 at 75% — shadow always visible and wide
+                    const lo = Math.min(m.p25, m.p75);
+                    const hi = Math.max(m.p25, m.p75);
+                    const range = hi - lo || 1;
+                    // Map value to 0-100% where lo=20% and hi=75%
+                    const toX = v => {
+                      const pct = 20 + ((v - lo) / range) * 55;
+                      return Math.max(0, Math.min(100, pct));
+                    };
                     return (
                       <div key={m.id}>
                         <Tip wide content={
