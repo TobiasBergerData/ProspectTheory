@@ -448,6 +448,21 @@ function mapProfile(d) {
   const badgeList = (d.badges && typeof d.badges === "string") ? d.badges.split("|").filter(Boolean) : (d.badges || []);
   const redList = (d.red_flags && typeof d.red_flags === "string") ? d.red_flags.split("|").filter(Boolean) : (d.red_flags || []);
 
+  // ── NORMALIZATION FUNCTIONS (must be defined before tmpP and return) ──
+  const normRate = (v) => {
+    if (v == null) return null;
+    const n = Number(v);
+    if (isNaN(n)) return null;
+    return Math.round(n * 10) / 10;
+  };
+  const normShootPct = (v) => {
+    if (v == null) return null;
+    const n = Number(v);
+    if (isNaN(n)) return null;
+    const r = (n > 0 && n < 1) ? n * 100 : n;
+    return (r > 100 || r < 0) ? null : Math.round(r * 10) / 10;
+  };
+
   // Always compute client badges (for consistency board↔profile)
   const resolvedPos = resolvePosition(d);
   const tmpP = {
@@ -473,25 +488,6 @@ function mapProfile(d) {
   const allGreen = [...new Set([...serverGreen, ...computed.green])];
   const allYellow = computed.yellow; // server doesn't send yellow
   const allRed = [...new Set([...serverRed, ...computed.red])];
-
-  // ── NORMALIZATION FUNCTIONS ──
-  // Rate stats (BLK%, STL%, ORB%, DRB%, AST%, TO%, USG%) are ALREADY percentage values
-  // from BartTorvik. e.g., BLK% = 0.7 means 0.7%, NOT 70%. NEVER multiply by 100.
-  const normRate = (v) => {
-    if (v == null) return null;
-    const n = Number(v);
-    if (isNaN(n)) return null;
-    return Math.round(n * 10) / 10;
-  };
-  // Shooting pcts (TS%, FG%, eFG%, FT%, 3P%) might come as 0-1 decimals from old profiles.
-  // e.g., TS% = 0.605 means 60.5%. Safe to multiply by 100 because no one shoots < 1%.
-  const normShootPct = (v) => {
-    if (v == null) return null;
-    const n = Number(v);
-    if (isNaN(n)) return null;
-    const r = (n > 0 && n < 1) ? n * 100 : n;
-    return (r > 100 || r < 0) ? null : Math.round(r * 10) / 10;
-  };
 
   return {
     name: d.name, pos: resolvedPos,
