@@ -728,43 +728,41 @@ function OverviewTab({p, compTier, setCompTier}) {
                     const maxB=m.invert?m.p25*1.4:m.p75*1.3;
                     const toX=v=>Math.max(0,Math.min(100,(v/maxB)*100));
                     return (
-                      <Tip key={m.id} wide content={
-                        <div>
-                          <div className="font-bold mb-1" style={{color:m.sc}}>{m.label}: {m.status}{m.core?" (Core ★)":""}</div>
-                          <div style={{color:"#94a3b8"}}>{m.desc}</div>
-                          <div className="mt-1 text-xs" style={{color:"#cbd5e1"}}>Floor (p25): {fmt(m.p25)} · Median (p50): {fmt(m.p50)} · Elite (p75): {fmt(m.p75)}</div>
-                          {m.status==="Compensated"&&<div className="mt-1" style={{color:"#fbbf24"}}>Below floor but compensated by elite ★ core skill.</div>}
-                        </div>
-                      }>
-                        <div className="cursor-help">
-                          <div className="flex items-center justify-between mb-1.5">
-                            <div className="flex items-center gap-2">
-                              {m.core&&<span className="text-base" style={{color:TC[compTier]||"#f97316"}}>★</span>}
-                              <span className="text-base font-semibold" style={{color:"#e5e7eb"}}>{m.label}</span>
+                      <div key={m.id}>
+                        <Tip wide content={
+                          <div>
+                            <div className="font-bold mb-1" style={{color:m.sc}}>{m.label}: {m.status}{m.core?" (Core ★)":""}</div>
+                            <div style={{color:"#94a3b8"}}>{m.desc}</div>
+                            <div className="mt-1 text-xs" style={{color:"#cbd5e1"}}>Floor (p25): {fmt(m.p25)} · Median (p50): {fmt(m.p50)} · Elite (p75): {fmt(m.p75)}</div>
+                            {m.status==="Compensated"&&<div className="mt-1" style={{color:"#fbbf24"}}>Below floor but compensated by elite ★ core skill.</div>}
+                          </div>
+                        }>
+                          <div className="cursor-help block">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <div className="flex items-center gap-2">
+                                {m.core&&<span className="text-base" style={{color:TC[compTier]||"#f97316"}}>★</span>}
+                                <span className="text-base font-semibold" style={{color:"#e5e7eb"}}>{m.label}</span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className="text-2xl font-bold" style={{color:m.sc,fontFamily:"'Oswald',sans-serif"}}>{m.val!=null?fmt(m.val):"—"}</span>
+                                <span className="text-sm" style={{color:"#4b5563"}}>/ {fmt(m.p50)}</span>
+                                <div className="w-3.5 h-3.5 rounded-full" style={{background:m.sc}}/>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-3">
-                              <span className="text-2xl font-bold" style={{color:m.sc,fontFamily:"'Oswald',sans-serif"}}>{m.val!=null?fmt(m.val):"—"}</span>
-                              <span className="text-sm" style={{color:"#4b5563"}}>/ {fmt(m.p50)}</span>
-                              <div className="w-3.5 h-3.5 rounded-full" style={{background:m.sc}}/>
+                            <div className="relative h-10 rounded-lg overflow-hidden" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+                              <div className="absolute top-0 bottom-0" style={{
+                                left:`${toX(Math.min(m.p25,m.p75))}%`,
+                                width:`${Math.abs(toX(m.p75)-toX(m.p25))}%`,
+                                background:`linear-gradient(90deg,${m.sc}08,${m.sc}18,${m.sc}08)`,
+                                borderLeft:`1px dashed ${m.sc}44`,borderRight:`1px dashed ${m.sc}44`,
+                              }}/>
+                              <div className="absolute top-0 bottom-0 w-0.5" style={{left:`${toX(m.p50)}%`,background:"#ffffff55"}}/>
+                              {m.val!=null&&<div className="absolute top-1 bottom-1 rounded-r" style={{left:0,width:`${toX(m.val)}%`,background:`linear-gradient(90deg,${m.sc}15,${m.sc}66)`}}/>}
+                              {m.val!=null&&<div className="absolute top-0 bottom-0 w-1.5 rounded" style={{left:`${Math.max(0,toX(m.val)-0.5)}%`,background:m.sc}}/>}
                             </div>
                           </div>
-                          <div className="relative h-10 rounded-lg overflow-hidden" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
-                            {/* Shadow band p25-p75 */}
-                            <div className="absolute top-0 bottom-0" style={{
-                              left:`${toX(Math.min(m.p25,m.p75))}%`,
-                              width:`${Math.abs(toX(m.p75)-toX(m.p25))}%`,
-                              background:`linear-gradient(90deg,${m.sc}08,${m.sc}18,${m.sc}08)`,
-                              borderLeft:`1px dashed ${m.sc}44`,borderRight:`1px dashed ${m.sc}44`,
-                            }}/>
-                            {/* Median line */}
-                            <div className="absolute top-0 bottom-0 w-0.5" style={{left:`${toX(m.p50)}%`,background:"#ffffff55"}}/>
-                            {/* Value fill */}
-                            {m.val!=null&&<div className="absolute top-1 bottom-1 rounded-r" style={{left:0,width:`${toX(m.val)}%`,background:`linear-gradient(90deg,${m.sc}15,${m.sc}66)`}}/>}
-                            {/* Value marker */}
-                            {m.val!=null&&<div className="absolute top-0 bottom-0 w-1.5 rounded" style={{left:`${Math.max(0,toX(m.val)-0.5)}%`,background:m.sc}}/>}
-                          </div>
-                        </div>
-                      </Tip>
+                        </Tip>
+                      </div>
                     );
                   })}
                 </div>
@@ -801,11 +799,14 @@ function ShootingTab({p}) {
 
   // ── Absolute attempts: estimate FGA from GP + PTS + TS%, then zone attempts ──
   const gp = p.gp ?? 0;
-  const rawFga = p.fga ?? null;  // direct if available
+  const rawFga = p.fga ?? null;  // season total from pipeline
   const estFgaPG = (p.pts && ts) ? p.pts / (2 * ts / 100) : null;
-  const totalFga = rawFga ? Math.round(rawFga) : (estFgaPG && gp ? Math.round(estFgaPG * gp) : null);
+  // If rawFga > 50, it's season total. If < 50, might be per-game.
+  const totalFga = rawFga ? (rawFga > 50 ? Math.round(rawFga) : Math.round(rawFga * gp)) : (estFgaPG && gp ? Math.round(estFgaPG * gp) : null);
   // FTA: from pipeline or estimate via FTR
-  const totalFta = p.fta ? Math.round(p.fta * gp) : (ftr != null && totalFga ? Math.round(ftr / 100 * totalFga) : null);
+  // FTA: p.fta is season total (e.g. 130), NOT per-game. Don't multiply by GP.
+  // Heuristic: if fta > 20 it's season total, if < 20 it might be per-game
+  const totalFta = p.fta ? (p.fta > 20 ? Math.round(p.fta) : Math.round(p.fta * gp)) : (ftr != null && totalFga ? Math.round(ftr / 100 * totalFga) : null);
   const totalShots = (totalFga || 0) + (totalFta || 0);
 
   const zoneAtt = (freq) => (freq != null && totalFga) ? Math.round(totalFga * freq / 100) : null;
@@ -851,8 +852,8 @@ function ShootingTab({p}) {
   };
   const bestTier = p.predTier || "Starter";
   const projFGA = (tierPosFga[bestTier]||tierPosFga["Starter"])[p.pos] || 13;
-  const proj3PAr = p.projNba3par ?? (threeF != null ? Math.min(55, Math.round(threeF * 0.85 + (ft > 80 ? 3 : 0) + 5)) : null);
-  const projNba3pa = p.projNba3pa ?? (proj3PAr != null ? Math.round(projFGA * proj3PAr / 100 * 10) / 10 : null);
+  const proj3PAr = threeF != null ? Math.min(55, Math.round(threeF * 0.85 + (ft > 80 ? 3 : 0) + 5)) : (p.projNba3par ?? null);
+  const projNba3pa = proj3PAr != null ? Math.round(projFGA * proj3PAr / 100 * 10) / 10 : null;
 
   const sc = (pct, type) => {
     if (pct == null) return "#6b7280";
