@@ -844,6 +844,9 @@ function ShootingTab({p}) {
   };
   const normPct = (v) => {
     const n = norm(v); if (n == null) return null;
+    // Values 0-1 are ratios (0.605 = 60.5%, 1.0 = 100%). Convert.
+    // Safe: no shooting pct is legitimately < 2% as a percentage
+    if (n > 0 && n <= 1.0) return Math.round(n * 1000) / 10;
     if (n > 100) return Math.round(n / 10) / 10;
     return n;
   };
@@ -1292,43 +1295,48 @@ function ScoutingTab({p}) {
   const archetype = p.archetype || "Unknown";
   const ARCH_MAP = {
     "Helio-Centric Engine":  {desc:"Ball-dominant offensive engine. The offense runs through this player.",color:"#fbbf24",
-      formula:"USG%>28 + PTS/36>18 + AST%>20 + Self-Creation>130",roles:["Helio-Scorer","Scorer","Event Creator"]},
+      pos:["Playmaker","Wing"],formula:"USG%>28 + PTS/36>18 + AST%>20 + Self-Creation>130",roles:["Helio-Scorer","Scorer","Event Creator"]},
     "Primary Initiator":     {desc:"Lead playmaker who creates for others. Half-court orchestrator.",color:"#f97316",
-      formula:"AST%>25 + AST/TO>2.0 + Feel>70",roles:["Playmaker","Connector","Event Creator"]},
+      pos:["Playmaker"],formula:"AST%>25 + AST/TO>2.0 + Feel>70",roles:["Playmaker","Connector","Event Creator"]},
     "Scoring Combo Guard":   {desc:"Versatile scoring guard. Can play on/off-ball with shooting.",color:"#22c55e",
-      formula:"Playmaker + USG%>22 + TS%>55 + 3P%>33",roles:["Scorer","Spacer","Playmaker"]},
+      pos:["Playmaker"],formula:"Playmaker + USG%>22 + TS%>55 + 3P%>33",roles:["Scorer","Spacer","Playmaker"]},
     "3&D Wing":              {desc:"Shoot and defend. The most valuable role player archetype in modern NBA.",color:"#3b82f6",
-      formula:"Wing + 3P%>35 + (STL%>2 OR DBPM>2) + USG%<22",roles:["Spacer","On-Ball D","Micro-Spacer"]},
+      pos:["Wing"],formula:"Wing + 3P%>35 + (STL%>2 OR DBPM>2) + USG%<22",roles:["Spacer","On-Ball D","Micro-Spacer"]},
     "Versatile Forward":     {desc:"Multi-positional forward. Defends, shoots, and connects plays.",color:"#8b5cf6",
-      formula:"Wing + Ht≥6'6\" + Role Versatility>60",roles:["Connector","Switch Pot.","Spacer"]},
+      pos:["Wing","Big"],formula:"Wing + Ht≥6'6\" + Role Versatility>60",roles:["Connector","Switch Pot.","Spacer"]},
     "Point Forward":         {desc:"Oversized playmaker. Creates mismatches with size + passing.",color:"#06b6d4",
-      formula:"Wing/Big + AST%>18 + Ht≥6'6\"",roles:["Playmaker","Connector","Driver"]},
+      pos:["Wing","Big"],formula:"Wing/Big + AST%>18 + Ht≥6'6\"",roles:["Playmaker","Connector","Driver"]},
     "Stretch Big":           {desc:"Shooting big who spaces the floor. Gravity from the 5 position.",color:"#10b981",
-      formula:"Big + 3P%>30 + 3PAr>15",roles:["Spacer","Rebounder","Rim Protect"]},
+      pos:["Big","Wing"],formula:"Big + 3P%>30 + 3PAr>15",roles:["Spacer","Rebounder","Rim Protect"]},
     "Rim-Running Big":       {desc:"Vertical threat. Finishes lobs, protects the rim, boards.",color:"#ef4444",
-      formula:"Big + Rim%>55 + BLK%>3 + Dunk Rate>8",roles:["Crasher","Rim Protect","Rebounder"]},
+      pos:["Big"],formula:"Big + Rim%>55 + BLK%>3 + Dunk Rate>8",roles:["Crasher","Rim Protect","Rebounder"]},
     "Two-Way Anchor":        {desc:"Defensive anchor with offensive polish. Anchors playoff rotations.",color:"#60a5fa",
-      formula:"Big + Def Score>70 + BPM>3",roles:["Rim Protect","Rebounder","Switch Pot."]},
+      pos:["Big"],formula:"Big + Def Score>70 + BPM>3",roles:["Rim Protect","Rebounder","Switch Pot."]},
     "Micro-Ball 5":          {desc:"Undersized center who defends with IQ. Switching specialist.",color:"#a78bfa",
-      formula:"Big + Ht<6'10\" + Switch Pot>1.5σ + DBPM>2",roles:["Switch Pot.","Connector","Rebounder"]},
+      pos:["Big","Wing"],formula:"Big + Ht<6'10\" + Switch Pot>1.5σ + DBPM>2",roles:["Switch Pot.","Connector","Rebounder"]},
     "Shot Creator":          {desc:"Can generate own shot off the dribble. Self-creation specialist.",color:"#fb923c",
-      formula:"Self-Creation>120 + TS%>55 + USG%>24",roles:["Scorer","Driver","Helio-Scorer"]},
+      pos:["Playmaker","Wing"],formula:"Self-Creation>120 + TS%>55 + USG%>24",roles:["Scorer","Driver","Helio-Scorer"]},
     "Athletic Slasher":      {desc:"Attacks the rim with explosiveness. Transition weapon.",color:"#f43f5e",
-      formula:"Rim%>45 + Func Ath>70 + Dunk Rate>5",roles:["Driver","Crasher","On-Ball D"]},
+      pos:["Wing","Playmaker"],formula:"Rim%>45 + Func Ath>70 + Dunk Rate>5",roles:["Driver","Crasher","On-Ball D"]},
   };
   const allArchetypes = Object.entries(ARCH_MAP);
   // Detect secondary/tertiary by matching role profiles
   const archScores = allArchetypes.map(([name,info]) => {
     let score = 0;
+    // Position bonus: archetypes matching player's position get +5
+    const posMatch = (info.pos||[]).includes(p.pos);
+    if (posMatch) score += 5;
     (info.roles||[]).forEach(r => {
       const key = Object.keys(ROLE_INFO).find(k => ROLE_INFO[k].name === r);
       if (key && rr[key]) score += Math.max(0, roleToZ(rr[key]));
     });
-    return {name, score, info};
+    return {name, score, info, posMatch};
   }).sort((a,b) => b.score - a.score);
   const primaryArch = archetype;
-  const secondaryArch = archScores.find(a => a.name !== primaryArch)?.name;
-  const tertiaryArch = archScores.filter(a => a.name !== primaryArch && a.name !== secondaryArch)[0]?.name;
+  // Secondary/tertiary must match position
+  const posFilteredArchs = archScores.filter(a => a.name !== primaryArch && a.posMatch);
+  const secondaryArch = posFilteredArchs[0]?.name;
+  const tertiaryArch = posFilteredArchs[1]?.name;
 
   // ── CFFR / Possession Impact ──
   const ffEfg = p.ff?.efg ?? 50, ffTov = p.ff?.tov ?? 50, ffOrb = p.ff?.orb ?? 50, ffFtr = p.ff?.ftr ?? 50;
@@ -1510,7 +1518,8 @@ function ScoutingTab({p}) {
             const isSecondary = secondaryArch === name;
             const isTertiary = tertiaryArch === name;
             const rank = isPrimary ? "PRIMARY" : isSecondary ? "2ND" : isTertiary ? "3RD" : null;
-            const rankColor = isPrimary ? info.color : isSecondary ? "#9ca3af" : "#4b5563";
+            const rankColor = isPrimary ? info.color : isSecondary ? info.color : isTertiary ? info.color : "#4b5563";
+            const posMatch = (info.pos||[]).includes(p.pos);
             return (
               <Tip key={name} content={
                 <div>
@@ -1518,18 +1527,21 @@ function ScoutingTab({p}) {
                   <div className="mb-1" style={{color:"#cbd5e1"}}>{info.desc}</div>
                   {info.formula&&<div className="mb-1"><span style={{color:"#94a3b8"}}>Formula:</span> <code className="text-xs" style={{color:"#7dd3fc"}}>{info.formula}</code></div>}
                   {info.roles&&<div><span style={{color:"#94a3b8"}}>Key roles:</span> <span style={{color:"#f97316"}}>{info.roles.join(", ")}</span></div>}
+                  {info.pos&&<div className="mt-1"><span style={{color:"#94a3b8"}}>Positions:</span> <span style={{color:posMatch?"#22c55e":"#ef4444"}}>{info.pos.join(", ")}{posMatch?"":" ⚠ mismatch"}</span></div>}
                 </div>
               }>
-                <div className={`rounded-lg p-3 cursor-help transition-all ${isPrimary ? "ring-2" : ""}`}
+                <div className={`rounded-lg cursor-help transition-all ${isPrimary ? "ring-2 p-4" : (isSecondary||isTertiary) ? "p-3" : "p-3"}`}
                   style={{
-                    background: isPrimary ? info.color + "18" : isSecondary ? "#0d111799" : "#0d1117",
-                    border: `1px solid ${isPrimary ? info.color : isSecondary ? "#374151" : "#1f2937"}`,
-                    opacity: isPrimary ? 1 : isSecondary ? 0.8 : isTertiary ? 0.65 : 0.4,
+                    background: isPrimary ? info.color + "22" : isSecondary ? info.color + "12" : isTertiary ? info.color + "08" : "#0d1117",
+                    border: `${isPrimary?"2":"1"}px solid ${isPrimary ? info.color : (isSecondary||isTertiary) ? info.color + "55" : "#1f2937"}`,
+                    opacity: isPrimary ? 1 : isSecondary ? 0.9 : isTertiary ? 0.75 : posMatch ? 0.4 : 0.2,
+                    ringColor: isPrimary ? info.color : "transparent",
                   }}>
                   <div className="flex items-center gap-2">
-                    {rank && <span className="text-xs px-1.5 py-0.5 rounded font-bold" style={{background:rankColor+"33",color:rankColor}}>{rank}</span>}
-                    <div className="text-xs font-semibold truncate" style={{color: isPrimary ? info.color : "#9ca3af"}}>{name} <span style={{color:"#475569"}}>ⓘ</span></div>
+                    {rank && <span className={`text-xs px-1.5 py-0.5 rounded font-bold ${isPrimary?"text-sm":""}`} style={{background:rankColor+"33",color:rankColor}}>{rank}</span>}
+                    <div className={`font-semibold truncate ${isPrimary?"text-sm":"text-xs"}`} style={{color: (isPrimary||isSecondary||isTertiary) ? info.color : "#9ca3af"}}>{name} <span style={{color:"#475569"}}>ⓘ</span></div>
                   </div>
+                  {isPrimary && <div className="mt-1 text-xs" style={{color:info.color+"aa"}}>{info.desc.split(".")[0]}.</div>}
                 </div>
               </Tip>
             );
