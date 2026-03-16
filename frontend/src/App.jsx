@@ -1221,13 +1221,15 @@ function ProjectionTab({p}) {
       <Sec icon="📈" title="Season-by-Season" sub="▲▼ shows change from previous season">
         {(p.seasonLines||[]).length > 1 ? (
           <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr>
-            {["Year","Cls","GP","MIN","PTS","REB","AST","STL","BLK","BPM","TS%","USG"].map(h=><th key={h} className="px-2 py-1 text-xs uppercase text-left" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>{h}</th>)}
+            {["Year","League","GP","MIN","PTS","REB","AST","STL","BLK","BPM","TS%","USG"].map(h=><th key={h} className="px-2 py-1 text-xs uppercase text-left" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>{h}</th>)}
           </tr></thead><tbody>
             {(p.seasonLines||[]).map((s,i)=>{
               const prev=i>0?(p.seasonLines||[])[i-1]:null;
-              const D=(cur,prv,inv)=>{if(!prev||cur==null||prv==null)return null;const d=cur-prv;const c=inv?(d<0?"#22c55e":d>0?"#ef4444":"#6b7280"):(d>0?"#22c55e":d<0?"#ef4444":"#6b7280");return<span className="text-xs ml-1" style={{color:c}}>{d>0?"▲":"▼"}{Math.abs(d).toFixed(1)}</span>;};
+              const D=(cur,prv,inv)=>{if(!prev||cur==null||prv==null)return null;const d=Number(cur)-Number(prv);if(isNaN(d))return null;const c=inv?(d<0?"#22c55e":d>0?"#ef4444":"#6b7280"):(d>0?"#22c55e":d<0?"#ef4444":"#6b7280");return<span className="text-xs ml-1" style={{color:c}}>{d>0?"▲":"▼"}{Math.abs(d).toFixed(1)}</span>;};
+              const leagueOrCls = s.league || s.cls || "";
               return(<tr key={i} style={{borderBottom:"1px solid #1f293744"}}>
-                <td className="px-2 py-2 font-semibold" style={{color:"#e5e7eb"}}>{s.yr}</td><td className="px-2" style={{color:"#9ca3af"}}>{s.cls}</td>
+                <td className="px-2 py-2 font-semibold" style={{color:"#e5e7eb"}}>{s.yr}</td>
+                <td className="px-2" style={{color:"#9ca3af"}}><span className="truncate block max-w-20" title={leagueOrCls}>{leagueOrCls}</span></td>
                 <td className="px-2">{s.gp}</td><td className="px-2">{fmt(s.min)}</td>
                 <td className="px-2">{fmt(s.pts)}{D(s.pts,prev?.pts)}</td><td className="px-2">{fmt(s.reb)}{D(s.reb,prev?.reb)}</td>
                 <td className="px-2">{fmt(s.ast)}{D(s.ast,prev?.ast)}</td><td className="px-2">{fmt(s.stl)}{D(s.stl,prev?.stl)}</td>
@@ -1238,10 +1240,14 @@ function ProjectionTab({p}) {
               </tr>);
             })}
           </tbody></table></div>
+        ) : (p.seasonLines||[]).length === 1 ? (
+          <div className="text-center py-4" style={{color:"#6b7280"}}>
+            Single season on record ({(p.seasonLines||[])[0]?.yr} · {(p.seasonLines||[])[0]?.league || (p.seasonLines||[])[0]?.cls || ""}).
+          </div>
         ) : (
           <div className="text-center py-6" style={{color:"#6b7280"}}>
             {p.seasonsPlayed > 1
-              ? "Multi-season data not yet in pipeline. Requires BartTorvik multi-year extraction."
+              ? "Multi-season data available but not yet linked. Pipeline re-run needed."
               : "One-and-done — no multi-season trajectory."}
           </div>
         )}
