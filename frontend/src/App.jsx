@@ -400,11 +400,28 @@ const API_BASE = "https://api.prospecttheory.io/api";
 
 function mapProfile(d) {
   if(!d) return null;
-  const pctl = d.pctl || {
-    bpm: d.pctl_bpm, usg: d.pctl_usg, ts: d.pctl_ts, ast: d.pctl_ast,
-    to: d.pctl_to, orb: d.pctl_orb, drb: d.pctl_drb, stl: d.pctl_stl,
-    blk: d.pctl_blk, pts36: d.pctl_pts36, reb36: d.pctl_reb36, ast36: d.pctl_ast36,
-    ftr: d.pctl_ftr, efg: d.pctl_efg,
+  // Normalize percentiles: pipeline sends 0-1, UI expects 0-100
+  const normPctl = (v) => {
+    if (v == null) return null;
+    const n = Number(v);
+    if (isNaN(n)) return null;
+    // If 0-1 scale (e.g. 0.95 = 95th percentile), multiply by 100
+    if (n > 0 && n <= 1.0) return Math.round(n * 100);
+    // Already 0-100 scale
+    return Math.round(n);
+  };
+  const pctl = d.pctl ? {
+    bpm: normPctl(d.pctl.bpm), usg: normPctl(d.pctl.usg), ts: normPctl(d.pctl.ts),
+    ast: normPctl(d.pctl.ast), to: normPctl(d.pctl.to), orb: normPctl(d.pctl.orb),
+    drb: normPctl(d.pctl.drb), stl: normPctl(d.pctl.stl), blk: normPctl(d.pctl.blk),
+    pts36: normPctl(d.pctl.pts36), reb36: normPctl(d.pctl.reb36), ast36: normPctl(d.pctl.ast36),
+    ftr: normPctl(d.pctl.ftr), efg: normPctl(d.pctl.efg),
+  } : {
+    bpm: normPctl(d.pctl_bpm), usg: normPctl(d.pctl_usg), ts: normPctl(d.pctl_ts),
+    ast: normPctl(d.pctl_ast), to: normPctl(d.pctl_to), orb: normPctl(d.pctl_orb),
+    drb: normPctl(d.pctl_drb), stl: normPctl(d.pctl_stl), blk: normPctl(d.pctl_blk),
+    pts36: normPctl(d.pctl_pts36), reb36: normPctl(d.pctl_reb36), ast36: normPctl(d.pctl_ast36),
+    ftr: normPctl(d.pctl_ftr), efg: normPctl(d.pctl_efg),
   };
 
   // Four factors — API sends flat fields (ff_efg, ff_tov etc), NOT nested objects
@@ -468,15 +485,22 @@ function mapProfile(d) {
     ast: d.ast ?? d.college_ast ?? d.apg,
     stl: d.stl ?? d.college_stl ?? d.spg,
     blk: d.blk ?? d.college_blk ?? d.bpg,
-    astTov: d.ast_to ?? d.astTov ?? d.ast_tov ?? d.college_ast_tov,
+    astTov: d.ast_to ?? d.astTov ?? d.ast_tov ?? d.college_ast_tov ?? d["ast/tov"] ?? null,
     bpm: d.bpm, obpm: d.obpm, dbpm: d.dbpm, ortg: d.ortg,
-    usg: d.usg ?? d.usg_p, ts: d.ts_pct ?? d.ts,
-    fg: d.fg_pct ?? d.fg, efg: d.efg_pct ?? d.efg,
-    astP: d.ast_p ?? d.astP, toP: d.to_p ?? d.toP,
-    orbP: d.orb_p ?? d.orbP, drbP: d.drb_p ?? d.drbP,
-    stlP: d.stl_p ?? d.stlP, blkP: d.blk_p ?? d.blkP,
-    ft: d.ft_pct ?? d.ft, tp: d.tp_pct ?? d.tp,
-    ftr: d.ftr ?? d.ft_rate, 
+    usg: d.usg ?? d.usg_p,
+    // Normalize percentages that might come as 0-1 from old profiles
+    ts: (() => { const v = d.ts_pct ?? d.ts; if (v==null) return null; const n=Number(v); return n>0&&n<1?Math.round(n*1000)/10:Math.round(n*10)/10; })(),
+    fg: (() => { const v = d.fg_pct ?? d.fg; if (v==null) return null; const n=Number(v); return n>0&&n<1?Math.round(n*1000)/10:Math.round(n*10)/10; })(),
+    efg: (() => { const v = d.efg_pct ?? d.efg; if (v==null) return null; const n=Number(v); return n>0&&n<1?Math.round(n*1000)/10:Math.round(n*10)/10; })(),
+    astP: (() => { const v = d.ast_p ?? d.astP; if (v==null) return null; const n=Number(v); return n>0&&n<1?Math.round(n*1000)/10:Math.round(n*10)/10; })(),
+    toP: (() => { const v = d.to_p ?? d.toP; if (v==null) return null; const n=Number(v); return n>0&&n<1?Math.round(n*1000)/10:Math.round(n*10)/10; })(),
+    orbP: (() => { const v = d.orb_p ?? d.orbP; if (v==null) return null; const n=Number(v); return n>0&&n<1?Math.round(n*1000)/10:Math.round(n*10)/10; })(),
+    drbP: (() => { const v = d.drb_p ?? d.drbP; if (v==null) return null; const n=Number(v); return n>0&&n<1?Math.round(n*1000)/10:Math.round(n*10)/10; })(),
+    stlP: (() => { const v = d.stl_p ?? d.stlP; if (v==null) return null; const n=Number(v); return n>0&&n<1?Math.round(n*1000)/10:Math.round(n*10)/10; })(),
+    blkP: (() => { const v = d.blk_p ?? d.blkP; if (v==null) return null; const n=Number(v); return n>0&&n<1?Math.round(n*1000)/10:Math.round(n*10)/10; })(),
+    ft: (() => { const v = d.ft_pct ?? d.ft; if (v==null) return null; const n=Number(v); return n>0&&n<1?Math.round(n*1000)/10:Math.round(n*10)/10; })(),
+    tp: (() => { const v = d.tp_pct ?? d.tp; if (v==null) return null; const n=Number(v); return n>0&&n<1?Math.round(n*1000)/10:Math.round(n*10)/10; })(),
+    ftr: (() => { const v = d.ftr ?? d.ft_rate; if (v == null) return null; const n = Number(v); return n > 0 && n < 1 ? Math.round(n * 1000) / 10 : Math.round(n * 10) / 10; })(),
     rimF: d.rim_f ?? d.rim_freq ?? d.rimF ?? d.rim_fga_pct, rimPct: d.rim_pct ?? d.rimPct ?? d.rim_fg_pct,
     midF: d.mid_f ?? d.mid_freq ?? d.midF ?? d.mid_fga_pct, midPct: d.mid_pct ?? d.midPct ?? d.mid_fg_pct,
     threeF: d.three_f ?? d.three_freq ?? d.threeF ?? d.three_fga_pct, threePar: d.three_par ?? d.threePar,
@@ -725,8 +749,12 @@ function OverviewTab({p, compTier, setCompTier}) {
                 <div className="text-xs uppercase tracking-widest font-bold mb-3" style={{color:"#9ca3af"}}>{cat}</div>
                 <div className="space-y-4">
                   {cm.map(m=>{
-                    const maxB=m.invert?m.p25*1.4:m.p75*1.3;
-                    const toX=v=>Math.max(0,Math.min(100,(v/maxB)*100));
+                    const minP = Math.min(m.p25, m.p75);
+                    const maxP = Math.max(m.p25, m.p75);
+                    const valOrP75 = Math.max(maxP, m.val || 0);
+                    // Scale so shadow band is always 30-60% of bar width
+                    const maxB = Math.max(valOrP75 * 1.15, maxP + (maxP - minP) * 0.8);
+                    const toX = v => Math.max(0, Math.min(100, (v / maxB) * 100));
                     return (
                       <div key={m.id}>
                         <Tip wide content={
@@ -787,13 +815,21 @@ function ShootingTab({p}) {
     if (v == null || v === "" || v === "—") return null;
     const n = Number(v);
     if (isNaN(n)) return null;
+    // Values 0-1 that are clearly ratios → convert to percentage
     if (n > 0 && n < 1 && n !== 0) return Math.round(n * 1000) / 10;
     return Math.round(n * 10) / 10;
   };
-  const rimPct = norm(p.rimPct), midPct = norm(p.midPct), tp = norm(p.tp), ft = norm(p.ft);
-  const efg = norm(p.efg), ftr = norm(p.ftr), ts = norm(p.ts);
+  // For shooting percentages: ensure 0-100 range (fixes old players with mixed formats)
+  const normPct = (v) => {
+    const n = norm(v);
+    if (n == null) return null;
+    if (n > 100) return Math.round(n / 10) / 10; // e.g. 698 → 69.8 (was stored as 0-1000)
+    return n;
+  };
+  const rimPct = normPct(p.rimPct), midPct = normPct(p.midPct), tp = normPct(p.tp), ft = normPct(p.ft);
+  const efg = normPct(p.efg), ftr = norm(p.ftr), ts = normPct(p.ts);
   const rimF = norm(p.rimF), midF = norm(p.midF), threeF = norm(p.threeF), dunkR = norm(p.dunkR);
-  const dunkPct = norm(p.dunkPct);
+  const dunkPct = normPct(p.dunkPct);
   const hasRim = rimF != null && rimF > 0, hasMid = midF != null && midF > 0;
   const hasDunk = dunkR != null && dunkR > 0, hasTracking = hasRim || hasMid;
 
