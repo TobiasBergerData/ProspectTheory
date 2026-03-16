@@ -496,20 +496,39 @@ function mapProfile(d) {
       return null;
     })(),
     bpm: d.bpm, obpm: d.obpm, dbpm: d.dbpm, ortg: d.ortg ?? d.ORtg ?? d.offensive_rating,
-    usg: d.usg ?? d.usg_p,
-    // Normalize percentages that might come as 0-1 from old profiles
-    ts: (() => { const v = d.ts_pct ?? d.ts; if (v==null) return null; const n=Number(v); return n>0&&n<1?Math.round(n*1000)/10:Math.round(n*10)/10; })(),
-    fg: (() => { const v = d.fg_pct ?? d.fg; if (v==null) return null; const n=Number(v); return n>0&&n<1?Math.round(n*1000)/10:Math.round(n*10)/10; })(),
-    efg: (() => { const v = d.efg_pct ?? d.efg; if (v==null) return null; const n=Number(v); return n>0&&n<1?Math.round(n*1000)/10:Math.round(n*10)/10; })(),
-    astP: (() => { const v = d.ast_p ?? d.astP; if (v==null) return null; const n=Number(v); return n>0&&n<1?Math.round(n*1000)/10:Math.round(n*10)/10; })(),
-    toP: (() => { const v = d.to_p ?? d.toP; if (v==null) return null; const n=Number(v); return n>0&&n<1?Math.round(n*1000)/10:Math.round(n*10)/10; })(),
-    orbP: (() => { const v = d.orb_p ?? d.orbP; if (v==null) return null; const n=Number(v); return n>0&&n<1?Math.round(n*1000)/10:Math.round(n*10)/10; })(),
-    drbP: (() => { const v = d.drb_p ?? d.drbP; if (v==null) return null; const n=Number(v); return n>0&&n<1?Math.round(n*1000)/10:Math.round(n*10)/10; })(),
-    stlP: (() => { const v = d.stl_p ?? d.stlP; if (v==null) return null; const n=Number(v); return n>0&&n<1?Math.round(n*1000)/10:Math.round(n*10)/10; })(),
-    blkP: (() => { const v = d.blk_p ?? d.blkP; if (v==null) return null; const n=Number(v); return n>0&&n<1?Math.round(n*1000)/10:Math.round(n*10)/10; })(),
-    ft: (() => { const v = d.ft_pct ?? d.ft; if (v==null) return null; const n=Number(v); return n>0&&n<1?Math.round(n*1000)/10:Math.round(n*10)/10; })(),
-    tp: (() => { const v = d.tp_pct ?? d.tp; if (v==null) return null; const n=Number(v); return n>0&&n<1?Math.round(n*1000)/10:Math.round(n*10)/10; })(),
-    ftr: (() => { const v = d.ftr ?? d.ft_rate; if (v == null) return null; const n = Number(v); return n > 0 && n < 1 ? Math.round(n * 1000) / 10 : Math.round(n * 10) / 10; })(),
+    usg: normRate(d.usg ?? d.usg_p),
+    // ── NORMALIZATION ──
+    // Rate stats (BLK%, STL%, ORB%, DRB%, AST%, TO%, USG%) are ALREADY percentage values
+    // from BartTorvik. e.g., BLK% = 0.7 means 0.7%, NOT 70%. NEVER multiply by 100.
+    // Shooting pcts (TS%, FG%, eFG%, FT%, 3P%) might come as 0-1 decimals from old profiles.
+    // e.g., TS% = 0.605 means 60.5%. Safe to multiply by 100 because no one shoots < 1%.
+    const normRate = (v) => {
+      // Rate stats: use as-is, they're already in percentage form (0.7 = 0.7%)
+      if (v == null) return null;
+      const n = Number(v);
+      if (isNaN(n)) return null;
+      return Math.round(n * 10) / 10;
+    };
+    const normShootPct = (v) => {
+      // Shooting pcts: convert 0-1 decimals to percentage, cap sanity
+      if (v == null) return null;
+      const n = Number(v);
+      if (isNaN(n)) return null;
+      const r = (n > 0 && n < 1) ? n * 100 : n;
+      return (r > 100 || r < 0) ? null : Math.round(r * 10) / 10;
+    };
+    ts: normShootPct(d.ts_pct ?? d.ts),
+    fg: normShootPct(d.fg_pct ?? d.fg),
+    efg: normShootPct(d.efg_pct ?? d.efg),
+    astP: normRate(d.ast_p ?? d.astP),
+    toP: normRate(d.to_p ?? d.toP),
+    orbP: normRate(d.orb_p ?? d.orbP),
+    drbP: normRate(d.drb_p ?? d.drbP),
+    stlP: normRate(d.stl_p ?? d.stlP),
+    blkP: normRate(d.blk_p ?? d.blkP),
+    ft: normShootPct(d.ft_pct ?? d.ft),
+    tp: normShootPct(d.tp_pct ?? d.tp),
+    ftr: normRate(d.ftr ?? d.ft_rate),
     rimF: d.rim_f ?? d.rim_freq ?? d.rimF ?? d.rim_fga_pct, rimPct: d.rim_pct ?? d.rimPct ?? d.rim_fg_pct,
     midF: d.mid_f ?? d.mid_freq ?? d.midF ?? d.mid_fga_pct, midPct: d.mid_pct ?? d.midPct ?? d.mid_fg_pct,
     threeF: d.three_f ?? d.three_freq ?? d.threeF ?? d.three_fga_pct, threePar: d.three_par ?? d.threePar,
@@ -1186,33 +1205,6 @@ function ProjectionTab({p}) {
           Model: LightGBM (depth=5, 200 trees) trained on 1,419 NCAA/Intl→NBA outcomes.
           r(projected_pie, peak_pie) = 0.58 in-sample, r = 0.41 CV 5-fold, r = 0.37 time-split.
           Top features: Age, Wingspan, BPM, DRB%, 3P%, Minutes, AST%.
-        </div>
-      </Sec>
-
-      {/* ═══ RISK PROFILE ═══ */}
-      <Sec icon="±" title="Risk Assessment" sub="">
-        <div className="grid grid-cols-3 gap-4">
-          <Tip content={<div>Floor = P(Starter or better). High floor = safe pick.</div>}>
-            <div className="rounded-lg p-4 text-center cursor-help" style={{background:"#0d1117"}}>
-              <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#6b7280"}}>Floor <span style={{color:"#475569"}}>ⓘ</span></div>
-              <div className="text-2xl font-bold" style={{color:p.floor>60?"#22c55e":p.floor>30?"#fbbf24":"#ef4444",fontFamily:"'Oswald',sans-serif"}}>{p.floor!=null?fmt(p.floor,0):"—"}</div>
-              <div className="text-xs mt-1" style={{color:"#475569"}}>P(≥Starter)</div>
-            </div>
-          </Tip>
-          <Tip content={<div>Ceiling = P(All-Star or better) × WAR multiplier. High ceiling = star potential.</div>}>
-            <div className="rounded-lg p-4 text-center cursor-help" style={{background:"#0d1117"}}>
-              <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#6b7280"}}>Ceiling <span style={{color:"#475569"}}>ⓘ</span></div>
-              <div className="text-2xl font-bold" style={{color:p.ceiling>50?"#fbbf24":p.ceiling>25?"#f97316":"#6b7280",fontFamily:"'Oswald',sans-serif"}}>{p.ceiling!=null?fmt(p.ceiling,0):"—"}</div>
-              <div className="text-xs mt-1" style={{color:"#475569"}}>Upside index</div>
-            </div>
-          </Tip>
-          <Tip content={<div>Volatility = model σ. Higher σ = wider range of outcomes. Boom-or-bust if σ > 0.04.</div>}>
-            <div className="rounded-lg p-4 text-center cursor-help" style={{background:"#0d1117"}}>
-              <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#6b7280"}}>Volatility <span style={{color:"#475569"}}>ⓘ</span></div>
-              <div className="text-2xl font-bold" style={{color:sigma>0.04?"#ef4444":sigma>0.03?"#fbbf24":"#22c55e",fontFamily:"'Oswald',sans-serif"}}>± {fmt(sigma,3)}</div>
-              <div className="text-xs mt-1" style={{color:"#475569"}}>{sigma>0.04?"Boom-or-Bust":sigma>0.03?"Moderate":"Stable"}</div>
-            </div>
-          </Tip>
         </div>
       </Sec>
 
