@@ -354,7 +354,7 @@ function resolvePosition(d) {
   const ht = d.ht ?? d.height_in ?? d.college_height_inches;
   const astP = d.ast_p ?? d.astP ?? 0;
   const usg = d.usg ?? d.usg_p ?? 0;
-  const tpFreq = d.three_freq ?? d.threeF ?? d.tp_per ?? 0;
+  const tpFreq = d.three_f ?? d.three_freq ?? d.threeF ?? d.tp_per ?? 0;
   const tp = d.tp_pct ?? d.tp ?? 0;
 
   // Ball-handler override: high AST% = Playmaker, WITH height guard
@@ -427,14 +427,14 @@ function mapProfile(d) {
   const resolvedPos = resolvePosition(d);
   const tmpP = {
     pos: resolvedPos,
-    ft:d.ft_pct??d.ft, tp:d.tp_pct??d.tp, threeF:d.three_freq??d.threeF,
+    ft:d.ft_pct??d.ft, tp:d.tp_pct??d.tp, threeF:d.three_f??d.three_freq??d.threeF,
     astP:d.ast_p??d.astP, astTov:d.ast_to??d.astTov??d.ast_tov, stlP:d.stl_p??d.stlP,
     blkP:d.blk_p??d.blkP, usg:d.usg??d.usg_p, toP:d.to_p??d.toP,
-    ts:d.ts_pct??d.ts, ftr:d.ftr??d.ft_rate, rimF:d.rim_freq??d.rimF,
+    ts:d.ts_pct??d.ts, ftr:d.ftr??d.ft_rate, rimF:d.rim_f??d.rim_freq??d.rimF,
     rimPct:d.rim_pct??d.rimPct, dbpm:d.dbpm, obpm:d.obpm, bpm:d.bpm,
     feel:d.feel??0, funcAth:d.func_ath??0,
     htIn:d.ht??d.height_in??d.college_height_inches,
-    drbP:d.drb_p??d.drbP, dunkR:d.dunk_rate??d.dunkR, age:d.age,
+    drbP:d.drb_p??d.drbP, dunkR:d.dunk_r??d.dunk_rate??d.dunkR, age:d.age,
     shootScore:d.shoot_score, efg:d.efg_pct??d.efg,
     twoPct:d.two_p_pct??d.fg_pct??d.fg,
     fouls40:d.fouls_40??0, min:d.min??0, pts:d.pts??0, fg:d.fg_pct??0,
@@ -477,10 +477,10 @@ function mapProfile(d) {
     stlP: d.stl_p ?? d.stlP, blkP: d.blk_p ?? d.blkP,
     ft: d.ft_pct ?? d.ft, tp: d.tp_pct ?? d.tp,
     ftr: d.ftr ?? d.ft_rate, 
-    rimF: d.rim_freq ?? d.rimF ?? d.rim_fga_pct, rimPct: d.rim_pct ?? d.rimPct ?? d.rim_fg_pct,
-    midF: d.mid_freq ?? d.midF ?? d.mid_fga_pct, midPct: d.mid_pct ?? d.midPct ?? d.mid_fg_pct,
-    threeF: d.three_freq ?? d.threeF ?? d.three_fga_pct, threePar: d.three_par ?? d.threePar,
-    dunkR: d.dunk_rate ?? d.dunkR ?? d.dunk_pct,
+    rimF: d.rim_f ?? d.rim_freq ?? d.rimF ?? d.rim_fga_pct, rimPct: d.rim_pct ?? d.rimPct ?? d.rim_fg_pct,
+    midF: d.mid_f ?? d.mid_freq ?? d.midF ?? d.mid_fga_pct, midPct: d.mid_pct ?? d.midPct ?? d.mid_fg_pct,
+    threeF: d.three_f ?? d.three_freq ?? d.threeF ?? d.three_fga_pct, threePar: d.three_par ?? d.threePar,
+    dunkR: d.dunk_r ?? d.dunk_rate ?? d.dunkR ?? d.dunk_pct,
     selfCreation: d.self_creation ?? Math.round(((d.usg??20)/100)*(1-(d.ast_p??d.astP??20)/100)*200),
     pctl,
     ff: { efg: ff.efg??50, tov: ff.tov??50, orb: ff.orb??50, ftr: ff.ftr??50, comp: ff.comp??50 },
@@ -972,11 +972,14 @@ function ShootingTab({p}) {
             </Tip>
           </div>
         </div>
-        {/* ── Summary line below court: TS% + eFG% ── */}
-        <div className="mt-3 flex items-center gap-4 text-sm" style={{color:"#9ca3af"}}>
-          <span>TS%: <strong style={{color:shotColor(ts,"ft")}}>{ts!=null?fmt(ts):"—"}</strong></span>
-          <span>eFG%: <strong style={{color:shotColor(efg,"mid")}}>{efg!=null?fmt(efg):"—"}</strong></span>
-          <span>Self-Created: <strong style={{color:"#f97316"}}>{selfCreatedPct}%</strong> <span style={{color:"#4b5563"}}>(estimated)</span></span>
+        {/* ── Summary: TS% + Unassisted ── */}
+        <div className="mt-3 flex items-center gap-6 text-sm" style={{color:"#9ca3af"}}>
+          <Tip content={<div>True Shooting % — PTS / (2 × FGA + 0.44 × FTA). Accounts for 2P, 3P, and FT in one number.</div>}>
+            <span className="cursor-help">TS%: <strong style={{color:shotColor(ts,"ft")}}>{ts!=null?fmt(ts):"—"}</strong></span>
+          </Tip>
+          <Tip content={<div>Estimated % of FGA that were self-created (no assist). Proxy: USG×2.0 − AST%×0.5. Zone-level AST'D data not yet in pipeline.</div>}>
+            <span className="cursor-help">Unassisted FGA: <strong style={{color:"#f97316"}}>~{selfCreatedPct}%</strong> <span style={{color:"#4b5563"}}>(est.) ⓘ</span></span>
+          </Tip>
         </div>
       </Sec>
 
