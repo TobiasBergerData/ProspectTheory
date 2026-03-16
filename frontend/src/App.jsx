@@ -466,6 +466,25 @@ function mapProfile(d) {
   const allYellow = computed.yellow; // server doesn't send yellow
   const allRed = [...new Set([...serverRed, ...computed.red])];
 
+  // ── NORMALIZATION FUNCTIONS ──
+  // Rate stats (BLK%, STL%, ORB%, DRB%, AST%, TO%, USG%) are ALREADY percentage values
+  // from BartTorvik. e.g., BLK% = 0.7 means 0.7%, NOT 70%. NEVER multiply by 100.
+  const normRate = (v) => {
+    if (v == null) return null;
+    const n = Number(v);
+    if (isNaN(n)) return null;
+    return Math.round(n * 10) / 10;
+  };
+  // Shooting pcts (TS%, FG%, eFG%, FT%, 3P%) might come as 0-1 decimals from old profiles.
+  // e.g., TS% = 0.605 means 60.5%. Safe to multiply by 100 because no one shoots < 1%.
+  const normShootPct = (v) => {
+    if (v == null) return null;
+    const n = Number(v);
+    if (isNaN(n)) return null;
+    const r = (n > 0 && n < 1) ? n * 100 : n;
+    return (r > 100 || r < 0) ? null : Math.round(r * 10) / 10;
+  };
+
   return {
     name: d.name, pos: resolvedPos,
     team: d.team ?? d.college_team ?? "", conf: d.conf ?? d.college_conf ?? "",
@@ -486,37 +505,15 @@ function mapProfile(d) {
     stl: d.stl ?? d.college_stl ?? d.spg ?? d.SPG ?? (d.stl36 && d.min ? Math.round(d.stl36 * d.min / 36 * 10) / 10 : null),
     blk: d.blk ?? d.college_blk ?? d.bpg ?? d.BPG ?? (d.blk36 && d.min ? Math.round(d.blk36 * d.min / 36 * 10) / 10 : null),
     astTov: d.ast_to ?? d.astTov ?? d.ast_tov ?? d.college_ast_tov ?? d["ast/tov"] ?? (() => {
-      // Client-side compute: AST per game / TOV per game
       const a = d.ast ?? d.college_ast ?? d.apg;
       const t = d.tov ?? d.college_tov ?? d.topg;
       if (a != null && t != null && t > 0) return Math.round(a / t * 100) / 100;
-      // From AST% and TO%: rough proxy AST%/TO% (not exact but directionally correct)
       const ap = d.ast_p ?? d.astP; const tp2 = d.to_p ?? d.toP;
       if (ap != null && tp2 != null && tp2 > 0) return Math.round(ap / tp2 * 100) / 100;
       return null;
     })(),
     bpm: d.bpm, obpm: d.obpm, dbpm: d.dbpm, ortg: d.ortg ?? d.ORtg ?? d.offensive_rating,
     usg: normRate(d.usg ?? d.usg_p),
-    // ── NORMALIZATION ──
-    // Rate stats (BLK%, STL%, ORB%, DRB%, AST%, TO%, USG%) are ALREADY percentage values
-    // from BartTorvik. e.g., BLK% = 0.7 means 0.7%, NOT 70%. NEVER multiply by 100.
-    // Shooting pcts (TS%, FG%, eFG%, FT%, 3P%) might come as 0-1 decimals from old profiles.
-    // e.g., TS% = 0.605 means 60.5%. Safe to multiply by 100 because no one shoots < 1%.
-    const normRate = (v) => {
-      // Rate stats: use as-is, they're already in percentage form (0.7 = 0.7%)
-      if (v == null) return null;
-      const n = Number(v);
-      if (isNaN(n)) return null;
-      return Math.round(n * 10) / 10;
-    };
-    const normShootPct = (v) => {
-      // Shooting pcts: convert 0-1 decimals to percentage, cap sanity
-      if (v == null) return null;
-      const n = Number(v);
-      if (isNaN(n)) return null;
-      const r = (n > 0 && n < 1) ? n * 100 : n;
-      return (r > 100 || r < 0) ? null : Math.round(r * 10) / 10;
-    };
     ts: normShootPct(d.ts_pct ?? d.ts),
     fg: normShootPct(d.fg_pct ?? d.fg),
     efg: normShootPct(d.efg_pct ?? d.efg),
