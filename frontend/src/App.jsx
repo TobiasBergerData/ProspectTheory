@@ -37,7 +37,7 @@ const TIER_THRESHOLDS = {
 // ═══════════════════════════════════════════════════════════
 // TOOLTIP COMPONENT
 // ═══════════════════════════════════════════════════════════
-function Tip({children, content, wide=false}) {
+function Tip({children, content, wide=false, block=false}) {
   const [show,setShow] = useState(false);
   const [pos,setPos] = useState({x:0,y:0});
   const ref = useRef(null);
@@ -47,7 +47,7 @@ function Tip({children, content, wide=false}) {
     setShow(true);
   };
   return (
-    <span className="relative inline-block cursor-help" onMouseEnter={handleEnter} onMouseLeave={()=>setShow(false)} ref={ref}>
+    <span className={`relative ${block?'block w-full':'inline-block'} cursor-help`} onMouseEnter={handleEnter} onMouseLeave={()=>setShow(false)} ref={ref}>
       {children}
       {show && (
         <div className={`fixed z-50 ${wide?"w-96":"w-72"} p-3 rounded-lg shadow-2xl text-xs leading-relaxed pointer-events-none`}
@@ -758,18 +758,11 @@ function OverviewTab({p, compTier, setCompTier}) {
                 <div className="text-xs uppercase tracking-widest font-bold mb-3" style={{color:"#9ca3af"}}>{cat}</div>
                 <div className="space-y-4">
                   {cm.map(m=>{
-                    // Scale: p25 at 20%, p75 at 75% — shadow always visible and wide
-                    const lo = Math.min(m.p25, m.p75);
-                    const hi = Math.max(m.p25, m.p75);
-                    const range = hi - lo || 1;
-                    // Map value to 0-100% where lo=20% and hi=75%
-                    const toX = v => {
-                      const pct = 20 + ((v - lo) / range) * 55;
-                      return Math.max(0, Math.min(100, pct));
-                    };
+                    const maxV = Math.max(m.val||0, Math.max(m.p25,m.p75)) * 1.2;
+                    const toX = v => Math.max(0, Math.min(100, (v / maxV) * 100));
                     return (
                       <div key={m.id}>
-                        <Tip wide content={
+                        <Tip block wide content={
                           <div>
                             <div className="font-bold mb-1" style={{color:m.sc}}>{m.label}: {m.status}{m.core?" (Core ★)":""}</div>
                             <div style={{color:"#94a3b8"}}>{m.desc}</div>
@@ -1100,99 +1093,66 @@ function ShootingTab({p}) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// TAB: PROJECTION (Monte Carlo — Priority 1)
+// TAB: PROJECTION (v2 — WAR-focused, clean)
 // ═══════════════════════════════════════════════════════════
 function ProjectionTab({p}) {
-  const tierOrder=["Superstar","All-Star","Starter","Role Player","Replacement","Out"];
-  const tierData=tierOrder.map(t=>({name:t.replace("Role Player","Role\nPlayer"),pct:p.tiers[t]||0,fill:TC[t]||"#374151"}));
+  const tierOrder = ["Superstar","All-Star","Starter","Role Player","Replacement","Out"];
+  const tierData = tierOrder.map(t=>({name:t.replace("Role Player","Role"),pct:p.tiers[t]||0,fill:TC[t]||"#374151"}));
+  const war = p.war;
+  const sigma = p.sigma ?? p.volatility ?? 0;
+  const predTier = p.predTier || "—";
+  const bestTierPct = Math.max(...tierOrder.map(t => p.tiers[t]||0));
 
-  // ASPM-based display (new pipeline) or PIE-based (old pipeline)
-  const isNewPipeline = p.aspm != null;
-  const peakVal = isNewPipeline ? p.aspm : p.mu;
-  const peakLabel = isNewPipeline ? "Adj. ASPM" : "Peak PIE";
-  const peakScale = isNewPipeline ? 1 : 1; // PIE is 0-1 scale displayed as-is
+  // Key model inputs
+  const drivers = [
+    {label:"BPM", val:p.bpm, desc:"Box Plus/Minus — strongest single predictor of NBA value", color:p.bpm>8?"#22c55e":p.bpm>4?"#86efac":p.bpm>0?"#fbbf24":"#ef4444"},
+    {label:"Age", val:p.age, desc:"Younger = more development runway. Age <20 gets bonus, >22 gets penalty", color:p.age!=null?(p.age<20?"#22c55e":p.age<21?"#86efac":p.age<22?"#fbbf24":"#f97316"):"#6b7280"},
+    {label:"Conference", val:p.confTier||p.conf, desc:"Conference/league strength (empirical weights from bridge players)", color:p.confTier==="Power"?"#22c55e":"#f97316", isText:true},
+    {label:"TS%", val:p.ts, desc:"Shooting efficiency — translates directly to NBA value", color:p.ts>58?"#22c55e":p.ts>54?"#86efac":p.ts>50?"#fbbf24":"#ef4444"},
+    {label:"Height", val:p.htIn ? `${Math.floor(p.htIn/12)}'${p.htIn%12}"` : null, desc:"Physical profile — size at position affects projection", color:"#9ca3af", isText:true},
+    {label:"USG%", val:p.usg, desc:"Usage rate — production volume signal", color:p.usg>25?"#22c55e":p.usg>20?"#86efac":"#fbbf24"},
+  ].filter(d => d.val != null);
 
-  // Career path
-  const isNbaPath = (p.careerPath||"NBA") === "NBA";
+  // WAR color
+  const warColor = war >= 15 ? "#fbbf24" : war >= 10 ? "#f97316" : war >= 5 ? "#3b82f6" : war >= 2 ? "#06b6d4" : war > 0 ? "#8b5cf6" : "#6b7280";
 
-  // Boom-or-bust detection
-  const vol = p.volatility ?? p.sigma ?? 3.5;
-  const isBoomBust = vol > 4.5 || ((p.tiers.Superstar||0)>15 && (p.tiers["Out"]||0)>15);
-
-  // Build Monte Carlo density curve (simulated from normal distribution)
-  const densityCurve = useMemo(() => {
-    if (peakVal == null || vol == null) return [];
-    const mu = peakVal;
-    const sig = vol;
-    const points = [];
-    for (let x = mu - 3.5*sig; x <= mu + 3.5*sig; x += sig*0.15) {
-      const z = (x - mu) / sig;
-      const density = Math.exp(-0.5*z*z) / (sig * Math.sqrt(2*Math.PI));
-      // Determine tier for coloring
-      let tier = "Out";
-      if (x >= 14) tier = "Superstar";
-      else if (x >= 10) tier = "All-Star";
-      else if (x >= 7.5) tier = "Starter";
-      else if (x >= 5) tier = "Role Player";
-      else if (x >= 3) tier = "Replacement";
-      points.push({ x: Math.round(x*10)/10, density: Math.round(density*1000)/10, tier });
-    }
-    return points;
-  }, [peakVal, vol]);
+  // Confidence context
+  const confLabel = p.confidence === "full" ? "Full Sample" : p.confidence === "medium" ? "Limited Sample" : "Insufficient";
+  const confColor = p.confidence === "full" ? "#22c55e" : p.confidence === "medium" ? "#fbbf24" : "#ef4444";
 
   return (
     <div className="space-y-5">
-      {/* Header cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          [peakLabel, peakVal!=null?fmt(peakVal):"—", "#f97316", `Model's best estimate of 3-year NBA peak${isNewPipeline?" (ASPM scale: Superstar >14, All-Star 10-14, Starter 7.5-10, Role 5-7.5)":""}.`],
-          ["UPS", p.ups!=null?fmt(p.ups,0):"—", "#fbbf24", "Unified Prospect Score (0-100). Integral of probability density across all Monte Carlo runs — captures both ceiling AND floor."],
-          ["Uncertainty (σ)", vol!=null?`± ${fmt(vol)}`:"—", "#6b7280", `How uncertain the model is. σ = ${fmt(vol)}. NCAA base = 3.5, Intl = 4.0, + age & league volatility. 68% of outcomes fall within ±1σ.`],
-          ["Career Path", isNbaPath?"NBA":"International", isNbaPath?"#22c55e":"#60a5fa", "If P(≥Roleplayer) > 25% → NBA path, else International path with EuroLeague/domestic tier mapping."],
-        ].map(([l,v,c,desc])=>(
-          <Tip key={l} wide content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>{l}</div><div style={{color:"#cbd5e1"}}>{desc}</div></div>}>
-            <div className="rounded-xl p-5 text-center cursor-help" style={{background:"#111827"}}>
-              <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#6b7280"}}>{l} <span style={{color:"#475569"}}>ⓘ</span></div>
-              <div className="text-3xl font-bold" style={{color:c,fontFamily:"'Oswald',sans-serif"}}>{v}</div>
+      {/* ═══ WAR PROJECTION — Hero Card ═══ */}
+      <div className="rounded-2xl p-6 text-center relative overflow-hidden" style={{background:"linear-gradient(135deg,#0d1117 0%,#111827 100%)",border:`1px solid ${warColor}33`}}>
+        <div className="absolute top-0 right-0 w-48 h-48 opacity-5 blur-3xl rounded-full" style={{background:`radial-gradient(circle,${warColor},transparent)`}}/>
+        <div className="relative">
+          <Tip wide content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>Projected Wins Above Replacement</div><div style={{color:"#cbd5e1"}}>WAR = (Projected Peak PIE − Replacement PIE) × 400. Based on LightGBM model trained on 1,419 NCAA→NBA outcomes. Peak PIE = best 3-year rolling window of NBA minutes-weighted PIE. σ = out-of-fold residual standard deviation by position.</div></div>}>
+            <div className="cursor-help">
+              <div className="text-xs uppercase tracking-widest mb-2" style={{color:"#6b7280"}}>Projected Career WAR <span style={{color:"#475569"}}>ⓘ</span></div>
+              <div className="text-6xl font-bold mb-1" style={{color:warColor,fontFamily:"'Oswald',sans-serif"}}>{war != null ? fmt(war,1) : "—"}</div>
+              {sigma > 0 && <div className="text-lg" style={{color:"#4b5563"}}>± {fmt(sigma,2)} σ <span className="text-xs">[{war!=null?fmt(war-sigma*5,1):"?"} – {war!=null?fmt(Number(war)+sigma*5,1):"?"}]</span></div>}
             </div>
           </Tip>
-        ))}
-      </div>
-
-      {/* Boom-or-Bust indicator */}
-      {isBoomBust && (
-        <div className="p-3 rounded-lg text-sm flex items-center gap-3" style={{background:"#7f1d1d33",border:"1px solid #ef444444",color:"#fca5a5"}}>
-          <span className="text-2xl">±</span>
-          <div>
-            <span className="font-bold">High Volatility — Boom-or-Bust Profile</span>
-            <div className="text-xs mt-0.5" style={{color:"#f87171"}}>Statistical profiles range from {p.predTier||"Starter"} to Out-of-League. Projection confidence is low due to σ={fmt(vol)}.</div>
+          <div className="flex justify-center gap-6 mt-4">
+            <div className="text-center">
+              <div className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Predicted Tier</div>
+              <div className="text-lg font-bold mt-0.5" style={{color:TC[predTier]||"#6b7280"}}>{predTier}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Career Path</div>
+              <div className="text-lg font-bold mt-0.5" style={{color:"#22c55e"}}>{p.careerPath || "NBA"}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Confidence</div>
+              <div className="text-lg font-bold mt-0.5" style={{color:confColor}}>{confLabel}</div>
+            </div>
           </div>
         </div>
-      )}
+      </div>
 
-      {/* Monte Carlo density curve */}
-      {densityCurve.length > 0 && (
-        <Sec icon="📈" title="Monte Carlo Distribution (20k runs)" sub={`Normal(μ=${fmt(peakVal)}, σ=${fmt(vol)}) — colored by tier thresholds`}>
-          <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={densityCurve} margin={{top:5,right:20,bottom:5,left:5}}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1f2937"/>
-              <XAxis dataKey="x" tick={{fill:"#6b7280",fontSize:10}} axisLine={{stroke:"#1f2937"}} label={{value:isNewPipeline?"ASPM":"PIE",position:"insideBottom",fill:"#475569",fontSize:10}}/>
-              <YAxis tick={{fill:"#6b7280",fontSize:10}} axisLine={false} tickLine={false}/>
-              <RTooltip contentStyle={{background:"#1f2937",border:"1px solid #374151",borderRadius:8,color:"#e5e7eb",fontSize:12}} formatter={(v,n,props)=>[`Density: ${v}`, `Tier: ${props.payload.tier}`]}/>
-              <Area type="monotone" dataKey="density" stroke="#f97316" fill="#f9731644" strokeWidth={2}/>
-            </AreaChart>
-          </ResponsiveContainer>
-          <div className="flex justify-center gap-3 mt-2 text-xs">
-            {[["Out","<3"],["Repl","3-5"],["Role","5-7.5"],["Start","7.5-10"],["All★","10-14"],["⭐","14+"]].map(([l,r])=>(
-              <span key={l} style={{color:TC[l==="⭐"?"Superstar":l==="All★"?"All-Star":l==="Start"?"Starter":l==="Role"?"Role Player":l==="Repl"?"Replacement":"Out"]||"#6b7280"}}>{l} ({r})</span>
-            ))}
-          </div>
-        </Sec>
-      )}
-
-      {/* Tier probability bar chart */}
-      <Sec icon="◆" title="Tier Probabilities" sub="Monte Carlo (20k samples) — probability of reaching each career tier">
-        <ResponsiveContainer width="100%" height={240}>
+      {/* ═══ TIER DISTRIBUTION ═══ */}
+      <Sec icon="◆" title="Tier Distribution" sub="Probability of reaching each career tier (residual-based, position-adjusted)">
+        <ResponsiveContainer width="100%" height={220}>
           <BarChart data={tierData} margin={{top:5,right:5,bottom:5,left:5}}>
             <XAxis dataKey="name" tick={{fill:"#9ca3af",fontSize:11}} axisLine={false} tickLine={false}/>
             <YAxis tick={{fill:"#6b7280",fontSize:11}} axisLine={false} tickLine={false} domain={[0,Math.max(50,...tierData.map(t=>t.pct+5))]} tickFormatter={v=>`${v}%`}/>
@@ -1200,62 +1160,94 @@ function ProjectionTab({p}) {
             <Bar dataKey="pct" radius={[6,6,0,0]}>{tierData.map((e,i)=><Cell key={i} fill={e.fill}/>)}</Bar>
           </BarChart>
         </ResponsiveContainer>
-        {p.actual&&<div className="mt-3 flex items-center gap-3 p-3 rounded-lg" style={{background:"#0c1222",border:"1px solid #1e3a5f"}}>
-          <span className="text-xs" style={{color:"#6b7280"}}>Actual:</span><TierBadge tier={p.actual}/><span className="text-sm" style={{color:"#9ca3af"}}>Peak: {p.peakPie!=null?fmt(p.peakPie):fmt(p.peakPie,3)}</span>
-        </div>}
+        {/* Actual NBA outcome (if available) */}
+        {(p.actual || p.peakPie != null) && (
+          <div className="mt-3 flex items-center gap-3 p-3 rounded-lg" style={{background:"#0c1222",border:"1px solid #1e3a5f"}}>
+            <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Actual NBA Outcome:</span>
+            {p.actual && <TierBadge tier={p.actual}/>}
+            {p.peakPie != null && <span className="text-sm" style={{color:"#9ca3af"}}>Peak PIE: <strong style={{color:"#fbbf24"}}>{fmt(p.peakPie,3)}</strong></span>}
+          </div>
+        )}
       </Sec>
 
-      {/* 3-Year Peak Matrix */}
-      <Sec icon="🎯" title="3-Year Peak Matrix" sub="Projected peak with confidence intervals (±1σ)">
-        <div className="grid grid-cols-3 gap-4">
-          {[
-            ["Production", p.production, "#f97316", "BPM (NCAA) or ASPM (Intl) — raw statistical output"],
-            ["Impact", p.impact, "#3b82f6", "PORPAG (NCAA) or eDiff (Intl) — plus/minus derived contribution"],
-            ["Blend (65/35)", peakVal, "#fbbf24", "Weighted blend: 65% Production + 35% Impact → z-scored and age-adjusted"],
-          ].map(([l,v,c,desc])=>(
-            <Tip key={l} content={<div><div className="font-bold mb-1" style={{color:c}}>{l}</div><div style={{color:"#cbd5e1"}}>{desc}</div></div>}>
-              <div className="rounded-lg p-4 text-center cursor-help" style={{background:"#0d1117"}}>
-                <div className="text-xs uppercase mb-2" style={{color:"#6b7280"}}>{l} <span style={{color:"#475569"}}>ⓘ</span></div>
-                <div className="text-2xl font-bold" style={{color:c,fontFamily:"'Oswald',sans-serif"}}>{v!=null?fmt(v):"—"}</div>
-                {v!=null && vol!=null && <div className="text-xs mt-1" style={{color:"#475569"}}>
-                  [{fmt(v-vol)} – {fmt(Number(v)+Number(vol))}]
-                </div>}
+      {/* ═══ MODEL DRIVERS — What's driving this projection ═══ */}
+      <Sec icon="🔬" title="Key Model Drivers" sub="Primary features influencing this player's WAR projection. Hover for explanation.">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          {drivers.map(d => (
+            <Tip key={d.label} content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>{d.label}</div><div style={{color:"#cbd5e1"}}>{d.desc}</div></div>}>
+              <div className="rounded-lg p-4 cursor-help" style={{background:"#0d1117",border:`1px solid ${d.color}22`}}>
+                <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#6b7280"}}>{d.label}</div>
+                <div className="text-2xl font-bold" style={{color:d.color,fontFamily:"'Oswald',sans-serif"}}>{d.isText ? d.val : fmt(d.val)}</div>
               </div>
             </Tip>
           ))}
         </div>
+        <div className="mt-3 p-3 rounded-lg text-xs" style={{background:"#0d111744",color:"#4b5563"}}>
+          Model: LightGBM (depth=5, 200 trees) trained on 1,419 NCAA/Intl→NBA outcomes.
+          r(projected_pie, peak_pie) = 0.58 in-sample, r = 0.41 CV 5-fold, r = 0.37 time-split.
+          Top features: Age, Wingspan, BPM, DRB%, 3P%, Minutes, AST%.
+        </div>
       </Sec>
 
-      {/* Season-by-Season */}
+      {/* ═══ RISK PROFILE ═══ */}
+      <Sec icon="±" title="Risk Assessment" sub="">
+        <div className="grid grid-cols-3 gap-4">
+          <Tip content={<div>Floor = P(Starter or better). High floor = safe pick.</div>}>
+            <div className="rounded-lg p-4 text-center cursor-help" style={{background:"#0d1117"}}>
+              <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#6b7280"}}>Floor <span style={{color:"#475569"}}>ⓘ</span></div>
+              <div className="text-2xl font-bold" style={{color:p.floor>60?"#22c55e":p.floor>30?"#fbbf24":"#ef4444",fontFamily:"'Oswald',sans-serif"}}>{p.floor!=null?fmt(p.floor,0):"—"}</div>
+              <div className="text-xs mt-1" style={{color:"#475569"}}>P(≥Starter)</div>
+            </div>
+          </Tip>
+          <Tip content={<div>Ceiling = P(All-Star or better) × WAR multiplier. High ceiling = star potential.</div>}>
+            <div className="rounded-lg p-4 text-center cursor-help" style={{background:"#0d1117"}}>
+              <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#6b7280"}}>Ceiling <span style={{color:"#475569"}}>ⓘ</span></div>
+              <div className="text-2xl font-bold" style={{color:p.ceiling>50?"#fbbf24":p.ceiling>25?"#f97316":"#6b7280",fontFamily:"'Oswald',sans-serif"}}>{p.ceiling!=null?fmt(p.ceiling,0):"—"}</div>
+              <div className="text-xs mt-1" style={{color:"#475569"}}>Upside index</div>
+            </div>
+          </Tip>
+          <Tip content={<div>Volatility = model σ. Higher σ = wider range of outcomes. Boom-or-bust if σ > 0.04.</div>}>
+            <div className="rounded-lg p-4 text-center cursor-help" style={{background:"#0d1117"}}>
+              <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#6b7280"}}>Volatility <span style={{color:"#475569"}}>ⓘ</span></div>
+              <div className="text-2xl font-bold" style={{color:sigma>0.04?"#ef4444":sigma>0.03?"#fbbf24":"#22c55e",fontFamily:"'Oswald',sans-serif"}}>± {fmt(sigma,3)}</div>
+              <div className="text-xs mt-1" style={{color:"#475569"}}>{sigma>0.04?"Boom-or-Bust":sigma>0.03?"Moderate":"Stable"}</div>
+            </div>
+          </Tip>
+        </div>
+      </Sec>
+
+      {/* ═══ SEASON-BY-SEASON ═══ */}
       <Sec icon="📈" title="Season-by-Season" sub="▲▼ shows change from previous season">
-        {(p.seasonLines||[]).length>1?(
+        {(p.seasonLines||[]).length > 1 ? (
           <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr>
             {["Year","Cls","GP","MIN","PTS","REB","AST","STL","BLK","BPM","TS%","USG"].map(h=><th key={h} className="px-2 py-1 text-xs uppercase text-left" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>{h}</th>)}
           </tr></thead><tbody>
             {(p.seasonLines||[]).map((s,i)=>{
               const prev=i>0?(p.seasonLines||[])[i-1]:null;
-              const D=(cur,prv,inv)=>{if(!prev)return null;const d=cur-prv;const c=inv?(d<0?"#22c55e":d>0?"#ef4444":"#6b7280"):(d>0?"#22c55e":d<0?"#ef4444":"#6b7280");return<span className="text-xs ml-1" style={{color:c}}>{d>0?"▲":"▼"}{Math.abs(d).toFixed(1)}</span>;};
+              const D=(cur,prv,inv)=>{if(!prev||cur==null||prv==null)return null;const d=cur-prv;const c=inv?(d<0?"#22c55e":d>0?"#ef4444":"#6b7280"):(d>0?"#22c55e":d<0?"#ef4444":"#6b7280");return<span className="text-xs ml-1" style={{color:c}}>{d>0?"▲":"▼"}{Math.abs(d).toFixed(1)}</span>;};
               return(<tr key={i} style={{borderBottom:"1px solid #1f293744"}}>
                 <td className="px-2 py-2 font-semibold" style={{color:"#e5e7eb"}}>{s.yr}</td><td className="px-2" style={{color:"#9ca3af"}}>{s.cls}</td>
-                <td className="px-2">{s.gp}</td><td className="px-2">{s.min}</td>
-                <td className="px-2">{s.pts}{D(s.pts,prev?.pts)}</td><td className="px-2">{s.reb}{D(s.reb,prev?.reb)}</td>
-                <td className="px-2">{s.ast}{D(s.ast,prev?.ast)}</td><td className="px-2">{s.stl}{D(s.stl,prev?.stl)}</td>
-                <td className="px-2">{s.blk}{D(s.blk,prev?.blk)}</td>
-                <td className="px-2 font-semibold" style={{color:valColor(s.bpm>10?85:s.bpm>5?60:30)}}>{s.bpm}{D(s.bpm,prev?.bpm)}</td>
-                <td className="px-2" style={{color:valColor(s.ts>58?80:s.ts>53?55:30)}}>{s.ts}{D(s.ts,prev?.ts)}</td>
-                <td className="px-2">{s.usg}{D(s.usg,prev?.usg)}</td>
+                <td className="px-2">{s.gp}</td><td className="px-2">{fmt(s.min)}</td>
+                <td className="px-2">{fmt(s.pts)}{D(s.pts,prev?.pts)}</td><td className="px-2">{fmt(s.reb)}{D(s.reb,prev?.reb)}</td>
+                <td className="px-2">{fmt(s.ast)}{D(s.ast,prev?.ast)}</td><td className="px-2">{fmt(s.stl)}{D(s.stl,prev?.stl)}</td>
+                <td className="px-2">{fmt(s.blk)}{D(s.blk,prev?.blk)}</td>
+                <td className="px-2 font-semibold" style={{color:valColor(s.bpm>10?85:s.bpm>5?60:30)}}>{fmt(s.bpm)}{D(s.bpm,prev?.bpm)}</td>
+                <td className="px-2" style={{color:valColor(s.ts>58?80:s.ts>53?55:30)}}>{fmt(s.ts)}{D(s.ts,prev?.ts)}</td>
+                <td className="px-2">{fmt(s.usg)}{D(s.usg,prev?.usg)}</td>
               </tr>);
             })}
           </tbody></table></div>
-        ):<div className="text-center py-6" style={{color:"#9ca3af"}}>One-and-done — no multi-season trajectory.</div>}
+        ) : (
+          <div className="text-center py-6" style={{color:"#6b7280"}}>
+            {p.seasonsPlayed > 1
+              ? "Multi-season data not yet in pipeline. Requires BartTorvik multi-year extraction."
+              : "One-and-done — no multi-season trajectory."}
+          </div>
+        )}
       </Sec>
     </div>
   );
 }
-
-// ═══════════════════════════════════════════════════════════
-// TAB: SCOUTING (Pillars + Roles + Archetypes + Possession Impact + Full Badges)
-// ═══════════════════════════════════════════════════════════
 function ScoutingTab({p}) {
   // Use merged badges from mapProfile (server + client-computed, deduped)
   const badges = { green: p.badges || [], yellow: p.yellowBadges || [], red: p.redFlags || [] };
