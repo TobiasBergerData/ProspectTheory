@@ -1263,7 +1263,7 @@ function ScoutingTab({p}) {
     {key:"shootScore",name:"Shooting",value:p.shootScore??0,color:"#22c55e",icon:"🎯"},
     {key:"defScore",name:"Defense",value:p.defScore??0,color:"#3b82f6",icon:"🛡"},
     {key:"funcAth",name:"Athleticism",value:p.funcAth??0,color:"#f97316",icon:"⚡"},
-    {key:"selfCreation",name:"Self-Creation",value:p.selfCreation??0,color:"#06b6d4",icon:"✦",max:200},
+    {key:"selfCreation",name:"Self-Creation",value:p.selfCreation??0,color:"#06b6d4",icon:"✦"},
   ];
 
   // ── Roles ──
@@ -1294,36 +1294,47 @@ function ScoutingTab({p}) {
   // ── Archetype ──
   const archetype = p.archetype || "Unknown";
   const ARCH_MAP = {
-    "Helio-Centric Engine":  {desc:"Ball-dominant offensive engine. The offense runs through this player.",color:"#fbbf24",
-      pos:["Playmaker","Wing"],formula:"USG%>28 + PTS/36>18 + AST%>20 + Self-Creation>130",roles:["Helio-Scorer","Scorer","Event Creator"]},
-    "Primary Initiator":     {desc:"Lead playmaker who creates for others. Half-court orchestrator.",color:"#f97316",
-      pos:["Playmaker"],formula:"AST%>25 + AST/TO>2.0 + Feel>70",roles:["Playmaker","Connector","Event Creator"]},
-    "Scoring Combo Guard":   {desc:"Versatile scoring guard. Can play on/off-ball with shooting.",color:"#22c55e",
-      pos:["Playmaker"],formula:"Playmaker + USG%>22 + TS%>55 + 3P%>33",roles:["Scorer","Spacer","Playmaker"]},
-    "3&D Wing":              {desc:"Shoot and defend. The most valuable role player archetype in modern NBA.",color:"#3b82f6",
-      pos:["Wing"],formula:"Wing + 3P%>35 + (STL%>2 OR DBPM>2) + USG%<22",roles:["Spacer","On-Ball D","Micro-Spacer"]},
-    "Versatile Forward":     {desc:"Multi-positional forward. Defends, shoots, and connects plays.",color:"#8b5cf6",
-      pos:["Wing","Big"],formula:"Wing + Ht≥6'6\" + Role Versatility>60",roles:["Connector","Switch Pot.","Spacer"]},
-    "Point Forward":         {desc:"Oversized playmaker. Creates mismatches with size + passing.",color:"#06b6d4",
-      pos:["Wing","Big"],formula:"Wing/Big + AST%>18 + Ht≥6'6\"",roles:["Playmaker","Connector","Driver"]},
-    "Stretch Big":           {desc:"Shooting big who spaces the floor. Gravity from the 5 position.",color:"#10b981",
-      pos:["Big","Wing"],formula:"Big + 3P%>30 + 3PAr>15",roles:["Spacer","Rebounder","Rim Protect"]},
-    "Rim-Running Big":       {desc:"Vertical threat. Finishes lobs, protects the rim, boards.",color:"#ef4444",
-      pos:["Big"],formula:"Big + Rim%>55 + BLK%>3 + Dunk Rate>8",roles:["Crasher","Rim Protect","Rebounder"]},
-    "Two-Way Anchor":        {desc:"Defensive anchor with offensive polish. Anchors playoff rotations.",color:"#60a5fa",
-      pos:["Big"],formula:"Big + Def Score>70 + BPM>3",roles:["Rim Protect","Rebounder","Switch Pot."]},
-    "Micro-Ball 5":          {desc:"Undersized center who defends with IQ. Switching specialist.",color:"#a78bfa",
-      pos:["Big","Wing"],formula:"Big + Ht<6'10\" + Switch Pot>1.5σ + DBPM>2",roles:["Switch Pot.","Connector","Rebounder"]},
-    "Shot Creator":          {desc:"Can generate own shot off the dribble. Self-creation specialist.",color:"#fb923c",
-      pos:["Playmaker","Wing"],formula:"Self-Creation>120 + TS%>55 + USG%>24",roles:["Scorer","Driver","Helio-Scorer"]},
-    "Athletic Slasher":      {desc:"Attacks the rim with explosiveness. Transition weapon.",color:"#f43f5e",
-      pos:["Wing","Playmaker"],formula:"Rim%>45 + Func Ath>70 + Dunk Rate>5",roles:["Driver","Crasher","On-Ball D"]},
+    "Scoring Point Guard": {desc:"Dual-threat point guard. Scores at high volume while maintaining playmaking.",color:"#fbbf24",
+      pos:["Playmaker"],formula:"Scorer>65 + Playmaker>55",roles:["Scorer","Playmaker","Event Creator"]},
+    "Floor General":       {desc:"Lead playmaker who creates for others. Elite AST/TO and half-court orchestration.",color:"#f97316",
+      pos:["Playmaker"],formula:"Playmaker>65",roles:["Playmaker","Connector","Event Creator"]},
+    "Shooting Guard":      {desc:"Off-ball scoring guard. Elite spacing with catch-and-shoot gravity.",color:"#22c55e",
+      pos:["Playmaker"],formula:"Spacer>65",roles:["Spacer","Scorer","Micro-Spacer"]},
+    "Defensive Guard":     {desc:"Perimeter lockdown specialist. Ball pressure and steal ability define his value.",color:"#3b82f6",
+      pos:["Playmaker"],formula:"Def Score>60",roles:["On-Ball D","Connector","Zone Pressure"]},
+    "Combo Guard":         {desc:"Versatile guard without a dominant skill. Jack-of-all-trades backcourt piece.",color:"#8b5cf6",
+      pos:["Playmaker"],formula:"Default (no role >65)",roles:["Scorer","Playmaker","Spacer"]},
+    "Scoring Wing":        {desc:"Pure scorer without elite creation. Efficient finisher who needs structure.",color:"#ef4444",
+      pos:["Wing"],formula:"Scorer>65",roles:["Scorer","Driver","Spacer"]},
+    "3-and-D Wing":        {desc:"Shoot and defend. The most valuable role player archetype in modern NBA.",color:"#3b82f6",
+      pos:["Wing"],formula:"Spacer>65 + Def Score>55",roles:["Spacer","On-Ball D","Micro-Spacer"]},
+    "Defensive Wing":      {desc:"Elite wing defender. Versatile stopper who guards multiple positions.",color:"#06b6d4",
+      pos:["Wing"],formula:"Def Score>65",roles:["On-Ball D","Switch Pot.","Zone Pressure"]},
+    "Slashing Wing":       {desc:"Attacks the rim with explosiveness. Transition weapon and paint-pressure.",color:"#f43f5e",
+      pos:["Wing"],formula:"Driver>65",roles:["Driver","Crasher","On-Ball D"]},
+    "Versatile Wing":      {desc:"Multi-tool forward without a dominant skill. Fits many lineups.",color:"#a78bfa",
+      pos:["Wing"],formula:"Default (no role >65)",roles:["Connector","Switch Pot.","Spacer"]},
+    "Point Forward":       {desc:"Oversized playmaker. Creates mismatches with size + passing vision.",color:"#10b981",
+      pos:["Wing","Big"],formula:"Playmaker>60",roles:["Playmaker","Connector","Driver"]},
+    "Stretch Big":         {desc:"Shooting big who spaces the floor. Gravity from the 5 position.",color:"#22c55e",
+      pos:["Big"],formula:"Rim Protect>65 + Spacer>55",roles:["Spacer","Rim Protect","Rebounder"]},
+    "Rim Protector":       {desc:"Elite shot-blocker. Deters drives and alters shots. Anchors paint defense.",color:"#3b82f6",
+      pos:["Big"],formula:"Rim Protect>65",roles:["Rim Protect","Rebounder","Switch Pot."]},
+    "Jumbo Creator":       {desc:"Playmaking big — Jokic/Draymond archetype. Creates from post/elbow with vision.",color:"#fbbf24",
+      pos:["Big"],formula:"Playmaker>55",roles:["Playmaker","Connector","Driver"]},
+    "Glass Cleaner":       {desc:"Dominant rebounder. Controls both boards and creates second chances.",color:"#f97316",
+      pos:["Big"],formula:"Rebounder>65",roles:["Rebounder","Crasher","Rim Protect"]},
+    "Scoring Big":         {desc:"Offense-first big. Post scoring, face-up game, or finishing at the rim.",color:"#ef4444",
+      pos:["Big"],formula:"Scorer>65",roles:["Scorer","Crasher","Driver"]},
+    "Modern Big":          {desc:"Well-rounded center without a standout skill. Does a bit of everything.",color:"#60a5fa",
+      pos:["Big"],formula:"Default (no role >65)",roles:["Rim Protect","Rebounder","Switch Pot."]},
+    "Shot Creator":        {desc:"Creates own offense off the dribble. Self-creation specialist.",color:"#fb923c",
+      pos:["Wing","Playmaker"],formula:"Scorer>65 + Playmaker>50",roles:["Scorer","Driver","Helio-Scorer"]},
   };
   const allArchetypes = Object.entries(ARCH_MAP);
   // Detect secondary/tertiary by matching role profiles
   const archScores = allArchetypes.map(([name,info]) => {
     let score = 0;
-    // Position bonus: archetypes matching player's position get +5
     const posMatch = (info.pos||[]).includes(p.pos);
     if (posMatch) score += 5;
     (info.roles||[]).forEach(r => {
@@ -1332,8 +1343,8 @@ function ScoutingTab({p}) {
     });
     return {name, score, info, posMatch};
   }).sort((a,b) => b.score - a.score);
-  const primaryArch = archetype;
-  // Secondary/tertiary must match position
+  // PRIMARY: use pipeline archetype if it matches ARCH_MAP, otherwise best role-score match
+  const primaryArch = ARCH_MAP[archetype] ? archetype : (archScores.find(a => a.posMatch)?.name || archScores[0]?.name);
   const posFilteredArchs = archScores.filter(a => a.name !== primaryArch && a.posMatch);
   const secondaryArch = posFilteredArchs[0]?.name;
   const tertiaryArch = posFilteredArchs[1]?.name;
