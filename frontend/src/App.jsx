@@ -157,6 +157,14 @@ const BADGE_DEFS = {
   "International Prodigy":  { cat:"green", rule:"Age < Avg-1.5yr & EFF top 10 pctl",   desc:"1.5+ years younger than tournament peers while statistically dominating. Historically the strongest predictor of NBA stardom. Precociousness multiplier: 1.5x risk reduction.", icon:"globe" },
   "Pro-Ready Teen":         { cat:"green", rule:"Pro League & Age<19 & BPM>2.0",       desc:"Positive impact as a teenager in a professional men's league (ACB, EuroLeague, BBL). Physically and mentally NBA-ready before most prospects enter college.", icon:"globe" },
 
+  // ── GREEN — Server-generated (10c pipeline) ──
+  "High IQ":                { cat:"green", rule:"Feel Score > 80",                     desc:"Elite basketball IQ. Reads the game ahead of the play — AST/TO ratio, USG efficiency, and BPM all signal processing speed beyond peers." },
+  "Defensive Anchor":       { cat:"green", rule:"Def Score > 80",                      desc:"Defensive engine. Elite combination of rim protection, steal rate, and DBPM. Anchors team defense and dictates opponent shot quality." },
+  "Rim Protector":          { cat:"green", rule:"BLK% > 5.0 & Height ≥ 6'10\"",       desc:"Elite shot-blocking big. Deters drives and alters shots. The most impactful single defensive skill in basketball." },
+  "Self-Creator":           { cat:"green", rule:"Self-Creation Index > 130",            desc:"Creates own offense off the dribble at elite volume. USG×(1-AST_share) signals ability to generate shots without structure. Most valuable offensive skill." },
+  "Swiss Army Knife":       { cat:"green", rule:"Role Versatility > 75 & 4+ roles > 50", desc:"Elite multi-role utility. Can credibly play 4+ distinct NBA roles. Coaches never have to take this player off the floor — fits every lineup." },
+  "Scoring Point Guard":    { cat:"green", rule:"Playmaker & USG>25 & TS%>55",         desc:"Dual-threat point guard. Scores efficiently at high volume while maintaining playmaking. The most coveted archetype in modern NBA." },
+
   // ── YELLOW — Potential / Swing skills ──
   "Latent Sniper":          { cat:"yellow", rule:"FT%>85 & 3P%<33",                    desc:"Elite FT% signals neuromuscular shooting consistency that hasn't yet translated to 3P range. Bayesian prior strongly favors breakout — mechanics are there, volume will follow." },
   "Latent Touch":           { cat:"yellow", rule:"FT%>80 & 3P%<32",                    desc:"Good FT% with weak 3P%. The gap suggests development potential — motor memory is trainable. Watch for improvement trajectory." },
@@ -573,7 +581,7 @@ function mapProfile(d) {
     madeNba:d.made_nba, draftYear:d.draft_year, draftPick:d.draft_pick,
     confidence:d.confidence||"full", sampleMin:d.sample_min, sampleGp:d.sample_gp,
     source: d.source ?? "ncaa",
-    statComps:[], anthroComps:[], seasonLines:[],
+    statComps:[], anthroComps:[], seasonLines: d.seasonLines || [],
     comb: d.combine || null,
     posPlaymaker:d.pos_playmaker, posWing:d.pos_wing, posBig:d.pos_big,
   };
@@ -1242,11 +1250,9 @@ function ProjectionTab({p}) {
   );
 }
 function ScoutingTab({p}) {
-  // Use merged badges from mapProfile (server + client-computed, deduped)
   const badges = { green: p.badges || [], yellow: p.yellowBadges || [], red: p.redFlags || [] };
   const allBadges = [...badges.green, ...badges.yellow, ...badges.red];
 
-  // ── Pillar Scores ──
   const pillars = [
     {key:"feel",name:"IQ & Feel",value:p.feel??0,color:"#fbbf24",icon:"🧠"},
     {key:"shootScore",name:"Shooting",value:p.shootScore??0,color:"#22c55e",icon:"🎯"},
@@ -1255,90 +1261,97 @@ function ScoutingTab({p}) {
     {key:"selfCreation",name:"Self-Creation",value:p.selfCreation??0,color:"#06b6d4",icon:"✦",max:200},
   ];
 
-  // ── Role Z-scores ──
+  // ── Roles ──
   const rr = p.roles || {};
+  const ROLE_INFO = {
+    scorer:     {name:"Scorer",      cat:"Offensive", inputs:"PTS/36, USG%, TS%, eFG%",                desc:"Volume scoring ability. Weights production × efficiency."},
+    playmaker:  {name:"Playmaker",   cat:"Offensive", inputs:"AST%, AST/TO, USG%, Feel Score",         desc:"Creates for others. Passing vision and decision-making under pressure."},
+    spacer:     {name:"Spacer",      cat:"Offensive", inputs:"3P%, 3PAr, FT%, three_frequency",        desc:"Floor spacing gravity. Draws defenders beyond the arc."},
+    driver:     {name:"Driver",      cat:"Offensive", inputs:"Rim%, FTR, USG%, Dunk Rate",             desc:"Rim pressure via drives. Creates contact and free throws."},
+    crasher:    {name:"Crasher",     cat:"Offensive", inputs:"ORB%, Dunk Rate, FTR, Func Ath",         desc:"Offensive rebounds and put-backs. Second-chance creation."},
+    onball:     {name:"On-Ball D",   cat:"Defensive", inputs:"STL%, DBPM, lateral quickness proxy",    desc:"Perimeter defense. Ball pressure and steal ability."},
+    switchPot:  {name:"Switch Pot.", cat:"Defensive", inputs:"Height, STL%, BLK%, Wingspan",           desc:"Can defend multiple positions in switching schemes."},
+    rimProt:    {name:"Rim Protect", cat:"Defensive", inputs:"BLK%, DBPM, Height, DRB%",              desc:"Shot-blocking and rim deterrence. Anchors paint defense."},
+    rebounder:  {name:"Rebounder",   cat:"Defensive", inputs:"DRB%, ORB%, Height, Func Ath",          desc:"Board control on both ends. Ends possessions and starts breaks."},
+    connector:  {name:"Connector",   cat:"Hybrid",    inputs:"AST/TO>2, DBPM>0, USG%<18",             desc:"Glue guy. Connects offense without mistakes, contributes defensively."},
+    helio:      {name:"Helio-Scorer",cat:"Hybrid",    inputs:"USG%>28, PTS/36>18, TS%>55",            desc:"Ball-dominant scoring engine. Offense revolves around this player."},
+    event:      {name:"Event Creator",cat:"Hybrid",   inputs:"Self-Creation>120, AST%>20, USG%>25",   desc:"Creates scoring opportunities from nothing. Iso + playmaking dual threat."},
+    zone:       {name:"Zone Pressure",cat:"Hybrid",   inputs:"STL%>2.5, BLK%>1.5, Func Ath>70",      desc:"Defensive chaos agent. Forces turnovers and blocks in multiple zones."},
+    microSpacer:{name:"Micro-Spacer",cat:"Hybrid",    inputs:"3P%>35, USG%<16, DBPM>0",               desc:"Low-usage spacer who contributes defensively. 3&D role player archetype."},
+  };
+
   const roleGroups = [
-    {label:"Offensive",color:"#f97316",roles:[
-      {key:"scorer",name:"Scorer",z:roleToZ(rr.scorer)},
-      {key:"playmaker",name:"Playmaker",z:roleToZ(rr.playmaker)},
-      {key:"spacer",name:"Spacer",z:roleToZ(rr.spacer)},
-      {key:"driver",name:"Driver",z:roleToZ(rr.driver)},
-      {key:"crasher",name:"Crasher",z:roleToZ(rr.crasher)},
-    ]},
-    {label:"Defensive",color:"#3b82f6",roles:[
-      {key:"onball",name:"On-Ball D",z:roleToZ(rr.onball)},
-      {key:"switchPot",name:"Switch Pot.",z:roleToZ(rr.switchPot)},
-      {key:"rimProt",name:"Rim Protect",z:roleToZ(rr.rimProt)},
-      {key:"rebounder",name:"Rebounder",z:roleToZ(rr.rebounder)},
-    ]},
-    {label:"Hybrid",color:"#8b5cf6",roles:[
-      {key:"connector",name:"Connector",z:roleToZ(rr.connector)},
-      {key:"helio",name:"Helio-Scorer",z:roleToZ(rr.helio)},
-      {key:"event",name:"Event Creator",z:roleToZ(rr.event)},
-      {key:"zone",name:"Zone Pressure",z:roleToZ(rr.zone)},
-      {key:"microSpacer",name:"Micro-Spacer",z:roleToZ(rr.microSpacer)},
-    ]},
+    {label:"Offensive",color:"#f97316",roles:["scorer","playmaker","spacer","driver","crasher"]},
+    {label:"Defensive",color:"#3b82f6",roles:["onball","switchPot","rimProt","rebounder"]},
+    {label:"Hybrid",color:"#8b5cf6",roles:["connector","helio","event","zone","microSpacer"]},
   ];
 
   // ── Archetype ──
   const archetype = p.archetype || "Unknown";
-  const ARCHETYPE_MAP = {
-    "Helio-Centric Engine":  {desc:"Ball-dominant offensive engine. The offense runs through this player.",color:"#fbbf24"},
-    "Primary Initiator":     {desc:"Lead playmaker who creates for others. Half-court orchestrator.",color:"#f97316"},
-    "Scoring Combo Guard":   {desc:"Versatile scoring guard. Can play on/off-ball with shooting.",color:"#22c55e"},
-    "3&D Wing":              {desc:"Shoot and defend. The most valuable role player archetype in the NBA.",color:"#3b82f6"},
-    "Versatile Forward":     {desc:"Multi-positional forward. Defends, shoots, and connects plays.",color:"#8b5cf6"},
-    "Point Forward":         {desc:"Oversized playmaker. Creates mismatches with size + passing.",color:"#06b6d4"},
-    "Stretch Big":           {desc:"Shooting big who spaces the floor. Gravity from the 5 position.",color:"#10b981"},
-    "Rim-Running Big":       {desc:"Vertical threat. Finishes lobs, protects the rim, boards.",color:"#ef4444"},
-    "Two-Way Anchor":        {desc:"Defensive anchor with offensive polish. Anchors playoff rotations.",color:"#60a5fa"},
-    "Micro-Ball 5":          {desc:"Undersized center who defends with IQ. Switching specialist.",color:"#a78bfa"},
-    "Shot Creator":          {desc:"Can generate own shot off the dribble. Self-creation specialist.",color:"#fb923c"},
-    "Athletic Slasher":      {desc:"Attacks the rim with explosiveness. Transition weapon.",color:"#f43f5e"},
+  const ARCH_MAP = {
+    "Helio-Centric Engine":  {desc:"Ball-dominant offensive engine. The offense runs through this player.",color:"#fbbf24",
+      formula:"USG%>28 + PTS/36>18 + AST%>20 + Self-Creation>130",roles:["Helio-Scorer","Scorer","Event Creator"]},
+    "Primary Initiator":     {desc:"Lead playmaker who creates for others. Half-court orchestrator.",color:"#f97316",
+      formula:"AST%>25 + AST/TO>2.0 + Feel>70",roles:["Playmaker","Connector","Event Creator"]},
+    "Scoring Combo Guard":   {desc:"Versatile scoring guard. Can play on/off-ball with shooting.",color:"#22c55e",
+      formula:"Playmaker + USG%>22 + TS%>55 + 3P%>33",roles:["Scorer","Spacer","Playmaker"]},
+    "3&D Wing":              {desc:"Shoot and defend. The most valuable role player archetype in modern NBA.",color:"#3b82f6",
+      formula:"Wing + 3P%>35 + (STL%>2 OR DBPM>2) + USG%<22",roles:["Spacer","On-Ball D","Micro-Spacer"]},
+    "Versatile Forward":     {desc:"Multi-positional forward. Defends, shoots, and connects plays.",color:"#8b5cf6",
+      formula:"Wing + Ht≥6'6\" + Role Versatility>60",roles:["Connector","Switch Pot.","Spacer"]},
+    "Point Forward":         {desc:"Oversized playmaker. Creates mismatches with size + passing.",color:"#06b6d4",
+      formula:"Wing/Big + AST%>18 + Ht≥6'6\"",roles:["Playmaker","Connector","Driver"]},
+    "Stretch Big":           {desc:"Shooting big who spaces the floor. Gravity from the 5 position.",color:"#10b981",
+      formula:"Big + 3P%>30 + 3PAr>15",roles:["Spacer","Rebounder","Rim Protect"]},
+    "Rim-Running Big":       {desc:"Vertical threat. Finishes lobs, protects the rim, boards.",color:"#ef4444",
+      formula:"Big + Rim%>55 + BLK%>3 + Dunk Rate>8",roles:["Crasher","Rim Protect","Rebounder"]},
+    "Two-Way Anchor":        {desc:"Defensive anchor with offensive polish. Anchors playoff rotations.",color:"#60a5fa",
+      formula:"Big + Def Score>70 + BPM>3",roles:["Rim Protect","Rebounder","Switch Pot."]},
+    "Micro-Ball 5":          {desc:"Undersized center who defends with IQ. Switching specialist.",color:"#a78bfa",
+      formula:"Big + Ht<6'10\" + Switch Pot>1.5σ + DBPM>2",roles:["Switch Pot.","Connector","Rebounder"]},
+    "Shot Creator":          {desc:"Can generate own shot off the dribble. Self-creation specialist.",color:"#fb923c",
+      formula:"Self-Creation>120 + TS%>55 + USG%>24",roles:["Scorer","Driver","Helio-Scorer"]},
+    "Athletic Slasher":      {desc:"Attacks the rim with explosiveness. Transition weapon.",color:"#f43f5e",
+      formula:"Rim%>45 + Func Ath>70 + Dunk Rate>5",roles:["Driver","Crasher","On-Ball D"]},
   };
-  const allArchetypes = Object.entries(ARCHETYPE_MAP);
+  const allArchetypes = Object.entries(ARCH_MAP);
+  // Detect secondary/tertiary by matching role profiles
+  const archScores = allArchetypes.map(([name,info]) => {
+    let score = 0;
+    (info.roles||[]).forEach(r => {
+      const key = Object.keys(ROLE_INFO).find(k => ROLE_INFO[k].name === r);
+      if (key && rr[key]) score += Math.max(0, roleToZ(rr[key]));
+    });
+    return {name, score, info};
+  }).sort((a,b) => b.score - a.score);
+  const primaryArch = archetype;
+  const secondaryArch = archScores.find(a => a.name !== primaryArch)?.name;
+  const tertiaryArch = archScores.filter(a => a.name !== primaryArch && a.name !== secondaryArch)[0]?.name;
 
-  // ── Four Factors / Possession Impact & Carefree Playability ──
-  // Convert percentiles to Z-scores for bidirectional display
-  const ffEfg = p.ff?.efg ?? 50;
-  const ffTov = p.ff?.tov ?? 50;
-  const ffOrb = p.ff?.orb ?? 50;
-  const ffFtr = p.ff?.ftr ?? 50;
+  // ── CFFR / Possession Impact ──
+  const ffEfg = p.ff?.efg ?? 50, ffTov = p.ff?.tov ?? 50, ffOrb = p.ff?.orb ?? 50, ffFtr = p.ff?.ftr ?? 50;
   const npv = p.ff?.comp ?? 50;
-
-  // Convert percentile (0-100) to Z-score (-3 to +3) for bar display
-  const pToZ = (pctl) => {
-    if (pctl == null) return 0;
-    return Math.max(-3, Math.min(3, (pctl - 50) / 16.67));
-  };
-
+  const pToZ = (pctl) => pctl == null ? 0 : Math.max(-3, Math.min(3, (pctl - 50) / 16.67));
   const ffFactors = [
     {key:"efg",label:"Shot Quality (eFG%)",z:pToZ(ffEfg),pctl:ffEfg,weight:"40%",color:"#fbbf24",
-     desc:"Shooting efficiency adjusted for 3-point value. Positive = better than role-peers. Negative = below-average efficiency."},
+     desc:"Shooting efficiency adjusted for 3-point value. Positive = better than role-peers."},
     {key:"tov",label:"Ball Security (TO%)",z:pToZ(ffTov),pctl:ffTov,weight:"25%",color:"#3b82f6",
-     desc:"Turnover control inverted: positive = fewer turnovers than peers. This factor rewards careful ball-handlers."},
+     desc:"Turnover control inverted: positive = fewer turnovers than peers."},
     {key:"orb",label:"Extra Possessions (ORB%)",z:pToZ(ffOrb),pctl:ffOrb,weight:"20%",color:"#06b6d4",
-     desc:"Offensive rebounding creates second-chance points. Positive = elite glass work for their role."},
+     desc:"Offensive rebounding creates second-chance points."},
     {key:"ftr",label:"Foul Pressure (FTr)",z:pToZ(ffFtr),pctl:ffFtr,weight:"15%",color:"#8b5cf6",
-     desc:"Drawing fouls generates free points and creates foul trouble. Positive = aggressive rim attacker."},
+     desc:"Drawing fouls generates free points and creates foul trouble."},
   ];
-
   const npvZ = pToZ(npv);
   const npvLabel = npvZ >= 1.2 ? "Elite Floor Raiser" : npvZ >= 0.3 ? "Winning Piece" : npvZ >= -0.3 ? "Role Dependent" : "High Maintenance";
   const npvColor = npvZ >= 1.2 ? "#22c55e" : npvZ >= 0.3 ? "#86efac" : npvZ >= -0.3 ? "#fbbf24" : "#ef4444";
-  const npvDesc = npvZ >= 1.2
-    ? "Makes every team immediately more stable and efficient. Every possession is protected and optimized."
-    : npvZ >= 0.3
-    ? "Highly efficient contributor who avoids costly mistakes. A reliable building block for any roster."
-    : npvZ >= -0.3
-    ? "Gets the job done within structure, but needs a system around him. Neither helps nor hurts possession math."
-    : "Consumes more possessions than he generates value. High talent may compensate, but it's expensive for coaches.";
+  const usageRole = p.cffr?.usageRole || "Unknown";
 
   return (
     <div className="space-y-5">
-      {/* ── BADGES (ALL — no limit on scouting page) ────── */}
-      <Sec icon="🏅" title="Skill Badges" sub="Computed from stats with international adjustments. Hover each badge for trigger rules and scouting context.">
-        {p.source !== "ncaa" && <div className="mb-3 px-3 py-1.5 rounded-lg inline-block text-xs" style={{background:"#3b82f622",color:"#60a5fa",border:"1px solid #3b82f644"}}>International Adjuster Active: Stats scaled x1.25, STL%/BLK% x1.15 for badge evaluation</div>}
+      {/* ── BADGES ── */}
+      <Sec icon="🏅" title="Skill Badges" sub="Computed from stats. Hover for trigger rules and scouting context.">
+        {p.source !== "ncaa" && <div className="mb-3 px-3 py-1.5 rounded-lg inline-block text-xs" style={{background:"#3b82f622",color:"#60a5fa",border:"1px solid #3b82f644"}}>International Adjuster Active</div>}
         {badges.green.length > 0 && <>
           <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#22c55e"}}>✓ Green Flags ({badges.green.length})</div>
           <div className="flex flex-wrap gap-2 mb-4">{badges.green.map((b,i)=><BadgeChip key={`g${i}`} text={b} color="#22c55e"/>)}</div>
@@ -1351,17 +1364,16 @@ function ScoutingTab({p}) {
           <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#ef4444"}}>⚠ Red Flags ({badges.red.length})</div>
           <div className="flex flex-wrap gap-2 mb-4">{badges.red.map((f,i)=><BadgeChip key={`r${i}`} text={f} color="#ef4444"/>)}</div>
         </>}
-        {allBadges.length === 0 && <div className="text-sm" style={{color:"#6b7280"}}>No badges earned — average or data-insufficient profile.</div>}
+        {allBadges.length === 0 && <div className="text-sm" style={{color:"#6b7280"}}>No badges earned.</div>}
       </Sec>
 
-      {/* ── PILLARS (5 DNA scores) ─────────────────────── */}
+      {/* ── PILLARS ── */}
       <Sec icon="🔬" title="The 5 Pillars" sub="Prospect DNA — position-adjusted percentile scores (0-100)">
-        {p.source !== "ncaa" && <div className="mb-3 px-3 py-1.5 rounded-lg inline-block text-xs" style={{background:"#3b82f622",color:"#60a5fa",border:"1px solid #3b82f644"}}>League-Adjusted (x1.25 for international stats)</div>}
         <div className="grid grid-cols-5 gap-3">
           {pillars.map(pl=>(
             <Tip key={pl.key} wide content={
               <div><div className="font-bold mb-1" style={{color:pl.color}}>{METHODS[pl.key]?.name||pl.name}</div>
-              <div className="mb-1"><span style={{color:"#94a3b8"}}>Formula:</span><br/><code className="text-xs" style={{color:"#7dd3fc"}}>{METHODS[pl.key]?.formula||""}</code></div>
+              {METHODS[pl.key]?.formula&&<div className="mb-1"><span style={{color:"#94a3b8"}}>Formula:</span><br/><code className="text-xs" style={{color:"#7dd3fc"}}>{METHODS[pl.key].formula}</code></div>}
               <div style={{color:"#cbd5e1"}}>{METHODS[pl.key]?.desc||""}</div></div>
             }>
               <div className="rounded-xl p-4 text-center cursor-help" style={{background:"#0d1117",border:`1px solid ${pl.color}33`}}>
@@ -1377,70 +1389,64 @@ function ScoutingTab({p}) {
         </div>
       </Sec>
 
-      {/* ── POSSESSION IMPACT & CAREFREE PLAYABILITY ────── */}
+      {/* ── POSSESSION IMPACT (CFFR) — wider bars, usage role prominent ── */}
       <Sec icon="↗" title="Possession Impact & Carefree Playability" sub="">
-        <Tip wide content={
-          <div>
-            <div className="font-bold mb-1" style={{color:"#f97316"}}>{METHODS.fourFactors.name}</div>
-            <div className="mb-1"><span style={{color:"#94a3b8"}}>Formula:</span><br/><code className="text-xs" style={{color:"#7dd3fc"}}>{METHODS.fourFactors.formula}</code></div>
-            <div style={{color:"#cbd5e1"}}>{METHODS.fourFactors.desc}</div>
-          </div>
-        }>
-          <div className="text-xs mb-4 cursor-help" style={{color:"#6b7280"}}>
-            The NPV is not a talent rating — it's an efficiency index measuring how 'expensive' it is for a coach to keep this player on the floor. <span style={{color:"#475569"}}>ⓘ hover for formula</span>
-          </div>
+        <Tip wide content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>{METHODS.fourFactors?.name||"Four Factors"}</div>{METHODS.fourFactors?.formula&&<div className="mb-1"><code className="text-xs" style={{color:"#7dd3fc"}}>{METHODS.fourFactors.formula}</code></div>}<div style={{color:"#cbd5e1"}}>{METHODS.fourFactors?.desc||"Dean Oliver's Four Factors adjusted for usage role. Measures net possession quality relative to role-peers."}</div></div>}>
+          <div className="text-xs mb-4 cursor-help" style={{color:"#6b7280"}}>Efficiency index: how much value this player creates per possession, relative to his usage role. <span style={{color:"#475569"}}>ⓘ</span></div>
         </Tip>
-
-        {/* Central NPV card */}
-        <div className="flex items-center gap-4 mb-5 p-5 rounded-xl" style={{background:"#0d1117",border:`1px solid ${npvColor}33`}}>
-          <div className="flex-1">
-            <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#6b7280"}}>Net Possession Value</div>
-            <div className="text-4xl font-bold" style={{color:npvColor,fontFamily:"'Oswald',sans-serif"}}>{Math.round(npv)}</div>
+        {/* NPV scale */}
+        <div className="p-5 rounded-xl mb-4" style={{background:"#0d1117",border:`1px solid ${npvColor}33`}}>
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#6b7280"}}>Net Possession Value</div>
+              <div className="text-4xl font-bold" style={{color:npvColor,fontFamily:"'Oswald',sans-serif"}}>{Math.round(npv)}</div>
+            </div>
+            <div className="text-right">
+              <div className="px-4 py-2 rounded-lg text-sm font-bold" style={{background:npvColor+"22",color:npvColor,border:`1px solid ${npvColor}44`}}>{npvLabel}</div>
+            </div>
           </div>
-          <div className="text-right">
-            <div className="px-4 py-2 rounded-lg text-sm font-bold mb-1" style={{background:npvColor+"22",color:npvColor,border:`1px solid ${npvColor}44`}}>{npvLabel}</div>
-            <div className="text-xs max-w-xs" style={{color:"#6b7280"}}>{npvDesc}</div>
+          {/* NPV scale bar */}
+          <div className="relative h-6 rounded-full overflow-hidden mb-2" style={{background:"linear-gradient(90deg,#ef4444,#fbbf24,#86efac,#22c55e)"}}>
+            <div className="absolute top-0 bottom-0 w-1.5 rounded" style={{left:`${Math.max(2,Math.min(98,npv))}%`,background:"#fff",boxShadow:"0 0 6px #fff"}}/>
           </div>
-          {p.cffr?.usageRole && <div className="ml-auto text-xs text-right" style={{color:"#6b7280"}}>Usage Role:<br/><span className="font-semibold" style={{color:"#f97316"}}>{p.cffr.usageRole}</span></div>}
+          <div className="flex justify-between text-xs" style={{color:"#4b5563"}}>
+            <span>High Maintenance</span><span>Role Dependent</span><span>Winning Piece</span><span>Elite Floor Raiser</span>
+          </div>
         </div>
-
-        {/* Bidirectional Z-Score Bars ("Why" bars) */}
-        <div className="text-xs uppercase tracking-wider mb-3 font-semibold" style={{color:"#6b7280"}}>Factor Breakdown</div>
-        <div className="space-y-3">
+        {/* Usage Role — prominent */}
+        <div className="flex items-center gap-3 mb-4 p-3 rounded-lg" style={{background:"#0d111788",border:"1px solid #1f2937"}}>
+          <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Usage Role Context:</span>
+          <span className="px-3 py-1 rounded-lg text-sm font-bold" style={{background:"#f9731622",color:"#f97316",border:"1px solid #f9731644"}}>{usageRole}</span>
+          <Tip content={<div>CFFR compares this player against peers with similar usage. Primary (USG≥28%), Secondary (≥22%), Finisher (≥15%), Low-Usage (&lt;15%). A "Winning Piece" at Primary usage is far more valuable than at Low usage.</div>}>
+            <span className="text-xs cursor-help" style={{color:"#475569"}}>ⓘ Four Factors are percentiled within this usage bucket</span>
+          </Tip>
+        </div>
+        {/* Factor bars — each on own row, full width */}
+        <div className="space-y-4">
           {ffFactors.map(f => {
-            const barPct = Math.abs(f.z) / 3 * 50; // 50% = max extent from center
-            const isPositive = f.z >= 0;
+            const barPct = Math.abs(f.z) / 3 * 50;
+            const isPos = f.z >= 0;
             return (
-              <Tip key={f.key} content={<div><div className="font-bold mb-1" style={{color:f.color}}>{f.label}</div><div className="mb-1 text-xs" style={{color:"#94a3b8"}}>Weight: {f.weight}</div><div style={{color:"#cbd5e1"}}>{f.desc}</div></div>}>
+              <Tip key={f.key} block wide content={<div><div className="font-bold mb-1" style={{color:f.color}}>{f.label}</div><div className="text-xs mb-1" style={{color:"#94a3b8"}}>Weight: {f.weight} · Percentile: {Math.round(f.pctl)}</div><div style={{color:"#cbd5e1"}}>{f.desc}</div></div>}>
                 <div className="cursor-help">
-                  <div className="flex justify-between items-center mb-1">
-                    <div className="text-xs font-semibold" style={{color:f.color}}>{f.label} <span style={{color:"#475569"}}>ⓘ</span></div>
-                    <div className="text-xs" style={{color:"#6b7280"}}>Wt: {f.weight}</div>
-                  </div>
-                  <div className="relative h-6 rounded-full overflow-hidden" style={{background:"#1f2937"}}>
-                    {/* Center line */}
-                    <div className="absolute top-0 bottom-0 w-px z-10" style={{left:"50%",background:"#ffffff44"}}/>
-                    {/* Bar extending from center */}
-                    {isPositive ? (
-                      <div className="absolute top-0 bottom-0 rounded-r-full" style={{
-                        left:"50%",width:`${barPct}%`,
-                        background:`linear-gradient(90deg,${f.color}66,${f.color})`
-                      }}/>
-                    ) : (
-                      <div className="absolute top-0 bottom-0 rounded-l-full" style={{
-                        right:"50%",width:`${barPct}%`,
-                        background:`linear-gradient(270deg,${f.color}66,${f.color})`
-                      }}/>
-                    )}
-                    {/* Labels on bar */}
-                    <div className="absolute inset-0 flex items-center justify-between px-3 text-xs font-semibold" style={{color:"#9ca3af"}}>
-                      <span style={{fontSize:9}}>- Drain</span>
-                      <span style={{fontSize:9}}>+ Impact</span>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-sm font-semibold" style={{color:f.color}}>{f.label} <span style={{color:"#475569"}}>ⓘ</span></span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm" style={{color:"#6b7280"}}>Wt: {f.weight}</span>
+                      <span className="text-lg font-bold" style={{color:f.z>=0?f.color:"#ef4444",fontFamily:"'Oswald',sans-serif"}}>{f.z>0?"+":""}{f.z.toFixed(1)}σ</span>
+                      <span className="text-xs" style={{color:"#4b5563"}}>Pctl: {Math.round(f.pctl)}</span>
                     </div>
                   </div>
-                  <div className="flex justify-between mt-0.5">
-                    <div className="text-xs" style={{color:f.z >= 0 ? f.color : "#ef4444"}}>{f.z > 0 ? "+" : ""}{f.z.toFixed(1)}σ</div>
-                    <div className="text-xs" style={{color:"#475569"}}>Pctl: {Math.round(f.pctl)}</div>
+                  <div className="relative h-10 rounded-lg overflow-hidden" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+                    <div className="absolute top-0 bottom-0 w-0.5 z-10" style={{left:"50%",background:"#ffffff44"}}/>
+                    {isPos ? (
+                      <div className="absolute top-1 bottom-1 rounded-r" style={{left:"50%",width:`${barPct}%`,background:`linear-gradient(90deg,${f.color}44,${f.color})`}}/>
+                    ) : (
+                      <div className="absolute top-1 bottom-1 rounded-l" style={{right:"50%",width:`${barPct}%`,background:`linear-gradient(270deg,${f.color}44,${f.color})`}}/>
+                    )}
+                    <div className="absolute inset-0 flex items-center justify-between px-3 text-xs" style={{color:"#ffffff22"}}>
+                      <span>− Drain</span><span>+ Impact</span>
+                    </div>
                   </div>
                 </div>
               </Tip>
@@ -1449,40 +1455,77 @@ function ScoutingTab({p}) {
         </div>
       </Sec>
 
-      {/* ── ROLE INFERENCE MATRIX ─────────────────────── */}
-      <Sec icon="📊" title="Role Inference Matrix" sub="Z-scores: >=+2.0 = Elite, >=+1.0 = Impact, <-1.0 = Liability">
+      {/* ── ROLE INFERENCE MATRIX — hoverable with inputs ── */}
+      <Sec icon="📊" title="Role Inference Matrix" sub="Z-scores relative to position peers. Hover for component stats.">
         {roleGroups.map(grp=>(
-          <div key={grp.label} className="mb-4">
+          <div key={grp.label} className="mb-5">
             <div className="text-xs uppercase tracking-widest font-bold mb-2" style={{color:grp.color}}>{grp.label}</div>
             <div className="grid grid-cols-5 gap-2">
-              {grp.roles.map(r=>(
-                <div key={r.key} className="rounded-lg p-3 text-center" style={{background:zBg(r.z),border:`1px solid ${zColor(r.z)}22`}}>
-                  <div className="text-xs mb-1 truncate" style={{color:"#9ca3af"}}>{r.name}</div>
-                  <div className="font-bold font-mono text-lg" style={{color:zColor(r.z),fontFamily:"'Oswald',sans-serif"}}>{r.z>0?"+":""}{r.z}</div>
-                  <div className="text-xs" style={{color:zColor(r.z),opacity:0.7}}>{zLabel(r.z)}</div>
-                </div>
-              ))}
+              {grp.roles.map(key=>{
+                const info = ROLE_INFO[key]||{};
+                const z = roleToZ(rr[key]);
+                return (
+                  <Tip key={key} content={
+                    <div>
+                      <div className="font-bold mb-1" style={{color:zColor(z)}}>{info.name||key}: {z>0?"+":""}{z} σ</div>
+                      <div className="mb-1"><span style={{color:"#94a3b8"}}>Inputs:</span> <span style={{color:"#7dd3fc"}}>{info.inputs||"—"}</span></div>
+                      <div style={{color:"#cbd5e1"}}>{info.desc||""}</div>
+                    </div>
+                  }>
+                    <div className="rounded-lg p-3 text-center cursor-help" style={{background:zBg(z),border:`1px solid ${zColor(z)}22`}}>
+                      <div className="text-xs mb-1 truncate" style={{color:"#9ca3af"}}>{info.name||key} <span style={{color:"#475569"}}>ⓘ</span></div>
+                      <div className="font-bold font-mono text-lg" style={{color:zColor(z),fontFamily:"'Oswald',sans-serif"}}>{z>0?"+":""}{z}</div>
+                      <div className="text-xs" style={{color:zColor(z),opacity:0.7}}>{zLabel(z)}</div>
+                    </div>
+                  </Tip>
+                );
+              })}
             </div>
           </div>
         ))}
       </Sec>
 
-      {/* ── ARCHETYPE (all 12 shown, primary highlighted) ─ */}
-      <Sec icon="🏷" title="NBA Archetype Fit" sub="All 12 archetypes — primary match highlighted. Based on pillar + role combination.">
+      {/* ── ARCHETYPE — formulas + secondary/tertiary + versatility ── */}
+      <Sec icon="🏷" title="NBA Archetype Fit" sub="Based on pillar + role combination. Hover for selection formula.">
+        {/* Role Versatility — prominent */}
+        {p.roleVersatility != null && (
+          <div className="flex items-center gap-4 mb-4 p-3 rounded-lg" style={{background:"#0d111788",border:"1px solid #1f2937"}}>
+            <Tip content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>Role Versatility</div><div style={{color:"#cbd5e1"}}>Count of roles where z-score ≥ +0.5, normalized to 0-100. Higher = more lineup flexibility. 80+ = Swiss Army Knife territory.</div></div>}>
+              <div className="cursor-help">
+                <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Role Versatility <span style={{color:"#475569"}}>ⓘ</span></span>
+                <div className="text-2xl font-bold" style={{color:p.roleVersatility>70?"#22c55e":p.roleVersatility>45?"#fbbf24":"#6b7280",fontFamily:"'Oswald',sans-serif"}}>{Math.round(p.roleVersatility)}/100</div>
+              </div>
+            </Tip>
+            <div className="flex-1 h-3 rounded-full overflow-hidden" style={{background:"#1f2937"}}>
+              <div className="h-full rounded-full" style={{width:`${Math.min(100,p.roleVersatility)}%`,background:`linear-gradient(90deg,#f9731688,${p.roleVersatility>70?"#22c55e":"#f97316"})`}}/>
+            </div>
+            <div className="text-xs" style={{color:"#4b5563"}}>{p.roleVersatility>75?"Swiss Army Knife":p.roleVersatility>55?"Multi-Role":p.roleVersatility>35?"Specialist":"One-Dimensional"}</div>
+          </div>
+        )}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
           {allArchetypes.map(([name, info]) => {
-            const isPrimary = archetype === name;
+            const isPrimary = primaryArch === name;
+            const isSecondary = secondaryArch === name;
+            const isTertiary = tertiaryArch === name;
+            const rank = isPrimary ? "PRIMARY" : isSecondary ? "2ND" : isTertiary ? "3RD" : null;
+            const rankColor = isPrimary ? info.color : isSecondary ? "#9ca3af" : "#4b5563";
             return (
-              <Tip key={name} content={<div><div className="font-bold mb-1" style={{color:info.color}}>{name}</div><div style={{color:"#cbd5e1"}}>{info.desc}</div></div>}>
+              <Tip key={name} content={
+                <div>
+                  <div className="font-bold mb-1" style={{color:info.color}}>{name}</div>
+                  <div className="mb-1" style={{color:"#cbd5e1"}}>{info.desc}</div>
+                  {info.formula&&<div className="mb-1"><span style={{color:"#94a3b8"}}>Formula:</span> <code className="text-xs" style={{color:"#7dd3fc"}}>{info.formula}</code></div>}
+                  {info.roles&&<div><span style={{color:"#94a3b8"}}>Key roles:</span> <span style={{color:"#f97316"}}>{info.roles.join(", ")}</span></div>}
+                </div>
+              }>
                 <div className={`rounded-lg p-3 cursor-help transition-all ${isPrimary ? "ring-2" : ""}`}
                   style={{
-                    background: isPrimary ? info.color + "18" : "#0d1117",
-                    border: `1px solid ${isPrimary ? info.color : "#1f2937"}`,
-                    ringColor: isPrimary ? info.color : "transparent",
-                    opacity: isPrimary ? 1 : 0.55,
+                    background: isPrimary ? info.color + "18" : isSecondary ? "#0d111799" : "#0d1117",
+                    border: `1px solid ${isPrimary ? info.color : isSecondary ? "#374151" : "#1f2937"}`,
+                    opacity: isPrimary ? 1 : isSecondary ? 0.8 : isTertiary ? 0.65 : 0.4,
                   }}>
                   <div className="flex items-center gap-2">
-                    {isPrimary && <span className="text-xs px-1.5 py-0.5 rounded font-bold" style={{background:info.color+"33",color:info.color}}>PRIMARY</span>}
+                    {rank && <span className="text-xs px-1.5 py-0.5 rounded font-bold" style={{background:rankColor+"33",color:rankColor}}>{rank}</span>}
                     <div className="text-xs font-semibold truncate" style={{color: isPrimary ? info.color : "#9ca3af"}}>{name} <span style={{color:"#475569"}}>ⓘ</span></div>
                   </div>
                 </div>
@@ -1490,17 +1533,10 @@ function ScoutingTab({p}) {
             );
           })}
         </div>
-        {p.roleVersatility != null && (
-          <div className="mt-3 text-xs" style={{color:"#475569"}}>Role Versatility: <span className="font-semibold" style={{color:"#f97316"}}>{Math.round(p.roleVersatility)}/100</span></div>
-        )}
       </Sec>
     </div>
   );
 }
-
-// ═══════════════════════════════════════════════════════════
-// TAB: BODY (Physical Profile + Anthro Comps + Interactive Sliders)
-// ═══════════════════════════════════════════════════════════
 function BodyTab({p}) {
   const [wsAdj,setWsAdj]=useState(0);
   const [wtAdj,setWtAdj]=useState(0);
