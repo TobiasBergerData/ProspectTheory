@@ -304,34 +304,34 @@ function computeBadges(p) {
   else if ((isW || isB) && ftr > 45 && astP > 15)                   yellow.push("Interior Engine");
 
   // ═══ RED BADGES ═══
-  // Spacing Killer
-  if ((isG || isW) && tp < 30 && threeF < 18)                       red.push("Spacing Killer");
+  // Spacing Killer — only if 3P data actually exists
+  if ((isG || isW) && p.tp != null && p.threeF != null && tp < 30 && threeF < 18)  red.push("Spacing Killer");
   // Efficiency Trap
   if (usg > 26 && ts < 52)                                          red.push("Efficiency Trap");
   // Empty Calorie Scorer (stricter bust signal)
   if (usg > 28 && ts < 52 && astP < 15)                             red.push("Empty Calorie Scorer");
-  // One-Way Project
-  if (obpm > 3.0 && dbpm < -1.5 && stlP < 1.0)                     red.push("One-Way Project");
-  // Soft Interior
-  if (isB && ftr < 22 && blkP < 2.0)                                red.push("Soft Interior");
+  // One-Way Project — only if DBPM data exists
+  if (p.obpm != null && p.dbpm != null && obpm > 3.0 && dbpm < -1.5 && stlP < 1.0)  red.push("One-Way Project");
+  // Soft Interior — only if FTR and BLK data exist
+  if (isB && p.ftr != null && p.blkP != null && ftr < 22 && blkP < 2.0)  red.push("Soft Interior");
   // Non-Processing Guard
-  if (isG && astTov < 0.8 && tovP > 20)                             red.push("Non-Processing Guard");
+  if (isG && p.astTov != null && astTov < 0.8 && tovP > 20)         red.push("Non-Processing Guard");
   // Tunnel Vision
-  if ((isG || isW) && astTov < 0.7 && usg > 22)                     red.push("Tunnel Vision");
+  if ((isG || isW) && p.astTov != null && astTov < 0.7 && usg > 22) red.push("Tunnel Vision");
   // Passive Scorer — only if FTR data actually exists (ftr=0 means missing, not passive)
   if (p.ftr != null && ftr > 0 && ftr < 20 && usg > 20)              red.push("Passive Scorer");
   // Foul Magnet
   if ((p.fouls40 ?? 0) > 4.8)                                       red.push("Foul Magnet");
-  // Liability Big
-  if (isB && (drbP < 15 || blkP < 1.5))                             red.push("Liability Big");
+  // Liability Big — only if DRB% and BLK% data exist
+  if (isB && p.drbP != null && p.blkP != null && (drbP < 15 || blkP < 1.5))  red.push("Liability Big");
   // Defensive Target (adjusted)
-  if (isG && htIn < 74 && dbpm < -1.0)                              red.push("Defensive Target");
-  // Non-Spacing Guard
-  if (isG && tp < 30 && threeF < 20)                                red.push("Non-Spacing Guard");
-  // All-Offense Big
-  if (isB && blkP < 2.5 && dbpm < 1.5)                              red.push("All-Offense Big");
-  // FT Concern
-  if (ft < 65 && usg > 25)                                          red.push("FT Concern");
+  if (isG && htIn < 74 && p.dbpm != null && dbpm < -1.0)            red.push("Defensive Target");
+  // Non-Spacing Guard — only if 3P data exists
+  if (isG && p.tp != null && p.threeF != null && tp < 30 && threeF < 20)  red.push("Non-Spacing Guard");
+  // All-Offense Big — only if BLK% and DBPM data exist
+  if (isB && p.blkP != null && p.dbpm != null && blkP < 2.5 && dbpm < 1.5)  red.push("All-Offense Big");
+  // FT Concern — only if FT% data exists
+  if (p.ft != null && ft < 65 && usg > 25)                          red.push("FT Concern");
 
   return { green, yellow, red };
 }
@@ -487,8 +487,10 @@ function mapProfile(d) {
     source:d.source, league:d.league,
   };
   // Only compute client badges when sufficient stats are available
-  // Board API doesn't return detailed stats → computeBadges would generate wrong results
-  const hasDetailedStats = tmpP.bpm != null && tmpP.usg != null && tmpP.ts != null;
+  // Board API only sends bpm/usg/ts/ast_p/blk_p/stl_p — NOT tp/ft/drbP/dbpm etc.
+  // Without those, computeBadges defaults them to 0 → false Spacing Killer, Liability Big, etc.
+  const hasDetailedStats = tmpP.bpm != null && tmpP.usg != null && tmpP.ts != null
+    && (tmpP.tp != null || tmpP.ft != null) && tmpP.drbP != null;
   const computed = hasDetailedStats ? computeBadges(tmpP) : { green: [], yellow: [], red: [] };
 
   // Merge: server badges + client badges (dedup)
@@ -773,7 +775,7 @@ function OverviewTab({p, compTier, setCompTier}) {
           </div>
         ))}
       </div>
-      <Sec icon="▦" title="Box Score" sub={`${p.gp??0} GP · ${fmt(p.min)} MIN/G — Traditional counting stats. Look for per-minute efficiency, not raw totals.`}>
+      <Sec icon="▦" title="Box Score" sub={p.gp ? `${p.gp} GP · ${fmt(p.min)} MIN/G — Traditional counting stats. Look for per-minute efficiency, not raw totals.` : (p.yr && p.yr <= 2009 ? "Per-game counting stats unavailable for 2008-2009 BartTorvik data. Advanced stats shown below." : "Game data unavailable for this player.")}>
         <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
           {[["PTS",p.pts,p.pctl?.pts36],["REB",p.reb,p.pctl?.reb36],["AST",p.ast,p.pctl?.ast36],
             ["STL",p.stl,p.pctl?.stl],["BLK",p.blk,p.pctl?.blk],["A/TO",p.astTov,null],["FTR",p.ftr,null],["TO%",p.toP,p.pctl?.to]
@@ -914,6 +916,7 @@ function ShootingTab({p}) {
   const dunkPct = normPct(p.dunkPct);
   const hasRim = rimF != null && rimF > 0, hasMid = midF != null && midF > 0;
   const hasDunk = dunkR != null && dunkR > 0, hasTracking = hasRim || hasMid;
+  const useSimplifiedCourt = !hasTracking;
 
   const gp = p.gp ?? 0;
   const rawFga = p.fga ?? null;
@@ -1002,11 +1005,6 @@ function ShootingTab({p}) {
     if (type==="rim") return pct>65?"#22c55e":pct>58?"#86efac":pct>50?"#fbbf24":"#ef4444";
     return "#e5e7eb";
   };
-
-  // ═══ DECIDE COURT MODE ═══
-  // Full court (5-zone): when rim/mid tracking exists (2010+ NCAA)
-  // Simplified court (2P/3P/FT): when no tracking (2008-09 NCAA, internationals)
-  const useSimplifiedCourt = !hasTracking;
 
   // ═══ DIET BAR COMPONENT ═══
   const DietBar = ({label, color, pctOfTotal, children}) => (
@@ -2086,7 +2084,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
   };
 
   const handleYearChange = (newYear) => {
-    setYearFilter(newYear);
+    setYearFilter(String(newYear));
     fetchBoard(newYear);
   };
 
@@ -2427,7 +2425,6 @@ export default function App() {
                       <span className="px-2 py-0.5 rounded text-xs font-semibold" style={{background:"#f9731622",color:"#f97316"}}>{p.pos}</span>
                       {p.archetype&&<span className="px-2 py-0.5 rounded text-xs font-semibold" style={{background:"#3b82f622",color:"#60a5fa"}}>{p.archetype}</span>}
                       <span>{p.team}</span><span>·</span><span>{p.ht}</span><span>·</span><span>Age {p.age!=null?Number(p.age).toFixed(1):"—"}</span>
-                      {p.btUrl&&<><span>·</span><a href={p.btUrl} target="_blank" rel="noopener noreferrer" className="hover:underline" style={{color:"#60a5fa"}}>BartTorvik ↗</a></>}
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
