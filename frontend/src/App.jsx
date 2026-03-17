@@ -120,14 +120,14 @@ const METHODS = {
     desc: "Usage-role-adjusted Four Factors measuring possession efficiency. Players bucketed by usage (Primary ≥28%, Secondary ≥22%, Finisher ≥15%, LowUsage <15%). Each factor z-scored within role × season. NPV > +2.0 = 'Elite Floor Raiser', +0.5–2.0 = 'Winning Piece', −0.5–0.5 = 'Role Dependent', < −1.0 = 'High Maintenance'. This is NOT a talent rating — it's an efficiency index measuring how 'expensive' it is for a coach to keep this player on the floor.",
   },
   monteCarlo: {
-    name: "Monte Carlo Projection (20k runs)",
-    formula: "UPS = E[0.65 × prod_z + 0.35 × impact_z] × age_factor × pos_value",
-    desc: "20,000 simulations from Normal(ASPM_adj, σ). Production (65%): BPM for NCAA / ASPM for Intl. Impact (35%): PORPAG for NCAA / eDiff for Intl. Both z-scored within source × position, then blended. Age factor: ≤20=bonus, >22=penalty. Tier thresholds on ASPM scale: Superstar >14, All-Star 10–14, Starter 7.5–10, Roleplayer 5–7.5, Replacement 3–5, Out <3.",
+    name: "WAR Projection (LightGBM)",
+    formula: "WAR = (projected_PIE − median_PIE) × 400, where PIE = 60% LightGBM + 40% xRAPM ensemble",
+    desc: "LightGBM gradient boosting trained on 1,181 prospects with known NBA outcomes. 32 features: age, height, wingspan, BPM, PER, eFG%, 3P%, AST%, STL%, BLK%, trajectory slopes, conference strength, age×league interaction. Validated at r=0.41 (5-fold CV). Conf adjustment: 0.55+0.45×league_strength. Precociousness boost for young internationals in strong leagues. WAR-based tiers: Superstar ≥18, All-Star ≥12, Starter ≥5, Roleplayer ≥1.",
   },
   posClassification: {
     name: "Position Classification",
-    formula: "Functional position from height + stats: Playmaker, Wing, Big, Jumbo Creator, Stretch Big",
-    desc: "Assigns functional position based on measurables and statistical profile. 'Jumbo Creator' = big with elite creation (1.15× pos_value). 'Stretch Big' = shooting big (1.05× pos_value).",
+    formula: "pos = f(height, AST%, USG%, BLK%, 3P%) → Playmaker / Wing / Big",
+    desc: "Three functional positions. Playmaker: PG-like creators (height <6'3\" or AST%>25+USG%>22). Big: true centers (height ≥6'10\"). Wing: everyone else. Stretch override: Bigs with 3P%>30+3PAr>15 → Wing. Stat override: high AST% creators regardless of height → Playmaker.",
   },
 };
 
@@ -221,23 +221,27 @@ function computeBadges(p) {
   const intlMult = isIntl ? 1.25 : 1.0;
   const badgeStocksMult = isIntl ? 1.15 : 1.0; // extra multiplier for STL%/BLK% in badge checks
 
+  // GREEN badge stats: default to 0 (conservative — no badge without data)
   const ft = p.ft ?? 0, tp = p.tp ?? 0, threeF = p.threeF ?? 0;
   const astP = (p.astP ?? 0) * intlMult;
-  const astTov = p.astTov ?? 0;
   const stlP = (p.stlP ?? 0) * intlMult * badgeStocksMult;
   const blkP = (p.blkP ?? 0) * intlMult * badgeStocksMult;
   const usg = (p.usg ?? 0) * intlMult;
-  const toP = p.toP ?? 0, ts = p.ts ?? 0;
+  const ts = p.ts ?? 0;
   const ftr = p.ftr ?? 0, rimF = p.rimF ?? 0, rimPct = p.rimPct ?? 0;
   const dbpm = (p.dbpm ?? 0) * intlMult;
   const obpm = (p.obpm ?? 0) * intlMult;
   const bpm = (p.bpm ?? 0) * intlMult;
   const feel = p.feel ?? 0, funcAth = p.funcAth ?? 0;
   const htIn = p.htIn ?? 78, drbP = (p.drbP ?? 0) * intlMult;
-  const efg = p.efg ?? (ts > 0 ? ts - 3 : 0); // rough eFG proxy
-  const tovP = toP;
-  const twoPct = p.twoPct ?? (p.fg ?? 45); // 2P% fallback
+  const efg = p.efg ?? (ts > 0 ? ts - 3 : 0);
+  const twoPct = p.twoPct ?? (p.fg ?? 45);
   const age = p.age ?? 22;
+
+  // RED badge stats: default to AVERAGE (missing data should NOT trigger warnings)
+  const astTov = p.astTov ?? 1.5;    // avg AST/TO — missing data ≠ tunnel vision
+  const toP = p.toP ?? 15;           // avg TO% — missing ≠ turnover prone
+  const tovP = toP;
 
   // ── Proxies ──
   const creationProxy = (usg * 0.7) + (astP * 0.3);
@@ -314,8 +318,8 @@ function computeBadges(p) {
   if (isG && astTov < 0.8 && tovP > 20)                             red.push("Non-Processing Guard");
   // Tunnel Vision
   if ((isG || isW) && astTov < 0.7 && usg > 22)                     red.push("Tunnel Vision");
-  // Passive Scorer
-  if (ftr < 20 && usg > 20)                                         red.push("Passive Scorer");
+  // Passive Scorer — only if FTR data actually exists (ftr=0 means missing, not passive)
+  if (p.ftr != null && ftr > 0 && ftr < 20 && usg > 20)              red.push("Passive Scorer");
   // Foul Magnet
   if ((p.fouls40 ?? 0) > 4.8)                                       red.push("Foul Magnet");
   // Liability Big
@@ -513,17 +517,25 @@ function mapProfile(d) {
   };
   const filterByPos = (badges, restrictions, pos) => badges.filter(b => {
     const allowed = restrictions[b];
-    if (allowed === undefined || allowed === null) return true; // no restriction or unknown badge
+    if (allowed === undefined || allowed === null) return true;
     return allowed.includes(pos);
   });
+  // Additional stat-validation: server badges must also pass client-side stat checks
+  const statValidate = (badge) => {
+    if (badge === "Point Big" && !(astP > 18 && astTov > 1.2)) return false;
+    if (badge === "Floor General" && !(astTov > 2.0 && astP > 22)) return false;
+    if (badge === "Self-Creator" && !(p.selfCreation > 70)) return false;
+    if (badge === "Tunnel Vision" && !(p.astTov != null && astTov < 0.8)) return false;
+    return true;
+  };
   const serverGreen = filterByPos(
     badgeList.filter(b => BADGE_DEFS[b]?.cat === "green" || (!BADGE_DEFS[b])),
     POS_RESTRICTED_GREEN, resolvedPos
-  );
+  ).filter(statValidate);
   const serverRed = filterByPos(
     redList.filter(b => BADGE_DEFS[b]?.cat === "red" || (!BADGE_DEFS[b])),
     POS_RESTRICTED_RED, resolvedPos
-  );
+  ).filter(statValidate);
   const allGreen = [...new Set([...serverGreen, ...computed.green])];
   const allYellow = computed.yellow; // server doesn't send yellow
   const allRed = [...new Set([...serverRed, ...computed.red])];
@@ -874,6 +886,9 @@ function OverviewTab({p, compTier, setCompTier}) {
 // TAB: SHOOTING (v4 — FT in diet, dunks stacked in rim, pos×tier FGA)
 // ═══════════════════════════════════════════════════════════
 function ShootingTab({p}) {
+  // Safety: catch rendering errors to prevent page crash
+  if (!p) return <div className="p-6 text-center" style={{color:"#6b7280"}}>No player data</div>;
+  try {
   const isIntl = p.source && p.source !== "ncaa";
   const norm = (v) => {
     if (v == null || v === "" || v === "—") return null;
@@ -899,7 +914,7 @@ function ShootingTab({p}) {
 
   const gp = p.gp ?? 0;
   const rawFga = p.fga ?? null;
-  const estFgaPG = (p.pts && ts) ? p.pts / (2 * ts / 100) : null;
+  const estFgaPG = (p.pts && ts && ts > 0) ? p.pts / (2 * ts / 100) : null;
   const totalFga = rawFga ? (rawFga > 50 ? Math.round(rawFga) : Math.round(rawFga * gp)) : (estFgaPG && gp ? Math.round(estFgaPG * gp) : null);
   const totalFta = p.fta ? (p.fta > 20 ? Math.round(p.fta) : Math.round(p.fta * gp)) : (ftr != null && totalFga ? Math.round(ftr / 100 * totalFga) : null);
   const totalShots = (totalFga || 0) + (totalFta || 0);
@@ -1188,14 +1203,23 @@ function ShootingTab({p}) {
       </Sec>
     </div>
   );
+  } catch(e) {
+    console.error("ShootingTab render error:", e);
+    return <div className="p-6 text-center rounded-xl" style={{background:"#111827",color:"#ef4444"}}>
+      <div className="text-lg font-bold mb-2">Shooting data error</div>
+      <div className="text-sm" style={{color:"#6b7280"}}>Could not render shooting profile. This player may have incomplete shooting data. Error: {String(e?.message||e)}</div>
+    </div>;
+  }
 }
 function ProjectionTab({p}) {
+  if (!p) return null;
+  const tiers = p.tiers || {};
   const tierOrder = ["Superstar","All-Star","Starter","Role Player","Replacement","Out"];
-  const tierData = tierOrder.map(t=>({name:t.replace("Role Player","Role"),pct:p.tiers[t]||0,fill:TC[t]||"#374151"}));
+  const tierData = tierOrder.map(t=>({name:t.replace("Role Player","Role"),pct:tiers[t]||0,fill:TC[t]||"#374151"}));
   const war = p.war;
   const sigma = p.sigma ?? p.volatility ?? 0;
   const predTier = p.predTier || "—";
-  const bestTierPct = Math.max(...tierOrder.map(t => p.tiers[t]||0));
+  const bestTierPct = Math.max(...tierOrder.map(t => tiers[t]||0));
 
   // Key model inputs
   const drivers = [
@@ -1339,15 +1363,15 @@ function ScoutingTab({p}) {
     scorer:     {name:"Scorer",      cat:"Offensive", inputs:"PTS/36, USG%, TS%, eFG%",                desc:"Volume scoring ability. Weights production × efficiency."},
     playmaker:  {name:"Playmaker",   cat:"Offensive", inputs:"AST%, AST/TO, USG%, Feel Score",         desc:"Creates for others. Passing vision and decision-making under pressure."},
     spacer:     {name:"Spacer",      cat:"Offensive", inputs:"3P%, 3PAr, FT%, three_frequency",        desc:"Floor spacing gravity. Draws defenders beyond the arc."},
-    driver:     {name:"Driver",      cat:"Offensive", inputs:"Rim%, FTR, USG%, Dunk Rate",             desc:"Rim pressure via drives. Creates contact and free throws."},
+    driver:     {name:"Driver",      cat:"Offensive", inputs:"Rim%, FTR, USG%, Dunk Rate*",          desc:"Rim pressure via drives. Creates contact and free throws. *Dunk Rate unavailable for internationals — FTR weighted higher as proxy."},
     crasher:    {name:"Crasher",     cat:"Offensive", inputs:"ORB%, Dunk Rate, FTR, Func Ath",         desc:"Offensive rebounds and put-backs. Second-chance creation."},
-    onball:     {name:"On-Ball D",   cat:"Defensive", inputs:"STL%, DBPM, lateral quickness proxy",    desc:"Perimeter defense. Ball pressure and steal ability."},
+    onball:     {name:"On-Ball D",   cat:"Defensive", inputs:"STL%, DBPM, Height (size proxy)",      desc:"Perimeter defense. Ball pressure and steal ability. No direct lateral quickness data available — STL% and DBPM serve as proxies."},
     switchPot:  {name:"Switch Pot.", cat:"Defensive", inputs:"Height, STL%, BLK%, Wingspan",           desc:"Can defend multiple positions in switching schemes."},
     rimProt:    {name:"Rim Protect", cat:"Defensive", inputs:"BLK%, DBPM, Height, DRB%",              desc:"Shot-blocking and rim deterrence. Anchors paint defense."},
     rebounder:  {name:"Rebounder",   cat:"Defensive", inputs:"DRB%, ORB%, Height, Func Ath",          desc:"Board control on both ends. Ends possessions and starts breaks."},
     connector:  {name:"Connector",   cat:"Hybrid",    inputs:"AST/TO>2, DBPM>0, USG%<18",             desc:"Glue guy. Connects offense without mistakes, contributes defensively."},
     helio:      {name:"Helio-Scorer",cat:"Hybrid",    inputs:"USG%>28, PTS/36>18, TS%>55",            desc:"Ball-dominant scoring engine. Offense revolves around this player."},
-    event:      {name:"Event Creator",cat:"Hybrid",   inputs:"Self-Creation>120, AST%>20, USG%>25",   desc:"Creates scoring opportunities from nothing. Iso + playmaking dual threat."},
+    event:      {name:"Event Creator",cat:"Hybrid",   inputs:"Self-Creation Pctl>70, AST%>20, USG%>25",desc:"Creates scoring opportunities from nothing. Iso + playmaking dual threat."},
     zone:       {name:"Zone Pressure",cat:"Hybrid",   inputs:"STL%>2.5, BLK%>1.5, Func Ath>70",      desc:"Defensive chaos agent. Forces turnovers and blocks in multiple zones."},
     microSpacer:{name:"Micro-Spacer",cat:"Hybrid",    inputs:"3P%>35, USG%<16, DBPM>0",               desc:"Low-usage spacer who contributes defensively. 3&D role player archetype."},
   };
@@ -1457,6 +1481,9 @@ function ScoutingTab({p}) {
 
       {/* ── PILLARS ── */}
       <Sec icon="🔬" title="The 5 Pillars" sub="Prospect DNA — position-adjusted percentile scores (0-100). These are the building blocks the model uses. Hover each for formula details.">
+        {p.source !== "ncaa" && <div className="mb-3 px-3 py-1.5 rounded-lg text-xs" style={{background:"#f9731611",color:"#f97316",border:"1px solid #f9731633"}}>
+          ⚠ International data gaps: Athleticism uses Dunk Rate which is unavailable for most intl players — score may undervalue athletic intl prospects. Self-Creation uses USG% which enters both this pillar and the USG-based production metrics.
+        </div>}
         <div className="grid grid-cols-5 gap-3">
           {pillars.map(pl=>(
             <Tip key={pl.key} wide content={
