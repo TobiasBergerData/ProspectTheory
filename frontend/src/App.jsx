@@ -146,7 +146,7 @@ const BADGE_DEFS = {
   "Transition Terror":      { cat:"green", rule:"(G/W) STL%>2.5 & Dunk%>60th pctl",   desc:"Creates fast breaks via steals and finishes above the rim. Free points in transition. Fallback: STL%>2.8 & 2P%>55 (for intl without dunk data)." },
   "FT Grifter":             { cat:"green", rule:"FTr>45 & (Rim%>40th pctl OR USG%>24)",desc:"Elite at drawing fouls through contact. Free throws = free points. High FTr at volume is extremely valuable." },
   "Efficient High Usage":   { cat:"green", rule:"USG>28 & TO%<12 & TS%>58",            desc:"Handles elite volume without efficiency collapse. The 'carry' badge — this player IS the offense." },
-  "High-Feel Athlete":      { cat:"green", rule:"Feel>75 & Func Ath>75",               desc:"Rarest badge — elite IQ + elite athleticism. Almost always translates to NBA." },
+  "High Feel Athlete":      { cat:"green", rule:"Feel>75 & Func Ath>75",               desc:"Rarest badge — elite IQ + elite athleticism. Almost always translates to NBA." },
   "Lurking Elite":          { cat:"green", rule:"USG%<20 & BPM>7.0 & TS%>62",          desc:"The Haliburton-Effect: Massively underutilized talent. Low usage masks star-level production. Efficiency explodes in a larger NBA role." },
   "Analytics Darling":      { cat:"green", rule:"BPM>8.0 & TS%>60 & USG%<22",          desc:"Maximum efficiency at moderate volume — the analytics dream. Statistical impact far exceeds perception." },
   "Efficiency Monster":     { cat:"green", rule:"eFG%>60 & AST/TO>2.0 & STL%>2.0",    desc:"Elite efficiency + elite decision-making + defensive activity. Multi-pillar excellence that guarantees NBA value." },
@@ -161,7 +161,7 @@ const BADGE_DEFS = {
   "High IQ":                { cat:"green", rule:"Feel Score > 80",                     desc:"Elite basketball IQ. Reads the game ahead of the play — AST/TO ratio, USG efficiency, and BPM all signal processing speed beyond peers." },
   "Defensive Anchor":       { cat:"green", rule:"Def Score > 80",                      desc:"Defensive engine. Elite combination of rim protection, steal rate, and DBPM. Anchors team defense and dictates opponent shot quality." },
   "Rim Protector":          { cat:"green", rule:"BLK% > 5.0 & Height ≥ 6'10\"",       desc:"Elite shot-blocking big. Deters drives and alters shots. The most impactful single defensive skill in basketball." },
-  "Self-Creator":           { cat:"green", rule:"Self-Creation Index > 130",            desc:"Creates own offense off the dribble at elite volume. USG×(1-AST_share) signals ability to generate shots without structure. Most valuable offensive skill." },
+  "Self-Creator":           { cat:"green", rule:"Self-Creation Percentile > 75",            desc:"Creates own offense off the dribble at elite volume. USG-weighted scoring without assists signals ability to generate shots without structure. Most valuable offensive skill." },
   "Swiss Army Knife":       { cat:"green", rule:"Role Versatility > 75 & 4+ roles > 50", desc:"Elite multi-role utility. Can credibly play 4+ distinct NBA roles. Coaches never have to take this player off the floor — fits every lineup." },
   "Scoring Point Guard":    { cat:"green", rule:"Playmaker & USG>25 & TS%>55",         desc:"Dual-threat point guard. Scores efficiently at high volume while maintaining playmaking. The most coveted archetype in modern NBA." },
 
@@ -186,6 +186,8 @@ const BADGE_DEFS = {
   "Non-Spacing Guard":      { cat:"red",   rule:"(G) 3P%<30 & 3P Freq<20%",           desc:"Guards who don't shoot threes can't play off-ball in modern NBA. Limits lineup construction severely." },
   "All-Offense Big":        { cat:"red",   rule:"(B) BLK%<2.5 & DBPM<1.5",            desc:"Bigs without rim protection are a defensive liability at every level. Offense doesn't compensate." },
   "FT Concern":             { cat:"red",   rule:"FT%<65 & USG>25",                    desc:"Hack-a-Player target at high usage. Opposing coaches will exploit this in close games." },
+  "Old for Class":          { cat:"red",   rule:"Age > 22.5",                          desc:"Older than typical draft prospect. Development runway is shorter; what you see is closer to the ceiling." },
+  "Turnover Prone":         { cat:"red",   rule:"TO% > 25",                            desc:"Excessive turnovers at any position. Ball security is a fundamental NBA requirement that doesn't improve easily." },
 };
 
 // ── Position group for badge logic (consistent with resolvePosition) ──
@@ -249,8 +251,8 @@ function computeBadges(p) {
   // Elite Shooting (tighter thresholds)
   if (tp > 40 && threeF > 30 && ft > 85)                            green.push("Elite Shooting");
   else if (ft > 82 && tp > 38 && threeF > 25)                       green.push("Elite Shooting"); // legacy threshold as fallback
-  // Floor General
-  if (isG && astTov > 2.2 && astP > 25)                             green.push("Floor General");
+  // Floor General — Playmakers and Wings only (not Bigs — use Point Big)
+  if ((isG || isW) && astTov > 2.2 && astP > 25)                     green.push("Floor General");
   // Two-Way Wing
   if (isW && tp > 35 && (stlP > 2.2 || dbpm > 2.0))                green.push("Two-Way Wing");
   // Modern Rim Anchor
@@ -269,8 +271,8 @@ function computeBadges(p) {
   if (ftr > 45 && (rimF > 25 || usg > 24))                          green.push("FT Grifter");
   // Efficient High Usage
   if (usg > 28 && toP < 12 && ts > 58)                              green.push("Efficient High Usage");
-  // High-Feel Athlete
-  if (feel > 75 && funcAth > 75)                                     green.push("High-Feel Athlete");
+  // High Feel Athlete
+  if (feel > 75 && funcAth > 75)                                     green.push("High Feel Athlete");
   // Lurking Elite (Haliburton-Effekt)
   if (usg < 20 && bpm > 7.0 && ts > 62)                             green.push("Lurking Elite");
   // Analytics Darling
@@ -480,11 +482,48 @@ function mapProfile(d) {
     fouls40:d.fouls_40??0, min:d.min??0, pts:d.pts??0, fg:d.fg_pct??0,
     source:d.source, league:d.league,
   };
-  const computed = computeBadges(tmpP);
+  // Only compute client badges when sufficient stats are available
+  // Board API doesn't return detailed stats → computeBadges would generate wrong results
+  const hasDetailedStats = tmpP.bpm != null && tmpP.usg != null && tmpP.ts != null;
+  const computed = hasDetailedStats ? computeBadges(tmpP) : { green: [], yellow: [], red: [] };
 
-  // Merge: server badges + client badges (dedup), server takes priority for ordering
-  const serverGreen = badgeList.filter(b => BADGE_DEFS[b]?.cat === "green" || (!BADGE_DEFS[b]));
-  const serverRed = redList.filter(b => BADGE_DEFS[b]?.cat === "red" || (!BADGE_DEFS[b]));
+  // Merge: server badges + client badges (dedup)
+  // CRITICAL: Server badges from pipeline may have position mismatches
+  // (e.g., "Floor General" for a Big, "Rim Protector" for a Playmaker)
+  // Filter them through position restrictions before including
+  const POS_RESTRICTED_GREEN = {
+    "Floor General": ["Playmaker"],       // Only guards/playmakers
+    "Point Big": ["Big"],                 // Only bigs
+    "Two-Way Wing": ["Wing","Playmaker"], // Not bigs
+    "Rim Protector": ["Big","Wing"],      // Not playmakers
+    "Defensive Anchor": null,             // Any position OK
+    "High IQ": null, "Elite Shooting": null, "Self-Creator": null,
+    "Swiss Army Knife": null, "High Feel Athlete": null, "Stocks Machine": null,
+    "Scoring Point Guard": ["Playmaker"], "International Prodigy": null, "Pro-Ready Teen": null,
+  };
+  const POS_RESTRICTED_RED = {
+    "Spacing Killer": ["Playmaker","Wing"],  // Only perimeter players
+    "Tunnel Vision": ["Playmaker"],          // Only playmakers
+    "Soft Interior": ["Big"],                // Only bigs
+    "Non-Processing Guard": ["Playmaker"],
+    "Defensive Target": ["Playmaker"],
+    "Non-Spacing Guard": ["Playmaker"],
+    "All-Offense Big": ["Big"],
+    "Liability Big": ["Big"],
+  };
+  const filterByPos = (badges, restrictions, pos) => badges.filter(b => {
+    const allowed = restrictions[b];
+    if (allowed === undefined || allowed === null) return true; // no restriction or unknown badge
+    return allowed.includes(pos);
+  });
+  const serverGreen = filterByPos(
+    badgeList.filter(b => BADGE_DEFS[b]?.cat === "green" || (!BADGE_DEFS[b])),
+    POS_RESTRICTED_GREEN, resolvedPos
+  );
+  const serverRed = filterByPos(
+    redList.filter(b => BADGE_DEFS[b]?.cat === "red" || (!BADGE_DEFS[b])),
+    POS_RESTRICTED_RED, resolvedPos
+  );
   const allGreen = [...new Set([...serverGreen, ...computed.green])];
   const allYellow = computed.yellow; // server doesn't send yellow
   const allRed = [...new Set([...serverRed, ...computed.red])];
@@ -536,7 +575,7 @@ function mapProfile(d) {
     dunkR: d.dunk_r ?? d.dunk_rate ?? d.dunkR,
     dunkPct: d.dunk_pct ?? d.dunkPct,
     fta: d.fta, ftm: d.ftm, fga: d.fga,
-    selfCreation: d.self_creation ?? Math.round(((d.usg??20)/100)*(1-(d.ast_p??d.astP??20)/100)*200),
+    selfCreation: d.self_creation ?? d.self_creation_idx ?? Math.min(100, Math.round(((d.usg??20)/100)*(1-(d.ast_p??d.astP??20)/100)*200)),
     pctl,
     ff: { efg: ff.efg??50, tov: ff.tov??50, orb: ff.orb??50, ftr: ff.ftr??50, comp: ff.comp??50 },
     cffr: { usageRole: d.cffr_usage_role ?? d.cffr_role ?? d.usage_role, reliability: d.cffr_reliability ?? d.cffr_rel, raw: typeof d.cffr === 'number' ? d.cffr : null },
@@ -719,7 +758,7 @@ function OverviewTab({p, compTier, setCompTier}) {
           </div>
         ))}
       </div>
-      <Sec icon="▦" title="Box Score" sub={`${p.gp??0} GP · ${fmt(p.min)} MIN/G`}>
+      <Sec icon="▦" title="Box Score" sub={`${p.gp??0} GP · ${fmt(p.min)} MIN/G — Traditional counting stats. Look for per-minute efficiency, not raw totals.`}>
         <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
           {[["PTS",p.pts,p.pctl?.pts36],["REB",p.reb,p.pctl?.reb36],["AST",p.ast,p.pctl?.ast36],
             ["STL",p.stl,p.pctl?.stl],["BLK",p.blk,p.pctl?.blk],["A/TO",p.astTov,null],["FTR",p.ftr,null],["TO%",p.toP,p.pctl?.to]
@@ -732,7 +771,7 @@ function OverviewTab({p, compTier, setCompTier}) {
           ))}
         </div>
       </Sec>
-      <Sec icon="⚡" title="Advanced">
+      <Sec icon="⚡" title="Advanced" sub="Rate stats that capture efficiency and impact independent of role. BPM and ORtg are the strongest NBA translation signals.">
         <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
           {[["BPM",p.bpm,p.pctl?.bpm],["OBPM",p.obpm,null],["DBPM",p.dbpm,null],["ORtg",p.ortg,null],
             ["USG%",p.usg,p.pctl?.usg],["TS%",p.ts,p.pctl?.ts],["AST%",p.astP,p.pctl?.ast],["TO%",p.toP,p.pctl?.to],
@@ -742,7 +781,7 @@ function OverviewTab({p, compTier, setCompTier}) {
       </Sec>
 
       {/* ═══ TIER FEASIBILITY — Each metric on its own row ═══ */}
-      <Sec icon="📊" title={`vs. NBA ${compTier} (${p.pos})`} sub="">
+      <Sec icon="📊" title={`vs. NBA ${compTier} (${p.pos})`} sub="How does this prospect's statistical profile compare against the p25-p75 corridor of actual NBA players at this tier? Shadow bars show the typical range. Green = within range, Yellow = compensated by elite core skill, Red = critical gap.">
         <div className="flex items-center gap-3 mb-4">
           <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Compare:</span>
           <div className="flex gap-1">
@@ -872,30 +911,55 @@ function ShootingTab({p}) {
   const rimAtt = zoneAtt(rimF), dunkAtt = zoneAtt(dunkR), midAtt = zoneAtt(midF), threeAtt = zoneAtt(threeF);
 
   // ── 2P/3P/FT split for simplified court ──
-  const threePA = threeAtt ?? (totalFga && threeF ? Math.round(totalFga * threeF / 100) : null);
-  const twoPA = totalFga && threePA != null ? totalFga - threePA : null;
+  let threePA = threeAtt ?? (totalFga && threeF ? Math.round(totalFga * threeF / 100) : null);
+  let twoPA = totalFga && threePA != null ? totalFga - threePA : null;
+  let dietFta = totalFta; // may be overridden by estimate for diet bars
+
+  // Fallback: estimate from PPG and shooting splits when no raw counts
+  if (useSimplifiedCourt && twoPA == null && tp != null && p.pts && gp > 0) {
+    const estThreeRate = tp > 35 ? 0.40 : tp > 30 ? 0.30 : 0.20;
+    const estFgaPG2 = p.pts / (2 * (ts || 52) / 100);
+    const est3pa = Math.round(estFgaPG2 * estThreeRate * gp);
+    const est2pa = Math.round(estFgaPG2 * (1 - estThreeRate) * gp);
+    if (est3pa > 0 && est2pa > 0) {
+      threePA = est3pa;
+      twoPA = est2pa;
+    }
+    // Estimate FTA from FT% and approximate FT scoring share (~25% of points)
+    if (!dietFta && ft != null && p.pts) {
+      const estFtPoints = p.pts * 0.25;
+      dietFta = Math.round(estFtPoints / ((ft || 75) / 100) * gp);
+    }
+  }
   const twoPMade = twoPA != null && twoPct != null ? Math.round(twoPA * twoPct / 100) : null;
   const threePMade = threePA != null && tp != null ? Math.round(threePA * tp / 100) : null;
-  const ftMade = totalFta != null && ft != null ? Math.round(totalFta * ft / 100) : null;
+  const ftMade = dietFta != null && ft != null ? Math.round(dietFta * ft / 100) : null;
 
   // ── Shot diet percentages ──
-  const rimPctOfTotal = totalShots > 0 && rimAtt != null ? Math.round(rimAtt / totalShots * 1000) / 10 : null;
-  const dunkPctOfTotal = totalShots > 0 && dunkAtt != null ? Math.round(dunkAtt / totalShots * 1000) / 10 : null;
-  const midPctOfTotal = totalShots > 0 && midAtt != null ? Math.round(midAtt / totalShots * 1000) / 10 : null;
-  const threePctOfTotal = totalShots > 0 && threePA != null ? Math.round(threePA / totalShots * 1000) / 10 : null;
-  const ftPctOfTotal = totalShots > 0 && totalFta != null ? Math.round(totalFta / totalShots * 1000) / 10 : null;
-  const twoPctOfTotal = totalShots > 0 && twoPA != null ? Math.round(twoPA / totalShots * 1000) / 10 : null;
+  const estTotalShots = totalShots > 0 ? totalShots : ((twoPA||0) + (threePA||0) + (dietFta||0));
+  const rimPctOfTotal = estTotalShots > 0 && rimAtt != null ? Math.round(rimAtt / estTotalShots * 1000) / 10 : null;
+  const dunkPctOfTotal = estTotalShots > 0 && dunkAtt != null ? Math.round(dunkAtt / estTotalShots * 1000) / 10 : null;
+  const midPctOfTotal = estTotalShots > 0 && midAtt != null ? Math.round(midAtt / estTotalShots * 1000) / 10 : null;
+  const threePctOfTotal = estTotalShots > 0 && threePA != null ? Math.round(threePA / estTotalShots * 1000) / 10 : null;
+  const ftPctOfTotal = estTotalShots > 0 && dietFta != null ? Math.round(dietFta / estTotalShots * 1000) / 10 : null;
+  const twoPctOfTotal = estTotalShots > 0 && twoPA != null ? Math.round(twoPA / estTotalShots * 1000) / 10 : null;
 
   // ── Unassisted proxy ──
   const usg = p.usg ?? 20, astP = p.astP ?? 15;
   const selfCreatedPct = Math.min(90, Math.max(10, Math.round(usg * 2.0 - astP * 0.5)));
 
   // ── Touch prior + Bayesian ──
-  const midForPrior = midPct ?? (twoPct ? twoPct * 0.6 : (ft ? ft * 0.55 : 40));
-  const touchPrior = p.projPrior ?? ((0.20 + 0.18 * (ft ?? 75) / 100 + 0.05 * (midForPrior) / 100) * 100);
+  const hasMidData = midPct != null;
+  const midForPrior = midPct ?? (twoPct ? twoPct * 0.6 : null);
+  // When no midrange data (intl/08-09): FT%-heavy prior (absorbs mid weight)
+  const touchPrior = p.projPrior ?? (hasMidData
+    ? ((0.20 + 0.18 * (ft ?? 75) / 100 + 0.05 * (midForPrior) / 100) * 100)
+    : ((0.22 + 0.22 * (ft ?? 75) / 100) * 100));  // FT-only prior
   const projNba3p = p.projNba3p ?? (() => {
     if (ft == null) return null;
-    const mu0 = 0.20 + 0.18 * (ft / 100) + 0.05 * (midForPrior / 100);
+    const mu0 = hasMidData
+      ? 0.20 + 0.18 * (ft / 100) + 0.05 * (midForPrior / 100)
+      : 0.22 + 0.22 * (ft / 100);  // FT-only prior (no midrange data)
     const kappa = 200;
     const est3PA = threePA || (threeF != null && estFgaPG ? Math.round(estFgaPG * gp * threeF / 100) : 50);
     const est3PM = tp != null ? Math.round(est3PA * tp / 100) : Math.round(est3PA * mu0);
@@ -976,7 +1040,7 @@ function ShootingTab({p}) {
                 <g>
                   <text x="290" y="210" textAnchor="middle" fill="#8b5cf6" style={{fontSize:13,fontWeight:"bold"}}>FREE THROW</text>
                   <text x="290" y="240" textAnchor="middle" fill={sc(ft,"ft")} style={{fontSize:24,fontWeight:"bold"}}>{ft!=null?`${fmt(ft)}%`:"—"}</text>
-                  {ftMade!=null&&totalFta!=null&&<text x="290" y="260" textAnchor="middle" fill="#9ca3af" style={{fontSize:12}}>{ftMade}-{totalFta} FTA</text>}
+                  {ftMade!=null&&dietFta!=null&&<text x="290" y="260" textAnchor="middle" fill="#9ca3af" style={{fontSize:12}}>{ftMade}-{dietFta} FTA{dietFta!==totalFta?" (est)":""}</text>}
                 </g>
                 {/* 3-POINT (outside arc) */}
                 <g opacity={tp!=null?1:0.3}>
@@ -1034,7 +1098,7 @@ function ShootingTab({p}) {
           {/* ══ SHOT DIET ══ */}
           <div className="lg:col-span-2">
             <div className="text-xs uppercase tracking-wider mb-2 font-semibold" style={{color:"#6b7280"}}>Shot Diet (% of all shots · FGA+FTA)</div>
-            {totalShots > 0 ? (
+            {estTotalShots > 0 ? (
               <div className="space-y-3">
                 {useSimplifiedCourt ? (
                   /* Simplified: 2P / 3P / FT */
@@ -1067,7 +1131,7 @@ function ShootingTab({p}) {
                     <DietBar label="Free Throws" color="#8b5cf6" pctOfTotal={ftPctOfTotal}/>
                   </>
                 )}
-                <div className="text-xs mt-1" style={{color:"#4b5563"}}>{totalShots} total shots ({totalFga||"?"} FGA + {totalFta||"?"} FTA)</div>
+                <div className="text-xs mt-1" style={{color:"#4b5563"}}>{estTotalShots > 0 ? `${estTotalShots} total shots` : "Shot volume unknown"}{estTotalShots > 0 && useSimplifiedCourt ? " (estimated)" : estTotalShots > 0 ? ` (${totalFga||"?"} FGA + ${totalFta||"?"} FTA)` : ""}</div>
               </div>
             ) : (
               <div className="py-6 text-center rounded-lg" style={{background:"#0d1117",color:"#6b7280"}}>
@@ -1087,7 +1151,7 @@ function ShootingTab({p}) {
       </Sec>
 
       {/* ═══ NBA SHOOTING PROJECTION ═══ */}
-      <Sec icon="🔮" title="NBA Shooting Projection" sub={isIntl||useSimplifiedCourt?"Bayesian priors (FT%-based touch)":"Bayesian Beta-Binomial model (Berger 2022)"}>
+      <Sec icon="🔮" title="NBA Shooting Projection" sub={isIntl||useSimplifiedCourt?"Bayesian priors using FT% as primary shooting touch signal (no midrange data available)":"Bayesian Beta-Binomial model (Berger 2022) — FT% + midrange touch predict NBA 3P translation"}>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
           {[
             ["projNba3p","Proj. 3P%", projNba3p, projNba3p!=null?(projNba3p>36?"#22c55e":projNba3p>32?"#fbbf24":"#ef4444"):"#6b7280"],
@@ -1115,7 +1179,10 @@ function ShootingTab({p}) {
         </div>
         <div className="px-3 py-2 rounded-lg text-xs" style={{background:"#0d1117",border:"1px solid #1e293b"}}>
           <Tip wide content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>Bayesian Beta-Binomial (Berger 2022)</div><div style={{color:"#cbd5e1"}}>Prior: FT%-based touch (μ₀). kappa=200 pseudo-attempts. Volume: {bestTier} {p.pos} → {projFGA.toFixed(1)} FGA/game.</div></div>}>
-            <span style={{color:"#6b7280"}}>Touch Prior: FT% (<span style={{color:"#8b5cf6"}}>{ft!=null?fmt(ft):"—"}</span>) × 0.18 + Mid% (<span style={{color:"#fbbf24"}}>{midPct!=null?fmt(midPct):twoPct!=null?`~${fmt(twoPct*0.6)} est`:`~${fmt(midForPrior)} est`}</span>) × 0.05 + 0.20 = <span className="font-bold" style={{color:touchPrior>37?"#22c55e":"#fbbf24"}}>{fmt(touchPrior)}%</span> <span style={{color:"#475569"}}>ⓘ</span></span>
+            <span style={{color:"#6b7280"}}>{hasMidData
+              ? <>Touch Prior: FT% (<span style={{color:"#8b5cf6"}}>{ft!=null?fmt(ft):"—"}</span>) × 0.18 + Mid% (<span style={{color:"#fbbf24"}}>{fmt(midForPrior)}</span>) × 0.05 + 0.20</>
+              : <>Touch Prior (FT-only): FT% (<span style={{color:"#8b5cf6"}}>{ft!=null?fmt(ft):"—"}</span>) × 0.22 + 0.22 <span style={{color:"#475569"}}>(no midrange data)</span></>
+            } = <span className="font-bold" style={{color:touchPrior>37?"#22c55e":"#fbbf24"}}>{fmt(touchPrior)}%</span> <span style={{color:"#475569"}}>ⓘ</span></span>
           </Tip>
         </div>
       </Sec>
@@ -1178,7 +1245,7 @@ function ProjectionTab({p}) {
       </div>
 
       {/* ═══ TIER DISTRIBUTION ═══ */}
-      <Sec icon="◆" title="Tier Distribution" sub="Probability of reaching each career tier (residual-based, position-adjusted)">
+      <Sec icon="◆" title="Tier Distribution" sub="What career outcome is most likely? Probabilities are derived from the Gaussian model (PIE projection ± position-specific residual std). The assigned Tier above uses WAR thresholds for consistency with the ranking.">
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={tierData} margin={{top:5,right:5,bottom:5,left:5}}>
             <XAxis dataKey="name" tick={{fill:"#9ca3af",fontSize:11}} axisLine={false} tickLine={false}/>
@@ -1198,7 +1265,7 @@ function ProjectionTab({p}) {
       </Sec>
 
       {/* ═══ MODEL DRIVERS — What's driving this projection ═══ */}
-      <Sec icon="🔬" title="Key Model Drivers" sub="Primary features influencing this player's WAR projection. Hover for explanation.">
+      <Sec icon="🔬" title="Key Model Drivers" sub="What's pushing this player's projection up or down? Green = above average for tier, Red = below. These are the features LightGBM weights most heavily.">
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           {drivers.map(d => (
             <Tip key={d.label} content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>{d.label}</div><div style={{color:"#cbd5e1"}}>{d.desc}</div></div>}>
@@ -1217,7 +1284,7 @@ function ProjectionTab({p}) {
       </Sec>
 
       {/* ═══ SEASON-BY-SEASON ═══ */}
-      <Sec icon="📈" title="Season-by-Season" sub="▲▼ shows change from previous season">
+      <Sec icon="📈" title="Season-by-Season" sub="Development trajectory — ▲▼ shows year-over-year change. Green = improvement, Red = regression. For internationals, 'League' shows the competition level. Multi-season improvement is one of the strongest NBA success signals.">
         {(p.seasonLines||[]).length > 1 ? (
           <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr>
             {["Year","League","GP","MIN","PTS","REB","AST","STL","BLK","BPM","TS%","USG"].map(h=><th key={h} className="px-2 py-1 text-xs uppercase text-left" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>{h}</th>)}
@@ -1371,7 +1438,7 @@ function ScoutingTab({p}) {
   return (
     <div className="space-y-5">
       {/* ── BADGES ── */}
-      <Sec icon="🏅" title="Skill Badges" sub="Computed from stats. Hover for trigger rules and scouting context.">
+      <Sec icon="🏅" title="Skill Badges" sub="Position-filtered skill signals. Green = elite NBA-translatable skills. Yellow = development potential. Red = bust warning signals. Hover each badge for the statistical trigger and scouting context.">
         {p.source !== "ncaa" && <div className="mb-3 px-3 py-1.5 rounded-lg inline-block text-xs" style={{background:"#3b82f622",color:"#60a5fa",border:"1px solid #3b82f644"}}>International Adjuster Active</div>}
         {badges.green.length > 0 && <>
           <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#22c55e"}}>✓ Green Flags ({badges.green.length})</div>
@@ -1389,7 +1456,7 @@ function ScoutingTab({p}) {
       </Sec>
 
       {/* ── PILLARS ── */}
-      <Sec icon="🔬" title="The 5 Pillars" sub="Prospect DNA — position-adjusted percentile scores (0-100)">
+      <Sec icon="🔬" title="The 5 Pillars" sub="Prospect DNA — position-adjusted percentile scores (0-100). These are the building blocks the model uses. Hover each for formula details.">
         <div className="grid grid-cols-5 gap-3">
           {pillars.map(pl=>(
             <Tip key={pl.key} wide content={
@@ -1411,7 +1478,7 @@ function ScoutingTab({p}) {
       </Sec>
 
       {/* ── POSSESSION IMPACT (CFFR) — wider bars, usage role prominent ── */}
-      <Sec icon="↗" title="Possession Impact & Carefree Playability" sub="">
+      <Sec icon="↗" title="Possession Impact & Carefree Playability" sub="How efficiently does this player use possessions? Based on Dean Oliver's Four Factors, adjusted for usage role.">
         <Tip wide content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>{METHODS.fourFactors?.name||"Four Factors"}</div>{METHODS.fourFactors?.formula&&<div className="mb-1"><code className="text-xs" style={{color:"#7dd3fc"}}>{METHODS.fourFactors.formula}</code></div>}<div style={{color:"#cbd5e1"}}>{METHODS.fourFactors?.desc||"Dean Oliver's Four Factors adjusted for usage role. Measures net possession quality relative to role-peers."}</div></div>}>
           <div className="text-xs mb-4 cursor-help" style={{color:"#6b7280"}}>Efficiency index: how much value this player creates per possession, relative to his usage role. <span style={{color:"#475569"}}>ⓘ</span></div>
         </Tip>
@@ -1477,7 +1544,7 @@ function ScoutingTab({p}) {
       </Sec>
 
       {/* ── ROLE INFERENCE MATRIX — hoverable with inputs ── */}
-      <Sec icon="📊" title="Role Inference Matrix" sub="Z-scores relative to position peers. Hover for component stats.">
+      <Sec icon="📊" title="Role Inference Matrix" sub="14 NBA roles scored as z-scores vs position peers. ≥+2.0σ = Elite (top 2%), ≥+1.0σ = Impact, ≤-1.0σ = Liability. Hover each role for the statistical inputs that drive it.">
         {roleGroups.map(grp=>(
           <div key={grp.label} className="mb-5">
             <div className="text-xs uppercase tracking-widest font-bold mb-2" style={{color:grp.color}}>{grp.label}</div>
@@ -1507,7 +1574,7 @@ function ScoutingTab({p}) {
       </Sec>
 
       {/* ── ARCHETYPE — formulas + secondary/tertiary + versatility ── */}
-      <Sec icon="🏷" title="NBA Archetype Fit" sub="Based on pillar + role combination. Hover for selection formula.">
+      <Sec icon="🏷" title="NBA Archetype Fit" sub="What NBA role does this prospect project into? PRIMARY = pipeline-assigned from dominant role scores. 2ND/3RD = best alternative fits within the same position group. Hover for selection formula and key roles.">
         {/* Role Versatility — prominent */}
         {p.roleVersatility != null && (
           <div className="flex items-center gap-4 mb-4 p-3 rounded-lg" style={{background:"#0d111788",border:"1px solid #1f2937"}}>
@@ -1636,7 +1703,7 @@ function BodyTab({p}) {
   return (
     <div className="space-y-5">
       {/* ── PHYSICAL PROFILE ── */}
-      <Sec icon="📏" title="Physical Profile" sub={isWsEstimated || isWtEstimated ? "Some measurements estimated from position averages (marked ≈)" : ""}>
+      <Sec icon="📏" title="Physical Profile" sub={`NBA Combine + estimated measurements. Wingspan delta and ape index are key defensive indicators.${isWsEstimated || isWtEstimated ? " ≈ = estimated from position averages." : ""}`}>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
           {[
             ["Height", htDisplay, false, null],
@@ -1709,7 +1776,7 @@ function BodyTab({p}) {
       </Sec>
 
       {/* ── ANTHROPOMETRIC COMPS ── */}
-      <Sec icon="👥" title="Anthropometric Comps" sub="Physical similarity (Height 60% + Weight 20% + Wingspan 20%). Adjust sliders above to refine.">
+      <Sec icon="👥" title="Anthropometric Comps" sub="Physical similarity matching against NBA players with Combine data (Height 60% + Weight 20% + Wingspan 20%). Use sliders above to model 'what if he bulks up 15 lbs?' or 'what if wingspan is longer than measured?'">
         {dynamicAnthro.length > 0 ? (
           <div className="space-y-2">
             {dynamicAnthro.map((c, i) => (
@@ -1790,7 +1857,7 @@ function CompsTab({p}) {
       </div>
 
       {/* ── STATISTICAL COMPS TABLE ── */}
-      <Sec icon="📊" title="Statistical Comps" sub="Weighted Euclidean distance on era-adjusted percentiles (USG%, AST%, STL%, eFG% weighted highest). 'Reached Tier' shows actual NBA outcome.">
+      <Sec icon="📊" title="Statistical Comps" sub="Nearest-neighbor matching on era-adjusted percentiles. Weights: Position match (30%), Age proximity (20%), Production profile (25%), Efficiency (25%). 'Reached Tier' shows actual NBA career outcome.">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -1885,42 +1952,62 @@ function CompsTab({p}) {
 // ═══════════════════════════════════════════════════════════
 function MethodologyTab() {
   const sections = [
-    {cat:"Monte Carlo Projection Model",items:["monteCarlo","posClassification"],desc:"The core projection engine. 20,000 simulations per player using a Gaussian model calibrated on 19,978 historical prospects across 19 draft classes (2008–2026). Validated at r=0.248 vs. actual NBA xRAPM (N=1,805)."},
-    {cat:"The 5 Pillars (DNA Scores)",items:["feel","shootScore","defScore","funcAth","selfCreation","overall"],desc:"Position-adjusted percentile scores (0–100) capturing the fundamental dimensions of prospect evaluation. Each pillar uses era-adjusted percentiles computed against ~34k college players since 2008."},
-    {cat:"Shooting Projection",items:["projNba3p","projNba3pa","projNba3par","touchPrior"],desc:"Bayesian Beta-Binomial model for NBA shooting translation (Berger, 2022). Uses individualized priors based on FT% motor touch + shooting volume to project 3P accuracy and volume."},
-    {cat:"Possession Impact (Four Factors)",items:["fourFactors"],desc:"Context-Free Four Factor Rating measuring possession efficiency. Usage-role adjusted so a primary scorer with 52% eFG rates correctly against peers, not low-usage finishers."},
+    {cat:"WAR Projection Model",items:["monteCarlo","posClassification"],desc:"Core engine: LightGBM gradient boosting trained on 1,181 NCAA+International prospects with known NBA outcomes (PIE peak over best 3 consecutive seasons, min 200 minutes/year). 32 features including age, anthropometrics, production, efficiency, trajectory slopes, and league strength. Validated at r=0.41 (5-fold CV, honest out-of-fold). WAR = (projected_PIE − median_PIE) × 400. Tier thresholds: Superstar ≥18 WAR, All-Star ≥12, Starter ≥5, Roleplayer ≥1."},
+    {cat:"International Adjustments",items:[],desc:"International players receive three adjustments: (1) League Strength via empirical bridge-player ratios (2,655 players who played both intl and NBA). Euroleague=1.40, ACB=1.39, BBL=1.18 (NCAA Power=1.0 anchor). (2) Precociousness Boost: young players (<22) in leagues stronger than NCAA Power receive extra PIE credit proportional to age×league_strength. (3) BPM Proxy: (PER−15)×0.8 + eDiff×0.15 replaces unavailable BPM for international players."},
+    {cat:"The 5 Pillars (DNA Scores)",items:["feel","shootScore","defScore","funcAth","selfCreation","overall"],desc:"Position-adjusted percentile scores (0–100) capturing the fundamental dimensions of prospect evaluation. Each pillar uses era-adjusted percentiles computed against ~34k college + ~9k international players since 2008. Self-Creation measures ability to generate own offense: USG-weighted scoring without assists, percentiled within position group."},
+    {cat:"Shooting Projection",items:["projNba3p","projNba3pa","projNba3par","touchPrior"],desc:"Bayesian Beta-Binomial model for NBA 3P shooting translation. Prior: FT%-based 'motor touch' (strongest single predictor of NBA shooting per Berger 2023). κ=200 pseudo-attempts means low-volume college shooters regress heavily toward their FT% prior. For players without midrange data (internationals, pre-2010), a simplified FT%-only prior is used with higher FT% weighting."},
+    {cat:"Possession Impact (CFFR)",items:["fourFactors"],desc:"Context-Free Four Factor Rating measuring possession efficiency per Dean Oliver's framework. Usage-role adjusted: Primary (USG≥28%), Secondary (≥22%), Finisher (≥15%), Low-Usage (<15%). Each factor (eFG% 40%, TO% 25%, ORB% 20%, FTr 15%) is percentiled WITHIN the player's usage bucket, so a primary scorer with 52% eFG rates correctly against peers, not low-usage finishers."},
+    {cat:"Role Inference Matrix",items:[],desc:"14 NBA roles scored as z-scores relative to position peers. Offensive: Scorer, Playmaker, Spacer, Driver, Crasher. Defensive: On-Ball, Switch Potential, Rim Protect, Rebounder. Hybrid: Connector, Helio-Scorer, Event Creator, Zone Pressure, Micro-Spacer. Each role combines 2-4 statistical inputs weighted by NBA translation research. Z≥+2.0 = Elite, ≥+1.0 = Impact, <-1.0 = Liability."},
+    {cat:"Archetype Classification",items:[],desc:"18 NBA archetypes assigned by position + dominant role scores. Playmaker archetypes: Scoring PG, Floor General, Shooting Guard, Defensive Guard, Combo Guard. Wing: Shot Creator, Scoring Wing, 3-and-D, Defensive Wing, Point Forward, Slashing Wing, Versatile Wing. Big: Stretch Big, Rim Protector, Jumbo Creator, Glass Cleaner, Scoring Big, Modern Big. Primary archetype from pipeline, secondary/tertiary from role-score matching within position."},
+    {cat:"Tier Feasibility (vs NBA)",items:[],desc:"Position-specific comparison against NBA tier benchmarks (p25-p75 corridors). For each tier (Replacement through All-Star), core metrics are checked: Wings = TS%+3P%, Playmakers = AST%+TO%, Bigs = BLK%+ORB%. If a core metric exceeds p75 of the target tier, deficiencies in secondary metrics are marked 'Compensated' (yellow) instead of 'Critical Gap' (red)."},
+    {cat:"Data Sources & Coverage",items:[],desc:"NCAA: BartTorvik (34k+ player-seasons 2008-2026, per-game + advanced + shooting zones). International: RealGM (9k+ player-seasons across 12 European leagues). NBA Outcomes: NBA API Advanced stats (27 seasons, PIE + minutes for peak computation). Anthropometrics: NBA Draft Combine measurements + Databallr wingspan data. Scouting: Scout consensus rankings (2008-2026) for humble/draft-stock adjustment."},
   ];
   return (
     <div className="space-y-6">
-      <Sec icon="📖" title="Methodology" sub="Complete documentation of all computed metrics, formulas, and their inputs.">
-        <div className="text-sm mb-2" style={{color:"#9ca3af"}}>
-          All scores are computed as position-aware era-adjusted percentiles (0-100) unless otherwise noted. Data sources: BartTorvik (NCAA), RealGM (International), NBA API (outcomes), Draft Combine (anthropometrics).
+      <Sec icon="📖" title="Methodology & Model Documentation" sub="Complete documentation of all computed metrics, formulas, and their statistical foundations.">
+        <div className="text-sm mb-3" style={{color:"#9ca3af"}}>
+          ProspectTheory uses a LightGBM ensemble model trained on 1,181 NCAA and international prospects with known NBA career outcomes. The model projects Peak PIE (Player Impact Estimate) which is converted to WAR (Wins Above Replacement) for ranking and tier assignment. All scores are position-aware and era-adjusted.
         </div>
-        <div className="text-sm" style={{color:"#9ca3af"}}>
-          Model validation: r(UPS, xRAPM_actual) = 0.248 (N=1,805) · r(UPS, NBA_3yr_peak) = 0.241 (N=1,191). 19,978 total players across 15 leagues with empirical weights from 2,655 bridge players.
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+          {[
+            ["r = 0.41","5-fold CV (honest)"],
+            ["r = 0.60","vs actual xRAPM"],
+            ["32","Model Features"],
+            ["40,633","Total Prospects"],
+          ].map(([val,label])=>(
+            <div key={label} className="p-3 rounded-lg text-center" style={{background:"#0d1117"}}>
+              <div className="text-lg font-bold" style={{color:"#f97316",fontFamily:"'Oswald',sans-serif"}}>{val}</div>
+              <div className="text-xs" style={{color:"#6b7280"}}>{label}</div>
+            </div>
+          ))}
+        </div>
+        <div className="text-xs" style={{color:"#475569"}}>
+          Top features by importance: Age (118), BPM (51), PER (41), eFG% (36), DRB% (35), ORB% (34), 3P% (34), PPG (34), Wingspan (33).
         </div>
       </Sec>
       {sections.map(({cat,items,desc})=>(
         <Sec key={cat} icon="▸" title={cat}>
           {desc&&<div className="text-sm mb-4" style={{color:"#94a3b8"}}>{desc}</div>}
-          <div className="space-y-4">
-            {items.map(key=>{
-              const m=METHODS[key]; if(!m)return null;
-              return (
-                <div key={key} className="p-4 rounded-lg" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
-                  <div className="font-bold text-sm mb-2" style={{color:"#f97316"}}>{m.name}</div>
-                  <div className="mb-2">
-                    <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Formula</span>
-                    <div className="mt-1 px-3 py-2 rounded text-xs font-mono" style={{background:"#111827",color:"#7dd3fc"}}>{m.formula}</div>
+          {items.length > 0 && (
+            <div className="space-y-4">
+              {items.map(key=>{
+                const m=METHODS[key]; if(!m)return null;
+                return (
+                  <div key={key} className="p-4 rounded-lg" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+                    <div className="font-bold text-sm mb-2" style={{color:"#f97316"}}>{m.name}</div>
+                    <div className="mb-2">
+                      <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Formula</span>
+                      <div className="mt-1 px-3 py-2 rounded text-xs font-mono" style={{background:"#111827",color:"#7dd3fc"}}>{m.formula}</div>
+                    </div>
+                    <div className="text-sm" style={{color:"#cbd5e1"}}>{m.desc}</div>
                   </div>
-                  <div className="text-sm" style={{color:"#cbd5e1"}}>{m.desc}</div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </Sec>
       ))}
-      <Sec icon="🏅" title="Badge Definitions" sub="Green = elite NBA skills · Yellow = swing/potential · Red = warning signals. International players receive stat adjustments (x1.25 base, x1.15 STL%/BLK%).">
+      <Sec icon="🏅" title="Badge Definitions" sub="Green = elite NBA skills · Yellow = swing/potential · Red = warning signals. Position-filtered: Bigs can't earn Floor General, Playmakers can't earn Rim Protector.">
         <div className="space-y-3">
           {Object.entries(BADGE_DEFS).map(([name,def])=>{
             const c = def.cat==="green"?"#22c55e":def.cat==="yellow"?"#fbbf24":"#ef4444";
@@ -2352,7 +2439,7 @@ export default function App() {
         )}
       </main>
       <footer className="mt-12 py-6 text-center text-xs" style={{color:"#374151",borderTop:"1px solid #111827"}}>
-        <span style={{color:"#6b7280"}}>ProspectTheory</span> · NBA Draft Intelligence · Data: BartTorvik, RealGM, NBA API, Draft Combine · Model: r=0.248 (N=1,805)
+        <span style={{color:"#6b7280"}}>ProspectTheory</span> · NBA Draft Intelligence · Data: BartTorvik, RealGM, NBA API, Draft Combine, Databallr
       </footer>
     </div>
   );
