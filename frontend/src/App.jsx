@@ -522,10 +522,13 @@ function mapProfile(d) {
   });
   // Additional stat-validation: server badges must also pass client-side stat checks
   const statValidate = (badge) => {
-    if (badge === "Point Big" && !(astP > 18 && astTov > 1.2)) return false;
-    if (badge === "Floor General" && !(astTov > 2.0 && astP > 22)) return false;
-    if (badge === "Self-Creator" && !(p.selfCreation > 70)) return false;
-    if (badge === "Tunnel Vision" && !(p.astTov != null && astTov < 0.8)) return false;
+    const _astP = tmpP.astP ?? 0;
+    const _astTov = tmpP.astTov ?? 1.5;
+    const _selfCreation = d.self_creation ?? d.self_creation_idx ?? 0;
+    if (badge === "Point Big" && !(_astP > 18 && _astTov > 1.2)) return false;
+    if (badge === "Floor General" && !(_astTov > 2.0 && _astP > 22)) return false;
+    if (badge === "Self-Creator" && !(_selfCreation > 70)) return false;
+    if (badge === "Tunnel Vision" && !(tmpP.astTov != null && _astTov < 0.8)) return false;
     return true;
   };
   const serverGreen = filterByPos(
