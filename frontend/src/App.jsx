@@ -86,8 +86,8 @@ const METHODS = {
   },
   selfCreation: {
     name: "Self-Creation",
-    formula: "pctl(Unassisted FGA %) — from shot-type composition",
-    desc: "Estimated % of shots self-created (not assisted). Based on shot-type composition: drives and pull-ups count as self-created, catch-and-shoot 3s and assisted dunks don't. FTR bonus for drawing fouls. For internationals without shot profile: FTR-based proxy. Higher = more offense created independently.",
+    formula: "pctl(USG% × TS%) within position group",
+    desc: "Efficient volume scoring: how much offense does a player create at what efficiency? High USG × high TS = elite shot-creator. Works for both NCAA and international players. Position-percentiled (0-100).",
   },
   overall: {
     name: "Overall Production Rating",
@@ -161,7 +161,7 @@ const BADGE_DEFS = {
   "High IQ":                { cat:"green", rule:"Feel Score > 80",                     desc:"Elite basketball IQ. Reads the game ahead of the play — AST/TO ratio, USG efficiency, and BPM all signal processing speed beyond peers." },
   "Defensive Anchor":       { cat:"green", rule:"Def Score > 80",                      desc:"Defensive engine. Elite combination of rim protection, steal rate, and DBPM. Anchors team defense and dictates opponent shot quality." },
   "Rim Protector":          { cat:"green", rule:"BLK% > 5.0 & Height ≥ 6'10\"",       desc:"Elite shot-blocking big. Deters drives and alters shots. The most impactful single defensive skill in basketball." },
-  "Self-Creator":           { cat:"green", rule:"Self-Creation Percentile > 75",            desc:"Creates own offense at elite rate. Shot-profile-based: high % of drives, pull-ups, and isolations vs catch-and-shoot. Indicates ability to generate shots without structure — the most valuable offensive skill." },
+  "Self-Creator":           { cat:"green", rule:"Self-Creation Percentile > 75",            desc:"Elite efficient volume scorer. High USG × high TS = creates own offense at high efficiency. Most valuable offensive skill." },
   "Swiss Army Knife":       { cat:"green", rule:"Role Versatility > 75 & 4+ roles > 50", desc:"Elite multi-role utility. Can credibly play 4+ distinct NBA roles. Coaches never have to take this player off the floor — fits every lineup." },
   "Scoring Point Guard":    { cat:"green", rule:"Playmaker & USG>25 & TS%>55",         desc:"Dual-threat point guard. Scores efficiently at high volume while maintaining playmaking. The most coveted archetype in modern NBA." },
 
@@ -924,10 +924,9 @@ function ShootingTab({p}) {
   const estFgaPG = (p.pts && ts && ts > 0) ? p.pts / (2 * ts / 100) : null;
   const totalFga = rawFga ? (rawFga > 50 ? Math.round(rawFga) : Math.round(rawFga * gp)) : (estFgaPG && gp ? Math.round(estFgaPG * gp) : null);
   const rawFta = p.fta ?? null;
-  // Guard: FTA per game should be < 15 (Shaq-level). Values > GP*15 are data errors (e.g., total_minutes leaking in).
   const ftaPerGame = rawFta && gp > 0 ? (rawFta > 50 ? rawFta / gp : rawFta) : null;
-  const totalFta = (ftaPerGame != null && ftaPerGame < 15) 
-    ? Math.round(ftaPerGame * gp) 
+  const totalFta = (ftaPerGame != null && ftaPerGame < 15)
+    ? Math.round(ftaPerGame * gp)
     : (ftr != null && totalFga ? Math.round(ftr / 100 * totalFga) : null);
   const totalShots = (totalFga || 0) + (totalFta || 0);
 
@@ -971,10 +970,9 @@ function ShootingTab({p}) {
   const ftPctOfTotal = estTotalShots > 0 && dietFta != null ? Math.round(dietFta / estTotalShots * 1000) / 10 : null;
   const twoPctOfTotal = estTotalShots > 0 && twoPA != null ? Math.round(twoPA / estTotalShots * 1000) / 10 : null;
 
-  // ── Self-creation % from backend shot profile (or fallback estimate) ──
-  const selfCreatedPct = p.selfCreationPct != null 
-    ? Math.round(p.selfCreationPct) 
-    : Math.min(90, Math.max(10, Math.round((p.usg ?? 20) * 2.0 - (p.astP ?? 15) * 0.5)));
+  // ── Self-creation score (USG × TS, from backend) ──
+  const selfCreationScore = p.selfCreationPct ?? ((p.usg ?? 20) * (ts ?? 52) / 100);
+  const selfCreationLabel = selfCreationScore > 18 ? "Elite" : selfCreationScore > 14 ? "Good" : selfCreationScore > 10 ? "Average" : "Low";
 
   // ── Touch prior + Bayesian ──
   const hasMidData = midPct != null;
@@ -1167,8 +1165,8 @@ function ShootingTab({p}) {
           <Tip content={<div>True Shooting % — PTS / (2 × FGA + 0.44 × FTA).</div>}>
             <span className="cursor-help">TS%: <strong style={{color:sc(ts,"ft")}}>{ts!=null?fmt(ts):"—"}</strong></span>
           </Tip>
-          <Tip content={<div>Estimated % of FGA self-created (not assisted). {p.selfCreationPct != null ? "Computed from shot-type composition: drives, pull-ups, isolations = self-created. Catch-and-shoot 3s, assisted dunks = assisted. FTR bonus for drawing fouls." : "Proxy: USG×2.0 − AST%×0.5 (backend shot profile not available)."}</div>}>
-            <span className="cursor-help">Unassisted FGA: <strong style={{color: selfCreatedPct > 50 ? "#ef4444" : selfCreatedPct > 35 ? "#f97316" : "#3b82f6"}}>{selfCreatedPct}%</strong> <span style={{color:"#4b5563"}}>({p.selfCreationPct != null ? "shot profile" : "est."}) ⓘ</span></span>
+          <Tip content={<div>Self-Creation Score (USG% × TS% / 100). Measures efficient volume scoring — how much offense created at what efficiency. Elite: &gt;18, Good: 14-18, Average: 10-14.</div>}>
+            <span className="cursor-help">Self-Creation: <strong style={{color: selfCreationScore > 18 ? "#22c55e" : selfCreationScore > 14 ? "#f97316" : selfCreationScore > 10 ? "#fbbf24" : "#ef4444"}}>{fmt(selfCreationScore)}</strong> <span style={{color:"#4b5563"}}>({selfCreationLabel}) ⓘ</span></span>
           </Tip>
         </div>
       </Sec>
@@ -1427,7 +1425,7 @@ function ScoutingTab({p}) {
       pos:["Big"],formula:"Scorer>65",roles:["Scorer","Crasher","Driver"]},
     "Modern Big":          {desc:"Well-rounded center without a standout skill. Does a bit of everything.",color:"#60a5fa",
       pos:["Big"],formula:"Default (no role >65)",roles:["Rim Protect","Rebounder","Switch Pot."]},
-    "Shot Creator":        {desc:"Creates own offense off the dribble. High unassisted shot rate from drives and pull-ups.",color:"#fb923c",
+    "Shot Creator":        {desc:"Creates own offense off the dribble. Self-creation specialist.",color:"#fb923c",
       pos:["Wing","Playmaker"],formula:"Scorer>65 + Playmaker>50",roles:["Scorer","Driver","Helio-Scorer"]},
   };
   const allArchetypes = Object.entries(ARCH_MAP);
@@ -1490,7 +1488,7 @@ function ScoutingTab({p}) {
       {/* ── PILLARS ── */}
       <Sec icon="🔬" title="The 5 Pillars" sub="Prospect DNA — position-adjusted percentile scores (0-100). These are the building blocks the model uses. Hover each for formula details.">
         {p.source !== "ncaa" && <div className="mb-3 px-3 py-1.5 rounded-lg text-xs" style={{background:"#f9731611",color:"#f97316",border:"1px solid #f9731633"}}>
-          ⚠ International data gaps: Athleticism uses Dunk Rate which is unavailable for most intl players — score may undervalue athletic intl prospects. Self-Creation uses FTR-based proxy for internationals since shot-type composition data is not available.
+          ⚠ International data gaps: Athleticism uses Dunk Rate which is unavailable for most intl players — score may undervalue athletic intl prospects. Self-Creation uses USG% × TS% — same formula for NCAA and international players.
         </div>}
         <div className="grid grid-cols-5 gap-3">
           {pillars.map(pl=>(
@@ -1989,7 +1987,7 @@ function MethodologyTab() {
   const sections = [
     {cat:"WAR Projection Model",items:["monteCarlo","posClassification"],desc:"Core engine: LightGBM gradient boosting trained on 1,181 NCAA+International prospects with known NBA outcomes (PIE peak over best 3 consecutive seasons, min 200 minutes/year). 32 features including age, anthropometrics, production, efficiency, trajectory slopes, and league strength. Validated at r=0.41 (5-fold CV, honest out-of-fold). WAR = (projected_PIE − median_PIE) × 400. Tier thresholds: Superstar ≥18 WAR, All-Star ≥12, Starter ≥5, Roleplayer ≥1."},
     {cat:"International Adjustments",items:[],desc:"International players receive three adjustments: (1) League Strength via empirical bridge-player ratios (2,655 players who played both intl and NBA). Euroleague=1.40, ACB=1.39, BBL=1.18 (NCAA Power=1.0 anchor). (2) Precociousness Boost: young players (<22) in leagues stronger than NCAA Power receive extra PIE credit proportional to age×league_strength. (3) BPM Proxy: (PER−15)×0.8 + eDiff×0.15 replaces unavailable BPM for international players."},
-    {cat:"The 5 Pillars (DNA Scores)",items:["feel","shootScore","defScore","funcAth","selfCreation","overall"],desc:"Position-adjusted percentile scores (0–100) capturing the fundamental dimensions of prospect evaluation. Each pillar uses era-adjusted percentiles computed against ~34k college + ~9k international players since 2008. Self-Creation measures estimated unassisted shot percentage based on shot-type composition (drives, pull-ups, isolations vs catch-and-shoot, assisted dunks). For internationals without shot profile data, an FTR-based proxy is used."},
+    {cat:"The 5 Pillars (DNA Scores)",items:["feel","shootScore","defScore","funcAth","selfCreation","overall"],desc:"Position-adjusted percentile scores (0–100) capturing the fundamental dimensions of prospect evaluation. Each pillar uses era-adjusted percentiles computed against ~34k college + ~9k international players since 2008. Self-Creation measures efficient volume scoring (USG% × TS%), percentiled within position group. Same formula for NCAA and international players."},
     {cat:"Shooting Projection",items:["projNba3p","projNba3pa","projNba3par","touchPrior"],desc:"Bayesian Beta-Binomial model for NBA 3P shooting translation. Prior: FT%-based 'motor touch' (strongest single predictor of NBA shooting per Berger 2023). κ=200 pseudo-attempts means low-volume college shooters regress heavily toward their FT% prior. For players without midrange data (internationals, pre-2010), a simplified FT%-only prior is used with higher FT% weighting."},
     {cat:"Possession Impact (CFFR)",items:["fourFactors"],desc:"Context-Free Four Factor Rating measuring possession efficiency per Dean Oliver's framework. Usage-role adjusted: Primary (USG≥28%), Secondary (≥22%), Finisher (≥15%), Low-Usage (<15%). Each factor (eFG% 40%, TO% 25%, ORB% 20%, FTr 15%) is percentiled WITHIN the player's usage bucket, so a primary scorer with 52% eFG rates correctly against peers, not low-usage finishers."},
     {cat:"Role Inference Matrix",items:[],desc:"14 NBA roles scored as z-scores relative to position peers. Offensive: Scorer, Playmaker, Spacer, Driver, Crasher. Defensive: On-Ball, Switch Potential, Rim Protect, Rebounder. Hybrid: Connector, Helio-Scorer, Event Creator, Zone Pressure, Micro-Spacer. Each role combines 2-4 statistical inputs weighted by NBA translation research. Z≥+2.0 = Elite, ≥+1.0 = Impact, <-1.0 = Liability."},
