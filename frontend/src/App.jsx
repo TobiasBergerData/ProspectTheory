@@ -183,7 +183,7 @@ const BADGE_DEFS = {
   "Foul Magnet":            { cat:"red",   rule:"Fouls/40>4.8",                        desc:"Foul trouble limits minutes. Signals poor mobility, discipline, or defensive IQ at the next level." },
   "Liability Big":          { cat:"red",   rule:"(B) DRB%<15 OR BLK%<1.5",            desc:"Bigs without rebounding or rim protection are a defensive sinkhole. Can't stay on the floor in playoffs." },
   "Defensive Target":       { cat:"red",   rule:"(G) Ht<6'2\" & DBPM<-1.0",           desc:"Small guards with negative defensive impact get hunted in playoffs. Physical weakness that coaching can't fix." },
-  "Non-Spacing Guard":      { cat:"red",   rule:"(G) 3P%<30 & 3P Freq<20%",           desc:"Guards who don't shoot threes can't play off-ball in modern NBA. Limits lineup construction severely." },
+  "Non-Spacing Perimeter":  { cat:"red",   rule:"(G/W) 3P%<30 & 3P Freq<20%",         desc:"Perimeter players who don't shoot threes can't play off-ball in modern NBA. Limits lineup construction severely." },
   "All-Offense Big":        { cat:"red",   rule:"(B) BLK%<2.5 & DBPM<1.5",            desc:"Bigs without rim protection are a defensive liability at every level. Offense doesn't compensate." },
   "FT Concern":             { cat:"red",   rule:"FT%<65 & USG>25",                    desc:"Hack-a-Player target at high usage. Opposing coaches will exploit this in close games." },
   "Old for Class":          { cat:"red",   rule:"Age > 22.5",                          desc:"Older than typical draft prospect. Development runway is shorter; what you see is closer to the ceiling." },
@@ -258,7 +258,7 @@ function computeBadges(p) {
   // Floor General — Playmakers and Wings only (not Bigs — use Point Big)
   if ((isG || isW) && astTov > 2.2 && astP > 25)                     green.push("Floor General");
   // Two-Way Wing
-  if (isW && tp > 35 && (stlP > 2.2 || dbpm > 2.0))                green.push("Two-Way Wing");
+  if (isW && p.tp != null && tp > 35 && (stlP > 2.2 || dbpm > 2.0))  green.push("Two-Way Wing");
   // Modern Rim Anchor
   if (isB && blkP > 4.0 && dbpm > 2.5)                              green.push("Modern Rim Anchor");
   // Point Big
@@ -269,18 +269,18 @@ function computeBadges(p) {
   if ((isW || isB) && htIn >= 79 && stlP > 1.6 && blkP > 1.8)      green.push("Versatile Stopper");
   else if (isIntl && (isW || isB) && htIn >= 79 && dbpm > 3.0)      green.push("Versatile Stopper");
   // Transition Terror (with fallback for no dunk data)
-  if ((isG || isW) && stlP > 2.5 && dunkR > 8)                      green.push("Transition Terror");
+  if ((isG || isW) && p.stlP != null && stlP > 2.5 && dunkR > 8)    green.push("Transition Terror");
   else if ((isG || isW) && stlP > 2.8 && twoPct > 55)               green.push("Transition Terror");
   // FT Grifter
-  if (ftr > 45 && (rimF > 25 || usg > 24))                          green.push("FT Grifter");
+  if (p.ftr != null && ftr > 45 && (rimF > 25 || usg > 24))         green.push("FT Grifter");
   // Efficient High Usage
-  if (usg > 28 && toP < 12 && ts > 58)                              green.push("Efficient High Usage");
+  if (p.usg != null && usg > 28 && toP < 12 && ts > 58)             green.push("Efficient High Usage");
   // High Feel Athlete
   if (feel > 75 && funcAth > 75)                                     green.push("High Feel Athlete");
   // Lurking Elite (Haliburton-Effekt)
-  if (usg < 20 && bpm > 7.0 && ts > 62)                             green.push("Lurking Elite");
+  if (p.bpm != null && usg < 20 && bpm > 7.0 && ts > 62)            green.push("Lurking Elite");
   // Analytics Darling
-  if (bpm > 8.0 && ts > 60 && usg < 22)                             green.push("Analytics Darling");
+  if (p.bpm != null && bpm > 8.0 && ts > 60 && usg < 22)            green.push("Analytics Darling");
   // Efficiency Monster
   if (efg > 60 && astTov > 2.0 && stlP > 2.0)                      green.push("Efficiency Monster");
   // Defensive Stopper Floor
@@ -307,9 +307,9 @@ function computeBadges(p) {
   // Spacing Killer — only if 3P data actually exists
   if ((isG || isW) && p.tp != null && p.threeF != null && tp < 30 && threeF < 18)  red.push("Spacing Killer");
   // Efficiency Trap
-  if (usg > 26 && ts < 52)                                          red.push("Efficiency Trap");
+  if (p.usg != null && p.ts != null && usg > 26 && ts < 52)         red.push("Efficiency Trap");
   // Empty Calorie Scorer (stricter bust signal)
-  if (usg > 28 && ts < 52 && astP < 15)                             red.push("Empty Calorie Scorer");
+  if (p.usg != null && p.ts != null && usg > 28 && ts < 52 && astP < 15)  red.push("Empty Calorie Scorer");
   // One-Way Project — only if DBPM data exists
   if (p.obpm != null && p.dbpm != null && obpm > 3.0 && dbpm < -1.5 && stlP < 1.0)  red.push("One-Way Project");
   // Soft Interior — only if FTR and BLK data exist
@@ -326,8 +326,8 @@ function computeBadges(p) {
   if (isB && p.drbP != null && p.blkP != null && (drbP < 15 || blkP < 1.5))  red.push("Liability Big");
   // Defensive Target (adjusted)
   if (isG && htIn < 74 && p.dbpm != null && dbpm < -1.0)            red.push("Defensive Target");
-  // Non-Spacing Guard — only if 3P data exists
-  if (isG && p.tp != null && p.threeF != null && tp < 30 && threeF < 20)  red.push("Non-Spacing Guard");
+  // Non-Spacing Perimeter — guards AND wings who can't shoot
+  if ((isG || isW) && p.tp != null && p.threeF != null && tp < 30 && threeF < 20)  red.push("Non-Spacing Perimeter");
   // All-Offense Big — only if BLK% and DBPM data exist
   if (isB && p.blkP != null && p.dbpm != null && blkP < 2.5 && dbpm < 1.5)  red.push("All-Offense Big");
   // FT Concern — only if FT% data exists
@@ -513,7 +513,7 @@ function mapProfile(d) {
     "Soft Interior": ["Big"],                // Only bigs
     "Non-Processing Guard": ["Playmaker"],
     "Defensive Target": ["Playmaker"],
-    "Non-Spacing Guard": ["Playmaker"],
+    "Non-Spacing Perimeter": ["Playmaker","Wing"],
     "All-Offense Big": ["Big"],
     "Liability Big": ["Big"],
   };
@@ -1165,7 +1165,7 @@ function ShootingTab({p}) {
           <Tip content={<div>True Shooting % — PTS / (2 × FGA + 0.44 × FTA).</div>}>
             <span className="cursor-help">TS%: <strong style={{color:sc(ts,"ft")}}>{ts!=null?fmt(ts):"—"}</strong></span>
           </Tip>
-          <Tip content={<div>Self-Creation Score (USG% × TS% / 100). Measures efficient volume scoring — how much offense created at what efficiency. Elite: &gt;18, Good: 14-18, Average: 10-14.</div>}>
+          <Tip content={<div>Self-Creation Score (USG% × TS% / 100). Measures efficient volume scoring. Elite: &gt;18, Good: 14-18, Average: 10-14.</div>}>
             <span className="cursor-help">Self-Creation: <strong style={{color: selfCreationScore > 18 ? "#22c55e" : selfCreationScore > 14 ? "#f97316" : selfCreationScore > 10 ? "#fbbf24" : "#ef4444"}}>{fmt(selfCreationScore)}</strong> <span style={{color:"#4b5563"}}>({selfCreationLabel}) ⓘ</span></span>
           </Tip>
         </div>
