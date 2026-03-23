@@ -435,12 +435,16 @@ function mapProfile(d) {
     drb: normPctl(d.pctl.drb), stl: normPctl(d.pctl.stl), blk: normPctl(d.pctl.blk),
     pts36: normPctl(d.pctl.pts36), reb36: normPctl(d.pctl.reb36), ast36: normPctl(d.pctl.ast36),
     ftr: normPctl(d.pctl.ftr), efg: normPctl(d.pctl.efg),
+    obpm: normPctl(d.pctl.obpm), dbpm: normPctl(d.pctl.dbpm),
+    ortg: normPctl(d.pctl.ortg), astTo: normPctl(d.pctl.astTo ?? d.pctl.ast_to),
   } : {
     bpm: normPctl(d.pctl_bpm), usg: normPctl(d.pctl_usg), ts: normPctl(d.pctl_ts),
     ast: normPctl(d.pctl_ast), to: normPctl(d.pctl_to), orb: normPctl(d.pctl_orb),
     drb: normPctl(d.pctl_drb), stl: normPctl(d.pctl_stl), blk: normPctl(d.pctl_blk),
     pts36: normPctl(d.pctl_pts36), reb36: normPctl(d.pctl_reb36), ast36: normPctl(d.pctl_ast36),
     ftr: normPctl(d.pctl_ftr), efg: normPctl(d.pctl_efg),
+    obpm: normPctl(d.pctl_obpm), dbpm: normPctl(d.pctl_dbpm),
+    ortg: normPctl(d.pctl_ortg), astTo: normPctl(d.pctl_ast_to),
   };
 
   // Four factors — API sends flat fields (ff_efg, ff_tov etc), NOT nested objects
@@ -787,7 +791,7 @@ function OverviewTab({p, compTier, setCompTier}) {
       <Sec icon="▦" title="Box Score" sub={p.gp ? `${p.gp} GP · ${fmt(p.min)} MIN/G — Traditional counting stats. Look for per-minute efficiency, not raw totals.` : (p.yr && p.yr <= 2009 ? "Per-game counting stats unavailable for 2008-2009 BartTorvik data. Advanced stats shown below." : "Game data unavailable for this player.")}>
         <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
           {[["PTS",p.pts,p.pctl?.pts36],["REB",p.reb,p.pctl?.reb36],["AST",p.ast,p.pctl?.ast36],
-            ["STL",p.stl,p.pctl?.stl],["BLK",p.blk,p.pctl?.blk],["A/TO",p.astTov,null],["FTR",p.ftr,null],["TO%",p.toP,p.pctl?.to]
+            ["STL",p.stl,p.pctl?.stl],["BLK",p.blk,p.pctl?.blk],["A/TO",p.astTov,p.pctl?.astTo],["FTR",p.ftr,p.pctl?.ftr],["TO%",p.toP,p.pctl?.to]
           ].map(([l,v,pc])=><StatCell key={l} label={l} val={v} pctl={pc}/>)}
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs" style={{color:"#6b7280"}}>
@@ -799,7 +803,7 @@ function OverviewTab({p, compTier, setCompTier}) {
       </Sec>
       <Sec icon="⚡" title="Advanced" sub="Rate stats that capture efficiency and impact independent of role. BPM and ORtg are the strongest NBA translation signals.">
         <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
-          {[["BPM",p.bpm,p.pctl?.bpm],["OBPM",p.obpm,null],["DBPM",p.dbpm,null],["ORtg",p.ortg,null],
+          {[["BPM",p.bpm,p.pctl?.bpm],["OBPM",p.obpm,p.pctl?.obpm],["DBPM",p.dbpm,p.pctl?.dbpm],["ORtg",p.ortg,p.pctl?.ortg],
             ["USG%",p.usg,p.pctl?.usg],["TS%",p.ts,p.pctl?.ts],["AST%",p.astP,p.pctl?.ast],["TO%",p.toP,p.pctl?.to],
             ["ORB%",p.orbP,p.pctl?.orb],["DRB%",p.drbP,p.pctl?.drb],["STL%",p.stlP,p.pctl?.stl],["BLK%",p.blkP,p.pctl?.blk]
           ].map(([l,v,pc])=><StatCell key={l} label={l} val={v} pctl={pc}/>)}
