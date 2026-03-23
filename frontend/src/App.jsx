@@ -191,6 +191,7 @@ const BADGE_DEFS = {
   "Non-Spacing Perimeter":  { cat:"red",   rule:"(G/W) 3P%<30 & 3P Freq<20%",         desc:"Perimeter players who don't shoot threes can't play off-ball in modern NBA. Limits lineup construction severely." },
   "All-Offense Big":        { cat:"red",   rule:"(B) BLK%<2.5 & DBPM<1.5",            desc:"Bigs without rim protection are a defensive liability at every level. Offense doesn't compensate." },
   "FT Concern":             { cat:"red",   rule:"FT%<65 & USG>25",                    desc:"Hack-a-Player target at high usage. Opposing coaches will exploit this in close games." },
+  "Passive Defender":       { cat:"red",   rule:"STL%+BLK%<2.5 & PFR<2.5",            desc:"Low stocks AND low fouls = not engaging defensively. This player avoids contact on both ends — no steals, no blocks, no fouls. At the NBA level, passive defenders get targeted in pick-and-roll and isolation." },
   "Old for Class":          { cat:"red",   rule:"Age > 22.5",                          desc:"Older than typical draft prospect. Development runway is shorter; what you see is closer to the ceiling." },
   "Turnover Prone":         { cat:"red",   rule:"TO% > 25",                            desc:"Excessive turnovers at any position. Ball security is a fundamental NBA requirement that doesn't improve easily." },
 };
@@ -337,6 +338,13 @@ function computeBadges(p) {
   if (isB && p.blkP != null && p.dbpm != null && blkP < 2.5 && dbpm < 1.5)  red.push("All-Offense Big");
   // FT Concern — only if FT% data exists
   if (p.ft != null && ft < 65 && usg > 25)                          red.push("FT Concern");
+  // Passive Defender — low stocks + low fouls = not engaging (Session 9b)
+  const stocks = (p.stlP ?? 0) + (p.blkP ?? 0);
+  const fouls40 = p.fouls40 ?? 0;
+  if (p.stlP != null && p.blkP != null) {
+    if (stocks < 2.5 && fouls40 > 0 && fouls40 < 2.5)              red.push("Passive Defender");
+    else if (stocks < 1.8 && fouls40 === 0)                         red.push("Passive Defender");
+  }
 
   return { green, yellow, red };
 }
