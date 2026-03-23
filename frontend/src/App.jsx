@@ -121,8 +121,13 @@ const METHODS = {
   },
   monteCarlo: {
     name: "WAR Projection (LightGBM)",
-    formula: "WAR = (projected_PIE − median_PIE) × 400, where PIE = 60% LightGBM + 40% xRAPM ensemble",
-    desc: "LightGBM gradient boosting trained on 1,181 prospects with known NBA outcomes. 32 features: age, height, wingspan, BPM, PER, eFG%, 3P%, AST%, STL%, BLK%, trajectory slopes, conference strength, age×league interaction. Validated at r=0.41 (5-fold CV). Conf adjustment: 0.55+0.45×league_strength. Precociousness boost for young internationals in strong leagues. WAR-based tiers: Superstar ≥18, All-Star ≥12, Starter ≥5, Roleplayer ≥1.",
+    formula: "WAR = (projected_WA − replacement_WA), where WA = 30% PIE model + 70% xRAPM model ensemble",
+    desc: "LightGBM gradient boosting (depth=3, 400 trees, lr=0.03) trained on ~980 prospects with known NBA outcomes. 28 ablation-validated features: age, wingspan, BPM, PER, DRB%, AST%, conference strength, consensus signal, basketball IQ composites, and position-specific interactions. Validated at r≈0.36 (5-fold CV). Conf adjustment: 0.80+0.20×league_strength (asymmetric). WAR-based tiers: Superstar ≥18, All-Star ≥12, Starter ≥5, Roleplayer ≥1.",
+  },
+  projectionDrivers: {
+    name: "Projection Drivers (SHAP Decomposition)",
+    formula: "contribution_i = Σ(split gains involving feature i across all trees)",
+    desc: "Per-player feature contributions computed via LightGBM's native SHAP tree decomposition (pred_contrib). For each prospect, the model's WAR prediction is broken down into the additive contribution of each of the 28 input features. The top 5 positive contributors (boosters) and top 5 negative contributors (limiters) are displayed. Strength (+++/++/+) reflects relative magnitude within the player's own top-5 drivers. Ensemble: PIE model contributions (30%) blended with xRAPM model contributions (70%) on the Wins Added scale.",
   },
   posClassification: {
     name: "Position Classification",
@@ -634,6 +639,9 @@ function mapProfile(d) {
     madeNba:d.made_nba, draftYear:d.draft_year, draftPick:d.draft_pick,
     confidence:d.confidence||"full", sampleMin:d.sample_min, sampleGp:d.sample_gp,
     source: d.source ?? "ncaa",
+    // Session 9: per-player feature contribution drivers
+    projectionBoosters: d.projection_boosters ?? d.proj_boost ?? "",
+    projectionLimiters: d.projection_limiters ?? d.proj_limit ?? "",
     statComps:[], anthroComps:[], seasonLines: d.seasonLines || [],
     comb: d.combine || null,
     posPlaymaker:d.pos_playmaker, posWing:d.pos_wing, posBig:d.pos_big,
@@ -1294,24 +1302,91 @@ function ProjectionTab({p}) {
         )}
       </Sec>
 
-      {/* ═══ MODEL DRIVERS — What's driving this projection ═══ */}
-      <Sec icon="🔬" title="Key Model Drivers" sub="What's pushing this player's projection up or down? Green = above average for tier, Red = below. These are the features LightGBM weights most heavily.">
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          {drivers.map(d => (
-            <Tip key={d.label} content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>{d.label}</div><div style={{color:"#cbd5e1"}}>{d.desc}</div></div>}>
-              <div className="rounded-lg p-4 cursor-help" style={{background:"#0d1117",border:`1px solid ${d.color}22`}}>
-                <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#6b7280"}}>{d.label}</div>
-                <div className="text-2xl font-bold" style={{color:d.color,fontFamily:"'Oswald',sans-serif"}}>{d.isText ? d.val : fmt(d.val)}</div>
+      {/* ═══ PROJECTION DRIVERS — SHAP-based per-player feature contributions (Session 9) ═══ */}
+      {(() => {
+        // Parse pipe-delimited "Label:strength" strings from backend
+        const parseDrvs = (raw) => {
+          if (!raw || typeof raw !== "string") return [];
+          return raw.split("|").filter(Boolean).map(s => {
+            const [label, str] = s.split(":");
+            return { label: label || "?", strength: parseInt(str) || 1 };
+          });
+        };
+        const boosters = parseDrvs(p.projectionBoosters);
+        const limiters = parseDrvs(p.projectionLimiters);
+        const hasDrvData = boosters.length > 0 || limiters.length > 0;
+
+        // Strength symbols
+        const boostSym = (s) => s >= 3 ? "+++" : s >= 2 ? "++" : "+";
+        const limitSym = (s) => s >= 3 ? "− − −" : s >= 2 ? "− −" : "−";
+        // Opacity by strength
+        const opac = (s) => s >= 3 ? 1.0 : s >= 2 ? 0.75 : 0.5;
+
+        if (!hasDrvData) {
+          // Fallback: old hardcoded drivers
+          return (
+            <Sec icon="🔬" title="Key Model Drivers" sub="What's pushing this player's projection up or down? Green = above average for tier, Red = below. These are the features LightGBM weights most heavily.">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {drivers.map(d => (
+                  <Tip key={d.label} content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>{d.label}</div><div style={{color:"#cbd5e1"}}>{d.desc}</div></div>}>
+                    <div className="rounded-lg p-4 cursor-help" style={{background:"#0d1117",border:`1px solid ${d.color}22`}}>
+                      <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#6b7280"}}>{d.label}</div>
+                      <div className="text-2xl font-bold" style={{color:d.color,fontFamily:"'Oswald',sans-serif"}}>{d.isText ? d.val : fmt(d.val)}</div>
+                    </div>
+                  </Tip>
+                ))}
               </div>
-            </Tip>
-          ))}
-        </div>
-        <div className="mt-3 p-3 rounded-lg text-xs" style={{background:"#0d111744",color:"#4b5563"}}>
-          Model: LightGBM (depth=5, 200 trees) trained on 1,419 NCAA/Intl→NBA outcomes.
-          r(projected_pie, peak_pie) = 0.58 in-sample, r = 0.41 CV 5-fold, r = 0.37 time-split.
-          Top features: Age, Wingspan, BPM, DRB%, 3P%, Minutes, AST%.
-        </div>
-      </Sec>
+            </Sec>
+          );
+        }
+
+        return (
+          <Sec icon="🔬" title="Projection Drivers" sub="Which features push this projection up or down? Our model decomposes each prediction into per-feature contributions. The top 5 boosters (green) lift the projected career value; the top 5 limiters (red) pull it down. Strength: +++ = very strong influence, ++ = strong, + = moderate.">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* ── BOOSTERS (green) ── */}
+              <div>
+                <div className="text-xs uppercase tracking-widest mb-3 flex items-center gap-2" style={{color:"#22c55e"}}>
+                  <span style={{fontSize:14}}>▲</span> Boosters
+                </div>
+                <div className="space-y-2">
+                  {boosters.length > 0 ? boosters.map((b, i) => (
+                    <div key={i} className="flex items-center gap-3 rounded-lg px-3 py-2" style={{background:"#0d1117",border:"1px solid #22c55e18",opacity:opac(b.strength)}}>
+                      <span className="font-mono font-bold text-sm flex-shrink-0" style={{color:"#22c55e",minWidth:36,textAlign:"right"}}>{boostSym(b.strength)}</span>
+                      <span className="text-sm" style={{color:"#d1d5db"}}>{b.label}</span>
+                    </div>
+                  )) : (
+                    <div className="text-sm py-2" style={{color:"#4b5563"}}>No significant positive drivers</div>
+                  )}
+                </div>
+              </div>
+              {/* ── LIMITERS (red) ── */}
+              <div>
+                <div className="text-xs uppercase tracking-widest mb-3 flex items-center gap-2" style={{color:"#ef4444"}}>
+                  <span style={{fontSize:14}}>▼</span> Limiters
+                </div>
+                <div className="space-y-2">
+                  {limiters.length > 0 ? limiters.map((l, i) => (
+                    <div key={i} className="flex items-center gap-3 rounded-lg px-3 py-2" style={{background:"#0d1117",border:"1px solid #ef444418",opacity:opac(l.strength)}}>
+                      <span className="font-mono font-bold text-sm flex-shrink-0" style={{color:"#ef4444",minWidth:36,textAlign:"right"}}>{limitSym(l.strength)}</span>
+                      <span className="text-sm" style={{color:"#d1d5db"}}>{l.label}</span>
+                    </div>
+                  )) : (
+                    <div className="text-sm py-2" style={{color:"#4b5563"}}>No significant negative drivers</div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 p-3 rounded-lg text-xs leading-relaxed" style={{background:"#0d111744",color:"#4b5563"}}>
+              <strong style={{color:"#6b7280"}}>How this works:</strong> For each prospect, our LightGBM model decomposes the WAR projection
+              into individual feature contributions (SHAP tree decomposition). Boosters are features where this prospect's value
+              pushes the prediction above the population baseline; limiters pull it below. Strength reflects relative magnitude
+              within this player's own top contributors — <span style={{color:"#22c55e"}}>+++</span> = dominant influence,{" "}
+              <span style={{color:"#22c55e"}}>+</span> = still top-5 but smaller effect.
+              The ensemble blends PIE (30%) and xRAPM (70%) model contributions.
+            </div>
+          </Sec>
+        );
+      })()}
 
       {/* ═══ SEASON-BY-SEASON ═══ */}
       <Sec icon="📈" title="Season-by-Season" sub="Development trajectory — ▲▼ shows year-over-year change. Green = improvement, Red = regression. For internationals, 'League' shows the competition level. Multi-season improvement is one of the strongest NBA success signals.">
