@@ -621,10 +621,16 @@ function mapProfile(d) {
     dunkR: d.dunk_r ?? d.dunk_rate ?? d.dunkR,
     dunkPct: d.dunk_pct ?? d.dunkPct,
     fta: d.fta, ftm: d.ftm, fga: d.fga,
-    selfCreation: d.self_creation ?? d.box_creation_idx ?? d.self_creation_idx ?? 50,
+    selfCreation: d.creation_score ?? d.self_creation ?? d.box_creation_idx ?? d.self_creation_idx ?? 50,
     selfCreationPct: d.box_creation ?? d.self_creation_pct ?? null,
     boxScoring: d.box_scoring ?? null,
     boxAssist: d.box_assist ?? null,
+    // PBP self-creation (real assisted-shot data, 2008-2026)
+    pbpSelfCreation: d.self_creation_raw ?? d.overall_self_creation ?? null,
+    creationScore: d.creation_score ?? null,
+    modernShotProfile: d.modern_shot_profile ?? null,
+    sosPctl: d.sos_pctl ?? null,
+    teamQuality: d.team_quality_pctl ?? null,
     pctl,
     ff: { efg: ff.efg??50, tov: ff.tov??50, orb: ff.orb??50, ftr: ff.ftr??50, comp: ff.comp??50 },
     cffr: { usageRole: d.cffr_usage_role ?? d.cffr_role ?? d.usage_role, reliability: d.cffr_reliability ?? d.cffr_rel, raw: typeof d.cffr === 'number' ? d.cffr : null },
@@ -1005,9 +1011,16 @@ function ShootingTab({p}) {
   const ftPctOfTotal = estTotalShots > 0 && dietFta != null ? Math.round(dietFta / estTotalShots * 1000) / 10 : null;
   const twoPctOfTotal = estTotalShots > 0 && twoPA != null ? Math.round(twoPA / estTotalShots * 1000) / 10 : null;
 
-  // ── Self-creation score (USG × TS, from backend) ──
-  const selfCreationScore = p.box_creation ?? p.selfCreationPct ?? ((p.usg ?? 20) * (ts ?? 52) / 100);
-  const selfCreationLabel = selfCreationScore > 25 ? "Elite" : selfCreationScore > 18 ? "Good" : selfCreationScore > 12 ? "Average" : "Low";
+  // ── Self-creation: PBP real data (preferred) or Box Creation fallback ──
+  const hasPbpCreation = p.pbpSelfCreation != null && p.pbpSelfCreation > 0;
+  const selfCreationRaw = hasPbpCreation ? p.pbpSelfCreation : null;
+  const selfCreationScore = hasPbpCreation
+    ? p.pbpSelfCreation
+    : (p.box_creation ?? p.selfCreationPct ?? ((p.usg ?? 20) * (ts ?? 52) / 100));
+  const selfCreationLabel = hasPbpCreation
+    ? (selfCreationRaw > 65 ? "Elite Creator" : selfCreationRaw > 50 ? "Good Creator" : selfCreationRaw > 35 ? "Average" : "Assisted Scorer")
+    : (selfCreationScore > 25 ? "Elite" : selfCreationScore > 18 ? "Good" : selfCreationScore > 12 ? "Average" : "Low");
+  const creationPctl = p.creationScore ?? p.selfCreation ?? null;
 
   // ── Touch prior + Bayesian ──
   const hasMidData = midPct != null;
@@ -1200,8 +1213,16 @@ function ShootingTab({p}) {
           <Tip content={<div>True Shooting % — PTS / (2 × FGA + 0.44 × FTA).</div>}>
             <span className="cursor-help">TS%: <strong style={{color:sc(ts,"ft")}}>{ts!=null?fmt(ts):"—"}</strong></span>
           </Tip>
-          <Tip content={<div>Box Creation (Ben Taylor). Scoring Creation (USG×TS) + Assist Creation. Measures total offensive creation. Elite: &gt;25, Good: 18-25, Average: 12-18.</div>}>
-            <span className="cursor-help">Box Creation: <strong style={{color: selfCreationScore > 25 ? "#22c55e" : selfCreationScore > 18 ? "#f97316" : selfCreationScore > 12 ? "#fbbf24" : "#ef4444"}}>{fmt(selfCreationScore)}</strong> <span style={{color:"#4b5563"}}>({selfCreationLabel}) ⓘ</span></span>
+                    <Tip content={<div>{hasPbpCreation
+            ? <>Self-Creation Rate (PBP). Percentage of made shots that were unassisted — higher means more shots created off the dribble. Based on real play-by-play assisted shot tracking data (2008-2026). Elite: &gt;65%, Good: 50-65%, Average: 35-50%.</>
+            : <>Box Creation (Ben Taylor). Scoring Creation (USG×TS) + Assist Creation. Measures total offensive creation. Elite: &gt;25, Good: 18-25, Average: 12-18.</>
+          }</div>}>
+            <span className="cursor-help">{hasPbpCreation ? "Self-Creation" : "Box Creation"}: <strong style={{color: hasPbpCreation
+              ? (selfCreationRaw > 65 ? "#22c55e" : selfCreationRaw > 50 ? "#86efac" : selfCreationRaw > 35 ? "#fbbf24" : "#ef4444")
+              : (selfCreationScore > 25 ? "#22c55e" : selfCreationScore > 18 ? "#f97316" : selfCreationScore > 12 ? "#fbbf24" : "#ef4444")
+            }}>{hasPbpCreation ? fmt(selfCreationRaw) + "%" : fmt(selfCreationScore)}</strong> <span style={{color:"#4b5563"}}>({selfCreationLabel})</span>
+            {creationPctl != null && <span style={{color:"#475569"}}> · Pctl: {Math.round(creationPctl)}</span>}
+            </span>
           </Tip>
         </div>
       </Sec>
