@@ -2282,14 +2282,15 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
 
     // Sort functions — including tier columns
     const sortFn = {
-      war: (a,b) => (b.war ?? -999) - (a.war ?? -999),
-      age: (a,b) => (a.age ?? 99) - (b.age ?? 99), // youngest first
-      bpm: (a,b) => (b.bpm ?? -999) - (a.bpm ?? -999),
-      super: (a,b) => (b.tiers?.Superstar ?? 0) - (a.tiers?.Superstar ?? 0),
+      war:     (a,b) => (b.war ?? b.ppwa ?? -999) - (a.war ?? a.ppwa ?? -999),
+      pelite:  (a,b) => (b.pElite ?? -1) - (a.pElite ?? -1),
+      age:     (a,b) => (a.age ?? 99) - (b.age ?? 99),
+      bpm:     (a,b) => (b.bpm ?? -999) - (a.bpm ?? -999),
+      super:   (a,b) => (b.tiers?.Superstar ?? 0) - (a.tiers?.Superstar ?? 0),
       allstar: (a,b) => (b.tiers?.["All-Star"] ?? 0) - (a.tiers?.["All-Star"] ?? 0),
       starter: (a,b) => (b.tiers?.Starter ?? 0) - (a.tiers?.Starter ?? 0),
-      role: (a,b) => (b.tiers?.["Role Player"] ?? 0) - (a.tiers?.["Role Player"] ?? 0),
-      repl: (a,b) => (b.tiers?.Replacement ?? 0) - (a.tiers?.Replacement ?? 0),
+      role:    (a,b) => (b.tiers?.["Role Player"] ?? 0) - (a.tiers?.["Role Player"] ?? 0),
+      repl:    (a,b) => (b.tiers?.Replacement ?? 0) - (a.tiers?.Replacement ?? 0),
     };
     list = [...list].sort(sortFn[sortBy] || sortFn.war);
     return list.slice(0, 60);
@@ -2298,7 +2299,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
   const posColors = {Playmaker:"#3b82f6", Wing:"#f97316", Big:"#8b5cf6"};
 
   // Sort label for header
-  const sortLabels = {war:"WAR", age:"Age (youngest)", bpm:"BPM", super:"Star %", allstar:"All-Star %", starter:"Starter %", role:"Role %", repl:"Repl %"};
+  const sortLabels = {war:"ppWA", pelite:"P(Elite)", age:"Age (youngest)", bpm:"BPM", super:"Star %", allstar:"All-Star %", starter:"Starter %", role:"Role %", repl:"Repl %"};
 
   // Clickable column header
   const SortTh = ({sortKey, children, align="left"}) => (
@@ -2353,7 +2354,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
         </div>
         {/* Sort buttons */}
         <div className="flex gap-1">
-          {[["war","WAR"],["age","Age"],["bpm","BPM"]].map(([k,l])=>(
+          {[["war","ppWA"],["pelite","P(Elite)"],["age","Age"],["bpm","BPM"]].map(([k,l])=>(
             <button key={k} onClick={()=>setSortBy(k)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
               style={{background:sortBy===k?"#f97316":"#1f2937",color:sortBy===k?"#000":"#9ca3af"}}>
               {l}
@@ -2373,13 +2374,13 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
                 <th className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>Pos</th>
                 <th className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>Team</th>
                 <SortTh sortKey="age">Age</SortTh>
-                <SortTh sortKey="war">WAR</SortTh>
+                <SortTh sortKey="war">ppWA</SortTh>
+                <SortTh sortKey="pelite">P(Elite)</SortTh>
                 <SortTh sortKey="bpm">BPM</SortTh>
                 <SortTh sortKey="super">⭐%</SortTh>
                 <SortTh sortKey="allstar">All★%</SortTh>
                 <SortTh sortKey="starter">Start%</SortTh>
                 <SortTh sortKey="role">Role%</SortTh>
-                <SortTh sortKey="repl">Repl%</SortTh>
                 <th className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>Tier</th>
               </tr>
             </thead>
@@ -2404,7 +2405,8 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
                     <td className="px-3 py-2.5"><span className="px-2 py-0.5 rounded text-xs font-semibold" style={{background:(posColors[p.pos]||"#6b7280")+"22",color:posColors[p.pos]||"#6b7280"}}>{p.pos}</span></td>
                     <td className="px-3 py-2.5 text-xs" style={{color:"#9ca3af"}}>{p.team||p.conf}</td>
                     <td className="px-3 py-2.5 text-xs" style={{color: p.age != null && p.age < 20 ? "#86efac" : "#9ca3af"}}>{p.age != null ? Number(p.age).toFixed(1) : "—"}</td>
-                    <td className="px-3 py-2.5 font-bold" style={{color: p.war != null ? "#fbbf24" : "#374151", fontFamily:"'Oswald',sans-serif"}}>{p.war != null ? fmt(p.war, 1) : "—"}</td>
+                    <td className="px-3 py-2.5 font-bold" style={{color: p.war != null ? (p.war>=25?"#fbbf24":p.war>=10?"#f97316":p.war>=4?"#3b82f6":"#6b7280") : "#374151", fontFamily:"'Oswald',sans-serif"}}>{p.war != null ? fmt(p.war, 1) : "—"}</td>
+                    <td className="px-3 py-2.5 text-xs font-semibold" style={{color: p.pElite != null ? (p.pElite>=0.5?"#f97316":p.pElite>=0.25?"#fbbf24":"#6b7280") : "#374151"}}>{p.pElite != null ? `${(p.pElite*100).toFixed(0)}%` : "—"}</td>
                     <td className="px-3 py-2.5 text-xs font-semibold" style={{color: p.bpm != null ? (p.bpm > 8 ? "#22c55e" : p.bpm > 4 ? "#86efac" : "#9ca3af") : "#374151"}}>{p.bpm != null ? fmt(p.bpm, 1) : "—"}</td>
                     <td className="px-3 py-2.5 text-xs font-semibold" style={{color:tierPctColor(p.tiers?.Superstar)}}>{fmt(p.tiers?.Superstar,0)}%</td>
                     <td className="px-3 py-2.5 text-xs font-semibold" style={{color:tierPctColor(p.tiers?.["All-Star"])}}>{fmt(p.tiers?.["All-Star"],0)}%</td>
@@ -2481,26 +2483,29 @@ export default function App() {
   },[]);
 
   const selectPlayer = async (name) => {
-    setSel(name);setSearch("");setShowS(false);setTab("overview");
-    if(profileCache[name]) return;
-    setProfileLoading(true);
-    try {
-      const [profRes,statsRes,anthroRes] = await Promise.all([
-        fetch(`${API_BASE}/player/${encodeURIComponent(name)}`).then(r=>r.ok?r.json():null),
+    setSel(name); setSearch(""); setShowS(false); setTab("overview");
+    if (profileCache[name]) return;
+
+    // If board already loaded rich profile data (ppwa present), show immediately
+    // and load comps in background — no blocking spinner.
+    const boardProfile = PLAYERS[name];
+    const alreadyRich = boardProfile && (boardProfile.ppwa != null || boardProfile.pctl != null);
+    if (alreadyRich) {
+      setProfileCache(prev => ({...prev, [name]: boardProfile}));
+      // Load comps in background (non-blocking)
+      Promise.all([
         fetch(`${API_BASE}/comps/stats/${encodeURIComponent(name)}`).then(r=>r.ok?r.json():null).catch(()=>null),
         fetch(`${API_BASE}/comps/anthro/${encodeURIComponent(name)}`).then(r=>r.ok?r.json():null).catch(()=>null),
-      ]);
-      if(profRes?.profile){
-        const mapped = mapProfile(profRes.profile);
-        if(statsRes?.comps) mapped.statComps = statsRes.comps.map(c=>{
-          // API similarity: could be 0-1 (similarity), 0-100 (%), or distance (lower=closer)
+      ]).then(([statsRes, anthroRes]) => {
+        const updated = {...boardProfile};
+        if (statsRes?.comps) updated.statComps = statsRes.comps.map(c => {
           let sim = null;
           if (c.similarity != null) {
             const raw = Number(c.similarity);
-            if (raw > 100) sim = Math.max(0, Math.round(100 - raw / 5)); // large distance → invert
-            else if (raw > 1 && raw <= 100) sim = Math.round(raw); // already percentage
-            else if (raw >= 0 && raw <= 1) sim = Math.round(raw * 100); // 0-1 ratio
-            else sim = Math.max(0, Math.round(100 - Math.abs(raw) * 2)); // negative or other
+            if (raw > 100) sim = Math.max(0, Math.round(100 - raw / 5));
+            else if (raw > 1 && raw <= 100) sim = Math.round(raw);
+            else if (raw >= 0 && raw <= 1) sim = Math.round(raw * 100);
+            else sim = Math.max(0, Math.round(100 - Math.abs(raw) * 2));
           }
           return {
             name:c.name, pos:c.position||c.pos, sim,
@@ -2512,15 +2517,55 @@ export default function App() {
             badges:c.badges?c.badges.split("|").filter(Boolean):[],
           };
         });
-        if(anthroRes?.comps) mapped.anthroComps = anthroRes.comps.map(c=>({
-          name:c.name,dist:c.distance,sim:Math.round(c.similarity||0),
-          ht:c.height||c.ht,wt:c.weight||c.wt,ws:c.wingspan||c.ws,
-          nba:!!c.made_nba,tier:c.tier||"",
+        if (anthroRes?.comps) updated.anthroComps = anthroRes.comps.map(c=>({
+          name:c.name, dist:c.distance, sim:Math.round(c.similarity||0),
+          ht:c.height||c.ht, wt:c.weight||c.wt, ws:c.wingspan||c.ws,
+          nba:!!c.made_nba, tier:c.tier||"",
         }));
-        PLAYERS[name]=mapped;
-        setProfileCache(prev=>({...prev,[name]:mapped}));
+        PLAYERS[name] = updated;
+        setProfileCache(prev => ({...prev, [name]: updated}));
+      }).catch(() => {});
+      return;
+    }
+
+    // Full fetch for players not in board cache (search results, etc.)
+    setProfileLoading(true);
+    try {
+      const [profRes, statsRes, anthroRes] = await Promise.all([
+        fetch(`${API_BASE}/player/${encodeURIComponent(name)}`).then(r=>r.ok?r.json():null),
+        fetch(`${API_BASE}/comps/stats/${encodeURIComponent(name)}`).then(r=>r.ok?r.json():null).catch(()=>null),
+        fetch(`${API_BASE}/comps/anthro/${encodeURIComponent(name)}`).then(r=>r.ok?r.json():null).catch(()=>null),
+      ]);
+      if (profRes?.profile) {
+        const mapped = mapProfile(profRes.profile);
+        if (statsRes?.comps) mapped.statComps = statsRes.comps.map(c => {
+          let sim = null;
+          if (c.similarity != null) {
+            const raw = Number(c.similarity);
+            if (raw > 100) sim = Math.max(0, Math.round(100 - raw / 5));
+            else if (raw > 1 && raw <= 100) sim = Math.round(raw);
+            else if (raw >= 0 && raw <= 1) sim = Math.round(raw * 100);
+            else sim = Math.max(0, Math.round(100 - Math.abs(raw) * 2));
+          }
+          return {
+            name:c.name, pos:c.position||c.pos, sim,
+            tier:c.tier||"", nba:!!c.made_nba, bpm:c.bpm, usg:c.usg, ts:c.ts,
+            astP:c.ast_p, toP:c.to_p, orbP:c.orb_p, drbP:c.drb_p,
+            stlP:c.stl_p, blkP:c.blk_p, ftr:c.ftr,
+            rimPct:c.rim_pct, tp:c.tp_pct, ft:c.ft_pct, dunkR:c.dunk_r,
+            ht:c.height||c.ht,
+            badges:c.badges?c.badges.split("|").filter(Boolean):[],
+          };
+        });
+        if (anthroRes?.comps) mapped.anthroComps = anthroRes.comps.map(c=>({
+          name:c.name, dist:c.distance, sim:Math.round(c.similarity||0),
+          ht:c.height||c.ht, wt:c.weight||c.wt, ws:c.wingspan||c.ws,
+          nba:!!c.made_nba, tier:c.tier||"",
+        }));
+        PLAYERS[name] = mapped;
+        setProfileCache(prev => ({...prev, [name]: mapped}));
       }
-    } catch(e){ console.error("Profile fetch failed:",e); }
+    } catch(e) { console.error("Profile fetch failed:", e); }
     setProfileLoading(false);
   };
 
@@ -2544,7 +2589,11 @@ export default function App() {
   },[search]);
 
   const p = sel ? (profileCache[sel] || PLAYERS[sel] || null) : null;
-  const pReady = p && p.pctl != null && (p.pts != null || p.usg != null || p.feel != null);
+  // pReady: full profile loaded — accept ppwa OR legacy pctl+stats signal
+  const pReady = p && (
+    (p.ppwa != null) ||
+    (p.pctl != null && (p.pts != null || p.usg != null || p.feel != null))
+  );
 
   return (
     <div className="min-h-screen" style={{background:"#080b12",fontFamily:"'Barlow',sans-serif",color:"#e5e7eb"}}>

@@ -1,16 +1,18 @@
 """
-ProspectTheory API — FastAPI backend serving precomputed player data.
+ProspectTheory API v2.0 — FastAPI backend serving precomputed player data.
 
 Uses compressed api_*.json files from Script 11.
 
 Endpoints:
-  GET /api/players/search?q=name       → Search players by name
-  GET /api/player/{name}               → Full player profile
-  GET /api/comps/stats/{name}          → Statistical comparisons
-  GET /api/comps/anthro/{name}         → Anthropometric comparisons
-  GET /api/tiers/{name}                → Tier probabilities
-  GET /api/players/top?n=50            → Top N by predicted PIE
-  GET /api/players/draft/{year}        → All players from a draft year
+  GET /api/years                        → Available draft years
+  GET /api/board?n=500&year=2026        → Big Board (full profiles, sorted by ppWA)
+  GET /api/players/search?q=name        → Search players by name
+  GET /api/player/{name}                → Full player profile
+  GET /api/comps/stats/{name}           → Statistical comparisons
+  GET /api/comps/anthro/{name}          → Anthropometric comparisons
+  GET /api/tiers/{name}                 → Tier probabilities
+  GET /api/players/top?n=50             → Top N by ppWA
+  GET /api/players/draft/{year}         → All players from a draft year
 
 Run:
   uvicorn main:app --host 0.0.0.0 --port 8000 --reload
@@ -58,6 +60,45 @@ _profiles = None
 _stat_comps = None
 _anthro_comps = None
 _search_index = None
+_years_cache = None   # sorted list of unique draft years
+
+
+def _get_years() -> list:
+    """Sorted unique draft years from profiles (cached)."""
+    global _years_cache
+    if _years_cache is None:
+        profiles = get_profiles()
+        years = sorted({v.get("yr") for v in profiles.values() if v.get("yr")}, reverse=True)
+        _years_cache = years
+    return _years_cache
+
+
+# Fields returned by /api/board per player — rich enough so front-end
+# does NOT need a second fetch for the board-visible columns.
+_BOARD_FIELDS = [
+    "name", "pos", "team", "yr", "source", "made_nba", "tier", "actual",
+    "age", "conf_tier", "conf", "ht", "wt", "wingspan",
+    # ppWA model v2
+    "ppwa", "pElite", "waFloor", "waCeiling", "waSigma",
+    "v2Tier", "v2TierProbs", "v2Conf", "posGroup",
+    # Legacy prediction fields (fallback)
+    "pred_mu", "pred_sigma", "pred_p_nba", "pred_tier",
+    # Tier probabilities
+    "prob_super", "prob_allstar", "prob_starter", "prob_role", "prob_repl", "prob_neg",
+    # Stats needed for pReady check and overview tab
+    "pctl_overall", "pctl", "bpm", "usg", "ts", "pts", "ast", "reb",
+    "ast_p", "to_p", "orb_p", "drb_p", "stl_p", "blk_p", "ftr",
+    "feel", "func_ath", "shoot_score", "def_score", "overall",
+    "self_creation", "creation_score",
+    "proj_3p", "proj_3pa", "proj_3par", "proj_ts", "proj_prior",
+    "archetype", "archetypes_all",
+    "career_path", "confidence", "ups",
+    # Badges (pipe-delimited strings)
+    "badges", "red_flags", "yellow_badges",
+    # Projection drivers
+    "projection_boosters", "projection_limiters",
+    "v2Boosters", "v2Limiters",
+]
 
 
 def load_json(filepath: Path):
@@ -323,6 +364,63 @@ async def get_tiers(name: str):
             "tier": profile.get("tier"),
             "peak_pie": profile.get("peak_pie"),
         },
+    }
+
+
+@app.get("/api/years")
+async def get_years():
+    """Available draft years, sorted descending. Returns latest year for default view."""
+    years = _get_years()
+    return {
+        "years": years,
+        "latest": years[0] if years else 2026,
+    }
+
+
+@app.get("/api/board")
+async def get_board(
+    n: int = Query(500, ge=1, le=2000),
+    year: Optional[int] = None,
+    position: Optional[str] = None,
+):
+    """
+    Big Board: top N players sorted by ppWA (or pred_mu fallback).
+    Returns rich profile data so the frontend does NOT need a second fetch.
+    """
+    profiles = get_profiles()
+    results = []
+
+    for name, p in profiles.items():
+        # Year filter
+        if year and p.get("yr") != year:
+            continue
+        # Position filter
+        if position and p.get("pos") != position:
+            continue
+        # Skip very-low-confidence entries
+        if p.get("confidence") == "very_low":
+            continue
+
+        # Build lightweight-but-rich board entry from selected fields
+        entry = {"name": name}
+        for field in _BOARD_FIELDS:
+            if field == "name":
+                continue
+            val = p.get(field)
+            if val is not None:
+                entry[field] = val
+
+        results.append(entry)
+
+    # Sort by ppWA → pred_mu → pred_p_nba
+    results.sort(key=lambda x: (
+        -(x.get("ppwa") or x.get("pred_mu") or 0),
+    ))
+
+    return {
+        "year": year,
+        "count": min(len(results), n),
+        "players": results[:n],
     }
 
 
