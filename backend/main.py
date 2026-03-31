@@ -31,7 +31,7 @@ from fastapi.responses import FileResponse
 app = FastAPI(
     title="ProspectTheory API",
     description="NBA Draft Intelligence — Player profiles, comparisons, and tier predictions",
-    version="1.0.0",
+    version="2.0.0",
 )
 
 app.add_middleware(
@@ -333,8 +333,9 @@ async def top_players(
     position: Optional[str] = None,
     nba_only: bool = False,
 ):
-    """Top N players by predicted PIE."""
-    results = []
+    """Top N players by ppWA (Projected Peak Wins Added)."""
+    profiles = get_profiles()
+    candidates = []
     for entry in get_search_index():
         if nba_only and not entry.get("nba"):
             continue
@@ -342,37 +343,43 @@ async def top_players(
             continue
         if year and entry.get("y") != year:
             continue
-        results.append({
+        p = profiles.get(entry.get("n"), {})
+        candidates.append({
             "name": entry.get("n"),
             "team": entry.get("t"),
             "position": entry.get("p"),
             "year": entry.get("y"),
             "made_nba": entry.get("nba"),
-            "tier": entry.get("tier"),
+            "tier": p.get("v2Tier") or entry.get("tier"),
+            "ppwa": p.get("ppwa"),
+            "pElite": p.get("pElite"),
             "pred_mu": entry.get("mu"),
             "pred_p_nba": entry.get("pn"),
         })
-        if len(results) >= n:
-            break
-    return {"count": len(results), "players": results}
+    # ppWA as primary sort (fallback: pred_mu)
+    candidates.sort(key=lambda x: (-(x.get("ppwa") or x.get("pred_mu") or 0)))
+    return {"count": min(len(candidates), n), "players": candidates[:n]}
 
 
 @app.get("/api/players/draft/{year}")
 async def draft_class(year: int):
     """All players from a specific draft year."""
+    profiles = get_profiles()
     results = []
     for entry in get_search_index():
         if entry.get("y") == year:
+            p = profiles.get(entry.get("n"), {})
             results.append({
                 "name": entry.get("n"),
                 "team": entry.get("t"),
                 "position": entry.get("p"),
                 "made_nba": entry.get("nba"),
-                "tier": entry.get("tier"),
+                "tier": p.get("v2Tier") or entry.get("tier"),
+                "ppwa": p.get("ppwa"),
                 "pred_mu": entry.get("mu"),
                 "pred_p_nba": entry.get("pn"),
             })
-    results.sort(key=lambda x: (-(x.get("pred_p_nba") or 0), -(x.get("pred_mu") or 0)))
+    results.sort(key=lambda x: (-(x.get("ppwa") or x.get("pred_mu") or 0)))
     return {"year": year, "count": len(results), "players": results}
 
 

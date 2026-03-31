@@ -128,9 +128,9 @@ const METHODS = {
     desc: "Usage-role-adjusted Four Factors measuring possession efficiency. Players bucketed by usage (Primary ≥28%, Secondary ≥22%, Finisher ≥15%, LowUsage <15%). Each factor z-scored within role × season. NPV > +2.0 = 'Elite Floor Raiser', +0.5–2.0 = 'Winning Piece', −0.5–0.5 = 'Role Dependent', < −1.0 = 'High Maintenance'. This is NOT a talent rating — it's an efficiency index measuring how 'expensive' it is for a coach to keep this player on the floor.",
   },
   monteCarlo: {
-    name: "WAR Projection (LightGBM)",
-    formula: "WAR = (projected_WA − replacement_WA), where WA = 30% PIE model + 70% xRAPM model ensemble",
-    desc: "LightGBM gradient boosting (depth=3, 400 trees, lr=0.03) trained on ~980 prospects with known NBA outcomes. 28 ablation-validated features: age, wingspan, BPM, PER, DRB%, AST%, conference strength, consensus signal, basketball IQ composites, and position-specific interactions. Validated at r≈0.36 (5-fold CV). Conf adjustment: 0.80+0.20×league_strength (asymmetric). WAR-based tiers: Superstar ≥18, All-Star ≥12, Starter ≥5, Roleplayer ≥1.",
+    name: "ppWA Projection Model (v2)",
+    formula: "ppWA = P(Elite) × E[WA | Elite] + (1 − P(Elite)) × WA_reg",
+    desc: "Two-component mixture model. WA_reg: position-stratified ElasticNet regression (L1+L2 regularization) trained on 1,784 prospects (2010–2016) with known NBA outcomes. Elite Detector: calibrated Logistic Regression predicting P(WA ≥ 10.0 = All-Star+). ppWA blends both signals — if P(Elite) is high, the player is pushed toward the expected WA of elite players (22.2 WA). Temporal CV: train 2010–2016, validate 2017–2019 (no future leakage). Validated: Spearman ρ = 0.46 (vs craftednba.com benchmark 0.373), MAR = 12.0 per class. WA tiers: Superstar ≥25, All-Star ≥10, Starter ≥4, Role Player ≥1, Replacement ≥0.",
   },
   projectionDrivers: {
     name: "Projection Drivers (SHAP Decomposition)",
@@ -649,9 +649,18 @@ function mapProfile(d) {
     mu:d.pred_mu??d.mu??d.projected_pie??d.pred_mu_pie??d.aspm_adj??d.aspm,
     sigma:d.pred_sigma??d.sigma??d.mc_sigma??d.volatility,
     pNba:d.pred_p_nba??d.pNba??d.pn,
-    predTier:d.pred_tier??d.predicted_tier??d.tier,
+    predTier: d.v2Tier ?? d.pred_tier ?? d.predicted_tier ?? d.tier,
     ups: d.ups ?? d.ups_raw,
-    war: d.war ?? d.projected_war ?? d.war_score ?? null,
+    // ppWA = Projected Peak Wins Added (Model v2: ElasticNet + Elite Detector)
+    ppwa: d.ppwa ?? null,
+    pElite: d.pElite ?? null,
+    waFloor: d.waFloor ?? null,
+    waCeiling: d.waCeiling ?? null,
+    waSigma: d.waSigma ?? d.v2_sigma ?? null,
+    v2Conf: d.v2Conf ?? null,
+    v2Boosters: d.v2Boosters ?? null,
+    v2Limiters: d.v2Limiters ?? null,
+    war: d.ppwa ?? d.war ?? d.projected_war ?? d.war_score ?? null,
     humble: d.humble ?? d.f_humble ?? d.hmb ?? null,
     aspm: d.aspm ?? d.aspm_adj,
     production: d.production ?? d.prod,
@@ -1278,7 +1287,12 @@ function ProjectionTab({p}) {
   const tiers = p.tiers || {};
   const tierOrder = ["Superstar","All-Star","Starter","Role Player","Replacement","Out"];
   const tierData = tierOrder.map(t=>({name:t.replace("Role Player","Role"),pct:tiers[t]||0,fill:TC[t]||"#374151"}));
-  const war = p.war;
+  // ppWA (v2 model) — primary metric; fallback to legacy war
+  const ppwa = p.ppwa;
+  const pElite = p.pElite;
+  const waFloor = p.waFloor;
+  const waCeiling = p.waCeiling;
+  const war = ppwa ?? p.war;
   const sigma = p.sigma ?? p.volatility ?? 0;
   const predTier = p.predTier || "—";
   const bestTierPct = Math.max(...tierOrder.map(t => tiers[t]||0));
@@ -1293,24 +1307,45 @@ function ProjectionTab({p}) {
     {label:"USG%", val:p.usg, desc:"Usage rate — production volume signal", color:p.usg>25?"#22c55e":p.usg>20?"#86efac":"#fbbf24"},
   ].filter(d => d.val != null);
 
-  // WAR color
-  const warColor = war >= 15 ? "#fbbf24" : war >= 10 ? "#f97316" : war >= 5 ? "#3b82f6" : war >= 2 ? "#06b6d4" : war > 0 ? "#8b5cf6" : "#6b7280";
+  // ppWA color scale (Wins Added thresholds)
+  const warColor = war >= 25 ? "#fbbf24" : war >= 10 ? "#f97316" : war >= 4 ? "#3b82f6" : war >= 1 ? "#06b6d4" : war > 0 ? "#8b5cf6" : "#6b7280";
 
-  // Confidence context
-  const confLabel = p.confidence === "full" ? "Full Sample" : p.confidence === "medium" ? "Limited Sample" : "Insufficient";
-  const confColor = p.confidence === "full" ? "#22c55e" : p.confidence === "medium" ? "#fbbf24" : "#ef4444";
+  // Confidence (v2Conf from model, fallback to legacy)
+  const rawConf = p.v2Conf || p.confidence;
+  const confLabel = rawConf === "High" || rawConf === "full" ? "High" : rawConf === "Medium" || rawConf === "medium" ? "Medium" : rawConf === "Low" || rawConf === "insufficient" ? "Low" : "—";
+  const confColor = confLabel === "High" ? "#22c55e" : confLabel === "Medium" ? "#fbbf24" : "#ef4444";
 
   return (
     <div className="space-y-5">
-      {/* ═══ WAR PROJECTION — Hero Card ═══ */}
+      {/* ═══ ppWA PROJECTION — Hero Card ═══ */}
       <div className="rounded-2xl p-6 text-center relative overflow-hidden" style={{background:"linear-gradient(135deg,#0d1117 0%,#111827 100%)",border:`1px solid ${warColor}33`}}>
         <div className="absolute top-0 right-0 w-48 h-48 opacity-5 blur-3xl rounded-full" style={{background:`radial-gradient(circle,${warColor},transparent)`}}/>
         <div className="relative">
-          <Tip wide content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>Projected Wins Above Replacement</div><div style={{color:"#cbd5e1"}}>WAR = (Projected Peak PIE − Replacement PIE) × 400. Based on LightGBM model trained on 1,419 NCAA→NBA outcomes. Peak PIE = best 3-year rolling window of NBA minutes-weighted PIE. σ = out-of-fold residual standard deviation by position.</div></div>}>
+          <Tip wide content={<div>
+            <div className="font-bold mb-2" style={{color:"#f97316"}}>ppWA — Projected Peak Wins Added</div>
+            <div className="mb-2" style={{color:"#cbd5e1"}}>
+              <strong>Formula:</strong> ppWA = P(Elite) × E[WA|Elite] + (1−P(Elite)) × WA_reg
+            </div>
+            <div className="mb-2" style={{color:"#9ca3af",fontSize:"0.85em"}}>
+              Two-component mixture: a regularized regression (WA_reg) combined with a calibrated Elite Detector that estimates the probability of reaching All-Star level (WA ≥ 10). If elite probability is high, the projection is pushed toward the average WA of elite players (22.2 WA).
+            </div>
+            <div style={{color:"#6b7280",fontSize:"0.8em"}}>
+              Trained on 1,784 prospects (2010–2016) · Validated on 2017–2019 holdout · Spearman ρ = 0.46 (craftednba.com baseline: 0.373) · WA tiers: Superstar ≥25, All-Star ≥10, Starter ≥4, Role ≥1
+            </div>
+          </div>}>
             <div className="cursor-help">
-              <div className="text-xs uppercase tracking-widest mb-2" style={{color:"#6b7280"}}>Projected Career WAR <span style={{color:"#475569"}}>ⓘ</span></div>
+              <div className="text-xs uppercase tracking-widest mb-2" style={{color:"#6b7280"}}>Projected Peak Wins Added <span style={{color:"#475569"}}>ⓘ</span></div>
               <div className="text-6xl font-bold mb-1" style={{color:warColor,fontFamily:"'Oswald',sans-serif"}}>{war != null ? fmt(war,1) : "—"}</div>
-              {sigma > 0 && <div className="text-lg" style={{color:"#4b5563"}}>± {fmt(sigma,2)} σ <span className="text-xs">[{war!=null?fmt(war-sigma*5,1):"?"} – {war!=null?fmt(Number(war)+sigma*5,1):"?"}]</span></div>}
+              {(waFloor != null && waCeiling != null) && (
+                <div className="text-sm mt-1" style={{color:"#4b5563"}}>
+                  Range: <span style={{color:"#6b7280"}}>{fmt(waFloor,1)}</span> – <span style={{color:"#9ca3af"}}>{fmt(waCeiling,1)}</span> wins
+                </div>
+              )}
+              {pElite != null && (
+                <div className="mt-2 text-sm font-semibold" style={{color: pElite >= 0.5 ? "#f97316" : pElite >= 0.25 ? "#fbbf24" : "#6b7280"}}>
+                  P(All-Star+): {(pElite * 100).toFixed(0)}%
+                </div>
+              )}
             </div>
           </Tip>
           <div className="flex justify-center gap-6 mt-4">
@@ -2123,7 +2158,7 @@ function CompsTab({p}) {
 // ═══════════════════════════════════════════════════════════
 function MethodologyTab() {
   const sections = [
-    {cat:"WAR Projection Model",items:["monteCarlo","posClassification"],desc:"Core engine: LightGBM gradient boosting trained on 1,181 NCAA+International prospects with known NBA outcomes (PIE peak over best 3 consecutive seasons, min 200 minutes/year). 32 features including age, anthropometrics, production, efficiency, trajectory slopes, and league strength. Validated at r=0.41 (5-fold CV, honest out-of-fold). WAR = (projected_PIE − median_PIE) × 400. Tier thresholds: Superstar ≥18 WAR, All-Star ≥12, Starter ≥5, Roleplayer ≥1."},
+    {cat:"ppWA Projection Model (v2)",items:["monteCarlo","posClassification"],desc:"Core engine: position-stratified ElasticNet regression + calibrated Elite Detector, trained on 1,784 NCAA and international prospects (draft classes 2010–2016) with verified NBA outcomes. Target variable: Peak Wins Added — best 3-consecutive-season window in first 8 NBA years (min 200 minutes/season). Features: 8–12 theoretically grounded variables per position group (Playmaker / Wing / Big), including age, BPM percentile, BPM trajectory, conference strength, free-throw rate, athleticism score, and position-specific shooting/playmaking signals. Output: ppWA = Projected Peak Wins Added (a single, interpretable number: 'this player projects to add X wins above replacement at his peak'). Validated on holdout classes 2017–2019: Spearman ρ = 0.460 (craftednba.com benchmark: 0.373), MAR = 12.0 per class."},
     {cat:"International Adjustments",items:[],desc:"International players receive three adjustments: (1) League Strength via empirical bridge-player ratios (2,655 players who played both intl and NBA). Euroleague=1.40, ACB=1.39, BBL=1.18 (NCAA Power=1.0 anchor). (2) Liga-BPM-Scaler: Raw BPM proxy (PER+eDiff) is multiplied by a league-specific scaler (Euroleague ×2.1, ACB ×1.9, NBL ×1.65, etc.) to translate to NCAA-equivalent BPM before feature engineering. (3) Conf-adj post-hoc with translatable-USG-aware caps for strong leagues."},
     {cat:"The 5 Pillars (DNA Scores)",items:["feel","shootScore","defScore","funcAth","selfCreation","overall"],desc:"Position-adjusted percentile scores (0–100) capturing the fundamental dimensions of prospect evaluation. Each pillar uses era-adjusted percentiles computed against ~34k college + ~9k international players since 2008. Box Creation (Ben Taylor method) measures total offensive creation: Scoring Creation (USG×TS) + Assist Creation (AST%×teammate possessions). Works identically for NCAA and international players."},
     {cat:"Shooting Projection",items:["projNba3p","projNba3pa","projNba3par","touchPrior"],desc:"Bayesian Beta-Binomial model for NBA 3P shooting translation. Prior: FT%-based 'motor touch' (strongest single predictor of NBA shooting per Berger 2023). κ=200 pseudo-attempts means low-volume college shooters regress heavily toward their FT% prior. For players without midrange data (internationals, pre-2010), a simplified FT%-only prior is used with higher FT% weighting."},
@@ -2137,14 +2172,14 @@ function MethodologyTab() {
     <div className="space-y-6">
       <Sec icon="📖" title="Methodology & Model Documentation" sub="Complete documentation of all computed metrics, formulas, and their statistical foundations.">
         <div className="text-sm mb-3" style={{color:"#9ca3af"}}>
-          ProspectTheory uses a LightGBM ensemble model trained on 1,181 NCAA and international prospects with known NBA career outcomes. The model projects Peak PIE (Player Impact Estimate) which is converted to WAR (Wins Above Replacement) for ranking and tier assignment. All scores are position-aware and era-adjusted.
+          ProspectTheory v2 uses <strong style={{color:"#e5e7eb"}}>ppWA (Projected Peak Wins Added)</strong> — a single, interpretable metric built from a two-component mixture model: position-stratified ElasticNet regression combined with a calibrated Elite Detector. Trained on 1,784 prospects (2010–2016) with verified NBA outcomes. Target: best 3-consecutive-season peak in first 8 NBA years. All scores are position-aware (Playmaker / Wing / Big) and era-adjusted.
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
           {[
-            ["r = 0.41","5-fold CV (honest)"],
-            ["r = 0.60","vs actual xRAPM"],
-            ["32","Model Features"],
-            ["40,633","Total Prospects"],
+            ["ρ = 0.46","Spearman (holdout)"],
+            ["0.373","craftednba.com baseline"],
+            ["8–12","Features per position"],
+            ["1,784","Training prospects"],
           ].map(([val,label])=>(
             <div key={label} className="p-3 rounded-lg text-center" style={{background:"#0d1117"}}>
               <div className="text-lg font-bold" style={{color:"#f97316",fontFamily:"'Oswald',sans-serif"}}>{val}</div>
@@ -2153,7 +2188,7 @@ function MethodologyTab() {
           ))}
         </div>
         <div className="text-xs" style={{color:"#475569"}}>
-          Top features by importance: Age (118), BPM (51), PER (41), eFG% (36), DRB% (35), ORB% (34), 3P% (34), PPG (34), Wingspan (33).
+          Key features: Age at draft day · BPM percentile (global) · BPM trajectory slope · Conference strength · Free-throw rate · Functional athleticism · Position-specific: AST/TOV ratio (Playmaker), 3P% (Wing), BLK% (Big). Model validated on holdout 2017–2019 using temporal split (no future leakage).
         </div>
       </Sec>
       {sections.map(({cat,items,desc})=>(
