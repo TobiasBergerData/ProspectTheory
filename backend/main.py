@@ -17,6 +17,7 @@ Endpoints:
 Run:
   uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 """
+import gzip
 import json
 import os
 from pathlib import Path
@@ -102,12 +103,19 @@ _BOARD_FIELDS = [
 
 
 def load_json(filepath: Path):
-    """Load a JSON file, return empty dict/list if missing."""
-    if not filepath.exists():
+    """Load a JSON file (.json or .json.gz). Returns empty dict if missing."""
+    gz_path = Path(str(filepath) + ".gz") if not str(filepath).endswith(".gz") else filepath
+    json_path = filepath if not str(filepath).endswith(".gz") else Path(str(filepath)[:-3])
+
+    if gz_path.exists():
+        with gzip.open(gz_path, "rt", encoding="utf-8") as f:
+            return json.load(f)
+    elif json_path.exists():
+        with open(json_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    else:
         print(f"⚠️  Not found: {filepath}")
         return {}
-    with open(filepath, "r", encoding="utf-8") as f:
-        return json.load(f)
 
 
 def get_profiles() -> dict:

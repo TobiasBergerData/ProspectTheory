@@ -149,8 +149,8 @@ const METHODS = {
 // ═══════════════════════════════════════════════════════════
 const BADGE_DEFS = {
   // ── GREEN — Elite NBA-scalable skills ──
-  "Elite Shooting":         { cat:"green", rule:"3P%>40 & 3PA/40>6.0 & FT%>85",        desc:"Top-tier shooting across both lines + elite volume. Most translatable skill in modern NBA. Berger (2023): FT% is the #1 predictor." },
-  "Floor General":          { cat:"green", rule:"(G) AST/TO>2.2 & AST%>25",            desc:"Elite decision-making with vision. Creates for others without turnovers — the rarest guard skill." },
+  "Elite Shooting":         { cat:"green", rule:"3P%>40 & 3P_Freq>30% & FT%>85",       desc:"Top-tier shooting across both lines + elite volume. Most translatable skill in modern NBA. Berger (2023): FT% is the #1 predictor." },
+  "Floor General":          { cat:"green", rule:"(G/W) AST/TO>2.2 & AST%>25",          desc:"Elite decision-making with vision. Creates for others without turnovers — the rarest guard/wing skill." },
   "Two-Way Wing":           { cat:"green", rule:"(W) 3P%>35 & (STL%>2.2 OR DBPM>2.0)",desc:"Shooting + perimeter defense. Most coveted role player archetype in modern NBA. Immediate starter value." },
   "Modern Rim Anchor":      { cat:"green", rule:"(B) BLK%>4.0 & DBPM>2.5",            desc:"Elite rim protection with overall defensive impact. Anchors a top-10 defense by itself." },
   "Passing Hub":              { cat:"green", rule:"(B) AST%>18 & AST/TO>1.2",            desc:"Playmaking big — Jokic/Draymond archetype. Creates from the post/elbow with low turnovers. Extremely rare." },
@@ -187,7 +187,7 @@ const BADGE_DEFS = {
   "Interior Engine":        { cat:"yellow", rule:"(W/B) Rim_Proxy>80th & AST%>15",     desc:"Rim pressure + playmaking from the paint. If shooting develops, this becomes a franchise cornerstone. Fallback: FTr>45 & AST%>15." },
 
   // ── RED — Warning signals (Bust Signals) ──
-  "Spacing Killer":         { cat:"red",   rule:"(G/W) 3P%<30 & 3PA/40<3.5",           desc:"Guards/wings who don't threaten from three destroy NBA spacing. Defenders sag off, clogging paint for teammates." },
+  "Spacing Killer":         { cat:"red",   rule:"(G/W) 3P%<30 & 3P_Freq<18%",           desc:"Guards/wings who don't threaten from three destroy NBA spacing. Defenders sag off, clogging paint for teammates." },
   "Efficiency Trap":        { cat:"red",   rule:"USG%>26 & TS%<52",                    desc:"High volume, low efficiency. Scoring a lot but hurting the team. Usage will drop in NBA — production collapses." },
   "Empty Calorie Scorer":   { cat:"red",   rule:"USG%>28 & TS%<52 & AST%<15",          desc:"Bust signal: Inefficient ball-dominant scorer who doesn't create for others. Volume without value — the most dangerous profile in the draft." },
   "One-Way Project":        { cat:"red",   rule:"OBPM>3.0 & DBPM<-1.5 & STL%<1.0",    desc:"Offensive hype, defensive liability. All-offense players get benched in playoff rotations when coaching tightens up." },
@@ -527,7 +527,7 @@ function mapProfile(d) {
   // (e.g., "Floor General" for a Big, "Rim Protector" for a Playmaker)
   // Filter them through position restrictions before including
   const POS_RESTRICTED_GREEN = {
-    "Floor General": ["Playmaker"],       // Only guards/playmakers
+    "Floor General": ["Playmaker","Wing"], // Guards + wings (computeBadges: isG || isW)
     "Passing Hub": ["Big"],                 // Only bigs
     "Two-Way Wing": ["Wing","Playmaker"], // Not bigs
     "Rim Protector": ["Big","Wing"],      // Not playmakers
@@ -557,17 +557,17 @@ function mapProfile(d) {
     const _astTov = tmpP.astTov ?? 1.5;
     const _selfCreation = d.self_creation ?? d.self_creation_idx ?? d.self_creation_pct ?? 0;
     if (badge === "Passing Hub" && !(_astP > 18 && _astTov > 1.2)) return false;
-    if (badge === "Floor General" && !(_astTov > 2.0 && _astP > 22)) return false;
+    if (badge === "Floor General" && !(_astTov > 2.2 && _astP > 25)) return false; // matches computeBadges thresholds
     if (badge === "Self-Creator" && !(_selfCreation > 70)) return false;
     if (badge === "Tunnel Vision" && !(tmpP.astTov != null && _astTov < 0.8)) return false;
     return true;
   };
   const serverGreen = filterByPos(
-    badgeList.filter(b => BADGE_DEFS[b]?.cat === "green" || (!BADGE_DEFS[b])),
+    badgeList.filter(b => BADGE_DEFS[b]?.cat === "green"), // unknown badges dropped
     POS_RESTRICTED_GREEN, resolvedPos
   ).filter(statValidate);
   const serverRed = filterByPos(
-    redList.filter(b => BADGE_DEFS[b]?.cat === "red" || (!BADGE_DEFS[b])),
+    redList.filter(b => BADGE_DEFS[b]?.cat === "red"),     // unknown badges dropped
     POS_RESTRICTED_RED, resolvedPos
   ).filter(statValidate);
   const allGreen = [...new Set([...serverGreen, ...computed.green])];
