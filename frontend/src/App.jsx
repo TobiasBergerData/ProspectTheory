@@ -614,7 +614,7 @@ function mapProfile(d) {
     blkP: normRate(d.blk_p ?? d.blkP),
     ft: normShootPct(d.ft_pct ?? d.ft),
     tp: normShootPct(d.tp_pct ?? d.tp),
-    ftr: normRate(d.ftr ?? d.ft_rate),
+    ftr: normRate(((v) => { const n = Number(v); return (n != null && !isNaN(n) && n > 0 && n < 2) ? n * 100 : n; })(d.ftr ?? d.ft_rate)),
     rimF: d.rim_f ?? d.rim_freq ?? d.rimF ?? d.rim_fga_pct, rimPct: d.rim_pct ?? d.rimPct ?? d.rim_fg_pct,
     midF: d.mid_f ?? d.mid_freq ?? d.midF ?? d.mid_fga_pct, midPct: d.mid_pct ?? d.midPct ?? d.mid_fg_pct,
     threeF: d.three_f ?? d.three_freq ?? d.threeF ?? d.three_fga_pct, threePar: d.three_par ?? d.threePar,
