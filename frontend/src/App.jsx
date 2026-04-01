@@ -687,7 +687,7 @@ function mapProfile(d) {
     // Session 9: per-player feature contribution drivers
     projectionBoosters: d.projection_boosters ?? d.proj_boost ?? "",
     projectionLimiters: d.projection_limiters ?? d.proj_limit ?? "",
-    statComps:[], anthroComps:[], seasonLines: d.seasonLines || [],
+    statComps:[], anthroComps:[], hasCombine: null, seasonLines: d.seasonLines || [],
     comb: d.combine || null,
     posPlaymaker:d.pos_playmaker, posWing:d.pos_wing, posBig:d.pos_big,
   };
@@ -2112,9 +2112,24 @@ function BodyTab({p}) {
             })}
           </div>
         ) : (
-          <div className="text-center py-8 rounded-lg" style={{background:"#0d1117",color:"#6b7280"}}>
-            <div className="text-lg mb-1">No anthropometric data available</div>
-            <div className="text-xs">Physical comps require height, weight, or wingspan data in the database.</div>
+          <div className="text-center py-8 rounded-lg" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+            {p.hasCombine === false ? (
+              <>
+                <div className="text-2xl mb-2">📋</div>
+                <div className="text-base font-semibold mb-1" style={{color:"#f97316"}}>No NBA Combine Attendance</div>
+                <div className="text-sm mb-2" style={{color:"#9ca3af"}}>
+                  This prospect has not attended the NBA Combine. Physical comps are only shown for players with verified combine measurements.
+                </div>
+                <div className="text-xs px-4" style={{color:"#6b7280"}}>
+                  Combine attendance itself is a signal — top prospects are typically invited. Use the sliders above to estimate body type scenarios.
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-lg mb-1" style={{color:"#6b7280"}}>No anthropometric data available</div>
+                <div className="text-xs" style={{color:"#4b5563"}}>Physical comps require height, weight, or wingspan data in the database.</div>
+              </>
+            )}
           </div>
         )}
       </Sec>
@@ -2638,11 +2653,14 @@ export default function App() {
             badges:c.badges?c.badges.split("|").filter(Boolean):[],
           };
         });
-        if (anthroRes?.comps) updated.anthroComps = anthroRes.comps.map(c=>({
-          name:c.name, dist:c.distance, sim:Math.round(c.similarity||0),
-          ht:c.height||c.ht, wt:c.weight||c.wt, ws:c.wingspan||c.ws,
-          nba:!!c.made_nba, tier:c.tier||"",
-        }));
+        if (anthroRes) {
+          updated.hasCombine = anthroRes.has_combine ?? (anthroRes.comps?.length > 0);
+          updated.anthroComps = (anthroRes.comps||[]).map(c=>({
+            name:c.name, dist:c.distance, sim:Math.round(c.similarity||0),
+            ht:c.height||c.ht, wt:c.weight||c.wt, ws:c.wingspan||c.ws,
+            nba:!!c.made_nba, tier:c.tier||"",
+          }));
+        }
         PLAYERS[name] = updated;
         setProfileCache(prev => ({...prev, [name]: updated}));
       }).catch(() => {});
@@ -2678,11 +2696,14 @@ export default function App() {
             badges:c.badges?c.badges.split("|").filter(Boolean):[],
           };
         });
-        if (anthroRes?.comps) mapped.anthroComps = anthroRes.comps.map(c=>({
-          name:c.name, dist:c.distance, sim:Math.round(c.similarity||0),
-          ht:c.height||c.ht, wt:c.weight||c.wt, ws:c.wingspan||c.ws,
-          nba:!!c.made_nba, tier:c.tier||"",
-        }));
+        if (anthroRes) {
+          mapped.hasCombine = anthroRes.has_combine ?? (anthroRes.comps?.length > 0);
+          mapped.anthroComps = (anthroRes.comps||[]).map(c=>({
+            name:c.name, dist:c.distance, sim:Math.round(c.similarity||0),
+            ht:c.height||c.ht, wt:c.weight||c.wt, ws:c.wingspan||c.ws,
+            nba:!!c.made_nba, tier:c.tier||"",
+          }));
+        }
         PLAYERS[name] = mapped;
         setProfileCache(prev => ({...prev, [name]: mapped}));
       }
