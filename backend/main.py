@@ -302,10 +302,11 @@ async def get_statistical_comps(
         similarity = max(0, min(100, round((_S_MAX - raw_s) / _S_RANGE * 100)))
         enriched.append({
             "name": cname,
-            "position": c.get("p", cp.get("pos", "")),
+            # Profile pos is authoritative; comp p-field is a fallback
+            "position": cp.get("pos") or c.get("p") or "",
             "similarity": similarity,
-            "made_nba": c.get("nba", False),
-            "tier": c.get("tier", cp.get("v2Tier", cp.get("tier", ""))),
+            "made_nba": c.get("nba", False) or bool(cp.get("made_nba")),
+            "tier": cp.get("v2Tier") or c.get("tier") or cp.get("tier") or "",
             # Key stats from profile for comparison table
             "bpm": cp.get("bpm"),
             "usg": cp.get("usg"),
@@ -350,27 +351,62 @@ async def get_anthro_comps(
     comp_list = entry.get("c", [])
     measurements = entry.get("m", {})
 
-    if nba_only:
-        comp_list = [c for c in comp_list if c.get("nba")]
-
     # Normalize measurements: combine_* keys → height/weight/wingspan
     m_ht = measurements.get("height") or measurements.get("combine_hgt_no_shoes") or profile.get("ht")
     m_wt = measurements.get("weight") or measurements.get("combine_wgt") or profile.get("wt")
     m_ws = measurements.get("wingspan") or measurements.get("combine_wngspn")
     m_ws_delta = measurements.get("combine_wingspan_delta") or measurements.get("wingspan_delta")
 
-    # If adjustments, recalculate distances using adjusted measurements
-    if weight_adj != 0 or wingspan_adj != 0:
+    # Live-search fallback: if no pre-computed comps (e.g. 2026 prospects without combine data),
+    # compute on-the-fly from all profiles with height data.
+    if not comp_list:
+        base_ht = m_ht or 78
+        base_wt = (m_wt or 200) + weight_adj
+        # Estimate wingspan from position median ape index when unmeasured
+        pos = profile.get("pos", "Wing")
+        ape = 1.04 if pos == "Playmaker" else 1.06 if pos == "Big" else 1.05
+        base_ws = (m_ws or round(base_ht * ape, 1)) + wingspan_adj
+
+        all_profiles = get_profiles()
+        live = []
+        for pname, pp in all_profiles.items():
+            if pname == canonical:
+                continue
+            pht = pp.get("ht")
+            if not pht:
+                continue
+            # Pre-filter: height within ±5" to keep iteration fast
+            if abs(pht - base_ht) > 5:
+                continue
+            pwt = pp.get("wt")
+            ppos = pp.get("pos", "Wing")
+            pape = 1.04 if ppos == "Playmaker" else 1.06 if ppos == "Big" else 1.05
+            pws = pp.get("ws") or round(pht * pape, 1)
+            ht_d = abs(pht - base_ht)
+            wt_d = abs((pwt or base_wt) - base_wt) * 0.5
+            ws_d = abs(pws - base_ws) * 1.5
+            dist = (ht_d**2 + wt_d**2 + ws_d**2) ** 0.5
+            live.append({
+                "n": pname, "_dist": dist, "nba": bool(pp.get("made_nba")),
+                "tier": pp.get("v2Tier") or pp.get("tier") or "",
+                "ht": pht, "wt": pwt, "ws": pws,
+            })
+        live.sort(key=lambda c: c["_dist"])
+        comp_list = live[:50]  # Keep top 50 so nba_only filter still has enough candidates
+
+    if nba_only:
+        comp_list = [c for c in comp_list if c.get("nba")]
+
+    # If adjustments on pre-computed comps (live comps already used adjusted base), recalculate
+    if weight_adj != 0 or wingspan_adj != 0 and measurements:
         base_ht = m_ht or 78
         base_wt = (m_wt or 200) + weight_adj
         base_ws = (m_ws or 0) + wingspan_adj
-
         for c in comp_list:
             ht_d = abs((c.get("ht") or base_ht) - base_ht)
             wt_d = abs((c.get("wt") or base_wt) - base_wt) * 0.5
             ws_d = abs((c.get("ws") or base_ws) - base_ws) * 1.5
             c["_dist"] = (ht_d**2 + wt_d**2 + ws_d**2) ** 0.5
-
         comp_list.sort(key=lambda c: c.get("_dist", 999))
 
     # Enrich comp measurements from profiles; normalize field names
@@ -470,6 +506,11 @@ async def get_board(
             continue
         # Skip very-low-confidence entries
         if p.get("confidence") == "very_low":
+            continue
+        # Age filter: exclude non-prospects (age > 24.5 at time of draft)
+        # Catches 28-34 year-old veterans erroneously included in prospect lists
+        age = p.get("age")
+        if age is not None and age > 24.5:
             continue
 
         # Build lightweight-but-rich board entry from selected fields

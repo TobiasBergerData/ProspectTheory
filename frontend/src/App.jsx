@@ -2128,7 +2128,18 @@ function BodyTab({p}) {
 function CompsTab({p}) {
   const [nbaOnly, setNbaOnly] = useState(false);
   const allComps = p.statComps || [];
-  const fStat = nbaOnly ? allComps.filter(c => c.nba) : allComps;
+  const nbaCompsOnly = allComps.filter(c => c.nba);
+  // When NBA-only is active but there are no NBA comps (e.g. 2026 prospects),
+  // fall back to all comps sorted with highest-tier players first
+  const fStat = nbaOnly
+    ? (nbaCompsOnly.length > 0
+        ? nbaCompsOnly
+        : [...allComps].sort((a,b) => {
+            const tr = {"All-Star":5,"Starter":4,"Role Player":3,"Replacement":2,"Negative":1};
+            return (tr[b.tier]??0) - (tr[a.tier]??0);
+          }))
+    : allComps;
+  const nbaFallback = nbaOnly && nbaCompsOnly.length === 0 && allComps.length > 0;
 
   // Similarity values are pre-normalized in selectPlayer (0-100%)
   const normSim = (raw) => {
@@ -2157,12 +2168,18 @@ function CompsTab({p}) {
         </Tip>
         <button onClick={() => setNbaOnly(!nbaOnly)} className="px-4 py-2 rounded-lg text-sm font-semibold transition-all"
           style={{background: nbaOnly ? "#f97316" : "#1f2937", color: nbaOnly ? "#000" : "#9ca3af"}}>
-          {nbaOnly ? "★ NBA Stars Only" : "All Prospects"}
+          {nbaOnly ? "★ NBA Players Only" : "All Prospects"}
         </button>
       </div>
 
+      {nbaFallback && (
+        <div className="text-xs px-3 py-2 rounded-lg" style={{background:"#1f293744",color:"#fbbf24"}}>
+          ⚠ No NBA players in comps for this prospect (2026 class). Showing all comps sorted by projected tier instead.
+        </div>
+      )}
+
       {/* ── STATISTICAL COMPS TABLE ── */}
-      <Sec icon="📊" title="Statistical Comps" sub="Nearest-neighbor matching on era-adjusted percentiles. Weights: Position match (30%), Age proximity (20%), Production profile (25%), Efficiency (25%). 'Reached Tier' shows actual NBA career outcome.">
+      <Sec icon="📊" title="Statistical Comps" sub="Nearest-neighbor matching on era-adjusted percentiles. Weights: Position match (30%), Age proximity (20%), Production profile (25%), Efficiency (25%). 'Reached Tier' shows actual NBA career outcome or v2 tier projection.">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -2389,6 +2406,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
       allstar: (a,b) => (b.tiers?.["All-Star"] ?? 0) - (a.tiers?.["All-Star"] ?? 0),
       starter: (a,b) => (b.tiers?.Starter ?? 0) - (a.tiers?.Starter ?? 0),
       role:    (a,b) => (b.tiers?.["Role Player"] ?? 0) - (a.tiers?.["Role Player"] ?? 0),
+      repl:    (a,b) => (b.tiers?.Replacement ?? 0) - (a.tiers?.Replacement ?? 0),
       tier:    (a,b) => (tierRank[b.predTier]??0) - (tierRank[a.predTier]??0),
     };
     list = [...list].sort(sortFn[sortBy] || sortFn.war);
@@ -2453,7 +2471,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
         </div>
         {/* Sort buttons */}
         <div className="flex gap-1">
-          {[["war","ppWA"],["pelite","P(Elite)"],["age","Age"],["bpm","BPM"]].map(([k,l])=>(
+          {[["war","ppWA"],["age","Age"],["bpm","BPM"]].map(([k,l])=>(
             <button key={k} onClick={()=>setSortBy(k)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
               style={{background:sortBy===k?"#f97316":"#1f2937",color:sortBy===k?"#000":"#9ca3af"}}>
               {l}
@@ -2479,6 +2497,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
                 <SortTh sortKey="allstar">All★%</SortTh>
                 <SortTh sortKey="starter">Start%</SortTh>
                 <SortTh sortKey="role">Role%</SortTh>
+                <SortTh sortKey="repl">Repl%</SortTh>
                 <SortTh sortKey="tier">Tier</SortTh>
               </tr>
             </thead>
@@ -2509,6 +2528,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
                     <td className="px-3 py-2.5 text-xs font-semibold" style={{color:tierPctColor(p.tiers?.["All-Star"])}}>{fmt(p.tiers?.["All-Star"],0)}%</td>
                     <td className="px-3 py-2.5 text-xs font-semibold" style={{color:tierPctColor(p.tiers?.Starter)}}>{fmt(p.tiers?.Starter,0)}%</td>
                     <td className="px-3 py-2.5 text-xs" style={{color:tierPctColor(p.tiers?.["Role Player"])}}>{fmt(p.tiers?.["Role Player"],0)}%</td>
+                    <td className="px-3 py-2.5 text-xs" style={{color:"#8b5cf6"}}>{fmt(p.tiers?.Replacement,0)}%</td>
                     <td className="px-3 py-2.5 text-xs font-semibold" style={{color:TC[p.predTier]||"#6b7280"}}>{p.predTier||"—"}</td>
                   </tr>
                 );
