@@ -1393,6 +1393,21 @@ function ProjectionTab({p}) {
       {/* ═══ PROJECTION DRIVERS — SHAP-based per-player feature contributions (Session 9) ═══ */}
       {(() => {
         // Parse pipe-delimited "Label:strength" strings from backend
+        // Translation map: German pipeline labels → English display labels
+        const LABEL_EN = {
+          "Funktionale Athletik (0-100)": "Functional Athleticism",
+          "Alter am Draft-Tag":           "Age at Draft",
+          "BPM-Percentile (era-adj.)":    "BPM Percentile (era-adj.)",
+          "Free-Throw-% (per 100)":       "Free-Throw %",
+          "Assist/Turnover-Ratio":        "Assist/Turnover Ratio",
+          "BPM-Sprung (letztes Jahr)":    "BPM Jump (final year)",
+          "Steals per 100":               "Steals per 100",
+          "BPM-Wachstumskurve":           "BPM Growth Curve",
+          "Free-Throw-Rate":              "Free-Throw Rate",
+          "Konferenzstärke":              "Conference Strength",
+          "3-Punkt-Quote":                "3-Point %",
+          "Blocks per 100":               "Blocks per 100",
+        };
         const parseDrvs = (raw) => {
           if (!raw) return [];
           // New format: JSON array from v2 model [{label, wa_impact, value, group, description}]
@@ -1400,7 +1415,9 @@ function ProjectionTab({p}) {
             return raw.map(item => {
               const abs = Math.abs(item.wa_impact || 0);
               const strength = abs >= 2.0 ? 3 : abs >= 1.0 ? 2 : 1;
-              return { label: item.label || item.feature || "?", strength, value: item.value, group: item.group, description: item.description };
+              const rawLabel = item.label || item.feature || "?";
+              const label = LABEL_EN[rawLabel] || rawLabel;
+              return { label, strength, value: item.value, group: item.group, description: item.description };
             });
           }
           // Legacy format: "label:strength|label:strength|..."
