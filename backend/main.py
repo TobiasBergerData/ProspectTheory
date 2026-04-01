@@ -34,7 +34,7 @@ from fastapi.responses import FileResponse
 app = FastAPI(
     title="ProspectTheory API",
     description="NBA Draft Intelligence — Player profiles, comparisons, and tier predictions",
-    version="2.1.0",  # gz support, expanded board fields, 2026 season data
+    version="2.2.0",  # comps similarity normalized, anthro field names fixed
 )
 
 app.add_middleware(
@@ -290,17 +290,22 @@ async def get_statistical_comps(
         comp_list = [c for c in comp_list if c.get("nba")]
 
     # Enrich comp data with profile info
+    # s = Euclidean distance in percentile space; observed range [0.635, 1.716]
+    # → normalize to 0–100% similarity: sim = (1.716 - s) / 1.081 * 100
+    _S_MAX, _S_RANGE = 1.716, 1.081
     profiles = get_profiles()
     enriched = []
     for c in comp_list[:limit]:
         cname = c.get("n", "")
         cp = profiles.get(cname, {})
+        raw_s = c.get("s", _S_MAX)
+        similarity = max(0, min(100, round((_S_MAX - raw_s) / _S_RANGE * 100)))
         enriched.append({
             "name": cname,
             "position": c.get("p", cp.get("pos", "")),
-            "similarity": c.get("s", 0),
+            "similarity": similarity,
             "made_nba": c.get("nba", False),
-            "tier": c.get("tier", cp.get("tier", "")),
+            "tier": c.get("tier", cp.get("v2Tier", cp.get("tier", ""))),
             # Key stats from profile for comparison table
             "bpm": cp.get("bpm"),
             "usg": cp.get("usg"),
@@ -320,6 +325,7 @@ async def get_statistical_comps(
             "three_par": cp.get("three_par"),
             "min": cp.get("min"),
             "overall": cp.get("overall"),
+            "height": cp.get("ht"),
             "badges": cp.get("badges", ""),
         })
 
@@ -347,11 +353,17 @@ async def get_anthro_comps(
     if nba_only:
         comp_list = [c for c in comp_list if c.get("nba")]
 
-    # If adjustments, recalculate distances
+    # Normalize measurements: combine_* keys → height/weight/wingspan
+    m_ht = measurements.get("height") or measurements.get("combine_hgt_no_shoes") or profile.get("ht")
+    m_wt = measurements.get("weight") or measurements.get("combine_wgt") or profile.get("wt")
+    m_ws = measurements.get("wingspan") or measurements.get("combine_wngspn")
+    m_ws_delta = measurements.get("combine_wingspan_delta") or measurements.get("wingspan_delta")
+
+    # If adjustments, recalculate distances using adjusted measurements
     if weight_adj != 0 or wingspan_adj != 0:
-        base_wt = (measurements.get("weight") or profile.get("wt") or 200) + weight_adj
-        base_ws = (measurements.get("wingspan") or 0) + wingspan_adj
-        base_ht = measurements.get("height") or profile.get("ht") or 78
+        base_ht = m_ht or 78
+        base_wt = (m_wt or 200) + weight_adj
+        base_ws = (m_ws or 0) + wingspan_adj
 
         for c in comp_list:
             ht_d = abs((c.get("ht") or base_ht) - base_ht)
@@ -361,12 +373,39 @@ async def get_anthro_comps(
 
         comp_list.sort(key=lambda c: c.get("_dist", 999))
 
+    # Enrich comp measurements from profiles; normalize field names
+    # d = Euclidean distance in inch-space; range [0, ~5.6], typical best < 2.0
+    # → similarity: linear 0–3" → 100%–0%
+    profiles = get_profiles()
+    enriched_anthro = []
+    for c in comp_list[:limit]:
+        cname = c.get("n", "")
+        cp = profiles.get(cname, {})
+        dist = c.get("_dist", c.get("d", 0)) or 0
+        sim = max(0, min(100, round((3.0 - dist) / 3.0 * 100)))
+        enriched_anthro.append({
+            "name": cname,
+            "distance": round(dist, 3),
+            "similarity": sim,
+            "made_nba": bool(c.get("nba", False)),
+            "tier": c.get("tier", cp.get("v2Tier", cp.get("tier", ""))),
+            # Measurements: prefer comp-stored values, fall back to profile
+            "height": c.get("ht") or cp.get("ht"),
+            "weight": c.get("wt") or cp.get("wt"),
+            "wingspan": c.get("ws") or cp.get("ws"),
+        })
+
     return {
         "player": canonical,
-        "measurements": measurements,
+        "measurements": {
+            "height": m_ht,
+            "weight": m_wt,
+            "wingspan": m_ws,
+            "wingspan_delta": m_ws_delta,
+        },
         "adjustments": {"weight": weight_adj, "wingspan": wingspan_adj},
-        "count": min(len(comp_list), limit),
-        "comps": comp_list[:limit],
+        "count": len(enriched_anthro),
+        "comps": enriched_anthro,
     }
 
 

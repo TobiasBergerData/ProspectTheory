@@ -1891,13 +1891,13 @@ function BodyTab({p}) {
           if (data?.comps) {
             setDynComps(data.comps.map(c => ({
               name: c.name,
-              ht: c.height || c.ht,
-              wt: c.weight || c.wt,
-              ws: c.wingspan || c.ws,
+              ht: c.height,
+              wt: c.weight,
+              ws: c.wingspan,
               nba: !!c.made_nba,
               tier: c.tier || "",
               dist: c.distance || 0,
-              sim: Math.max(0, Math.min(100, Math.round(100 - (c.distance || 0) * 4))),
+              sim: c.similarity ?? Math.max(0, Math.min(100, Math.round((3.0 - (c.distance||0)) / 3.0 * 100))),
             })));
           }
           setDynLoading(false);
@@ -1908,11 +1908,9 @@ function BodyTab({p}) {
   }, [wsAdj, wtAdj, p.name]);
 
   // Pre-loaded comps (on initial load, before any slider adjustment)
+  // sim is already stored correctly from the backend's normalized similarity field
   const staticComps = useMemo(() => {
-    return (p.anthroComps || []).map(c => ({
-      ...c,
-      sim: Math.max(0, Math.min(100, Math.round(100 - (c.dist || 0) * 4))),
-    })).sort((a, b) => b.sim - a.sim);
+    return (p.anthroComps || []).slice().sort((a, b) => b.sim - a.sim);
   }, [p.anthroComps]);
 
   const displayComps = dynComps ?? staticComps;
