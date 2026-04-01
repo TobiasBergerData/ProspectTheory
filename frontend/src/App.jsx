@@ -1394,7 +1394,17 @@ function ProjectionTab({p}) {
       {(() => {
         // Parse pipe-delimited "Label:strength" strings from backend
         const parseDrvs = (raw) => {
-          if (!raw || typeof raw !== "string") return [];
+          if (!raw) return [];
+          // New format: JSON array from v2 model [{label, wa_impact, value, group, description}]
+          if (Array.isArray(raw)) {
+            return raw.map(item => {
+              const abs = Math.abs(item.wa_impact || 0);
+              const strength = abs >= 2.0 ? 3 : abs >= 1.0 ? 2 : 1;
+              return { label: item.label || item.feature || "?", strength, value: item.value, group: item.group, description: item.description };
+            });
+          }
+          // Legacy format: "label:strength|label:strength|..."
+          if (typeof raw !== "string") return [];
           return raw.split("|").filter(Boolean).map(s => {
             const [label, str] = s.split(":");
             return { label: label || "?", strength: parseInt(str) || 1 };
