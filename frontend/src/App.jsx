@@ -1341,11 +1341,18 @@ function ProjectionTab({p}) {
             <div className="cursor-help">
               <div className="text-xs uppercase tracking-widest mb-2" style={{color:"#6b7280"}}>Projected Peak Wins Added <span style={{color:"#475569"}}>ⓘ</span></div>
               <div className="text-6xl font-bold mb-1" style={{color:warColor,fontFamily:"'Oswald',sans-serif"}}>{war != null ? fmt(war,1) : "—"}</div>
-              {(waFloor != null && waCeiling != null) && (
-                <div className="text-sm mt-1" style={{color:"#4b5563"}}>
-                  Range: <span style={{color:"#6b7280"}}>{fmt(waFloor,1)}</span> – <span style={{color:"#9ca3af"}}>{fmt(waCeiling,1)}</span> wins
-                </div>
-              )}
+              {(waFloor != null && waCeiling != null && war != null) && (() => {
+                // CI was computed around v2_wa_pred (raw regression), not v2_ppwa (mixture model).
+                // Recenter around ppwa using the same CI width to keep floor ≤ ppwa ≤ ceiling.
+                const ciWidth = waCeiling - waFloor;
+                const adjFloor = war - ciWidth / 2;
+                const adjCeiling = war + ciWidth / 2;
+                return (
+                  <div className="text-sm mt-1" style={{color:"#4b5563"}}>
+                    Range: <span style={{color:"#6b7280"}}>{fmt(adjFloor,1)}</span> – <span style={{color:"#9ca3af"}}>{fmt(adjCeiling,1)}</span> wins
+                  </div>
+                );
+              })()}
               {pElite != null && (
                 <div className="mt-2 text-sm font-semibold" style={{color: pElite >= 0.5 ? "#f97316" : pElite >= 0.25 ? "#fbbf24" : "#6b7280"}}>
                   P(All-Star+): {(pElite * 100).toFixed(0)}%
@@ -1905,34 +1912,24 @@ function BodyTab({p}) {
   // ── Combine data (if available) ──
   const hasCombine = p.comb != null;
 
-  // ── Backend refetch when sliders change (debounced 400ms) ──
-  // This queries the FULL database for the best anthro matches at adjusted measurements
+  // ── Client-side re-sort when sliders change (instant, no network call) ──
+  // Re-computes distances from the prospect's adjusted measurements to each stored comp.
+  // Distance formula mirrors the backend: ht×1.0, wt×0.5, ws×1.5 — same weights.
   useEffect(() => {
     if (wsAdj === 0 && wtAdj === 0) { setDynComps(null); return; }
-    const timer = setTimeout(() => {
-      setDynLoading(true);
-      const url = `${API_BASE}/comps/anthro/${encodeURIComponent(p.name)}?weight_adj=${wtAdj}&wingspan_adj=${wsAdj}&limit=15`;
-      fetch(url)
-        .then(r => r.ok ? r.json() : null)
-        .then(data => {
-          if (data?.comps) {
-            setDynComps(data.comps.map(c => ({
-              name: c.name,
-              ht: c.height,
-              wt: c.weight,
-              ws: c.wingspan,
-              nba: !!c.made_nba,
-              tier: c.tier || "",
-              dist: c.distance || 0,
-              sim: c.similarity ?? Math.max(0, Math.min(100, Math.round((3.0 - (c.distance||0)) / 3.0 * 100))),
-            })));
-          }
-          setDynLoading(false);
-        })
-        .catch(() => setDynLoading(false));
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [wsAdj, wtAdj, p.name]);
+    const baseHt = p.htIn || 78;
+    const baseWt = estimatedWt + wtAdj;
+    const baseWs = estimatedWs + wsAdj;
+    const resorted = staticComps.map(c => {
+      const ht_d = Math.abs((c.ht || baseHt) - baseHt);
+      const wt_d = Math.abs((c.wt || baseWt) - baseWt) * 0.5;
+      const ws_d = Math.abs((c.ws || baseWs) - baseWs) * 1.5;
+      const dist = Math.sqrt(ht_d ** 2 + wt_d ** 2 + ws_d ** 2);
+      const sim = Math.max(0, Math.min(100, Math.round((3.0 - dist) / 3.0 * 100)));
+      return { ...c, dist, sim };
+    }).sort((a, b) => a.dist - b.dist);
+    setDynComps(resorted);
+  }, [wsAdj, wtAdj, staticComps, estimatedWt, estimatedWs, p.htIn]);
 
   // Pre-loaded comps (on initial load, before any slider adjustment)
   // sim is already stored correctly from the backend's normalized similarity field
