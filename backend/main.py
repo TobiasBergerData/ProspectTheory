@@ -34,7 +34,7 @@ from fastapi.responses import FileResponse
 app = FastAPI(
     title="ProspectTheory API",
     description="NBA Draft Intelligence — Player profiles, comparisons, and tier predictions",
-    version="2.0.0",
+    version="2.1.0",  # gz support, expanded board fields, 2026 season data
 )
 
 app.add_middleware(

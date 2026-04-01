@@ -1841,15 +1841,17 @@ function ScoutingTab({p}) {
   );
 }
 function BodyTab({p}) {
-  const [wsAdj,setWsAdj]=useState(0);
-  const [wtAdj,setWtAdj]=useState(0);
+  const [wsAdj, setWsAdj] = useState(0);
+  const [wtAdj, setWtAdj] = useState(0);
+  const [dynComps, setDynComps] = useState(null);   // null = show pre-loaded comps
+  const [dynLoading, setDynLoading] = useState(false);
 
-  // ── Wingspan proxy (Ape Index by position) ──
+  // ── Wingspan estimate (Ape Index by position when not measured) ──
   const apeIndex = p.pos==="Playmaker" ? 1.04 : p.pos==="Big" ? 1.06 : 1.05;
   const estimatedWs = p.ws || Math.round((p.htIn||78) * apeIndex * 10) / 10;
   const isWsEstimated = !p.ws;
 
-  // ── BMI-based weight proxy ──
+  // ── Weight estimate (BMI by position when not measured) ──
   const htM = (p.htIn||78) * 0.0254;
   const posBmi = p.pos==="Playmaker" ? 23.5 : p.pos==="Big" ? 26.5 : 24.8;
   const estimatedWt = p.wt || Math.round(posBmi * htM * htM * 2.205);
@@ -1860,14 +1862,12 @@ function BodyTab({p}) {
   const wsDelta = adjWs - (p.htIn||78);
   const apeRatio = adjWs / (p.htIn||78);
 
-  // ── Dynamic labels ──
+  // ── Frame labels ──
   const wsLabel = wsDelta > 6 ? "Elite Length / Disruptor Frame"
     : wsDelta > 3 ? "Above Average Length"
-    : wsDelta > 1 ? "Neutral Wingspan"
-    : "Negative Wingspan / Tactical Limitations";
-  const wsLabelColor = wsDelta > 6 ? "#22c55e" : wsDelta > 3 ? "#86efac" : wsDelta > 1 ? "#6b7280" : "#ef4444";
-
-  // Weight label relative to position median (not slider-adjusted base)
+    : wsDelta > 0 ? "Neutral Wingspan"
+    : "Negative Wingspan";
+  const wsLabelColor = wsDelta > 6 ? "#22c55e" : wsDelta > 3 ? "#86efac" : wsDelta > 0 ? "#6b7280" : "#ef4444";
   const posMedianWt = p.pos==="Playmaker" ? 190 : p.pos==="Big" ? 240 : 215;
   const wtDeviation = adjWt - posMedianWt;
   const wtLabel = wtDeviation > 15 ? "High Strength / Power Build"
@@ -1878,149 +1878,245 @@ function BodyTab({p}) {
   // ── Combine data (if available) ──
   const hasCombine = p.comb != null;
 
-  // ── Dynamic anthro comps (recomputed on slider change) ──
-  const dynamicAnthro = useMemo(() => {
-    return (p.anthroComps || []).map(c => {
-      const cHt = c.ht || (p.htIn || 78);
-      const cWt = c.wt || adjWt;
-      const cWs = c.ws || adjWs;
+  // ── Backend refetch when sliders change (debounced 400ms) ──
+  // This queries the FULL database for the best anthro matches at adjusted measurements
+  useEffect(() => {
+    if (wsAdj === 0 && wtAdj === 0) { setDynComps(null); return; }
+    const timer = setTimeout(() => {
+      setDynLoading(true);
+      const url = `${API_BASE}/comps/anthro/${encodeURIComponent(p.name)}?weight_adj=${wtAdj}&wingspan_adj=${wsAdj}&limit=15`;
+      fetch(url)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data?.comps) {
+            setDynComps(data.comps.map(c => ({
+              name: c.name,
+              ht: c.height || c.ht,
+              wt: c.weight || c.wt,
+              ws: c.wingspan || c.ws,
+              nba: !!c.made_nba,
+              tier: c.tier || "",
+              dist: c.distance || 0,
+              sim: Math.max(0, Math.min(100, Math.round(100 - (c.distance || 0) * 4))),
+            })));
+          }
+          setDynLoading(false);
+        })
+        .catch(() => setDynLoading(false));
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [wsAdj, wtAdj, p.name]);
 
-      // Weighted Euclidean distance: Height 60%, Weight 20%, Wingspan 20%
-      const htDiff = (cHt - (p.htIn || 78));
-      const wtDiff = (cWt - adjWt) * 0.5;  // scale weight to comparable units
-      const wsDiff = (cWs - adjWs) * 1.5;  // wingspan differences matter more
+  // Pre-loaded comps (on initial load, before any slider adjustment)
+  const staticComps = useMemo(() => {
+    return (p.anthroComps || []).map(c => ({
+      ...c,
+      sim: Math.max(0, Math.min(100, Math.round(100 - (c.dist || 0) * 4))),
+    })).sort((a, b) => b.sim - a.sim);
+  }, [p.anthroComps]);
 
-      const dist = Math.sqrt(
-        htDiff * htDiff * 0.6 +
-        wtDiff * wtDiff * 0.2 +
-        wsDiff * wsDiff * 0.2
-      );
+  const displayComps = dynComps ?? staticComps;
 
-      // Similarity as 100% - distance%, capped at 0-100
-      const sim = Math.max(0, Math.min(100, Math.round(100 - dist * 4)));
+  // GM-facing NBA success metrics
+  const nbaComps = displayComps.filter(c => c.nba);
+  const nbaRate = displayComps.length > 0 ? Math.round(nbaComps.length / displayComps.length * 100) : null;
+  const tierCounts = nbaComps.reduce((acc, c) => { acc[c.tier] = (acc[c.tier]||0)+1; return acc; }, {});
 
-      // Physical deviation check (>10% different in any dimension)
-      const physWarn = Math.abs(htDiff) > (p.htIn||78) * 0.03 || // ~2.5" for a 78" player
-                       Math.abs(cWt - adjWt) > adjWt * 0.1 ||
-                       Math.abs(cWs - adjWs) > adjWs * 0.05;
-
-      return { ...c, sim, dist, physWarn };
-    }).sort((a, b) => b.sim - a.sim).slice(0, 10);
-  }, [p, wsAdj, wtAdj]);
-
-  // Height display
   const htDisplay = p.ht || (p.htIn ? `${Math.floor(p.htIn/12)}'${p.htIn%12}"` : "—");
+  const isAdjusted = wsAdj !== 0 || wtAdj !== 0;
 
   return (
     <div className="space-y-5">
       {/* ── PHYSICAL PROFILE ── */}
-      <Sec icon="📏" title="Physical Profile" sub={`NBA Combine + estimated measurements. Wingspan delta and ape index are key defensive indicators.${isWsEstimated || isWtEstimated ? " ≈ = estimated from position averages." : ""}`}>
+      <Sec icon="📏" title="Physical Profile" sub={`Measurements${isWsEstimated||isWtEstimated ? " (≈ = estimated from position average)" : ""}. Wingspan Delta = Wingspan − Height. NBA average: +3" to +4". Ape Index > 1.05 = above average length.`}>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
           {[
             ["Height", htDisplay, false, null],
             ["Weight", `${adjWt} lbs`, isWtEstimated, wtLabelColor],
             ["Wingspan", `${adjWs.toFixed(1)}"`, isWsEstimated, wsLabelColor],
-            ["WS Delta", `${wsDelta > 0 ? "+" : ""}${wsDelta.toFixed(1)}"`, false, wsLabelColor],
-            ["Ape Index", apeRatio.toFixed(3), false, apeRatio > 1.06 ? "#22c55e" : apeRatio < 1.02 ? "#ef4444" : "#6b7280"],
+            ["WS Delta", `${wsDelta >= 0 ? "+" : ""}${wsDelta.toFixed(1)}"`, false, wsLabelColor],
+            ["Ape Index", apeRatio.toFixed(3), false, apeRatio >= 1.06 ? "#22c55e" : apeRatio < 1.02 ? "#ef4444" : "#6b7280"],
           ].map(([l, v, est, accent]) => (
-            <div key={l} className="rounded-lg p-3 text-center" style={{background:"#0d1117", border: accent ? `1px solid ${accent}22` : "1px solid #1f2937"}}>
-              <div className="text-xs uppercase" style={{color:"#6b7280"}}>{l}{est ? " ≈" : ""}</div>
-              <div className="font-bold text-lg" style={{color: accent || "#e5e7eb", fontFamily:"'Oswald',sans-serif"}}>{v}</div>
+            <div key={l} className="rounded-lg p-3 text-center" style={{background:"#0d1117", border: accent ? `1px solid ${accent}33` : "1px solid #1f2937"}}>
+              <div className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>{l}{est ? " ≈" : ""}</div>
+              <div className="font-bold text-lg mt-0.5" style={{color: accent || "#e5e7eb", fontFamily:"'Oswald',sans-serif"}}>{v}</div>
             </div>
           ))}
         </div>
-
-        {/* Frame labels */}
-        <div className="flex flex-wrap gap-2 mb-4">
-          <Tip content={<div><div className="font-bold mb-1" style={{color:wsLabelColor}}>Wingspan Assessment</div><div style={{color:"#cbd5e1"}}>Wingspan delta = Wingspan - Height. NBA average is +3" to +4". Elite length (6+") creates defensive disruption. Negative wingspan limits defensive versatility.</div></div>}>
+        <div className="flex flex-wrap gap-2 mb-5">
+          <Tip content={<div><div className="font-bold mb-1" style={{color:wsLabelColor}}>Wingspan Assessment</div><div style={{color:"#cbd5e1"}}>Delta = WS − Height. +6" = disruptive length, affects multiple defensive positions. Negative = tactical limitations in switching schemes.</div></div>}>
             <span className="px-3 py-1 rounded-lg text-xs cursor-help" style={{background:wsLabelColor+"22",color:wsLabelColor,border:`1px solid ${wsLabelColor}44`}}>{wsLabel}</span>
           </Tip>
-          <Tip content={<div><div className="font-bold mb-1" style={{color:wtLabelColor}}>Frame Assessment</div><div style={{color:"#cbd5e1"}}>Weight relative to position median ({p.pos}: ~{posMedianWt} lbs). Heavy frames absorb contact; light frames need development to handle NBA physicality.</div></div>}>
+          <Tip content={<div><div className="font-bold mb-1" style={{color:wtLabelColor}}>Frame Assessment</div><div style={{color:"#cbd5e1"}}>Relative to {p.pos} median (~{posMedianWt} lbs). Heavy frame = contact absorption. Light frame = needs strength development for NBA physicality.</div></div>}>
             <span className="px-3 py-1 rounded-lg text-xs cursor-help" style={{background:wtLabelColor+"22",color:wtLabelColor,border:`1px solid ${wtLabelColor}44`}}>{wtLabel}</span>
           </Tip>
         </div>
 
-        {/* ── Combine data (if available) ── */}
+        {/* ── Combine data ── */}
         {hasCombine && (
-          <div className="mb-4 p-3 rounded-lg" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
-            <div className="text-xs uppercase tracking-wider mb-2 font-semibold" style={{color:"#f97316"}}>NBA Combine Measurements</div>
+          <div className="mb-5 p-4 rounded-lg" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+            <div className="text-xs uppercase tracking-wider mb-3 font-bold" style={{color:"#f97316"}}>NBA Combine Measurements</div>
             <div className="grid grid-cols-3 md:grid-cols-6 gap-2 text-center">
               {[
                 ["No-Shoes Ht", p.comb.height_ns],
                 ["Shoes Ht", p.comb.height_ws],
                 ["Weight", p.comb.weight ? `${p.comb.weight} lbs` : null],
                 ["Wingspan", p.comb.wingspan ? `${p.comb.wingspan}"` : null],
-                ["Reach", p.comb.reach ? `${p.comb.reach}"` : null],
+                ["Standing Reach", p.comb.reach ? `${p.comb.reach}"` : null],
                 ["Body Fat", p.comb.body_fat ? `${p.comb.body_fat}%` : null],
-              ].map(([l,v]) => v != null && (
+              ].filter(([,v]) => v != null).map(([l,v]) => (
                 <div key={l} className="rounded p-2" style={{background:"#111827"}}>
                   <div className="text-xs" style={{color:"#6b7280"}}>{l}</div>
-                  <div className="text-sm font-semibold" style={{color:"#e5e7eb"}}>{v}</div>
+                  <div className="text-sm font-semibold mt-0.5" style={{color:"#e5e7eb"}}>{v}</div>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* ── Scout adjustment sliders ── */}
-        <div className="flex gap-6 p-4 rounded-lg" style={{background:"#0d1117"}}>
-          <div className="flex-1">
-            <div className="flex justify-between text-xs mb-1">
-              <span style={{color:"#9ca3af"}}>Weight Adjust</span>
-              <span style={{color:"#f97316"}}>{wtAdj > 0 ? "+" : ""}{wtAdj} lbs</span>
-            </div>
-            <input type="range" min={-20} max={20} value={wtAdj} onChange={e=>setWtAdj(+e.target.value)} className="w-full" style={{accentColor:"#f97316"}}/>
+        {/* ── Scout Scenario Sliders ── */}
+        <div className="p-4 rounded-xl" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+          <div className="text-xs uppercase tracking-wider font-bold mb-4" style={{color:"#6b7280"}}>
+            Scenario Modeling — How do the comps change?
           </div>
-          <div className="flex-1">
-            <div className="flex justify-between text-xs mb-1">
-              <span style={{color:"#9ca3af"}}>Wingspan Adjust</span>
-              <span style={{color:"#f97316"}}>{wsAdj > 0 ? "+" : ""}{wsAdj}"</span>
+          <div className="space-y-5">
+            {/* Weight slider */}
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <div>
+                  <span className="text-sm font-semibold" style={{color:"#e5e7eb"}}>Weight</span>
+                  <span className="text-xs ml-2" style={{color:"#6b7280"}}>{isWtEstimated ? "≈ estimated" : "measured"}</span>
+                </div>
+                <div className="text-sm font-bold" style={{color: wtAdj > 0 ? "#22c55e" : wtAdj < 0 ? "#ef4444" : "#f97316"}}>
+                  {adjWt} lbs {wtAdj !== 0 && <span style={{fontSize:11}}>({wtAdj > 0 ? "+" : ""}{wtAdj})</span>}
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-xs w-16 text-right" style={{color:"#6b7280"}}>−30 lbs</span>
+                <input type="range" min={-30} max={30} step={1} value={wtAdj}
+                  onChange={e => setWtAdj(+e.target.value)} className="flex-1" style={{accentColor:"#f97316"}}/>
+                <span className="text-xs w-16" style={{color:"#6b7280"}}>+30 lbs</span>
+              </div>
+              <div className="flex justify-between text-xs mt-1" style={{color:"#374151"}}>
+                <span>Leaner / Weight loss</span>
+                <span style={{color:"#4b5563"}}>Base</span>
+                <span>Heavier / Muscle gain</span>
+              </div>
             </div>
-            <input type="range" min={-4} max={4} step={0.25} value={wsAdj} onChange={e=>setWsAdj(+e.target.value)} className="w-full" style={{accentColor:"#f97316"}}/>
+            {/* Wingspan slider */}
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <div>
+                  <span className="text-sm font-semibold" style={{color:"#e5e7eb"}}>Wingspan</span>
+                  <span className="text-xs ml-2" style={{color: isWsEstimated ? "#fbbf24" : "#6b7280"}}>{isWsEstimated ? "≈ estimated — use slider to model uncertainty" : "measured"}</span>
+                </div>
+                <div className="text-sm font-bold" style={{color: wsAdj > 0 ? "#22c55e" : wsAdj < 0 ? "#ef4444" : "#f97316"}}>
+                  {adjWs.toFixed(1)}" {wsAdj !== 0 && <span style={{fontSize:11}}>({wsAdj > 0 ? "+" : ""}{wsAdj}")</span>}
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-xs w-16 text-right" style={{color:"#6b7280"}}>−6"</span>
+                <input type="range" min={-6} max={6} step={0.25} value={wsAdj}
+                  onChange={e => setWsAdj(+e.target.value)} className="flex-1" style={{accentColor:"#f97316"}}/>
+                <span className="text-xs w-16" style={{color:"#6b7280"}}>+6"</span>
+              </div>
+              <div className="flex justify-between text-xs mt-1" style={{color:"#374151"}}>
+                <span>Short wingspan</span>
+                <span style={{color:"#4b5563"}}>Base estimate</span>
+                <span>Elite length</span>
+              </div>
+            </div>
           </div>
+          {isAdjusted && (
+            <div className="mt-3 flex items-center justify-between">
+              <div className="text-xs" style={{color:"#fbbf24"}}>
+                ⚡ Scenario active — comps updated for adjusted measurements
+              </div>
+              <button onClick={() => { setWsAdj(0); setWtAdj(0); }} className="text-xs px-2 py-1 rounded"
+                style={{background:"#1f2937",color:"#9ca3af"}}>Reset</button>
+            </div>
+          )}
         </div>
-        {(wsAdj !== 0 || wtAdj !== 0) && (
-          <div className="mt-2 text-xs" style={{color:"#fbbf24"}}>
-            User Projected Matches — showing comps based on adjusted measurements
-          </div>
-        )}
       </Sec>
 
-      {/* ── ANTHROPOMETRIC COMPS ── */}
-      <Sec icon="👥" title="Anthropometric Comps" sub="Physical similarity matching against NBA players with Combine data (Height 60% + Weight 20% + Wingspan 20%). Use sliders above to model 'what if he bulks up 15 lbs?' or 'what if wingspan is longer than measured?'">
-        {dynamicAnthro.length > 0 ? (
-          <div className="space-y-2">
-            {dynamicAnthro.map((c, i) => (
-              <div key={i} className="flex items-center gap-3 p-3 rounded-lg" style={{background:"#0d1117"}}>
-                <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0" style={{background: i < 3 ? "#f9731622" : "#1f2937", color: i < 3 ? "#f97316" : "#9ca3af"}}>{i+1}</div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-sm" style={{color:"#e5e7eb"}}>{c.name}</span>
-                    {c.physWarn && (
-                      <Tip content={<div style={{color:"#fbbf24"}}>Physical mismatch: Size differs &gt;10% from this prospect. Interpret with caution.</div>}>
-                        <span className="text-xs cursor-help" style={{color:"#fbbf24"}}>⚠</span>
-                      </Tip>
-                    )}
-                  </div>
-                  <div className="text-xs" style={{color:"#6b7280"}}>
-                    {c.ht ? `${Math.floor(c.ht/12)}'${c.ht%12}"` : "—"} · {c.wt ? `${c.wt} lbs` : "—"} · WS {c.ws ? `${c.ws}"` : "—"}
-                  </div>
-                </div>
-                {/* Similarity bar */}
-                <div className="w-24 shrink-0">
-                  <div className="h-3 rounded-full overflow-hidden" style={{background:"#1f2937"}}>
-                    <div className="h-full rounded-full" style={{width:`${c.sim}%`, background: c.sim > 80 ? "#22c55e" : c.sim > 60 ? "#3b82f6" : c.sim > 40 ? "#fbbf24" : "#ef4444"}}/>
-                  </div>
-                </div>
-                <div className="w-12 text-sm font-bold text-right shrink-0" style={{color: c.sim > 80 ? "#22c55e" : c.sim > 60 ? "#3b82f6" : c.sim > 40 ? "#fbbf24" : "#ef4444"}}>{c.sim}%</div>
-                {c.tier && <TierBadge tier={c.tier}/>}
+      {/* ── NBA PHYSICAL COMPS ── */}
+      <Sec icon="👥"
+        title={isAdjusted ? `Anthropometric Comps — Scenario (${wtAdj > 0 ? "+" : ""}${wtAdj || ""}${wtAdj !== 0 ? " lbs" : ""}${wtAdj !== 0 && wsAdj !== 0 ? " · " : ""}${wsAdj > 0 ? "+" : ""}${wsAdj !== 0 ? wsAdj + '"' : ""})` : "Anthropometric Comps"}
+        sub={`Physical similarity across the NBA draft database (Height 60% · Weight 20% · Wingspan 20%). No stats — body type only. ${isAdjusted ? "Results re-queried from full database at adjusted measurements." : "Adjust sliders to model scenarios: 'What if he adds 20 lbs?' or 'What if his wingspan is longer than estimated?'"}`}>
+
+        {/* NBA Success Banner */}
+        {displayComps.length > 0 && (
+          <div className="flex items-center gap-4 p-4 rounded-xl mb-4" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+            <div className="text-center px-4" style={{borderRight:"1px solid #1f2937"}}>
+              <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#6b7280"}}>NBA Rate</div>
+              <div className="text-3xl font-bold" style={{color: nbaRate >= 70 ? "#22c55e" : nbaRate >= 40 ? "#fbbf24" : "#ef4444", fontFamily:"'Oswald',sans-serif"}}>
+                {nbaRate ?? "—"}%
               </div>
-            ))}
+              <div className="text-xs mt-0.5" style={{color:"#4b5563"}}>{nbaComps.length}/{displayComps.length} made it</div>
+            </div>
+            <div className="flex-1">
+              <div className="text-xs uppercase tracking-wider mb-2 font-semibold" style={{color:"#6b7280"}}>Outcomes of physical comps</div>
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(tierCounts).filter(([t]) => t).sort(([,a],[,b]) => b-a).map(([tier, count]) => (
+                  <div key={tier} className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs" style={{background:(TC[tier]||"#6b7280")+"22",border:`1px solid ${(TC[tier]||"#6b7280")}44`}}>
+                    <span style={{color:TC[tier]||"#6b7280"}}>{tier}</span>
+                    <span className="font-bold" style={{color:"#e5e7eb"}}>×{count}</span>
+                  </div>
+                ))}
+                {nbaComps.length === 0 && <span className="text-xs" style={{color:"#4b5563"}}>No NBA players in comps</span>}
+              </div>
+            </div>
+            {dynLoading && <div className="text-xs" style={{color:"#f97316"}}>Updating…</div>}
+          </div>
+        )}
+
+        {dynLoading && !displayComps.length ? (
+          <div className="text-center py-8" style={{color:"#6b7280"}}>Recalculating comps…</div>
+        ) : displayComps.length > 0 ? (
+          <div className="space-y-1.5">
+            {displayComps.map((c, i) => {
+              const htStr = c.ht ? `${Math.floor(c.ht/12)}'${c.ht%12}"` : "—";
+              const wsDeltaC = c.ws && c.ht ? (c.ws - c.ht).toFixed(1) : null;
+              const simC = typeof c.sim === "number" ? c.sim : Math.max(0, Math.min(100, Math.round(100 - (c.dist||0)*4)));
+              return (
+                <div key={i} className="flex items-center gap-3 px-3 py-2.5 rounded-lg" style={{background: i < 3 ? "#0d1117" : "#0a0e1799", border: i < 3 ? "1px solid #1f2937" : "1px solid #1f293744"}}>
+                  {/* Rank */}
+                  <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                    style={{background: i < 3 ? "#f9731622" : "#1f293766", color: i < 3 ? "#f97316" : "#6b7280"}}>
+                    {i+1}
+                  </div>
+                  {/* Name + NBA badge */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-sm" style={{color: c.nba ? "#e5e7eb" : "#9ca3af"}}>{c.name}</span>
+                      {c.nba && c.tier && <TierBadge tier={c.tier}/>}
+                      {!c.nba && <span className="text-xs px-1.5 py-0 rounded" style={{background:"#1f2937",color:"#4b5563"}}>Never NBA</span>}
+                    </div>
+                    {/* Physical measurements — no stats */}
+                    <div className="text-xs mt-0.5 flex gap-3" style={{color:"#6b7280"}}>
+                      <span>{htStr}</span>
+                      {c.wt && <span>{c.wt} lbs</span>}
+                      {c.ws && <span>WS {c.ws}"</span>}
+                      {wsDeltaC && <span style={{color: Number(wsDeltaC) >= 3 ? "#86efac" : Number(wsDeltaC) < 0 ? "#ef444488" : "#6b7280"}}>Δ{Number(wsDeltaC) >= 0 ? "+" : ""}{wsDeltaC}"</span>}
+                    </div>
+                  </div>
+                  {/* Similarity */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="w-20">
+                      <div className="h-2 rounded-full overflow-hidden" style={{background:"#1f2937"}}>
+                        <div className="h-full rounded-full transition-all" style={{width:`${simC}%`, background: simC > 80 ? "#22c55e" : simC > 60 ? "#3b82f6" : simC > 40 ? "#fbbf24" : "#ef4444"}}/>
+                      </div>
+                    </div>
+                    <span className="w-10 text-xs font-bold text-right" style={{color: simC > 80 ? "#22c55e" : simC > 60 ? "#3b82f6" : simC > 40 ? "#fbbf24" : "#ef4444"}}>{simC}%</span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         ) : (
           <div className="text-center py-8 rounded-lg" style={{background:"#0d1117",color:"#6b7280"}}>
-            <div className="text-lg mb-1">No anthropometric data</div>
-            <div className="text-xs">Combine/measurement data not available for this prospect. Physical comparison requires height, weight, or wingspan data.</div>
+            <div className="text-lg mb-1">No anthropometric data available</div>
+            <div className="text-xs">Physical comps require height, weight, or wingspan data in the database.</div>
           </div>
         )}
       </Sec>
