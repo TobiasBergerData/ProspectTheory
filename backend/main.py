@@ -34,7 +34,7 @@ from fastapi.responses import FileResponse
 app = FastAPI(
     title="ProspectTheory API",
     description="NBA Draft Intelligence — Player profiles, comparisons, and tier predictions",
-    version="2.2.0",  # comps similarity normalized, anthro field names fixed
+    version="2.4.0",  # anthro live fallback vs combine DB, board age filter
 )
 
 app.add_middleware(
@@ -212,7 +212,7 @@ def find_player(name: str) -> tuple:
 
 @app.get("/")
 async def root():
-    return {"name": "ProspectTheory API", "version": "1.0.0"}
+    return {"name": "ProspectTheory API", "version": "2.4.0"}
 
 
 @app.get("/health")
@@ -358,36 +358,43 @@ async def get_anthro_comps(
     m_ws_delta = measurements.get("combine_wingspan_delta") or measurements.get("wingspan_delta")
 
     # Live-search fallback: if no pre-computed comps (e.g. 2026 prospects without combine data),
-    # compute on-the-fly from all profiles with height data.
+    # search the entire anthro_comps database using estimated target measurements.
+    # Only players in anthro_comps have actual NBA combine measurements (height/weight/wingspan),
+    # making them the only valid basis for physical comparison.
     if not comp_list:
         base_ht = m_ht or 78
-        base_wt = (m_wt or 200) + weight_adj
-        # Estimate wingspan from position median ape index when unmeasured
+        # Estimate weight from position/height when unmeasured
         pos = profile.get("pos", "Wing")
+        htM = base_ht * 0.0254  # inches → meters
+        pos_bmi = 23.5 if pos == "Playmaker" else 26.5 if pos == "Big" else 24.8
+        est_wt = round(pos_bmi * htM * htM * 2.205)  # BMI → lbs
+        base_wt = est_wt + weight_adj
+        # Estimate wingspan via position ape index
         ape = 1.04 if pos == "Playmaker" else 1.06 if pos == "Big" else 1.05
-        base_ws = (m_ws or round(base_ht * ape, 1)) + wingspan_adj
+        base_ws = round(base_ht * ape, 1) + wingspan_adj
 
-        all_profiles = get_profiles()
+        all_anthro = get_anthro_comps()
+        all_profs = get_profiles()  # Load once outside loop
+        # Build NBA player set from pre-computed comps (ground truth from NBA outcome data)
+        nba_set = {c.get("n", "") for entry in all_anthro.values() for c in entry.get("c", []) if c.get("nba")}
         live = []
-        for pname, pp in all_profiles.items():
+        for pname, pentry in all_anthro.items():
             if pname == canonical:
                 continue
-            pht = pp.get("ht")
-            if not pht:
+            pm = pentry.get("m", {})
+            pht = pm.get("combine_hgt_no_shoes") or pm.get("height")
+            pwt = pm.get("combine_wgt") or pm.get("weight")
+            pws = pm.get("combine_wngspn") or pm.get("wingspan")
+            if not pht:  # Must have at least height measurement
                 continue
-            # Pre-filter: height within ±5" to keep iteration fast
-            if abs(pht - base_ht) > 5:
-                continue
-            pwt = pp.get("wt")
-            ppos = pp.get("pos", "Wing")
-            pape = 1.04 if ppos == "Playmaker" else 1.06 if ppos == "Big" else 1.05
-            pws = pp.get("ws") or round(pht * pape, 1)
+            pp = all_profs.get(pname, {})
             ht_d = abs(pht - base_ht)
             wt_d = abs((pwt or base_wt) - base_wt) * 0.5
-            ws_d = abs(pws - base_ws) * 1.5
+            ws_d = abs((pws or base_ws) - base_ws) * 1.5
             dist = (ht_d**2 + wt_d**2 + ws_d**2) ** 0.5
             live.append({
-                "n": pname, "_dist": dist, "nba": bool(pp.get("made_nba")),
+                "n": pname, "_dist": dist,
+                "nba": pname in nba_set,
                 "tier": pp.get("v2Tier") or pp.get("tier") or "",
                 "ht": pht, "wt": pwt, "ws": pws,
             })
