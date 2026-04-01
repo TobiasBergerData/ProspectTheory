@@ -675,7 +675,7 @@ function mapProfile(d) {
       Starter:((d.prob_starter??d.probs?.starter??0)*100),
       "Role Player":((d.prob_role??d.prob_roleplayer??d.probs?.roleplayer??0)*100),
       Replacement:((d.prob_repl??d.prob_replacement??d.probs?.replacement??0)*100),
-      "Out":((d.prob_neg??d.prob_negative??d.prob_never??d.probs?.out??0)*100),
+      "Negative":((d.prob_neg??d.prob_negative??d.prob_never??d.probs?.out??0)*100),
     },
     ceiling: d.ceiling, floor: d.floor, volatility: d.volatility ?? d.mc_sigma,
     badges: allGreen, redFlags: allRed, yellowBadges: allYellow,
@@ -1290,7 +1290,7 @@ function ProjectionTab({p}) {
   // Prefer v2TierProbs (new model, %-scale already) over legacy prob_* fields
   const v2Probs = p.v2TierProbs || null;
   const tiers = v2Probs || p.tiers || {};
-  const tierOrder = ["Superstar","All-Star","Starter","Role Player","Replacement","Out"];
+  const tierOrder = ["Superstar","All-Star","Starter","Role Player","Replacement","Negative"];
   const tierData = tierOrder.map(t=>({name:t.replace("Role Player","Role"),pct:tiers[t]||0,fill:TC[t]||"#374151"}));
   // ppWA (v2 model) — primary metric; fallback to legacy war
   const ppwa = p.ppwa;
@@ -1912,6 +1912,12 @@ function BodyTab({p}) {
   // ── Combine data (if available) ──
   const hasCombine = p.comb != null;
 
+  // Pre-loaded comps (on initial load, before any slider adjustment)
+  // sim is already stored correctly from the backend's normalized similarity field
+  const staticComps = useMemo(() => {
+    return (p.anthroComps || []).slice().sort((a, b) => b.sim - a.sim);
+  }, [p.anthroComps]);
+
   // ── Client-side re-sort when sliders change (instant, no network call) ──
   // Re-computes distances from the prospect's adjusted measurements to each stored comp.
   // Distance formula mirrors the backend: ht×1.0, wt×0.5, ws×1.5 — same weights.
@@ -1930,12 +1936,6 @@ function BodyTab({p}) {
     }).sort((a, b) => a.dist - b.dist);
     setDynComps(resorted);
   }, [wsAdj, wtAdj, staticComps, estimatedWt, estimatedWs, p.htIn]);
-
-  // Pre-loaded comps (on initial load, before any slider adjustment)
-  // sim is already stored correctly from the backend's normalized similarity field
-  const staticComps = useMemo(() => {
-    return (p.anthroComps || []).slice().sort((a, b) => b.sim - a.sim);
-  }, [p.anthroComps]);
 
   const displayComps = dynComps ?? staticComps;
 
@@ -2436,7 +2436,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
     list = list.filter(p => p.confidence !== "very_low");
 
     // Sort functions — including tier columns
-    const tierRank = {"Superstar":6,"All-Star":5,"Starter":4,"Role Player":3,"Replacement":2,"Out":1};
+    const tierRank = {"Superstar":6,"All-Star":5,"Starter":4,"Role Player":3,"Replacement":2,"Negative":1};
     const sortFn = {
       war:     (a,b) => (b.war ?? b.ppwa ?? -999) - (a.war ?? a.ppwa ?? -999),
       age:     (a,b) => (a.age ?? 99) - (b.age ?? 99),
