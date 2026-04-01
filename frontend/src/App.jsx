@@ -658,6 +658,7 @@ function mapProfile(d) {
     waCeiling: d.waCeiling ?? null,
     waSigma: d.waSigma ?? d.v2_sigma ?? null,
     v2Conf: d.v2Conf ?? null,
+    v2TierProbs: d.v2TierProbs ?? null,  // %-scale already: {Superstar:30.9, All-Star:41.8, ...}
     v2Boosters: d.v2Boosters ?? null,
     v2Limiters: d.v2Limiters ?? null,
     war: d.ppwa ?? d.war ?? d.projected_war ?? d.war_score ?? null,
@@ -666,7 +667,9 @@ function mapProfile(d) {
     production: d.production ?? d.prod,
     impact: d.impact,
     careerPath: d.career_path ?? d.path ?? "NBA",
-    tiers:{
+    // Tier probabilities: v2TierProbs is already %-scale from new model
+    // Fall back to prob_* fields (×100 for %) from the legacy model
+    tiers: d.v2TierProbs ? d.v2TierProbs : {
       Superstar:((d.prob_super??d.prob_superstar??d.probs?.superstar??0)*100),
       "All-Star":((d.prob_allstar??d.probs?.allstar??0)*100),
       Starter:((d.prob_starter??d.probs?.starter??0)*100),
@@ -1284,7 +1287,9 @@ function ShootingTab({p}) {
 }
 function ProjectionTab({p}) {
   if (!p) return null;
-  const tiers = p.tiers || {};
+  // Prefer v2TierProbs (new model, %-scale already) over legacy prob_* fields
+  const v2Probs = p.v2TierProbs || null;
+  const tiers = v2Probs || p.tiers || {};
   const tierOrder = ["Superstar","All-Star","Starter","Role Player","Replacement","Out"];
   const tierData = tierOrder.map(t=>({name:t.replace("Role Player","Role"),pct:tiers[t]||0,fill:TC[t]||"#374151"}));
   // ppWA (v2 model) — primary metric; fallback to legacy war
@@ -2281,16 +2286,16 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
     list = list.filter(p => p.confidence !== "very_low");
 
     // Sort functions — including tier columns
+    const tierRank = {"Superstar":6,"All-Star":5,"Starter":4,"Role Player":3,"Replacement":2,"Out":1};
     const sortFn = {
       war:     (a,b) => (b.war ?? b.ppwa ?? -999) - (a.war ?? a.ppwa ?? -999),
-      pelite:  (a,b) => (b.pElite ?? -1) - (a.pElite ?? -1),
       age:     (a,b) => (a.age ?? 99) - (b.age ?? 99),
       bpm:     (a,b) => (b.bpm ?? -999) - (a.bpm ?? -999),
       super:   (a,b) => (b.tiers?.Superstar ?? 0) - (a.tiers?.Superstar ?? 0),
       allstar: (a,b) => (b.tiers?.["All-Star"] ?? 0) - (a.tiers?.["All-Star"] ?? 0),
       starter: (a,b) => (b.tiers?.Starter ?? 0) - (a.tiers?.Starter ?? 0),
       role:    (a,b) => (b.tiers?.["Role Player"] ?? 0) - (a.tiers?.["Role Player"] ?? 0),
-      repl:    (a,b) => (b.tiers?.Replacement ?? 0) - (a.tiers?.Replacement ?? 0),
+      tier:    (a,b) => (tierRank[b.predTier]??0) - (tierRank[a.predTier]??0),
     };
     list = [...list].sort(sortFn[sortBy] || sortFn.war);
     return list.slice(0, 60);
@@ -2299,7 +2304,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
   const posColors = {Playmaker:"#3b82f6", Wing:"#f97316", Big:"#8b5cf6"};
 
   // Sort label for header
-  const sortLabels = {war:"ppWA", pelite:"P(Elite)", age:"Age (youngest)", bpm:"BPM", super:"Star %", allstar:"All-Star %", starter:"Starter %", role:"Role %", repl:"Repl %"};
+  const sortLabels = {war:"ppWA", age:"Age (youngest)", bpm:"BPM", super:"Star %", allstar:"All-Star %", starter:"Starter %", role:"Role %", tier:"Tier"};
 
   // Clickable column header
   const SortTh = ({sortKey, children, align="left"}) => (
@@ -2375,13 +2380,12 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
                 <th className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>Team</th>
                 <SortTh sortKey="age">Age</SortTh>
                 <SortTh sortKey="war">ppWA</SortTh>
-                <SortTh sortKey="pelite">P(Elite)</SortTh>
                 <SortTh sortKey="bpm">BPM</SortTh>
                 <SortTh sortKey="super">⭐%</SortTh>
                 <SortTh sortKey="allstar">All★%</SortTh>
                 <SortTh sortKey="starter">Start%</SortTh>
                 <SortTh sortKey="role">Role%</SortTh>
-                <th className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>Tier</th>
+                <SortTh sortKey="tier">Tier</SortTh>
               </tr>
             </thead>
             <tbody>
@@ -2406,13 +2410,11 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
                     <td className="px-3 py-2.5 text-xs" style={{color:"#9ca3af"}}>{p.team||p.conf}</td>
                     <td className="px-3 py-2.5 text-xs" style={{color: p.age != null && p.age < 20 ? "#86efac" : "#9ca3af"}}>{p.age != null ? Number(p.age).toFixed(1) : "—"}</td>
                     <td className="px-3 py-2.5 font-bold" style={{color: p.war != null ? (p.war>=25?"#fbbf24":p.war>=10?"#f97316":p.war>=4?"#3b82f6":"#6b7280") : "#374151", fontFamily:"'Oswald',sans-serif"}}>{p.war != null ? fmt(p.war, 1) : "—"}</td>
-                    <td className="px-3 py-2.5 text-xs font-semibold" style={{color: p.pElite != null ? (p.pElite>=0.5?"#f97316":p.pElite>=0.25?"#fbbf24":"#6b7280") : "#374151"}}>{p.pElite != null ? `${(p.pElite*100).toFixed(0)}%` : "—"}</td>
                     <td className="px-3 py-2.5 text-xs font-semibold" style={{color: p.bpm != null ? (p.bpm > 8 ? "#22c55e" : p.bpm > 4 ? "#86efac" : "#9ca3af") : "#374151"}}>{p.bpm != null ? fmt(p.bpm, 1) : "—"}</td>
                     <td className="px-3 py-2.5 text-xs font-semibold" style={{color:tierPctColor(p.tiers?.Superstar)}}>{fmt(p.tiers?.Superstar,0)}%</td>
                     <td className="px-3 py-2.5 text-xs font-semibold" style={{color:tierPctColor(p.tiers?.["All-Star"])}}>{fmt(p.tiers?.["All-Star"],0)}%</td>
                     <td className="px-3 py-2.5 text-xs font-semibold" style={{color:tierPctColor(p.tiers?.Starter)}}>{fmt(p.tiers?.Starter,0)}%</td>
                     <td className="px-3 py-2.5 text-xs" style={{color:tierPctColor(p.tiers?.["Role Player"])}}>{fmt(p.tiers?.["Role Player"],0)}%</td>
-                    <td className="px-3 py-2.5 text-xs" style={{color:"#6b7280"}}>{fmt(p.tiers?.Replacement,0)}%</td>
                     <td className="px-3 py-2.5 text-xs font-semibold" style={{color:TC[p.predTier]||"#6b7280"}}>{p.predTier||"—"}</td>
                   </tr>
                 );
@@ -2486,18 +2488,21 @@ export default function App() {
     setSel(name); setSearch(""); setShowS(false); setTab("overview");
     if (profileCache[name]) return;
 
-    // If board already loaded rich profile data (ppwa present), show immediately
-    // and load comps in background — no blocking spinner.
+    // If board already loaded rich profile data (ppwa present), show Overview
+    // immediately and load full profile + comps in background — no blocking spinner.
     const boardProfile = PLAYERS[name];
     const alreadyRich = boardProfile && (boardProfile.ppwa != null || boardProfile.pctl != null);
     if (alreadyRich) {
       setProfileCache(prev => ({...prev, [name]: boardProfile}));
-      // Load comps in background (non-blocking)
+      // Fetch full profile + comps in background (non-blocking)
+      // This ensures Shooting/Scouting/Projection tabs always get complete data
       Promise.all([
+        fetch(`${API_BASE}/player/${encodeURIComponent(name)}`).then(r=>r.ok?r.json():null).catch(()=>null),
         fetch(`${API_BASE}/comps/stats/${encodeURIComponent(name)}`).then(r=>r.ok?r.json():null).catch(()=>null),
         fetch(`${API_BASE}/comps/anthro/${encodeURIComponent(name)}`).then(r=>r.ok?r.json():null).catch(()=>null),
-      ]).then(([statsRes, anthroRes]) => {
-        const updated = {...boardProfile};
+      ]).then(([profRes, statsRes, anthroRes]) => {
+        // Use full profile if available, fall back to board profile
+        const updated = profRes?.profile ? mapProfile(profRes.profile) : {...boardProfile};
         if (statsRes?.comps) updated.statComps = statsRes.comps.map(c => {
           let sim = null;
           if (c.similarity != null) {

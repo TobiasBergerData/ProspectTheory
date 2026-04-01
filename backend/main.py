@@ -74,8 +74,8 @@ def _get_years() -> list:
     return _years_cache
 
 
-# Fields returned by /api/board per player — rich enough so front-end
-# does NOT need a second fetch for the board-visible columns.
+# Fields returned by /api/board per player — ALL fields needed for every tab,
+# so the front-end NEVER needs a second profile fetch.
 _BOARD_FIELDS = [
     "name", "pos", "team", "yr", "source", "made_nba", "tier", "actual",
     "age", "conf_tier", "conf", "ht", "wt", "wingspan",
@@ -84,16 +84,40 @@ _BOARD_FIELDS = [
     "v2Tier", "v2TierProbs", "v2Conf", "posGroup",
     # Legacy prediction fields (fallback)
     "pred_mu", "pred_sigma", "pred_p_nba", "pred_tier",
-    # Tier probabilities
+    # Tier probabilities (old model — still used as fallback in tier chart)
     "prob_super", "prob_allstar", "prob_starter", "prob_role", "prob_repl", "prob_neg",
-    # Stats needed for pReady check and overview tab
-    "pctl_overall", "pctl", "bpm", "usg", "ts", "pts", "ast", "reb",
+    # Core stats (Overview + pReady check)
+    "pctl_overall", "pctl", "bpm", "obpm", "dbpm", "ortg",
+    "usg", "ts", "pts", "ast", "reb", "stl", "blk",
     "ast_p", "to_p", "orb_p", "drb_p", "stl_p", "blk_p", "ftr",
+    "gp", "min", "fg_pct", "efg", "tp_pct", "ft_pct", "two_pct",
+    "fta", "ftm", "fga", "fouls_40",
+    # Percentiles for box score and advanced stats
+    "pctl_pts36", "pctl_reb36", "pctl_ast36", "pctl_ast_to",
+    "pctl_stl", "pctl_blk", "pctl_bpm", "pctl_obpm", "pctl_dbpm",
+    "pctl_ftr", "pctl_to", "pctl_usg", "pctl_ts", "pctl_orb", "pctl_drb",
+    # Shooting zone data (Shooting tab)
+    "rim_f", "rim_pct", "mid_f", "mid_pct", "three_f",
+    "dunk_r", "dunk_pct",
+    # Scores and creation
     "feel", "func_ath", "shoot_score", "def_score", "overall",
-    "self_creation", "creation_score",
-    "proj_3p", "proj_3pa", "proj_3par", "proj_ts", "proj_prior",
+    "self_creation", "creation_score", "self_creation_raw", "box_creation",
+    "cffr", "cffr_usage_role",
+    # Four-factor possession scores (Scouting tab)
+    "ff_efg", "ff_tov", "ff_orb", "ff_ftr", "ff_comp",
+    # Role inference scores (Scouting tab — 15 roles)
+    "role_scorer", "role_playmaker", "role_spacer", "role_driver", "role_crasher",
+    "role_onball", "role_rim_prot", "role_rebounder", "role_switch",
+    "role_connector", "role_helio", "role_event", "role_zone", "role_micro_spacer",
+    "role_versatility",
+    # Archetypes and NBA projection
     "archetype", "archetypes_all",
     "career_path", "confidence", "ups",
+    "proj_3p", "proj_3pa", "proj_3par", "proj_ts", "proj_prior",
+    # Season lines for trajectory
+    "seasonLines", "seasons",
+    # Recruit rank, source context
+    "recRank", "rec_rank", "cls", "bt_url",
     # Badges (pipe-delimited strings)
     "badges", "red_flags", "yellow_badges",
     # Projection drivers
