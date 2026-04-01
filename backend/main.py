@@ -488,6 +488,7 @@ async def get_years():
     return {
         "years": years,
         "latest": years[0] if years else 2026,
+        "api_version": app.version,
     }
 
 

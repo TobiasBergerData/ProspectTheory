@@ -2571,6 +2571,7 @@ export default function App() {
 
   const [availableYears,setAvailableYears]=useState(["All"]);
   const [yearFilter,setYearFilter]=useState("All");
+  const [apiVersion,setApiVersion]=useState(null);
 
   useEffect(()=>{
     setLoading(true);
@@ -2579,6 +2580,7 @@ export default function App() {
       .then(yearData=>{
         const yrs = yearData.years || [];
         setAvailableYears(["All", ...yrs]);
+        if (yearData.api_version) setApiVersion(yearData.api_version);
         const latestYear = yearData.latest || 2026;
         setYearFilter(String(latestYear));
         return fetch(`${API_BASE}/board?n=500&year=${latestYear}`)
@@ -2720,7 +2722,13 @@ export default function App() {
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3 cursor-pointer" onClick={()=>{setSel(null);setTab("overview");}}>
             <div className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm" style={{background:"linear-gradient(135deg,#f97316,#ea580c)",color:"#000"}}>PT</div>
-            <div><div className="font-bold text-sm tracking-wider" style={{fontFamily:"'Oswald',sans-serif",color:"#f97316"}}>PROSPECT THEORY</div><div className="text-xs" style={{color:"#6b7280"}}>NBA Draft Intelligence</div></div>
+            <div>
+              <div className="font-bold text-sm tracking-wider" style={{fontFamily:"'Oswald',sans-serif",color:"#f97316"}}>PROSPECT THEORY</div>
+              <div className="flex items-center gap-2">
+                <div className="text-xs" style={{color:"#6b7280"}}>NBA Draft Intelligence</div>
+                {apiVersion && <span className="text-xs px-1.5 py-0.5 rounded" style={{background:"#1f2937",color:"#4b5563",fontSize:9}}>API v{apiVersion}</span>}
+              </div>
+            </div>
           </div>
           {/* No toggle needed — Big Board only */}
           <div className="relative">
