@@ -1298,10 +1298,10 @@ function ProjectionTab({p}) {
   // P(NBA) scaling: tier probs from v2TierProbs are CONDITIONAL on NBA career.
   // For low-probability prospects we scale each bar by P(NBA) and add a "Non-NBA" bar,
   // so the chart reflects true unconditional career outcome probabilities.
-  // pNba comes from the legacy model (pred_p_nba); pElite is P(All-Star+) — a lower bound.
+  // Never scale for players who already made the NBA (madeNba=true).
   const pNba = p.pNba != null ? p.pNba
     : (p.pElite != null ? Math.min(0.95, p.pElite + 0.25) : null); // rough fallback
-  const showNonNba = pNba != null && pNba < 0.80;
+  const showNonNba = !p.madeNba && pNba != null && pNba < 0.80;
   const nbaScale  = showNonNba ? pNba : 1.0;
 
   const tierData = [
@@ -1556,7 +1556,9 @@ function ProjectionTab({p}) {
 
       {/* ═══ INTERNATIONAL CAREER OUTLOOK ═══ */}
       {/* Only shown for players with P(NBA) < 25% and intl projection available */}
-      {p.intlTierProbs && pElite != null && pElite < 0.25 && (() => {
+      {/* Guards: (1) not already in NBA, (2) pElite < 0.15 (not just borderline),
+           (3) ppWA < 10 (model doesn't project as NBA Starter+) */}
+      {p.intlTierProbs && !p.madeNba && pElite != null && pElite < 0.15 && (war == null || war < 10) && (() => {
         const INTL_COLORS = {
           "EuroLeague Impact": "#fbbf24",
           "EuroLeague":        "#f97316",
@@ -2764,11 +2766,12 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
                     <td className="px-3 py-2.5 text-xs font-semibold" style={{color: p.bpm != null ? (p.bpm > 8 ? "#22c55e" : p.bpm > 4 ? "#86efac" : "#9ca3af") : "#374151"}}>{p.bpm != null ? fmt(p.bpm, 1) : "—"}</td>
                     {/* NBA Tier */}
                     <td className="px-3 py-2.5 text-xs font-bold" style={{color:TC[p.predTier]||"#6b7280"}}>{p.predTier||"—"}</td>
-                    {/* International Tier — only for non-NBA prospects */}
+                    {/* International Tier — only for genuine non-NBA prospects:
+                        not already in NBA, pElite < 15%, ppWA < 10 */}
                     {(() => {
                       const ppwa = p.war ?? p.ppwa;
-                      const pEl  = p.pElite ?? p.pNba;
-                      const showIntl = pEl != null && pEl < 0.25 && ppwa != null;
+                      const pEl  = p.pElite;
+                      const showIntl = !p.madeNba && pEl != null && pEl < 0.15 && ppwa != null && ppwa < 10;
                       if (!showIntl) return <td className="px-3 py-2.5 text-xs" style={{color:"#374151"}}>—</td>;
                       const INTL_COLORS = {"EL Impact":"#fbbf24","EuroLeague":"#f97316","Top Liga":"#60a5fa","Pro Ball":"#a78bfa","Fringe":"#6b7280"};
                       const label = ppwa>=7?"EL Impact":ppwa>=4?"EuroLeague":ppwa>=2?"Top Liga":ppwa>=0.5?"Pro Ball":"Fringe";
