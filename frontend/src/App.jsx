@@ -681,7 +681,8 @@ function mapProfile(d) {
     badges: allGreen, redFlags: allRed, yellowBadges: allYellow,
     btUrl:d.bt_url, btTeamUrl:d.bt_team_url,
     actual:d.tier, peakPie:d.peak_pie??d.nba_peak_actual, nbaName:d.nba_name||"",
-    madeNba:d.made_nba, draftYear:d.draft_year, draftPick:d.draft_pick,
+    madeNba:d.made_nba, draftYear:d.draftYear??d.draft_year, draftPick:d.draft_pick,
+    classRank: d.classRank ?? null,
     confidence:d.confidence||"full", sampleMin:d.sample_min, sampleGp:d.sample_gp,
     source: d.source ?? "ncaa",
     // Session 9: per-player feature contribution drivers
@@ -2384,10 +2385,10 @@ function MethodologyTab() {
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
           {[
-            ["ρ = 0.46","Spearman (holdout)"],
+            ["ρ = 0.46","Spearman (holdout 2017–19)"],
             ["0.373","craftednba.com baseline"],
-            ["8–12","Features per position"],
-            ["1,784","Training prospects"],
+            ["8–12","Features per position group"],
+            ["1,784","Training prospects (2010–16)"],
           ].map(([val,label])=>(
             <div key={label} className="p-3 rounded-lg text-center" style={{background:"#0d1117"}}>
               <div className="text-lg font-bold" style={{color:"#f97316",fontFamily:"'Oswald',sans-serif"}}>{val}</div>
@@ -2397,6 +2398,31 @@ function MethodologyTab() {
         </div>
         <div className="text-xs" style={{color:"#475569"}}>
           Key features: Age at draft day · BPM percentile (global) · BPM trajectory slope · Conference strength · Free-throw rate · Functional athleticism · Position-specific: AST/TOV ratio (Playmaker), 3P% (Wing), BLK% (Big). Model validated on holdout 2017–2019 using temporal split (no future leakage).
+        </div>
+      </Sec>
+
+      {/* ── LIMITATIONS & HONEST CAVEATS ── */}
+      <Sec icon="⚠️" title="Honest Limitations" sub="What the model cannot know — and why that's okay.">
+        <div className="space-y-3 text-sm" style={{color:"#94a3b8"}}>
+          <div className="p-4 rounded-lg" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+            <div className="font-semibold mb-1" style={{color:"#fbbf24"}}>Prediction Error is Large by Design</div>
+            <div>Player development is fundamentally uncertain. Injuries, team fit, coaching, and mental growth cannot be predicted from college statistics. Our RMSE of ~9 WA means a player projected at Starter level (12 WA) could plausibly reach All-Star (21 WA) or Role Player (7 WA) outcomes. <strong style={{color:"#e5e7eb"}}>Use ppWA as a probability-weighted central estimate, not a guarantee</strong> — that's why we show tier distributions, not just a single number.</div>
+          </div>
+          <div className="p-4 rounded-lg" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+            <div className="font-semibold mb-1" style={{color:"#fbbf24"}}>Selection Bias: Non-Drafted Players Are Invisible</div>
+            <div>The model trains only on players who entered our database as prospects — typically those who declared for the draft or played in tracked leagues. Late bloomers like Isaiah Thomas or Jalen Brunson, who slipped through or were underdogs, are systematically underrepresented. If you see a high ppWA for a late-round prospect, that's based on the statistical profile alone — not on any pre-draft consensus signal.</div>
+          </div>
+          <div className="p-4 rounded-lg" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+            <div className="font-semibold mb-1" style={{color:"#fbbf24"}}>Future Classes Are Out-of-Sample</div>
+            <div>The model was trained on 2010–2016 drafts, validated on 2017–2019. Every class from 2020 onward is true out-of-sample data — the model has never seen their NBA outcomes. We update the training window over time, but there is always a lag. Treat current-class projections as informed priors, not retrospective validations.</div>
+          </div>
+          <div className="p-4 rounded-lg" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+            <div className="font-semibold mb-1" style={{color:"#fbbf24"}}>International Translations Are Approximations</div>
+            <div>League strength adjustments (Euroleague ×1.40, ACB ×1.39, etc.) are derived from bridge players who played in both leagues. A player with no bridge-player comparison — e.g., a dominant presence in a weaker domestic league — has higher uncertainty than a Power-5 NCAA prospect. The model applies conservative adjustments, which may systematically undervalue elite international players.</div>
+          </div>
+          <div className="p-3 rounded-lg text-xs" style={{background:"#0d111744",color:"#4b5563",border:"1px solid #1f293744"}}>
+            <strong style={{color:"#6b7280"}}>Context:</strong> ProspectTheory v2's Spearman ρ = 0.46 compares favorably to craftednba.com (0.373) and published NBA team benchmarks (~0.33). But all prospect models, including those used by NBA front offices, are limited by the same fundamental ceiling: player development is irreducibly noisy. The goal is better-than-random, not perfect.
+          </div>
         </div>
       </Sec>
       {sections.map(({cat,items,desc})=>(
@@ -2871,7 +2897,16 @@ export default function App() {
                 <div className="absolute top-0 right-0 w-48 h-48 rounded-full opacity-5" style={{background:"radial-gradient(circle,#f97316,transparent)",transform:"translate(30%,-30%)"}}/>
                 <div className="flex flex-col md:flex-row md:items-center gap-3 relative z-10">
                   <div className="flex-1">
-                    <div className="text-xs uppercase tracking-widest mb-1" style={{color:"#6b7280"}}>{p.yr} Draft Class{p.source!=="ncaa"?` · ${p.source?.toUpperCase()}`:""}</div>
+                    <div className="text-xs uppercase tracking-widest mb-1 flex items-center gap-2" style={{color:"#6b7280"}}>
+                      <span>{p.draftYear || p.yr} Draft Class{p.source!=="ncaa"?` · ${p.source?.toUpperCase()}`:""}</span>
+                      {p.classRank && (
+                        <Tip content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>Model Draft Class Rank</div><div style={{color:"#cbd5e1"}}>Ranked #{p.classRank} in the {p.draftYear||p.yr} class by projected peak wins added (ppWA). Based on ProspectTheory v2 model — not a scout consensus ranking.</div></div>}>
+                          <span className="px-1.5 py-0.5 rounded font-bold cursor-help" style={{background:"#f9731622",color:"#fb923c",border:"1px solid #f9731644",fontFamily:"'Oswald',sans-serif",fontSize:"0.7rem"}}>
+                            #{p.classRank} MODEL
+                          </span>
+                        </Tip>
+                      )}
+                    </div>
                     <h1 className="text-2xl md:text-3xl font-bold tracking-tight" style={{fontFamily:"'Oswald',sans-serif"}}>{sel}</h1>
                     <div className="flex flex-wrap items-center gap-2 mt-1 text-sm" style={{color:"#9ca3af"}}>
                       <span className="px-2 py-0.5 rounded text-xs font-semibold" style={{background:"#f9731622",color:"#f97316"}}>{p.pos}</span>
