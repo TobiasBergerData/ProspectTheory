@@ -1404,7 +1404,16 @@ function ProjectionTab({p}) {
       {(() => {
         // Parse pipe-delimited "Label:strength" strings from backend
         // Translation map: German pipeline labels → English display labels
+        // Translation map: all German v2_patch labels → English display labels
+        // Keys must match exactly what the backend emits (check v2_patch.csv label column)
         const LABEL_EN = {
+          // v2_patch model-derived labels (actual keys from CSV)
+          "BPM-Entwicklung":              "BPM Development Trend",
+          "BPM-Langzeittrend":            "BPM Long-Term Trend",
+          "BPM-Perzentil (era-adjusted)": "BPM Percentile (era-adj.)",
+          "Funktionale Athletik":         "Functional Athleticism",
+          "Alter bei Draft":              "Draft Age",
+          // Legacy / alternate key formats (keep for backward compatibility)
           "Funktionale Athletik (0-100)": "Functional Athleticism",
           "Alter am Draft-Tag":           "Age at Draft",
           "BPM-Percentile (era-adj.)":    "BPM Percentile (era-adj.)",
@@ -1416,7 +1425,7 @@ function ProjectionTab({p}) {
           "Free-Throw-Rate":              "Free-Throw Rate",
           "Konferenzstärke":              "Conference Strength",
           "3-Punkt-Quote":                "3-Point %",
-          "Blocks per 100":               "Blocks per 100",
+          "Blocks per 100":               "Blocks per 100 Possessions",
         };
         const parseDrvs = (raw) => {
           if (!raw) return [];
@@ -1532,9 +1541,27 @@ function ProjectionTab({p}) {
         const bestDesc = p.intlTierProbs?.find(t => t.tier === bestTier)?.desc || "";
         const bestLeagues = p.intlTierProbs?.find(t => t.tier === bestTier)?.leagues || "";
 
+        // Bar chart data — short label for X axis
+        const SHORT = {
+          "EuroLeague Impact": "EL Impact",
+          "EuroLeague":        "EuroLeague",
+          "Top European Liga": "Top Liga",
+          "Pro Basketball":    "Pro Ball",
+          "Fringe Pro":        "Fringe",
+        };
+        const chartData = (p.intlTierProbs || []).map(t => ({
+          name:  SHORT[t.tier] || t.tier,
+          full:  t.tier,
+          pct:   Math.round((t.prob || 0) * 100 * 10) / 10,
+          fill:  INTL_COLORS[t.tier] || "#6b7280",
+          leagues: t.leagues,
+          desc:  t.desc,
+        }));
+
         return (
           <Sec icon="🌍" title="International Career Outlook"
             sub={`NBA probability ${(pElite*100).toFixed(0)}% — projected international trajectory based on ${war != null ? fmt(war,1) + " ppWA" : "model output"}, calibrated from 254 bridge players.`}>
+
             {/* Hero: most likely tier */}
             <div className="rounded-xl p-4 mb-4 flex items-center gap-4" style={{background:"#0d1117",border:`1px solid ${bestColor}33`}}>
               <div className="flex-shrink-0 w-2 self-stretch rounded-full" style={{background:bestColor}}/>
@@ -1546,36 +1573,39 @@ function ProjectionTab({p}) {
               </div>
             </div>
 
-            {/* Probability bars — all tiers */}
-            <div className="space-y-2">
-              {(p.intlTierProbs || []).map((t, i) => {
-                const col = INTL_COLORS[t.tier] || "#6b7280";
-                const pct = Math.round((t.prob || 0) * 100);
-                const isBest = t.tier === bestTier;
-                return (
-                  <Tip key={i} content={<div>
-                    <div className="font-bold mb-1" style={{color:col}}>{t.tier}</div>
-                    <div style={{color:"#9ca3af",fontSize:"0.85em"}}>{t.leagues}</div>
-                    <div style={{color:"#cbd5e1",marginTop:4}}>{t.desc}</div>
-                    <div style={{color:"#6b7280",fontSize:"0.8em",marginTop:4}}>Probability: {pct}%</div>
-                  </div>}>
-                    <div className="flex items-center gap-3 cursor-help">
-                      <span className="text-xs w-36 flex-shrink-0 text-right" style={{color: isBest ? col : "#6b7280", fontWeight: isBest ? 700 : 400}}>{t.tier}</span>
-                      <div className="flex-1 rounded-full h-2 overflow-hidden" style={{background:"#1f2937"}}>
-                        <div className="h-2 rounded-full transition-all" style={{width:`${Math.max(pct,1)}%`, background: isBest ? col : `${col}66`}}/>
+            {/* Bar chart — mirrors NBA Tier Distribution layout */}
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={chartData} margin={{top:5,right:5,bottom:5,left:5}}>
+                <XAxis dataKey="name" tick={{fill:"#9ca3af",fontSize:11}} axisLine={false} tickLine={false}/>
+                <YAxis tick={{fill:"#6b7280",fontSize:11}} axisLine={false} tickLine={false}
+                  domain={[0, Math.max(50, ...chartData.map(d => d.pct + 5))]}
+                  tickFormatter={v=>`${v}%`}/>
+                <RTooltip
+                  contentStyle={{background:"#1f2937",border:"1px solid #374151",borderRadius:8,color:"#e5e7eb"}}
+                  content={({active,payload}) => {
+                    if (!active || !payload?.length) return null;
+                    const d = payload[0].payload;
+                    return (
+                      <div style={{background:"#1f2937",border:"1px solid #374151",borderRadius:8,padding:"10px 14px",maxWidth:220}}>
+                        <div className="font-bold mb-1" style={{color:d.fill}}>{d.full}</div>
+                        <div style={{color:"#9ca3af",fontSize:"0.82em"}}>{d.leagues}</div>
+                        <div style={{color:"#cbd5e1",fontSize:"0.85em",marginTop:4}}>{d.desc}</div>
+                        <div style={{color:"#6b7280",fontSize:"0.8em",marginTop:4}}>Probability: {d.pct}%</div>
                       </div>
-                      <span className="text-xs w-8 text-right flex-shrink-0" style={{color: isBest ? col : "#6b7280"}}>{pct}%</span>
-                    </div>
-                  </Tip>
-                );
-              })}
-            </div>
+                    );
+                  }}
+                />
+                <Bar dataKey="pct" radius={[6,6,0,0]}>
+                  {chartData.map((d,i) => <Cell key={i} fill={d.fill} opacity={d.full===bestTier?1:0.45}/>)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
 
             {/* Calibration note */}
-            <div className="mt-4 p-3 rounded-lg text-xs leading-relaxed" style={{background:"#0d111744",color:"#4b5563"}}>
+            <div className="mt-3 p-3 rounded-lg text-xs leading-relaxed" style={{background:"#0d111744",color:"#4b5563"}}>
               <strong style={{color:"#6b7280"}}>Calibration:</strong> Thresholds derived from 254 international players who later made the NBA.
-              EuroLeague Impact-tier corresponds to NBA Role Player–caliber production internationally.
-              Tier probabilities use soft sigmoid boundaries (±1.5 ppWA) around each threshold.
+              EuroLeague Impact corresponds to NBA Role Player–caliber production.
+              Probabilities use soft sigmoid boundaries (±1.5 ppWA) around each threshold.
             </div>
           </Sec>
         );
