@@ -1417,11 +1417,13 @@ function ProjectionTab({p}) {
         };
         const parseDrvs = (raw) => {
           if (!raw) return [];
-          // New format: JSON array from v2 model [{label, wa_impact, value, group, description}]
+          // New format: JSON array from v2 model [{label, strength?, wa_impact?, value, ...}]
           if (Array.isArray(raw)) {
             return raw.map(item => {
+              // Prefer explicit strength set by backend; fall back to wa_impact magnitude
               const abs = Math.abs(item.wa_impact || 0);
-              const strength = abs >= 2.0 ? 3 : abs >= 1.0 ? 2 : 1;
+              const strength = item.strength != null ? item.strength
+                : abs >= 0.4 ? 3 : abs >= 0.2 ? 2 : 1;
               const rawLabel = item.label || item.feature || "?";
               const label = LABEL_EN[rawLabel] || rawLabel;
               return { label, strength, value: item.value, group: item.group, description: item.description };
@@ -1438,11 +1440,13 @@ function ProjectionTab({p}) {
         const limiters = parseDrvs(p.projectionLimiters);
         const hasDrvData = boosters.length > 0 || limiters.length > 0;
 
-        // Strength symbols
-        const boostSym = (s) => s >= 3 ? "+++" : s >= 2 ? "++" : "+";
-        const limitSym = (s) => s >= 3 ? "− − −" : s >= 2 ? "− −" : "−";
+        // Strength pips: filled squares for strength, empty for remaining slots
+        const pipRow = (s, filled, empty) =>
+          [filled.repeat(Math.min(s,3)), empty.repeat(Math.max(0,3-s))].join("");
+        const boostSym = (s) => pipRow(s, "■", "□");
+        const limitSym = (s) => pipRow(s, "■", "□");
         // Opacity by strength
-        const opac = (s) => s >= 3 ? 1.0 : s >= 2 ? 0.75 : 0.5;
+        const opac = (s) => s >= 3 ? 1.0 : s >= 2 ? 0.82 : 0.6;
 
         if (!hasDrvData) {
           // Fallback: old hardcoded drivers
@@ -1830,46 +1834,75 @@ function ScoutingTab({p}) {
             <div className="text-xs" style={{color:"#4b5563"}}>{p.roleVersatility>75?"Swiss Army Knife":p.roleVersatility>55?"Multi-Role":p.roleVersatility>35?"Specialist":"One-Dimensional"}</div>
           </div>
         )}
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-          {allArchetypes.map(([name, info]) => {
-            const isPrimary = primaryArch === name;
-            const isSecondary = secondaryArch === name;
-            const isTertiary = tertiaryArch === name;
-            const isRanked = isPrimary || isSecondary || isTertiary;
-            const isTriggered = pipelineTriggered.has(name);
-            const rank = isPrimary ? "PRIMARY" : isSecondary ? "2ND" : isTertiary ? "3RD" : null;
-            const posMatch = (info.pos||[]).includes(p.pos);
-            const showDesc = isRanked;
-            return (
-              <Tip key={name} content={
-                <div>
-                  <div className="font-bold mb-1" style={{color:info.color}}>{name}</div>
-                  <div className="mb-1" style={{color:"#cbd5e1"}}>{info.desc}</div>
-                  {info.formula&&<div className="mb-1"><span style={{color:"#94a3b8"}}>Formula:</span> <code className="text-xs" style={{color:"#7dd3fc"}}>{info.formula}</code></div>}
-                  {info.roles&&<div><span style={{color:"#94a3b8"}}>Key roles:</span> <span style={{color:"#f97316"}}>{info.roles.join(", ")}</span></div>}
-                  {info.pos&&<div className="mt-1"><span style={{color:"#94a3b8"}}>Positions:</span> <span style={{color:posMatch?"#22c55e":"#ef4444"}}>{info.pos.join(", ")}{posMatch?"":" ⚠ mismatch"}</span></div>}
-                  {isTriggered && !isRanked && <div className="mt-1 text-xs" style={{color:"#22c55e"}}>✓ Triggered by pipeline thresholds</div>}
-                </div>
-              }>
-                <div className={`rounded-lg cursor-help transition-all ${isPrimary ? "ring-2 p-4" : isRanked ? "p-4" : "p-3"}`}
-                  style={{
-                    background: isPrimary ? info.color + "22" : isSecondary ? info.color + "18" : isTertiary ? info.color + "12" : isTriggered ? info.color + "0c" : "#0d1117",
-                    border: `${isPrimary?"2":"1"}px solid ${isPrimary ? info.color : isRanked ? info.color + "66" : isTriggered ? info.color + "44" : "#1f293766"}`,
-                    opacity: isRanked ? 1 : isTriggered ? 0.85 : 0.3,
-                    ringColor: isPrimary ? info.color : "transparent",
-                  }}>
-                  <div className="flex items-center gap-2">
-                    {rank && <span className={`text-xs px-1.5 py-0.5 rounded font-bold ${isPrimary?"text-sm":""}`} style={{background:info.color+"33",color:info.color}}>{rank}</span>}
-                    {!rank && isTriggered && <span className="text-xs px-1.5 py-0.5 rounded" style={{background:info.color+"22",color:info.color}}>✓</span>}
-                    <div className={`font-semibold truncate ${isRanked?"text-sm":"text-xs"}`} style={{color: (isRanked || isTriggered) ? info.color : "#6b7280"}}>{name} <span style={{color:"#475569"}}>ⓘ</span></div>
+        {/* Orange-only archetype system: rank distinction via weight/opacity, not color */}
+        {(() => {
+          const O = { pri:"#f97316", sec:"#fb923c", ter:"#fdba74" };
+          return (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            {allArchetypes.map(([name, info]) => {
+              const isPrimary   = primaryArch   === name;
+              const isSecondary = secondaryArch === name;
+              const isTertiary  = tertiaryArch  === name;
+              const isRanked    = isPrimary || isSecondary || isTertiary;
+              const isTriggered = pipelineTriggered.has(name);
+              const rank = isPrimary ? "PRIMARY" : isSecondary ? "2ND" : isTertiary ? "3RD" : null;
+              const posMatch = (info.pos||[]).includes(p.pos);
+              // Card color: unified orange scale, never green/red/blue for rank distinction
+              const cardColor = isPrimary ? O.pri : isSecondary ? O.sec : isTertiary ? O.ter : O.pri;
+              const cardOpacity = isPrimary ? 1.0 : isSecondary ? 0.78 : isTertiary ? 0.58 : isTriggered ? 0.4 : 0.22;
+              const showDesc = isRanked;
+              return (
+                <Tip key={name} content={
+                  <div>
+                    {/* Tooltip keeps original archetype color for reference */}
+                    <div className="font-bold mb-1" style={{color:info.color}}>{name}</div>
+                    <div className="mb-1" style={{color:"#cbd5e1"}}>{info.desc}</div>
+                    {info.formula&&<div className="mb-1"><span style={{color:"#94a3b8"}}>Formula:</span> <code className="text-xs" style={{color:"#7dd3fc"}}>{info.formula}</code></div>}
+                    {info.roles&&<div><span style={{color:"#94a3b8"}}>Key roles:</span> <span style={{color:"#f97316"}}>{info.roles.join(", ")}</span></div>}
+                    {info.pos&&<div className="mt-1"><span style={{color:"#94a3b8"}}>Positions:</span> <span style={{color:posMatch?"#86efac":"#fca5a5"}}>{info.pos.join(", ")}{posMatch?"":" ⚠ mismatch"}</span></div>}
+                    {isTriggered && !isRanked && <div className="mt-1 text-xs" style={{color:"#fb923c"}}>✓ Triggered by pipeline thresholds</div>}
                   </div>
-                  {showDesc && <div className="mt-1.5 text-xs leading-relaxed" style={{color:info.color+"bb"}}>{info.desc.split(".")[0]}.</div>}
-                  {showDesc && info.formula && <div className="mt-1 text-xs" style={{color:"#4b5563"}}>Trigger: {info.formula}</div>}
-                </div>
-              </Tip>
-            );
-          })}
-        </div>
+                }>
+                  <div className={`rounded-lg cursor-help transition-all ${isPrimary ? "ring-2 p-4" : isRanked ? "p-4" : "p-3"}`}
+                    style={{
+                      background: isRanked
+                        ? cardColor + (isPrimary ? "1e" : isSecondary ? "14" : "0e")
+                        : isTriggered ? "#f9731608" : "#0d1117",
+                      border: `${isPrimary?"2":"1"}px solid ${isRanked
+                        ? cardColor + (isPrimary ? "cc" : isSecondary ? "77" : "44")
+                        : isTriggered ? "#f9731622" : "#1f293744"}`,
+                      opacity: cardOpacity,
+                      outline: isPrimary ? `2px solid ${O.pri}55` : "none",
+                    }}>
+                    <div className="flex items-center gap-2">
+                      {rank && (
+                        <span className={`text-xs px-1.5 py-0.5 rounded font-bold ${isPrimary ? "text-sm" : ""}`}
+                          style={{
+                            background: cardColor + "33",
+                            color: cardColor,
+                            fontWeight: isPrimary ? 800 : isSecondary ? 700 : 600,
+                          }}>
+                          {rank}
+                        </span>
+                      )}
+                      {!rank && isTriggered && <span className="text-xs px-1.5 py-0.5 rounded" style={{background:"#f9731618",color:"#fb923c"}}>✓</span>}
+                      <div className={`truncate ${isRanked ? "text-sm" : "text-xs"}`}
+                        style={{
+                          color: isRanked ? cardColor : isTriggered ? "#fb923c88" : "#4b5563",
+                          fontWeight: isPrimary ? 700 : isSecondary ? 600 : 500,
+                        }}>
+                        {name} <span style={{color:"#475569",fontWeight:400}}>ⓘ</span>
+                      </div>
+                    </div>
+                    {showDesc && <div className="mt-1.5 text-xs leading-relaxed" style={{color: cardColor + "aa", fontWeight: isPrimary ? 500 : 400}}>{info.desc.split(".")[0]}.</div>}
+                    {showDesc && info.formula && <div className="mt-1 text-xs" style={{color:"#4b5563"}}>Trigger: {info.formula}</div>}
+                  </div>
+                </Tip>
+              );
+            })}
+          </div>
+          );
+        })()}
       </Sec>
     </div>
   );
@@ -2096,10 +2129,26 @@ function BodyTab({p}) {
           <div className="text-center py-8" style={{color:"#6b7280"}}>Recalculating comps…</div>
         ) : displayComps.length > 0 ? (
           <div className="space-y-1.5">
-            {displayComps.map((c, i) => {
+            {(() => {
+              // Normalize similarity relative to best match in this player's comp set.
+              // Best comp = 100%; remaining comps scaled down proportionally.
+              // Avoids the "all show 76-77%" problem from similar absolute distances.
+              const hasSim = displayComps.some(c => typeof c.sim === "number");
+              const rawVals = displayComps.map(c =>
+                hasSim ? (c.sim ?? 0) : Math.max(0, 100 - (c.dist || 0) * 4)
+              );
+              const maxVal = Math.max(...rawVals, 1);
+              const minVal = Math.min(...rawVals, 0);
+              const range  = Math.max(maxVal - minVal, 1);
+              // Scale to 60–100 range so even the worst comp shows meaningful bar
+              const normSim = rawVals.map(v => Math.round(60 + ((v - minVal) / range) * 40));
+
+              return displayComps.map((c, i) => {
               const htStr = c.ht ? `${Math.floor(c.ht/12)}'${c.ht%12}"` : "—";
               const wsDeltaC = c.ws && c.ht ? (c.ws - c.ht).toFixed(1) : null;
-              const simC = typeof c.sim === "number" ? c.sim : Math.max(0, Math.min(100, Math.round(100 - (c.dist||0)*4)));
+              const simC = normSim[i];
+              // Bar fills orange → more orange = closer match; no traffic-light encoding
+              const barOpacity = 0.5 + (simC / 100) * 0.5;
               return (
                 <div key={i} className="flex items-center gap-3 px-3 py-2.5 rounded-lg" style={{background: i < 3 ? "#0d1117" : "#0a0e1799", border: i < 3 ? "1px solid #1f2937" : "1px solid #1f293744"}}>
                   {/* Rank */}
@@ -2122,18 +2171,22 @@ function BodyTab({p}) {
                       {wsDeltaC && <span style={{color: Number(wsDeltaC) >= 3 ? "#86efac" : Number(wsDeltaC) < 0 ? "#ef444488" : "#6b7280"}}>Δ{Number(wsDeltaC) >= 0 ? "+" : ""}{wsDeltaC}"</span>}
                     </div>
                   </div>
-                  {/* Similarity */}
+                  {/* Similarity bar — normalized, orange-only, no traffic-light */}
                   <div className="flex items-center gap-2 shrink-0">
                     <div className="w-20">
                       <div className="h-2 rounded-full overflow-hidden" style={{background:"#1f2937"}}>
-                        <div className="h-full rounded-full transition-all" style={{width:`${simC}%`, background: simC > 80 ? "#22c55e" : simC > 60 ? "#3b82f6" : simC > 40 ? "#fbbf24" : "#ef4444"}}/>
+                        <div className="h-full rounded-full transition-all"
+                          style={{width:`${simC}%`, background:`rgba(249,115,22,${barOpacity})`}}/>
                       </div>
                     </div>
-                    <span className="w-10 text-xs font-bold text-right" style={{color: simC > 80 ? "#22c55e" : simC > 60 ? "#3b82f6" : simC > 40 ? "#fbbf24" : "#ef4444"}}>{simC}%</span>
+                    <span className="w-10 text-xs font-bold text-right" style={{color:`rgba(249,115,22,${barOpacity})`}}>
+                      {i === 0 ? "Best" : `#${i+1}`}
+                    </span>
                   </div>
                 </div>
               );
-            })}
+              });
+            })()}
           </div>
         ) : (
           <div className="text-center py-8 rounded-lg" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
