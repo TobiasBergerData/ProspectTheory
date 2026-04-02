@@ -1294,7 +1294,30 @@ function ProjectionTab({p}) {
   const v2Probs = p.v2TierProbs || null;
   const tiers = v2Probs || p.tiers || {};
   const tierOrder = ["Superstar","All-Star","Starter","Role Player","Replacement","Negative"];
-  const tierData = tierOrder.map(t=>({name:t.replace("Role Player","Role"),pct:tiers[t]||0,fill:TC[t]||"#374151"}));
+
+  // P(NBA) scaling: tier probs from v2TierProbs are CONDITIONAL on NBA career.
+  // For low-probability prospects we scale each bar by P(NBA) and add a "Non-NBA" bar,
+  // so the chart reflects true unconditional career outcome probabilities.
+  // pNba comes from the legacy model (pred_p_nba); pElite is P(All-Star+) — a lower bound.
+  const pNba = p.pNba != null ? p.pNba
+    : (p.pElite != null ? Math.min(0.95, p.pElite + 0.25) : null); // rough fallback
+  const showNonNba = pNba != null && pNba < 0.80;
+  const nbaScale  = showNonNba ? pNba : 1.0;
+
+  const tierData = [
+    ...tierOrder.map(t => ({
+      name: t.replace("Role Player","Role"),
+      pct:  Math.round((tiers[t] || 0) * nbaScale * 10) / 10,
+      fill: TC[t] || "#374151",
+      isNonNba: false,
+    })),
+    ...(showNonNba ? [{
+      name: "Non-NBA",
+      pct:  Math.round((1 - pNba) * 100 * 10) / 10,
+      fill: "#374151",
+      isNonNba: true,
+    }] : []),
+  ];
   // ppWA (v2 model) — primary metric; fallback to legacy war
   const ppwa = p.ppwa;
   const pElite = p.pElite;
@@ -1381,12 +1404,29 @@ function ProjectionTab({p}) {
       </div>
 
       {/* ═══ TIER DISTRIBUTION ═══ */}
-      <Sec icon="◆" title="Tier Distribution" sub="What career outcome is most likely? Probabilities are derived from the Gaussian model (PIE projection ± position-specific residual std). The assigned Tier above uses WAR thresholds for consistency with the ranking.">
+      <Sec icon="◆" title="Tier Distribution"
+        sub={showNonNba
+          ? `Unconditional career outcome distribution — NBA tier bars scaled by P(NBA) ${(pNba*100).toFixed(0)}%. "Non-NBA" covers G League, international, or out of pro ball.`
+          : "What career outcome is most likely? Probabilities derived from the ppWA Gaussian distribution (v2 model). Tier thresholds: Superstar ≥25 WA · All-Star ≥10 · Starter ≥4 · Role Player ≥1."}>
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={tierData} margin={{top:5,right:5,bottom:5,left:5}}>
             <XAxis dataKey="name" tick={{fill:"#9ca3af",fontSize:11}} axisLine={false} tickLine={false}/>
             <YAxis tick={{fill:"#6b7280",fontSize:11}} axisLine={false} tickLine={false} domain={[0,Math.max(50,...tierData.map(t=>t.pct+5))]} tickFormatter={v=>`${v}%`}/>
-            <RTooltip contentStyle={{background:"#1f2937",border:"1px solid #374151",borderRadius:8,color:"#e5e7eb"}} formatter={v=>[`${v.toFixed(1)}%`,"Probability"]}/>
+            <RTooltip
+              contentStyle={{background:"#1f2937",border:"1px solid #374151",borderRadius:8,color:"#e5e7eb"}}
+              content={({active,payload}) => {
+                if (!active || !payload?.length) return null;
+                const d = payload[0].payload;
+                return (
+                  <div style={{background:"#1f2937",border:"1px solid #374151",borderRadius:8,padding:"8px 12px"}}>
+                    <div className="font-bold mb-0.5" style={{color: d.isNonNba ? "#6b7280" : (TC[d.name.replace("Role","Role Player")] || "#e5e7eb")}}>{d.name}</div>
+                    <div style={{color:"#9ca3af",fontSize:"0.85em"}}>{d.pct.toFixed(1)}%</div>
+                    {d.isNonNba && <div style={{color:"#6b7280",fontSize:"0.78em",marginTop:3}}>G League · International · Out of pro ball</div>}
+                    {showNonNba && !d.isNonNba && <div style={{color:"#6b7280",fontSize:"0.78em",marginTop:3}}>= P(NBA) × P(tier | NBA career)</div>}
+                  </div>
+                );
+              }}
+            />
             <Bar dataKey="pct" radius={[6,6,0,0]}>{tierData.map((e,i)=><Cell key={i} fill={e.fill}/>)}</Bar>
           </BarChart>
         </ResponsiveContainer>
