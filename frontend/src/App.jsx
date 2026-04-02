@@ -1367,18 +1367,6 @@ function ProjectionTab({p}) {
             <div className="cursor-help">
               <div className="text-xs uppercase tracking-widest mb-2" style={{color:"#6b7280"}}>Projected Peak Wins Added <span style={{color:"#475569"}}>ⓘ</span></div>
               <div className="text-6xl font-bold mb-1" style={{color:warColor,fontFamily:"'Oswald',sans-serif"}}>{war != null ? fmt(war,1) : "—"}</div>
-              {(waFloor != null && waCeiling != null && war != null) && (() => {
-                // CI was computed around v2_wa_pred (raw regression), not v2_ppwa (mixture model).
-                // Recenter around ppwa using the same CI width to keep floor ≤ ppwa ≤ ceiling.
-                const ciWidth = waCeiling - waFloor;
-                const adjFloor = war - ciWidth / 2;
-                const adjCeiling = war + ciWidth / 2;
-                return (
-                  <div className="text-sm mt-1" style={{color:"#4b5563"}}>
-                    Range: <span style={{color:"#6b7280"}}>{fmt(adjFloor,1)}</span> – <span style={{color:"#9ca3af"}}>{fmt(adjCeiling,1)}</span> wins
-                  </div>
-                );
-              })()}
               {pElite != null && (
                 <div className="mt-2 text-sm font-semibold" style={{color: pElite >= 0.5 ? "#f97316" : pElite >= 0.25 ? "#fbbf24" : "#6b7280"}}>
                   P(All-Star+): {(pElite * 100).toFixed(0)}%
@@ -2747,12 +2735,8 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
                 <SortTh sortKey="age">Age</SortTh>
                 <SortTh sortKey="war">ppWA</SortTh>
                 <SortTh sortKey="bpm">BPM</SortTh>
-                <SortTh sortKey="super">⭐%</SortTh>
-                <SortTh sortKey="allstar">All★%</SortTh>
-                <SortTh sortKey="starter">Start%</SortTh>
-                <SortTh sortKey="role">Role%</SortTh>
-                <SortTh sortKey="repl">Repl%</SortTh>
-                <SortTh sortKey="tier">Tier</SortTh>
+                <SortTh sortKey="tier">NBA Tier</SortTh>
+                <th className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>Intl Tier</th>
               </tr>
             </thead>
             <tbody>
@@ -2778,12 +2762,18 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
                     <td className="px-3 py-2.5 text-xs" style={{color: p.age != null && p.age < 20 ? "#86efac" : "#9ca3af"}}>{p.age != null ? Number(p.age).toFixed(1) : "—"}</td>
                     <td className="px-3 py-2.5 font-bold" style={{color: p.war != null ? (p.war>=25?"#fbbf24":p.war>=10?"#f97316":p.war>=4?"#3b82f6":"#6b7280") : "#374151", fontFamily:"'Oswald',sans-serif"}}>{p.war != null ? fmt(p.war, 1) : "—"}</td>
                     <td className="px-3 py-2.5 text-xs font-semibold" style={{color: p.bpm != null ? (p.bpm > 8 ? "#22c55e" : p.bpm > 4 ? "#86efac" : "#9ca3af") : "#374151"}}>{p.bpm != null ? fmt(p.bpm, 1) : "—"}</td>
-                    <td className="px-3 py-2.5 text-xs font-semibold" style={{color:tierPctColor(p.tiers?.Superstar)}}>{fmt(p.tiers?.Superstar,0)}%</td>
-                    <td className="px-3 py-2.5 text-xs font-semibold" style={{color:tierPctColor(p.tiers?.["All-Star"])}}>{fmt(p.tiers?.["All-Star"],0)}%</td>
-                    <td className="px-3 py-2.5 text-xs font-semibold" style={{color:tierPctColor(p.tiers?.Starter)}}>{fmt(p.tiers?.Starter,0)}%</td>
-                    <td className="px-3 py-2.5 text-xs" style={{color:tierPctColor(p.tiers?.["Role Player"])}}>{fmt(p.tiers?.["Role Player"],0)}%</td>
-                    <td className="px-3 py-2.5 text-xs" style={{color:"#8b5cf6"}}>{fmt(p.tiers?.Replacement,0)}%</td>
-                    <td className="px-3 py-2.5 text-xs font-semibold" style={{color:TC[p.predTier]||"#6b7280"}}>{p.predTier||"—"}</td>
+                    {/* NBA Tier */}
+                    <td className="px-3 py-2.5 text-xs font-bold" style={{color:TC[p.predTier]||"#6b7280"}}>{p.predTier||"—"}</td>
+                    {/* International Tier — only for non-NBA prospects */}
+                    {(() => {
+                      const ppwa = p.war ?? p.ppwa;
+                      const pEl  = p.pElite ?? p.pNba;
+                      const showIntl = pEl != null && pEl < 0.25 && ppwa != null;
+                      if (!showIntl) return <td className="px-3 py-2.5 text-xs" style={{color:"#374151"}}>—</td>;
+                      const INTL_COLORS = {"EL Impact":"#fbbf24","EuroLeague":"#f97316","Top Liga":"#60a5fa","Pro Ball":"#a78bfa","Fringe":"#6b7280"};
+                      const label = ppwa>=7?"EL Impact":ppwa>=4?"EuroLeague":ppwa>=2?"Top Liga":ppwa>=0.5?"Pro Ball":"Fringe";
+                      return <td className="px-3 py-2.5 text-xs font-semibold" style={{color:INTL_COLORS[label]||"#6b7280"}}>🌍 {label}</td>;
+                    })()}
                   </tr>
                 );
               })}
