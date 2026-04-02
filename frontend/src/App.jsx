@@ -683,6 +683,8 @@ function mapProfile(d) {
     actual:d.tier, peakPie:d.peak_pie??d.nba_peak_actual, nbaName:d.nba_name||"",
     madeNba:d.made_nba, draftYear:d.draftYear??d.draft_year, draftPick:d.draft_pick,
     classRank: d.classRank ?? null,
+    intlTier: d.intlTier ?? null,
+    intlTierProbs: d.intlTierProbs ?? null,
     confidence:d.confidence||"full", sampleMin:d.sample_min, sampleGp:d.sample_gp,
     source: d.source ?? "ncaa",
     // Session 9: per-player feature contribution drivers
@@ -1510,6 +1512,70 @@ function ProjectionTab({p}) {
               within this player's own top contributors — <span style={{color:"#22c55e"}}>+++</span> = dominant influence,{" "}
               <span style={{color:"#22c55e"}}>+</span> = still top-5 but smaller effect.
               The ensemble blends PIE (30%) and xRAPM (70%) model contributions.
+            </div>
+          </Sec>
+        );
+      })()}
+
+      {/* ═══ INTERNATIONAL CAREER OUTLOOK ═══ */}
+      {/* Only shown for players with P(NBA) < 25% and intl projection available */}
+      {p.intlTierProbs && pElite != null && pElite < 0.25 && (() => {
+        const INTL_COLORS = {
+          "EuroLeague Impact": "#fbbf24",
+          "EuroLeague":        "#f97316",
+          "Top European Liga": "#60a5fa",
+          "Pro Basketball":    "#a78bfa",
+          "Fringe Pro":        "#6b7280",
+        };
+        const bestTier = p.intlTier || p.intlTierProbs?.[0]?.tier || "—";
+        const bestColor = INTL_COLORS[bestTier] || "#f97316";
+        const bestDesc = p.intlTierProbs?.find(t => t.tier === bestTier)?.desc || "";
+        const bestLeagues = p.intlTierProbs?.find(t => t.tier === bestTier)?.leagues || "";
+
+        return (
+          <Sec icon="🌍" title="International Career Outlook"
+            sub={`NBA probability ${(pElite*100).toFixed(0)}% — projected international trajectory based on ${war != null ? fmt(war,1) + " ppWA" : "model output"}, calibrated from 254 bridge players.`}>
+            {/* Hero: most likely tier */}
+            <div className="rounded-xl p-4 mb-4 flex items-center gap-4" style={{background:"#0d1117",border:`1px solid ${bestColor}33`}}>
+              <div className="flex-shrink-0 w-2 self-stretch rounded-full" style={{background:bestColor}}/>
+              <div>
+                <div className="text-xs uppercase tracking-widest mb-0.5" style={{color:"#6b7280"}}>Most Likely Outcome</div>
+                <div className="text-xl font-bold" style={{color:bestColor,fontFamily:"'Oswald',sans-serif"}}>{bestTier}</div>
+                <div className="text-xs mt-0.5" style={{color:"#9ca3af"}}>{bestLeagues}</div>
+                {bestDesc && <div className="text-xs mt-1" style={{color:"#6b7280"}}>{bestDesc}</div>}
+              </div>
+            </div>
+
+            {/* Probability bars — all tiers */}
+            <div className="space-y-2">
+              {(p.intlTierProbs || []).map((t, i) => {
+                const col = INTL_COLORS[t.tier] || "#6b7280";
+                const pct = Math.round((t.prob || 0) * 100);
+                const isBest = t.tier === bestTier;
+                return (
+                  <Tip key={i} content={<div>
+                    <div className="font-bold mb-1" style={{color:col}}>{t.tier}</div>
+                    <div style={{color:"#9ca3af",fontSize:"0.85em"}}>{t.leagues}</div>
+                    <div style={{color:"#cbd5e1",marginTop:4}}>{t.desc}</div>
+                    <div style={{color:"#6b7280",fontSize:"0.8em",marginTop:4}}>Probability: {pct}%</div>
+                  </div>}>
+                    <div className="flex items-center gap-3 cursor-help">
+                      <span className="text-xs w-36 flex-shrink-0 text-right" style={{color: isBest ? col : "#6b7280", fontWeight: isBest ? 700 : 400}}>{t.tier}</span>
+                      <div className="flex-1 rounded-full h-2 overflow-hidden" style={{background:"#1f2937"}}>
+                        <div className="h-2 rounded-full transition-all" style={{width:`${Math.max(pct,1)}%`, background: isBest ? col : `${col}66`}}/>
+                      </div>
+                      <span className="text-xs w-8 text-right flex-shrink-0" style={{color: isBest ? col : "#6b7280"}}>{pct}%</span>
+                    </div>
+                  </Tip>
+                );
+              })}
+            </div>
+
+            {/* Calibration note */}
+            <div className="mt-4 p-3 rounded-lg text-xs leading-relaxed" style={{background:"#0d111744",color:"#4b5563"}}>
+              <strong style={{color:"#6b7280"}}>Calibration:</strong> Thresholds derived from 254 international players who later made the NBA.
+              EuroLeague Impact-tier corresponds to NBA Role Player–caliber production internationally.
+              Tier probabilities use soft sigmoid boundaries (±1.5 ppWA) around each threshold.
             </div>
           </Sec>
         );
