@@ -1578,7 +1578,7 @@ function ProjectionTab({p}) {
         const SHORT = {
           "EuroLeague Impact": "EL Impact",
           "EuroLeague":        "EuroLeague",
-          "Top European Liga": "Top Liga",
+          "Top European Liga": "Top League",
           "Pro Basketball":    "Pro Ball",
           "Fringe Pro":        "Fringe",
         };
@@ -2822,8 +2822,8 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
                       const pEl  = p.pElite;
                       const showIntl = !p.madeNba && pEl != null && pEl < 0.15 && ppwa != null && ppwa < 10;
                       if (!showIntl) return <td className="px-3 py-2.5 text-xs" style={{color:"#374151"}}>—</td>;
-                      const INTL_COLORS = {"EL Impact":"#fbbf24","EuroLeague":"#f97316","Top Liga":"#60a5fa","Pro Ball":"#a78bfa","Fringe":"#6b7280"};
-                      const label = ppwa>=7?"EL Impact":ppwa>=4?"EuroLeague":ppwa>=2?"Top Liga":ppwa>=0.5?"Pro Ball":"Fringe";
+                      const INTL_COLORS = {"EL Impact":"#fbbf24","EuroLeague":"#f97316","Top League":"#60a5fa","Pro Ball":"#a78bfa","Fringe":"#6b7280"};
+                      const label = ppwa>=7?"EL Impact":ppwa>=4?"EuroLeague":ppwa>=2?"Top League":ppwa>=0.5?"Pro Ball":"Fringe";
                       return <td className="px-3 py-2.5 text-xs font-semibold" style={{color:INTL_COLORS[label]||"#6b7280"}}>🌍 {label}</td>;
                     })()}
                   </tr>
