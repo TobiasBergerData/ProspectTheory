@@ -2552,8 +2552,101 @@ function MethodologyTab() {
     {cat:"Tier Feasibility (vs NBA)",items:[],desc:"Position-specific comparison against NBA tier benchmarks (p25-p75 corridors). For each tier (Replacement through All-Star), core metrics are checked: Wings = TS%+3P%, Playmakers = AST%+TO%, Bigs = BLK%+ORB%. If a core metric exceeds p75 of the target tier, deficiencies in secondary metrics are marked 'Compensated' (yellow) instead of 'Critical Gap' (red)."},
     {cat:"Data Sources & Coverage",items:[],desc:"NCAA: BartTorvik (34k+ player-seasons 2008-2026, per-game + advanced + shooting zones). International: RealGM (9k+ player-seasons across 12 European leagues). NBA Outcomes: NBA API Advanced stats (27 seasons, PIE + minutes for peak computation). Anthropometrics: NBA Draft Combine measurements + Databallr wingspan data. Scouting: Scout consensus rankings (2008-2026) for humble/draft-stock adjustment."},
   ];
+  /* ── Pipeline Flow Diagram ── */
+  const PipelineDiagram = () => {
+    const boxStyle = (color) => ({
+      background:"#0d1117", border:`1.5px solid ${color}44`, borderRadius:10,
+      padding:"10px 14px", textAlign:"center", position:"relative",
+    });
+    const arrow = (dir="down") => (
+      <div style={{textAlign:"center",color:"#374151",fontSize:18,lineHeight:"20px"}}>
+        {dir==="down"?"▼":dir==="right"?"▶":"▼"}
+      </div>
+    );
+    const dataBox = (label, sub, color="#60a5fa") => (
+      <div style={boxStyle(color)}>
+        <div style={{color, fontSize:12, fontWeight:700, fontFamily:"'Oswald',sans-serif"}}>{label}</div>
+        <div style={{color:"#6b7280", fontSize:10, marginTop:2}}>{sub}</div>
+      </div>
+    );
+
+    return (
+      <div style={{padding:"8px 0"}}>
+        {/* Row 1: Data Sources */}
+        <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:8, marginBottom:4}}>
+          {dataBox("BartTorvik", "34k NCAA players\nBPM, TS%, USG%, shooting", "#60a5fa")}
+          {dataBox("RealGM", "9k intl players\n12 European leagues", "#f97316")}
+          {dataBox("NBA API", "27 seasons\nPIE + minutes → Peak WA", "#22c55e")}
+          {dataBox("Combine + Scout", "Anthro, wingspan\nConsensus rankings", "#a78bfa")}
+        </div>
+        {arrow()}
+
+        {/* Row 2: Feature Engineering */}
+        <div style={{...boxStyle("#fbbf24"), marginBottom:4}}>
+          <div style={{color:"#fbbf24", fontSize:13, fontWeight:700, fontFamily:"'Oswald',sans-serif"}}>Feature Engineering</div>
+          <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6, marginTop:6}}>
+            {[
+              ["BPM Percentile", "Era-adjusted, global rank"],
+              ["BPM Trajectory", "Slope + delta (multi-season)"],
+              ["Func. Athleticism", "Dunk rate × usage proxy"],
+              ["League Translation", "Bridge-player ratios (2,655)"],
+              ["Position Group", "Playmaker / Wing / Big"],
+              ["Age at Draft", "Development runway"],
+              ["Conference Str.", "Power / Mid / Low tier"],
+              ["FT Rate + 3P%", "Contact creation + range"],
+              ["Pos-Specific", "AST% (PG) · BLK% (C) · 3P (W)"],
+            ].map(([l,s])=>(
+              <div key={l} style={{background:"#1a1a2e",borderRadius:6,padding:"5px 8px"}}>
+                <div style={{color:"#e5e7eb",fontSize:10,fontWeight:600}}>{l}</div>
+                <div style={{color:"#4b5563",fontSize:9}}>{s}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        {arrow()}
+
+        {/* Row 3: Two-Component Model */}
+        <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:4}}>
+          <div style={boxStyle("#ef4444")}>
+            <div style={{color:"#ef4444", fontSize:12, fontWeight:700, fontFamily:"'Oswald',sans-serif"}}>ElasticNet Regression</div>
+            <div style={{color:"#6b7280", fontSize:10, marginTop:3}}>Position-stratified<br/>8–12 features per group<br/>→ wa_pred (continuous)</div>
+          </div>
+          <div style={boxStyle("#8b5cf6")}>
+            <div style={{color:"#8b5cf6", fontSize:12, fontWeight:700, fontFamily:"'Oswald',sans-serif"}}>Elite Detector</div>
+            <div style={{color:"#6b7280", fontSize:10, marginTop:3}}>Calibrated classifier<br/>P(All-Star+) probability<br/>→ pElite (0–1)</div>
+          </div>
+        </div>
+        <div style={{textAlign:"center",color:"#6b7280",fontSize:10,marginBottom:2}}>
+          ppWA = P(Elite) × E[WA|Elite] + (1 − P(Elite)) × wa_pred
+        </div>
+        {arrow()}
+
+        {/* Row 4: Outputs */}
+        <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8}}>
+          <div style={boxStyle("#f97316")}>
+            <div style={{color:"#f97316", fontSize:12, fontWeight:700, fontFamily:"'Oswald',sans-serif"}}>NBA Projection</div>
+            <div style={{color:"#6b7280", fontSize:10, marginTop:3}}>ppWA score<br/>5 tier probabilities<br/>Boosters + Limiters</div>
+          </div>
+          <div style={boxStyle("#60a5fa")}>
+            <div style={{color:"#60a5fa", fontSize:12, fontWeight:700, fontFamily:"'Oswald',sans-serif"}}>Intl Projection</div>
+            <div style={{color:"#6b7280", fontSize:10, marginTop:3}}>If P(NBA) &lt; 15%<br/>5 intl tiers (sigmoid)<br/>Calibrated from 254 bridge</div>
+          </div>
+          <div style={boxStyle("#22c55e")}>
+            <div style={{color:"#22c55e", fontSize:12, fontWeight:700, fontFamily:"'Oswald',sans-serif"}}>Player Profile</div>
+            <div style={{color:"#6b7280", fontSize:10, marginTop:3}}>DNA Pillars · Roles<br/>Archetypes · Comps<br/>Season trajectory</div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
+      {/* ── Pipeline Diagram ── */}
+      <Sec icon="🔬" title="Model Pipeline" sub="How data flows from raw sources through feature engineering to final projections.">
+        <PipelineDiagram/>
+      </Sec>
+
       <Sec icon="📖" title="Methodology & Model Documentation" sub="Complete documentation of all computed metrics, formulas, and their statistical foundations.">
         <div className="text-sm mb-3" style={{color:"#9ca3af"}}>
           ProspectTheory v2 uses <strong style={{color:"#e5e7eb"}}>ppWA (Projected Peak Wins Added)</strong> — a single, interpretable metric built from a two-component mixture model: position-stratified ElasticNet regression combined with a calibrated Elite Detector. Trained on 1,784 prospects (2010–2016) with verified NBA outcomes. Target: best 3-consecutive-season peak in first 8 NBA years. All scores are position-aware (Playmaker / Wing / Big) and era-adjusted.
