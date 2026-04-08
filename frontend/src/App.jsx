@@ -2969,7 +2969,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
       )}
 
       {/* Board table */}
-      {boardView === "table" &&
+      {boardView === "table" && (
       <div className="rounded-xl overflow-hidden" style={{background:"#111827",border:"1px solid #1f2937"}}>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -3029,6 +3029,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
           </table>
         </div>
       </div>
+      )}
     </div>
   );
 }
