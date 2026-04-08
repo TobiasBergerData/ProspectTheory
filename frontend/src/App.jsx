@@ -148,6 +148,8 @@ const METHODS = {
 // BADGE DEFINITIONS (Expanded — 40+ badges with International & Youth Engine)
 // ═══════════════════════════════════════════════════════════
 const BADGE_DEFS = {
+  // ── YELLOW — Shot profile / style tags (neither good nor bad) ──
+  "Moreyballer":            { cat:"yellow", rule:"≥75% of shots from rim + 3P + FTs",   desc:"Shot distribution is heavily skewed toward high-value zones (rim, 3P, free throws) with minimal mid-range. Named after former Rockets GM Daryl Morey who popularized this approach. This reflects shot selection only — not skill level." },
   // ── GREEN — Elite NBA-scalable skills ──
   "Elite Shooting":         { cat:"green", rule:"3P%>40 & 3P_Freq>30% & FT%>85",       desc:"Top-tier shooting across both lines + elite volume. Most translatable skill in modern NBA. Berger (2023): FT% is the #1 predictor." },
   "Floor General":          { cat:"green", rule:"(G/W) AST/TO>2.2 & AST%>25",          desc:"Elite decision-making with vision. Creates for others without turnovers — the rarest guard/wing skill." },
@@ -311,6 +313,8 @@ function computeBadges(p) {
   if (isIntl && age < 19 && bpm > 2.0)                              green.push("Pro-Ready Teen");
 
   // ═══ YELLOW BADGES ═══
+  // Moreyballer: ≥75% of shots from rim + 3P (excludes mid-range)
+  if (p.rimF != null && p.threeF != null && rimF + threeF >= 75)    yellow.push("Moreyballer");
   // Latent Sniper (stricter)
   if (ft > 85 && tp < 33)                                           yellow.push("Latent Sniper");
   // Latent Touch (broader)
@@ -2670,29 +2674,6 @@ function MethodologyTab() {
       </Sec>
 
       {/* ── LIMITATIONS & HONEST CAVEATS ── */}
-      <Sec icon="⚠️" title="Honest Limitations" sub="What the model cannot know — and why that's okay.">
-        <div className="space-y-3 text-sm" style={{color:"#94a3b8"}}>
-          <div className="p-4 rounded-lg" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
-            <div className="font-semibold mb-1" style={{color:"#fbbf24"}}>Prediction Error is Large by Design</div>
-            <div>Player development is fundamentally uncertain. Injuries, team fit, coaching, and mental growth cannot be predicted from college statistics. Our RMSE of ~9 WA means a player projected at Starter level (12 WA) could plausibly reach All-Star (21 WA) or Role Player (7 WA) outcomes. <strong style={{color:"#e5e7eb"}}>Use ppWA as a probability-weighted central estimate, not a guarantee</strong> — that's why we show tier distributions, not just a single number.</div>
-          </div>
-          <div className="p-4 rounded-lg" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
-            <div className="font-semibold mb-1" style={{color:"#fbbf24"}}>Selection Bias: Non-Drafted Players Are Invisible</div>
-            <div>The model trains only on players who entered our database as prospects — typically those who declared for the draft or played in tracked leagues. Late bloomers like Isaiah Thomas or Jalen Brunson, who slipped through or were underdogs, are systematically underrepresented. If you see a high ppWA for a late-round prospect, that's based on the statistical profile alone — not on any pre-draft consensus signal.</div>
-          </div>
-          <div className="p-4 rounded-lg" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
-            <div className="font-semibold mb-1" style={{color:"#fbbf24"}}>Future Classes Are Out-of-Sample</div>
-            <div>The model was trained on 2010–2016 drafts, validated on 2017–2019. Every class from 2020 onward is true out-of-sample data — the model has never seen their NBA outcomes. We update the training window over time, but there is always a lag. Treat current-class projections as informed priors, not retrospective validations.</div>
-          </div>
-          <div className="p-4 rounded-lg" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
-            <div className="font-semibold mb-1" style={{color:"#fbbf24"}}>International Translations Are Approximations</div>
-            <div>League strength adjustments (Euroleague ×1.40, ACB ×1.39, etc.) are derived from bridge players who played in both leagues. A player with no bridge-player comparison — e.g., a dominant presence in a weaker domestic league — has higher uncertainty than a Power-5 NCAA prospect. The model applies conservative adjustments, which may systematically undervalue elite international players.</div>
-          </div>
-          <div className="p-3 rounded-lg text-xs" style={{background:"#0d111744",color:"#4b5563",border:"1px solid #1f293744"}}>
-            <strong style={{color:"#6b7280"}}>Context:</strong> ProspectTheory v2's Spearman ρ = 0.46 compares favorably to craftednba.com (0.373) and published NBA team benchmarks (~0.33). But all prospect models, including those used by NBA front offices, are limited by the same fundamental ceiling: player development is irreducibly noisy. The goal is better-than-random, not perfect.
-          </div>
-        </div>
-      </Sec>
       {sections.map(({cat,items,desc})=>(
         <Sec key={cat} icon="▸" title={cat}>
           {desc&&<div className="text-sm mb-4" style={{color:"#94a3b8"}}>{desc}</div>}
@@ -2736,11 +2717,113 @@ function MethodologyTab() {
 }
 
 // ═══════════════════════════════════════════════════════════
+// RANGE VIEW — probabilistic outcome chart for Big Board
+// ═══════════════════════════════════════════════════════════
+function RangeView({ players }) {
+  const W = 720, LEFT = 168, RIGHT = 24, INNER_W = W - LEFT - RIGHT;
+  const ROW_H = 19, PAD_TOP = 36, PAD_BOT = 32;
+  const H = PAD_TOP + players.length * ROW_H + PAD_BOT;
+  const X_MIN = -3, X_MAX = 36;
+  const xScale = v => LEFT + ((v - X_MIN) / (X_MAX - X_MIN)) * INNER_W;
+
+  // Compute P20 / P80 range from tier probabilities
+  const computeRange = p => {
+    const tiers = p.tiers || {};
+    const tierOrder = [
+      { name:"Negative",      lo:-10, hi:-2  },
+      { name:"Replacement",   lo:-2,  hi:1   },
+      { name:"Role Player",   lo:1,   hi:4   },
+      { name:"Starter",       lo:4,   hi:10  },
+      { name:"All-Star",      lo:10,  hi:25  },
+      { name:"Superstar",     lo:25,  hi:50  },
+    ].map(t => ({ ...t, prob: (tiers[t.name] ?? 0) / 100 }));
+    const total = tierOrder.reduce((s, t) => s + t.prob, 0);
+    if (total < 0.01) { const a = p.war ?? 0; return { lo: a - 1, hi: a + 3 }; }
+    const norm = tierOrder.map(t => ({ ...t, prob: t.prob / total }));
+    let cum = 0, p20 = null, p80 = null;
+    for (const t of norm) {
+      const prev = cum; cum += t.prob;
+      if (p20 === null && cum >= 0.20) p20 = t.lo + ((0.20 - prev) / t.prob) * (t.hi - t.lo);
+      if (p80 === null && cum >= 0.80) { p80 = t.lo + ((0.80 - prev) / t.prob) * (t.hi - t.lo); break; }
+    }
+    return { lo: Math.max(X_MIN, p20 ?? -2), hi: Math.min(X_MAX, p80 ?? 25) };
+  };
+
+  const gridLines = [
+    { v:25, label:"Superstar",   color:"#fbbf24" },
+    { v:10, label:"All-Star",    color:"#f97316" },
+    { v:4,  label:"Starter",     color:"#3b82f6" },
+    { v:1,  label:"Role Player", color:"#06b6d4" },
+    { v:0,  label:"",            color:"#374151" },
+  ];
+
+  return (
+    <div style={{overflowX:"auto", background:"#111827", borderRadius:12, border:"1px solid #1f2937", padding:"12px 0"}}>
+      <svg width={W} height={H} style={{display:"block", fontFamily:"'Inter',sans-serif"}}>
+        {/* Column header */}
+        <text x={W/2} y={16} textAnchor="middle" fontSize={10} fill="#6b7280" fontWeight="600" letterSpacing="0.08em">
+          ppWA OUTCOME RANGE  (P20 → P80)
+        </text>
+        {/* Vertical tier threshold lines */}
+        {gridLines.map(gl => (
+          <g key={gl.v}>
+            <line x1={xScale(gl.v)} y1={PAD_TOP} x2={xScale(gl.v)} y2={H-PAD_BOT}
+              stroke={gl.color} strokeWidth={gl.v===0?0.5:0.8} strokeDasharray="3,4" opacity={gl.v===0?0.3:0.45}/>
+            {gl.label && <text x={xScale(gl.v)} y={PAD_TOP-8} textAnchor="middle" fontSize={8.5} fill={gl.color} opacity={0.8}>{gl.label}</text>}
+          </g>
+        ))}
+        {/* X-axis base */}
+        <line x1={LEFT} y1={H-PAD_BOT} x2={W-RIGHT} y2={H-PAD_BOT} stroke="#374151" strokeWidth={1}/>
+        {/* X-axis tick labels */}
+        {[-2,0,4,10,25].map(v => (
+          <text key={v} x={xScale(v)} y={H-PAD_BOT+13} textAnchor="middle" fontSize={9} fill="#6b7280">{v}</text>
+        ))}
+        <text x={LEFT+INNER_W/2} y={H-6} textAnchor="middle" fontSize={9} fill="#4b5563">
+          ppWA — predicted career win shares added
+        </text>
+        {/* Players */}
+        {players.map((p, i) => {
+          const y = PAD_TOP + i * ROW_H + ROW_H / 2;
+          const anchor = Math.max(X_MIN, Math.min(X_MAX, p.war ?? 0));
+          const { lo, hi } = computeRange(p);
+          const color = TC[p.predTier] || "#6b7280";
+          const xA = xScale(anchor), xLo = xScale(lo), xHi = xScale(hi);
+          const barW = Math.max(4, xHi - xLo);
+          const shortName = p.name.length > 20 ? p.name.slice(0,19)+"…" : p.name;
+          return (
+            <g key={p.name} style={{cursor:"pointer"}}>
+              {/* Rank */}
+              <text x={LEFT-158} y={y+4} fontSize={9} fill="#374151" textAnchor="start" fontWeight="700">{i+1}</text>
+              {/* Name */}
+              <text x={LEFT-142} y={y+4} fontSize={10} fill="#9ca3af" textAnchor="start">{shortName}</text>
+              {/* Range bar (P20–P80) — translucent fill */}
+              <rect x={xLo} y={y-3.5} width={barW} height={7} rx={3.5} fill={color} opacity={0.22}/>
+              {/* Thick center band (±1 ppWA around anchor) */}
+              <rect x={Math.max(xLo, xA-6)} y={y-2} width={Math.min(12, xHi-xLo)} height={4} rx={2} fill={color} opacity={0.5}/>
+              {/* Whisker end caps */}
+              <line x1={xLo} y1={y-5} x2={xLo} y2={y+5} stroke={color} strokeWidth={1.5} opacity={0.55}/>
+              <line x1={xHi} y1={y-5} x2={xHi} y2={y+5} stroke={color} strokeWidth={1.5} opacity={0.55}/>
+              {/* ppWA anchor dot */}
+              <circle cx={xA} cy={y} r={4.5} fill={color} stroke="#111827" strokeWidth={1.2}/>
+              {/* ppWA value label */}
+              <text x={xA} y={y-8} fontSize={8} fill={color} textAnchor="middle" fontWeight="700">
+                {(p.war??0).toFixed(1)}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
 // BIG BOARD (No class overview — single view)
 // ═══════════════════════════════════════════════════════════
 function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, availableYears, yearFilter, setYearFilter}) {
   const [sortBy,setSortBy]=useState("war");
   const [posFilter,setPosFilter]=useState("All");
+  const [boardView,setBoardView]=useState("table"); // "table" | "range"
 
   const fetchBoard = (year) => {
     setLoading(true);
@@ -2864,9 +2947,29 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
             </button>
           ))}
         </div>
+        {/* View toggle */}
+        <div className="flex gap-1 ml-auto">
+          {[["table","☰ Table"],["range","◈ Range"]].map(([v,l])=>(
+            <button key={v} onClick={()=>setBoardView(v)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+              style={{background:boardView===v?"#6d28d9":"#1f2937",color:boardView===v?"#e9d5ff":"#9ca3af"}}>
+              {l}
+            </button>
+          ))}
+        </div>
       </div>
 
+      {/* Range View */}
+      {boardView === "range" && (
+        <div>
+          <div className="text-xs mb-3" style={{color:"#6b7280"}}>
+            Each player: dot = ppWA anchor · bar = P20–P80 outcome range based on tier probabilities · colors match predicted tier
+          </div>
+          <RangeView players={filtered} />
+        </div>
+      )}
+
       {/* Board table */}
+      {boardView === "table" &&
       <div className="rounded-xl overflow-hidden" style={{background:"#111827",border:"1px solid #1f2937"}}>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -2904,7 +3007,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
                     <td className="px-3 py-2.5"><span className="px-2 py-0.5 rounded text-xs font-semibold" style={{background:(posColors[p.pos]||"#6b7280")+"22",color:posColors[p.pos]||"#6b7280"}}>{p.pos}</span></td>
                     <td className="px-3 py-2.5 text-xs" style={{color:"#9ca3af"}}>{p.team||p.conf}</td>
                     <td className="px-3 py-2.5 text-xs" style={{color: p.age != null && p.age < 20 ? "#86efac" : "#9ca3af"}}>{p.age != null ? Number(p.age).toFixed(1) : "—"}</td>
-                    <td className="px-3 py-2.5 font-bold" style={{color: p.war != null ? (p.war>=25?"#fbbf24":p.war>=10?"#f97316":p.war>=4?"#3b82f6":"#6b7280") : "#374151", fontFamily:"'Oswald',sans-serif"}}>{p.war != null ? fmt(p.war, 1) : "—"}</td>
+                    <td className="px-3 py-2.5 font-bold" style={{color: p.war != null ? (TC[p.predTier]||"#6b7280") : "#374151", fontFamily:"'Oswald',sans-serif"}}>{p.war != null ? fmt(p.war, 1) : "—"}</td>
                     <td className="px-3 py-2.5 text-xs font-semibold" style={{color: p.bpm != null ? (p.bpm > 8 ? "#22c55e" : p.bpm > 4 ? "#86efac" : "#9ca3af") : "#374151"}}>{p.bpm != null ? fmt(p.bpm, 1) : "—"}</td>
                     {/* NBA Tier */}
                     <td className="px-3 py-2.5 text-xs font-bold" style={{color:TC[p.predTier]||"#6b7280"}}>{p.predTier||"—"}</td>
