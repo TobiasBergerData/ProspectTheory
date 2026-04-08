@@ -366,6 +366,152 @@ function computeBadges(p) {
 }
 
 // ═══════════════════════════════════════════════════════════
+// NCAA ARCHETYPE → NBA PROJECTION PIPELINE
+// ═══════════════════════════════════════════════════════════
+
+// Step 1 — What does this player DO right now in college?
+// Uses the same tmpP fields as computeBadges (pos, usg, astP, dbpm, etc.)
+function computeNcaaArchetype(p) {
+  const pos   = getBadgePos(p);          // "G" | "W" | "B"
+  const usg   = p.usg   ?? 0;
+  const astP  = p.astP  ?? 0;
+  const astTov= p.astTov?? 1.5;
+  const dbpm  = p.dbpm  ?? 0;
+  const blkP  = p.blkP  ?? 0;
+  const orbP  = p.orbP  ?? 0;
+  const threeF= p.threeF?? 0;
+  const tp    = p.tp    ?? 0;
+  const ftr   = p.ftr   ?? 0;
+  const htIn  = p.htIn  ?? 78;
+  // selfCreation comes from mapProfile's selfCreation field
+  const sc    = p.selfCreation ?? p.pbpSelfCreation ?? 50;
+
+  // ── Bigs ──────────────────────────────────────────────
+  if (pos === "B") {
+    if (blkP >= 4  && orbP >= 7)          return "Rim Anchor";
+    if (tp   >= 33 || (htIn >= 82 && ftr > 35)) return "Stretch Big";
+    if (astP >= 22 && astTov >= 1.5)      return "Passing Big";
+    return "Paint Presence";
+  }
+
+  // ── Guards & Wings ────────────────────────────────────
+  // Priority: most restrictive first
+  if (usg >= 27 && sc >= 60)              return "Ball Dominant Scorer";
+  if (astP >= 28 && astTov >= 1.8)        return "Playmaker";
+  if (pos === "W" && dbpm >= 1.5 && tp >= 32 && threeF >= 25) return "Two-Way Wing";
+  if (pos === "G" && usg >= 22 && astP >= 20) return "Combo Guard";
+  if (usg >= 24 && pos === "W")           return "Shot Creator Wing";
+  if (threeF >= 30 && tp >= 35)           return "Secondary Wing";
+  if (dbpm >= 2.5 && usg <= 18)           return "Defensive Specialist";
+  return "Versatile Role Player";
+}
+
+// Short description of NCAA archetype for UI
+const NCAA_ARCH_DESC = {
+  "Ball Dominant Scorer": "High-usage primary scorer — creates shots off the dribble with little off-ball reliance",
+  "Playmaker":            "High AST% ball-handler — organizes offense, low turnover rate",
+  "Two-Way Wing":         "Wing with credible defense + shooting — most coveted modern NBA profile",
+  "Combo Guard":          "Guard who creates + facilitates — blend of scoring and playmaking",
+  "Shot Creator Wing":    "High-usage wing scorer — relies on individual creation",
+  "Secondary Wing":       "Off-ball wing — catches, shoots, cuts; spacing-first profile",
+  "Defensive Specialist": "Low-usage player whose value is defensive impact",
+  "Rim Anchor":           "Rim-protecting, rebounding big — defensive cornerstone",
+  "Stretch Big":          "Shot-blocking or floor-spacing big — modern 4/5",
+  "Passing Big":          "High-AST% big — playmaking from the elbow/high post",
+  "Paint Presence":       "Traditional interior big — dunks, rebounds, screens",
+  "Versatile Role Player":"Multi-dimensional contributor — no dominant skill signature",
+};
+
+// Step 2 — Project to most likely NBA role given tier ceiling
+// ncaaArch × predTier → what role this player fills on an NBA roster
+function projectNbaArchetype(ncaaArch, predTier) {
+  const rank = {"Superstar":5,"All-Star":4,"Starter":3,"Role Player":2,"Replacement":1,"Negative":0}[predTier] ?? 1;
+  const PROJ = {
+    "Ball Dominant Scorer":   ["Non-Roster","Fringe Scorer","Scoring Role Player","Secondary Creator","Primary Creator","Franchise Scorer"],
+    "Playmaker":              ["Non-Roster","Fringe PG","Connective Playmaker","Starting Playmaker","Elite Orchestrator","Generational PG"],
+    "Two-Way Wing":           ["Non-Roster","Fringe Contributor","3-and-D Contributor","3-and-D Starter","3-and-D Star","Franchise Wing"],
+    "Combo Guard":            ["Non-Roster","Fringe Guard","Bench Creator","Starting Guard","Quality Starter Guard","Star Guard"],
+    "Shot Creator Wing":      ["Non-Roster","Fringe Scorer","Bench Scorer","Rotation Wing","Quality Wing Starter","Star Wing"],
+    "Secondary Wing":         ["Non-Roster","Camp Invite","Spot-Up Specialist","Rotation Shooter","Quality Off-Ball Scorer","Elite Off-Ball Weapon"],
+    "Defensive Specialist":   ["Non-Roster","Two-Way Contract","Def. Specialist","Quality Def. Rotation","Elite Def. Starter","Defensive Star"],
+    "Rim Anchor":             ["Non-Roster","Camp Invite","Backup Rim Protector","Starting Rim Protector","Elite Rim Protector","Defensive Cornerstone"],
+    "Stretch Big":            ["Non-Roster","Camp Invite","Spacing Backup Big","Starting Stretch Big","Star Stretch Big","Modern Star Big"],
+    "Passing Big":            ["Non-Roster","Camp Invite","Connective Backup Big","Playmaking Big","Star Playmaking Big","Generational Playmaking Big"],
+    "Paint Presence":         ["Non-Roster","Camp Invite","Bench Bruiser","Starting Paint Center","Quality Starting Big","Dominant Interior Big"],
+    "Versatile Role Player":  ["Non-Roster","Two-Way Contract","Bench Versatility","Rotation Player","Quality Role Player","Versatile Starter"],
+  };
+  return PROJ[ncaaArch]?.[rank] ?? "Undefined";
+}
+
+// Short description of NBA projection for UI
+const NBA_PROJ_DESC = {
+  "Franchise Scorer":       "Capable of carrying an offense as the #1 option — rare",
+  "Primary Creator":        "#1 scoring option — creates own shot + others on a contender",
+  "Secondary Creator":      "High-usage co-star — star-level production without sole creation burden",
+  "Scoring Role Player":    "Reliable scorer off bench or in limited starting role",
+  "Generational PG":        "All-time caliber playmaker — orchestrates offense at elite level",
+  "Elite Orchestrator":     "Elite primary playmaker — sets table for entire roster",
+  "Starting Playmaker":     "Starting PG who runs offense — reliable facilitator",
+  "Connective Playmaker":   "High-IQ secondary playmaker — glue-guy creator",
+  "Franchise Wing":         "Two-way cornerstone — coveted on any contender",
+  "3-and-D Star":           "Premium two-way wing — All-Star caliber on both ends",
+  "3-and-D Starter":        "Starting-quality 3-and-D — staple of winning rosters",
+  "3-and-D Contributor":    "Reliable two-way rotation wing",
+  "Star Wing":              "Star-level wing scorer — primary option without elite defense",
+  "Quality Wing Starter":   "Dependable starting wing — scoring + some shot creation",
+  "Rotation Wing":          "Rotation-level wing — contributes in 20-25 MPG",
+  "Star Guard":             "Star-level combo guard — scoring and playmaking",
+  "Quality Starter Guard":  "Reliable starting guard — efficient in both creation and finishing",
+  "Starting Guard":         "Starting guard who can run offense",
+  "Elite Off-Ball Weapon":  "Premium catch-and-shoot — unlocks floor spacing at star level",
+  "Quality Off-Ball Scorer":"Reliable floor spacer — above-average off-ball threat",
+  "Rotation Shooter":       "Rotation spot-up shooter — spacing + smart play",
+  "Spot-Up Specialist":     "Pure catch-and-shoot — valuable when paired with creators",
+  "Defensive Cornerstone":  "Elite rim protector — defines team's defensive identity",
+  "Elite Rim Protector":    "Starting-caliber rim protector — shot-blocker + rebounder",
+  "Starting Rim Protector": "Solid starting center — anchors paint defense",
+  "Backup Rim Protector":   "Rotation-level rim protection",
+  "Modern Star Big":        "Stretch-5 star — combines spacing, mobility, and production",
+  "Star Stretch Big":       "All-Star caliber stretch 4/5 — shooting + rim presence",
+  "Starting Stretch Big":   "Starting stretch big — spacing + solid rotation defense",
+  "Spacing Backup Big":     "Floor-spacing backup center",
+  "Generational Playmaking Big": "All-time caliber playmaking big — Jokic-tier vision",
+  "Star Playmaking Big":    "Star-level big who creates for others",
+  "Playmaking Big":         "Starting big with credible playmaking — high value",
+  "Connective Backup Big":  "Backup big who moves the ball",
+  "Dominant Interior Big":  "Star-level paint scorer — traditional post dominance",
+  "Quality Starting Big":   "Reliable starting big — production + physicality",
+  "Starting Paint Center":  "Workhorse starting center — rebounding + rim scoring",
+  "Bench Bruiser":          "Backup interior big — physical minutes",
+  "Defensive Star":         "Star-level defensive specialist — elite impact without creation",
+  "Elite Def. Starter":     "Starting-caliber defensive ace — changes games defensively",
+  "Quality Def. Rotation":  "Valued rotation defender — earns minutes through defense",
+  "Def. Specialist":        "Pure defensive backup — minimal offensive role",
+  "Quality Role Player":    "Reliable rotation player — fits winning culture",
+  "Rotation Player":        "Solid NBA rotation contributor",
+  "Versatile Starter":      "Starting-caliber versatile player — does multiple things",
+  "Bench Versatility":      "Valuable bench player — does a bit of everything",
+};
+
+// Ceiling / Floor scores from tier probability distribution (both 0–10)
+function computeCeilingFloor(tiers) {
+  if (!tiers) return { ceiling: 5, floor: 5, riskTag: null };
+  const SS = (tiers.Superstar       ?? 0) / 100;
+  const AS = (tiers["All-Star"]     ?? 0) / 100;
+  const ST = (tiers.Starter         ?? 0) / 100;
+  const RP = (tiers["Role Player"]  ?? 0) / 100;
+  const RE = (tiers.Replacement     ?? 0) / 100;
+  const NE = (tiers.Negative        ?? 0) / 100;
+  const ceiling = Math.min(10, Math.round((SS*10 + AS*7 + ST*3 + RP*1) * 10) / 10);
+  const floor   = Math.min(10, Math.round((1 - RE - NE) * 10 * 10) / 10);
+  const riskTag = (ceiling >= 6 && floor <= 4) ? "Boom/Bust"
+                : (ceiling >= 7 && floor >= 5) ? "High Upside"
+                : (floor   >= 7 && ceiling <= 5) ? "Safe Floor"
+                : (floor   >= 6) ? "Bankable" : null;
+  return { ceiling, floor, riskTag };
+}
+
+// ═══════════════════════════════════════════════════════════
 // Z-SCORE HELPERS
 // ═══════════════════════════════════════════════════════════
 function pctl2z(p50) {
@@ -519,6 +665,21 @@ function mapProfile(d) {
     fouls40:d.fouls_40??0, min:d.min??0, pts:d.pts??0, fg:d.fg_pct??0,
     source:d.source, league:d.league,
   };
+  // ── Archetype pipeline (uses same tmpP stats as badges) ──
+  const _ncaaArch = computeNcaaArchetype(tmpP);
+  const _predTierForArch = d.v2Tier ?? d.pred_tier ?? d.predicted_tier ?? d.tier ?? "Replacement";
+  const _nbaProjection = projectNbaArchetype(_ncaaArch, _predTierForArch);
+  // Pre-compute tiers for ceiling/floor (same logic as tiers field below)
+  const _tiersForCF = d.v2TierProbs ? d.v2TierProbs : {
+    Superstar:     (d.prob_super??d.prob_superstar??d.probs?.superstar??0)*100,
+    "All-Star":    (d.prob_allstar??d.probs?.allstar??0)*100,
+    Starter:       (d.prob_starter??d.probs?.starter??0)*100,
+    "Role Player": (d.prob_role??d.prob_roleplayer??d.probs?.roleplayer??0)*100,
+    Replacement:   (d.prob_repl??d.prob_replacement??d.probs?.replacement??0)*100,
+    Negative:      (d.prob_neg??d.prob_negative??d.prob_never??d.probs?.out??0)*100,
+  };
+  const { ceiling: _ceilingScore, floor: _floorScore, riskTag: _riskTag } = computeCeilingFloor(_tiersForCF);
+
   // Only compute client badges when sufficient stats are available
   // Board API only sends bpm/usg/ts/ast_p/blk_p/stl_p — NOT tp/ft/drbP/dbpm etc.
   // Without those, computeBadges defaults them to 0 → false Spacing Killer, Liability Big, etc.
@@ -692,6 +853,11 @@ function mapProfile(d) {
     actualIntlLeague:  d.actualIntlLeague  ?? null,
     actualIntlTier:    d.actualIntlTier    ?? null,
     actualIntlLeagues: d.actualIntlLeagues ?? null,
+    ncaaArchetype: _ncaaArch,
+    nbaProjection: _nbaProjection,
+    ceilingScore: _ceilingScore,
+    floorScore: _floorScore,
+    riskTag: _riskTag,
     confidence:d.confidence||"full", sampleMin:d.sample_min, sampleGp:d.sample_gp,
     source: d.source ?? "ncaa",
     // Session 9: per-player feature contribution drivers
@@ -1395,6 +1561,63 @@ function ProjectionTab({p}) {
               <div className="text-lg font-bold mt-0.5" style={{color:confColor}}>{confLabel}</div>
             </div>
           </div>
+          {/* ── Archetype Pipeline ── */}
+          {(p.ncaaArchetype || p.nbaProjection) && (
+            <div className="mt-4 rounded-xl px-4 py-3" style={{background:"#0a0e17",border:"1px solid #1f2937"}}>
+              <div className="flex items-center gap-2 flex-wrap justify-center">
+                {/* NCAA Role (what the player IS now) */}
+                <div className="text-center">
+                  <div className="text-xs uppercase tracking-widest mb-1" style={{color:"#4b5563",letterSpacing:"0.1em"}}>NCAA Role</div>
+                  <div className="px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wide"
+                    style={{background:"#1f293788",color:"#9ca3af",border:"1px solid #374151"}}>
+                    {p.ncaaArchetype}
+                  </div>
+                  {NCAA_ARCH_DESC[p.ncaaArchetype] && (
+                    <div className="text-xs mt-1 max-w-32" style={{color:"#4b5563",lineHeight:1.3}}>
+                      {NCAA_ARCH_DESC[p.ncaaArchetype].split(" — ")[0]}
+                    </div>
+                  )}
+                </div>
+                {/* Arrow */}
+                <div className="text-2xl font-bold mx-1" style={{color:"#374151"}}>→</div>
+                {/* NBA Projection (what he can become) */}
+                <div className="text-center">
+                  <div className="text-xs uppercase tracking-widest mb-1" style={{color:"#4b5563",letterSpacing:"0.1em"}}>NBA Projection</div>
+                  <div className="px-3 py-1 rounded-lg text-sm font-bold"
+                    style={{background:(TC[predTier]||"#6b7280")+"22",color:TC[predTier]||"#9ca3af",border:`1px solid ${TC[predTier]||"#374151"}88`}}>
+                    {p.nbaProjection}
+                  </div>
+                  {NBA_PROJ_DESC[p.nbaProjection] && (
+                    <div className="text-xs mt-1 max-w-36" style={{color:"#6b7280",lineHeight:1.3}}>
+                      {NBA_PROJ_DESC[p.nbaProjection]}
+                    </div>
+                  )}
+                </div>
+                {/* Ceiling / Floor */}
+                {(p.ceilingScore != null || p.floorScore != null) && (
+                  <div className="flex gap-3 ml-2">
+                    <div className="text-center">
+                      <div className="text-xs uppercase tracking-widest mb-1" style={{color:"#4b5563"}}>Ceiling</div>
+                      <div className="text-xl font-bold" style={{color:"#fbbf24",fontFamily:"'Oswald',sans-serif"}}>{(p.ceilingScore??0).toFixed(0)}<span className="text-xs font-normal" style={{color:"#78716c"}}>/10</span></div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-xs uppercase tracking-widest mb-1" style={{color:"#4b5563"}}>Floor</div>
+                      <div className="text-xl font-bold" style={{color:"#06b6d4",fontFamily:"'Oswald',sans-serif"}}>{(p.floorScore??0).toFixed(0)}<span className="text-xs font-normal" style={{color:"#164e63"}}>/10</span></div>
+                    </div>
+                    {p.riskTag && (
+                      <div className="text-center">
+                        <div className="text-xs uppercase tracking-widest mb-1" style={{color:"#4b5563"}}>Risk Profile</div>
+                        <div className="text-xs font-bold px-2 py-1 rounded" style={{
+                          color: p.riskTag==="Boom/Bust"?"#f59e0b":p.riskTag==="High Upside"?"#22c55e":p.riskTag==="Safe Floor"?"#06b6d4":"#3b82f6",
+                          background: p.riskTag==="Boom/Bust"?"#78350f44":p.riskTag==="High Upside"?"#14532d44":p.riskTag==="Safe Floor"?"#0c4a6e44":"#1e3a5f44",
+                        }}>{p.riskTag}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -2696,6 +2919,78 @@ function MethodologyTab() {
           )}
         </Sec>
       ))}
+      {/* ── Archetype Pipeline ── */}
+      <Sec icon="🔭" title="NCAA Archetype → NBA Projection Pipeline"
+        sub="Two-stage role inference: (1) classify current college role from stats, (2) project most likely NBA function given tier ceiling. Distinct from Badges — Badges describe individual skills, Archetypes describe holistic roles.">
+        <div className="space-y-4 text-sm" style={{color:"#cbd5e1"}}>
+          <div className="p-4 rounded-lg" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+            <div className="font-bold mb-2" style={{color:"#f97316"}}>Stage 1 — NCAA Role Classification</div>
+            <p className="mb-3" style={{color:"#94a3b8"}}>Derived from the same stat profile used for badges (USG, AST%, DBPM, BLK%, 3P%, self-creation index, position). Priority-ordered rules assign one of 12 archetypes. Order matters: more restrictive archetypes (Ball Dominant Scorer, Playmaker) are checked first to avoid false positives.</p>
+            <div className="grid gap-2" style={{gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))"}}>
+              {Object.entries(NCAA_ARCH_DESC).map(([arch,desc])=>(
+                <div key={arch} className="px-3 py-2 rounded" style={{background:"#111827",border:"1px solid #1f2937"}}>
+                  <div className="font-bold text-xs mb-0.5" style={{color:"#9ca3af"}}>{arch}</div>
+                  <div className="text-xs" style={{color:"#6b7280"}}>{desc}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="p-4 rounded-lg" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+            <div className="font-bold mb-2" style={{color:"#f97316"}}>Stage 2 — NBA Projection</div>
+            <p style={{color:"#94a3b8"}}>Each NCAA archetype maps to a 6-level NBA projection table indexed by Predicted Tier (Negative → Superstar). The projection answers: <em>"If this player achieves his predicted tier ceiling, what role will he fill on an NBA roster?"</em> Tier is the vertical axis (how good), Archetype is the horizontal axis (what kind of good). Together they form a 12×6 matrix of 72 distinct NBA role projections.</p>
+          </div>
+          <div className="p-4 rounded-lg" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+            <div className="font-bold mb-2" style={{color:"#f97316"}}>Ceiling / Floor Scores (0–10)</div>
+            <p className="mb-2" style={{color:"#94a3b8"}}>Derived from the tier probability distribution — not from raw stats. This ensures they reflect model uncertainty, not just statistical magnitude.</p>
+            <div className="px-3 py-2 rounded font-mono text-xs mb-2" style={{background:"#111827",color:"#7dd3fc"}}>
+              Ceiling = P(Superstar)×10 + P(All-Star)×7 + P(Starter)×3 + P(Role Player)×1  [capped at 10]
+            </div>
+            <div className="px-3 py-2 rounded font-mono text-xs" style={{background:"#111827",color:"#7dd3fc"}}>
+              Floor = (1 − P(Replacement) − P(Negative)) × 10  [capped at 10]
+            </div>
+            <div className="mt-3 grid gap-2" style={{gridTemplateColumns:"repeat(4,1fr)"}}>
+              {[["Boom/Bust","C≥6 ∩ F≤4","⚡ High variance — real star upside + real bust risk","#f59e0b"],
+                ["High Upside","C≥7 ∩ F≥5","Rare: star potential with acceptable downside","#22c55e"],
+                ["Safe Floor","F≥7 ∩ C≤5","Reliable contributor — minimal bust risk","#06b6d4"],
+                ["Bankable","F≥6","Dependable rotation player or better","#3b82f6"]
+              ].map(([tag,rule,desc,color])=>(
+                <div key={tag} className="p-2 rounded" style={{background:"#111827",border:`1px solid ${color}44`}}>
+                  <div className="font-bold text-xs mb-0.5" style={{color}}>{tag}</div>
+                  <div className="text-xs font-mono mb-1" style={{color:"#4b5563"}}>{rule}</div>
+                  <div className="text-xs" style={{color:"#6b7280"}}>{desc}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Sec>
+
+      {/* ── GM Risk Profile ── */}
+      <Sec icon="🎯" title="GM Risk Profile"
+        sub="Three draft philosophies that reorder the Big Board Range View. Same players, different priorities — reflecting real front-office decision-making contexts.">
+        <div className="space-y-3 text-sm" style={{color:"#cbd5e1"}}>
+          <p style={{color:"#94a3b8"}}>Two prospects with identical ppWA of 6.0 can have completely different risk profiles: one might be 70% Starter / 30% Role Player (safe, bankable), while another is 30% All-Star / 40% Replacement (high variance). The optimal draft choice depends on where your team is in its competitive window.</p>
+          <div className="grid gap-3" style={{gridTemplateColumns:"repeat(3,1fr)"}}>
+            {[["🎰 Ceiling First","#f59e0b","#78350f",
+              "Sort: 65% Ceiling Score + 35% ppWA",
+              "Rebuilding teams, tanking franchises, or GMs willing to accept bust risk for a potential star. Boom/Bust picks rise. A 5% Superstar probability is an asset, not a liability. This GM is picking lottery tickets.",
+            ],["⚖️ Balanced","#6b7280","#1f2937",
+              "Sort: ppWA (expected value)",
+              "Standard draft order. Best proxy for long-run roster value. Neither ceiling nor floor is systematically privileged. Default view.",
+            ],["🛡️ Floor First","#06b6d4","#0c4a6e",
+              "Sort: 65% Floor Score + 35% ppWA",
+              "Win-now teams, GMs protecting their jobs, or franchises with no room for a bust. High-variance picks drop. A player who reliably delivers 4-6 ppWA is more valuable than a boom/bust candidate with the same expected value.",
+            ]].map(([label,color,bg,formula,desc])=>(
+              <div key={label} className="p-3 rounded-lg" style={{background:"#0d1117",border:`1px solid ${color}44`}}>
+                <div className="font-bold mb-1" style={{color}}>{label}</div>
+                <div className="text-xs font-mono mb-2 px-2 py-1 rounded" style={{background:"#111827",color:"#7dd3fc"}}>{formula}</div>
+                <div className="text-xs" style={{color:"#94a3b8"}}>{desc}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Sec>
+
       <Sec icon="🏅" title="Badge Definitions" sub="Green = elite NBA skills · Yellow = swing/potential · Red = warning signals. Position-filtered: Bigs can't earn Floor General, Playmakers can't earn Rim Protector.">
         <div className="space-y-3">
           {Object.entries(BADGE_DEFS).map(([name,def])=>{
@@ -2719,99 +3014,183 @@ function MethodologyTab() {
 // ═══════════════════════════════════════════════════════════
 // RANGE VIEW — probabilistic outcome chart for Big Board
 // ═══════════════════════════════════════════════════════════
-function RangeView({ players }) {
-  const W = 720, LEFT = 168, RIGHT = 24, INNER_W = W - LEFT - RIGHT;
-  const ROW_H = 19, PAD_TOP = 36, PAD_BOT = 32;
-  const H = PAD_TOP + players.length * ROW_H + PAD_BOT;
-  const X_MIN = -3, X_MAX = 36;
-  const xScale = v => LEFT + ((v - X_MIN) / (X_MAX - X_MIN)) * INNER_W;
+// Tier order for stacked distribution bars (worst → best, left → right)
+const TIER_STACK = [
+  { name:"Negative",     color:"#ef4444", lo:-10, hi:-2  },
+  { name:"Replacement",  color:"#8b5cf6", lo:-2,  hi:1   },
+  { name:"Role Player",  color:"#06b6d4", lo:1,   hi:4   },
+  { name:"Starter",      color:"#3b82f6", lo:4,   hi:10  },
+  { name:"All-Star",     color:"#f97316", lo:10,  hi:25  },
+  { name:"Superstar",    color:"#fbbf24", lo:25,  hi:50  },
+];
 
-  // Compute P20 / P80 range from tier probabilities
-  const computeRange = p => {
-    const tiers = p.tiers || {};
-    const tierOrder = [
-      { name:"Negative",      lo:-10, hi:-2  },
-      { name:"Replacement",   lo:-2,  hi:1   },
-      { name:"Role Player",   lo:1,   hi:4   },
-      { name:"Starter",       lo:4,   hi:10  },
-      { name:"All-Star",      lo:10,  hi:25  },
-      { name:"Superstar",     lo:25,  hi:50  },
-    ].map(t => ({ ...t, prob: (tiers[t.name] ?? 0) / 100 }));
-    const total = tierOrder.reduce((s, t) => s + t.prob, 0);
-    if (total < 0.01) { const a = p.war ?? 0; return { lo: a - 1, hi: a + 3 }; }
-    const norm = tierOrder.map(t => ({ ...t, prob: t.prob / total }));
-    let cum = 0, p20 = null, p80 = null;
-    for (const t of norm) {
-      const prev = cum; cum += t.prob;
-      if (p20 === null && cum >= 0.20) p20 = t.lo + ((0.20 - prev) / t.prob) * (t.hi - t.lo);
-      if (p80 === null && cum >= 0.80) { p80 = t.lo + ((0.80 - prev) / t.prob) * (t.hi - t.lo); break; }
+function RangeView({ players, gmRisk }) {
+  // Layout constants
+  const LEFT_NAME = 14, NAME_W = 148, LEFT_PROJ = NAME_W + LEFT_NAME + 6;
+  const PROJ_W = 140, LEFT_BAR = LEFT_PROJ + PROJ_W + 8;
+  const BAR_W = 340, RIGHT_META = 12;
+  const W = LEFT_BAR + BAR_W + RIGHT_META + 80; // 80 for C/F scores
+  const ROW_H = 22, PAD_TOP = 44, PAD_BOT = 28;
+  const H = PAD_TOP + players.length * ROW_H + PAD_BOT;
+
+  // Convert ppWA value to x-position within a player's bar
+  // (the bar represents full prob distribution left→right)
+  const ppwaToBarX = (ppwa, segments) => {
+    // Find which tier ppWA falls in, compute cumulative x-offset
+    const total = segments.reduce((s, t) => s + t.prob, 0);
+    if (total < 0.001) return LEFT_BAR + BAR_W * 0.5;
+    let cum = 0;
+    for (const t of segments) {
+      const w = (t.prob / total) * BAR_W;
+      if (ppwa <= t.hi || t === segments[segments.length - 1]) {
+        const frac = t.hi === t.lo ? 0.5 : Math.max(0, Math.min(1, (ppwa - t.lo) / (t.hi - t.lo)));
+        return LEFT_BAR + cum + frac * w;
+      }
+      cum += w;
     }
-    return { lo: Math.max(X_MIN, p20 ?? -2), hi: Math.min(X_MAX, p80 ?? 25) };
+    return LEFT_BAR + BAR_W;
   };
 
-  const gridLines = [
-    { v:25, label:"Superstar",   color:"#fbbf24" },
-    { v:10, label:"All-Star",    color:"#f97316" },
-    { v:4,  label:"Starter",     color:"#3b82f6" },
-    { v:1,  label:"Role Player", color:"#06b6d4" },
-    { v:0,  label:"",            color:"#374151" },
-  ];
+  // Skewness label from distribution shape
+  const getSkewLabel = (segs) => {
+    const total = segs.reduce((s, t) => s + t.prob, 0);
+    if (total < 0.001) return null;
+    const upper = (segs[4].prob + segs[5].prob) / total; // All-Star + SS
+    const lower = (segs[0].prob + segs[1].prob) / total; // Neg + Repl
+    if (upper > 0.35 && lower < 0.10) return { label:"↗ Upside", color:"#22c55e" };
+    if (upper < 0.08 && lower > 0.25) return { label:"↙ Floor", color:"#06b6d4" };
+    if (upper > 0.25 && lower > 0.20) return { label:"⚡ Volatile", color:"#f59e0b" };
+    return null;
+  };
 
   return (
-    <div style={{overflowX:"auto", background:"#111827", borderRadius:12, border:"1px solid #1f2937", padding:"12px 0"}}>
+    <div style={{overflowX:"auto", background:"#0a0e17", borderRadius:12, border:"1px solid #1f2937", padding:"0"}}>
       <svg width={W} height={H} style={{display:"block", fontFamily:"'Inter',sans-serif"}}>
-        {/* Column header */}
-        <text x={W/2} y={16} textAnchor="middle" fontSize={10} fill="#6b7280" fontWeight="600" letterSpacing="0.08em">
-          ppWA OUTCOME RANGE  (P20 → P80)
+
+        {/* ── Column headers ── */}
+        <text x={LEFT_NAME+2}   y={18} fontSize={8.5} fill="#4b5563" fontWeight="700" letterSpacing="0.07em">RNK  PLAYER</text>
+        {/* Two-row header for archetype columns */}
+        <text x={LEFT_PROJ+2}   y={12} fontSize={7.5} fill="#374151" fontWeight="600">NCAA ROLE</text>
+        <text x={LEFT_PROJ+2}   y={22} fontSize={7.5} fill="#4b5563" fontWeight="600">→ NBA PROJECTION</text>
+        <text x={LEFT_BAR+2}    y={12} fontSize={7.5} fill="#4b5563" fontWeight="600" letterSpacing="0.06em">OUTCOME DISTRIBUTION  (each segment = tier probability)</text>
+        <text x={LEFT_BAR+BAR_W+14} y={12} fontSize={7.5} fill="#fbbf24" fontWeight="600">C</text>
+        <text x={LEFT_BAR+BAR_W+26} y={12} fontSize={7.5} fill="#06b6d4" fontWeight="600">F</text>
+        <text x={LEFT_BAR+2}    y={22} fontSize={7.5} fill="#374151">
+          {TIER_STACK.map(t=>t.name).join("  ·  ")}
         </text>
-        {/* Vertical tier threshold lines */}
-        {gridLines.map(gl => (
-          <g key={gl.v}>
-            <line x1={xScale(gl.v)} y1={PAD_TOP} x2={xScale(gl.v)} y2={H-PAD_BOT}
-              stroke={gl.color} strokeWidth={gl.v===0?0.5:0.8} strokeDasharray="3,4" opacity={gl.v===0?0.3:0.45}/>
-            {gl.label && <text x={xScale(gl.v)} y={PAD_TOP-8} textAnchor="middle" fontSize={8.5} fill={gl.color} opacity={0.8}>{gl.label}</text>}
-          </g>
-        ))}
-        {/* X-axis base */}
-        <line x1={LEFT} y1={H-PAD_BOT} x2={W-RIGHT} y2={H-PAD_BOT} stroke="#374151" strokeWidth={1}/>
-        {/* X-axis tick labels */}
-        {[-2,0,4,10,25].map(v => (
-          <text key={v} x={xScale(v)} y={H-PAD_BOT+13} textAnchor="middle" fontSize={9} fill="#6b7280">{v}</text>
-        ))}
-        <text x={LEFT+INNER_W/2} y={H-6} textAnchor="middle" fontSize={9} fill="#4b5563">
-          ppWA — predicted career win shares added
-        </text>
-        {/* Players */}
+
+        {/* Tier legend blocks */}
+        {TIER_STACK.map((t,i) => {
+          const cumW = TIER_STACK.slice(0,i).reduce((s,_)=>s+42,0);
+          return <rect key={t.name} x={LEFT_BAR+2+cumW} y={26} width={38} height={4} rx={2} fill={t.color} opacity={0.4}/>;
+        })}
+
+        {/* ── Separator line ── */}
+        <line x1={LEFT_NAME} y1={PAD_TOP-4} x2={W-4} y2={PAD_TOP-4} stroke="#1f2937" strokeWidth={1}/>
+        <line x1={LEFT_PROJ-4} y1={PAD_TOP-4} x2={LEFT_PROJ-4} y2={H-PAD_BOT} stroke="#1f2937" strokeWidth={0.5}/>
+        <line x1={LEFT_BAR-4}  y1={PAD_TOP-4} x2={LEFT_BAR-4}  y2={H-PAD_BOT} stroke="#1f2937" strokeWidth={0.5}/>
+
+        {/* ── Players ── */}
         {players.map((p, i) => {
           const y = PAD_TOP + i * ROW_H + ROW_H / 2;
-          const anchor = Math.max(X_MIN, Math.min(X_MAX, p.war ?? 0));
-          const { lo, hi } = computeRange(p);
-          const color = TC[p.predTier] || "#6b7280";
-          const xA = xScale(anchor), xLo = xScale(lo), xHi = xScale(hi);
-          const barW = Math.max(4, xHi - xLo);
-          const shortName = p.name.length > 20 ? p.name.slice(0,19)+"…" : p.name;
+          const tiers = p.tiers || {};
+          const segments = TIER_STACK.map(t => ({ ...t, prob: (tiers[t.name] ?? 0) / 100 }));
+          const total = segments.reduce((s, t) => s + t.prob, 0);
+
+          // Stacked bar: each segment width proportional to probability
+          let cumX = LEFT_BAR;
+          const barSegments = segments.map(t => {
+            const w = total > 0 ? (t.prob / total) * BAR_W : 0;
+            const x = cumX; cumX += w;
+            return { ...t, x, w };
+          });
+
+          // ppWA anchor position within distribution
+          const anchor = p.war ?? 0;
+          const xA = ppwaToBarX(anchor, segments);
+
+          // Ceiling/floor
+          const ceil = p.ceilingScore ?? 5;
+          const flr  = p.floorScore  ?? 5;
+          const risk = p.riskTag;
+          const riskColor = risk==="Boom/Bust"?"#f59e0b":risk==="High Upside"?"#22c55e":risk==="Safe Floor"?"#06b6d4":risk==="Bankable"?"#3b82f6":"#6b7280";
+
+          // GM risk highlight: dim non-relevant end
+          const highlightLeft  = gmRisk === "floor";
+          const highlightRight = gmRisk === "ceiling";
+
+          const ncaaArch = p.ncaaArchetype ?? "—";
+          const nbaProj  = p.nbaProjection  ?? "—";
+          const skew = getSkewLabel(segments);
+          const shortName = p.name.length > 17 ? p.name.slice(0,16)+"…" : p.name;
+
+          // Alternate row tint
+          const rowBg = i % 2 === 0 ? "#0a0e1700" : "#ffffff06";
+
           return (
-            <g key={p.name} style={{cursor:"pointer"}}>
+            <g key={p.name}>
+              {/* Row background */}
+              <rect x={LEFT_NAME} y={y-ROW_H/2} width={W-LEFT_NAME-4} height={ROW_H} fill={rowBg}/>
+
               {/* Rank */}
-              <text x={LEFT-158} y={y+4} fontSize={9} fill="#374151" textAnchor="start" fontWeight="700">{i+1}</text>
-              {/* Name */}
-              <text x={LEFT-142} y={y+4} fontSize={10} fill="#9ca3af" textAnchor="start">{shortName}</text>
-              {/* Range bar (P20–P80) — translucent fill */}
-              <rect x={xLo} y={y-3.5} width={barW} height={7} rx={3.5} fill={color} opacity={0.22}/>
-              {/* Thick center band (±1 ppWA around anchor) */}
-              <rect x={Math.max(xLo, xA-6)} y={y-2} width={Math.min(12, xHi-xLo)} height={4} rx={2} fill={color} opacity={0.5}/>
-              {/* Whisker end caps */}
-              <line x1={xLo} y1={y-5} x2={xLo} y2={y+5} stroke={color} strokeWidth={1.5} opacity={0.55}/>
-              <line x1={xHi} y1={y-5} x2={xHi} y2={y+5} stroke={color} strokeWidth={1.5} opacity={0.55}/>
-              {/* ppWA anchor dot */}
-              <circle cx={xA} cy={y} r={4.5} fill={color} stroke="#111827" strokeWidth={1.2}/>
-              {/* ppWA value label */}
-              <text x={xA} y={y-8} fontSize={8} fill={color} textAnchor="middle" fontWeight="700">
-                {(p.war??0).toFixed(1)}
+              <text x={LEFT_NAME+2} y={y+4} fontSize={9} fill="#374151" fontWeight="700">{i+1}</text>
+              {/* Player name */}
+              <text x={LEFT_NAME+22} y={y+4} fontSize={10} fill="#d1d5db" fontWeight="600">{shortName}</text>
+
+              {/* ── NCAA Archetype (what he IS now) ── */}
+              <text x={LEFT_PROJ+2} y={y-1} fontSize={8} fill="#6b7280" fontWeight="600" letterSpacing="0.04em">
+                {ncaaArch.toUpperCase()}
               </text>
+              {/* ── NBA Projection (what he CAN BECOME) — more prominent ── */}
+              <text x={LEFT_PROJ+2} y={y+9} fontSize={9.5} fill={TC[p.predTier]||"#9ca3af"} fontWeight="700">
+                → {nbaProj}
+              </text>
+
+              {/* ── Stacked tier distribution bar ── */}
+              {barSegments.map(seg => seg.w > 0.5 && (
+                <rect key={seg.name} x={seg.x} y={y-5} width={seg.w} height={10}
+                  fill={seg.color}
+                  opacity={
+                    (highlightRight && (seg.name==="All-Star"||seg.name==="Superstar")) ? 0.85 :
+                    (highlightLeft  && (seg.name==="Role Player"||seg.name==="Starter"||seg.name==="Replacement")) ? 0.85 :
+                    (gmRisk !== "neutral" && !highlightRight && !highlightLeft) ? 0.25 : 0.55
+                  }
+                />
+              ))}
+              {/* Subtle gap lines between segments */}
+              {barSegments.slice(0,-1).map(seg => seg.w > 0.5 && (
+                <line key={`gap-${seg.name}`} x1={seg.x+seg.w} y1={y-5} x2={seg.x+seg.w} y2={y+5}
+                  stroke="#0a0e17" strokeWidth={0.8}/>
+              ))}
+
+              {/* ppWA anchor line + dot */}
+              <line x1={xA} y1={y-7} x2={xA} y2={y+7} stroke="#fff" strokeWidth={1.5} opacity={0.9}/>
+              <circle cx={xA} cy={y} r={3.5} fill="#fff" stroke="#0a0e17" strokeWidth={1}/>
+              {/* ppWA value above dot */}
+              <text x={xA} y={y-10} fontSize={8.5} fill="#e5e7eb" textAnchor="middle" fontWeight="700">
+                {anchor.toFixed(1)}
+              </text>
+
+              {/* Skewness label (right of bar) */}
+              {skew && <text x={LEFT_BAR+BAR_W+4} y={y+4} fontSize={8} fill={skew.color}>{skew.label}</text>}
+
+              {/* Ceiling / Floor scores */}
+              <text x={LEFT_BAR+BAR_W+52} y={y-1} fontSize={8} fill="#4b5563" textAnchor="middle">C</text>
+              <text x={LEFT_BAR+BAR_W+52} y={y+9} fontSize={9} fill="#fbbf24" fontWeight="700" textAnchor="middle">{ceil.toFixed(0)}</text>
+              <text x={LEFT_BAR+BAR_W+66} y={y-1} fontSize={8} fill="#4b5563" textAnchor="middle">F</text>
+              <text x={LEFT_BAR+BAR_W+66} y={y+9} fontSize={9} fill="#06b6d4" fontWeight="700" textAnchor="middle">{flr.toFixed(0)}</text>
+
+              {/* Risk tag (if present) */}
+              {risk && <text x={LEFT_BAR+BAR_W+52} y={y+20} fontSize={7} fill={riskColor} textAnchor="middle">{risk}</text>}
             </g>
           );
         })}
+
+        {/* Bottom axis */}
+        <line x1={LEFT_BAR} y1={H-PAD_BOT+2} x2={LEFT_BAR+BAR_W} y2={H-PAD_BOT+2} stroke="#1f2937" strokeWidth={1}/>
+        <text x={LEFT_BAR+BAR_W/2} y={H-8} textAnchor="middle" fontSize={8.5} fill="#374151">
+          Probability distribution across outcome tiers · White line = ppWA (expected value anchor)
+        </text>
       </svg>
     </div>
   );
@@ -2824,6 +3203,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
   const [sortBy,setSortBy]=useState("war");
   const [posFilter,setPosFilter]=useState("All");
   const [boardView,setBoardView]=useState("table"); // "table" | "range"
+  const [gmRisk,setGmRisk]=useState("neutral");    // "ceiling" | "neutral" | "floor"
 
   const fetchBoard = (year) => {
     setLoading(true);
@@ -2878,7 +3258,15 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
       repl:    (a,b) => (b.tiers?.Replacement ?? 0) - (a.tiers?.Replacement ?? 0),
       tier:    (a,b) => (tierRank[b.predTier]??0) - (tierRank[a.predTier]??0),
     };
-    list = [...list].sort(sortFn[sortBy] || sortFn.war);
+    // GM Risk Profile overrides sort when in Range view
+    if (boardView === "range" && gmRisk !== "neutral") {
+      const gmSort = gmRisk === "ceiling"
+        ? (a,b) => (b.ceilingScore??0)*0.65 + (b.war??0)*0.35/3 - ((a.ceilingScore??0)*0.65 + (a.war??0)*0.35/3)
+        : (a,b) => (b.floorScore??0)*0.65   + (b.war??0)*0.35/3 - ((a.floorScore??0)*0.65   + (a.war??0)*0.35/3);
+      list = [...list].sort(gmSort);
+    } else {
+      list = [...list].sort(sortFn[sortBy] || sortFn.war);
+    }
     return list.slice(0, 60);
   }, [allPlayers, sortBy, posFilter]);
 
@@ -2958,13 +3346,31 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
         </div>
       </div>
 
+      {/* GM Risk Profile — only shown in Range view */}
+      {boardView === "range" && (
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-xs font-semibold uppercase tracking-widest" style={{color:"#4b5563"}}>GM Risk Profile</span>
+          {[
+            ["ceiling","🎰 Ceiling First","Rebuilding · Sort by upside potential","#f59e0b","#78350f"],
+            ["neutral", "⚖️ Balanced",    "Expected value · Sort by ppWA",        "#6b7280","#1f2937"],
+            ["floor",  "🛡️ Floor First",  "Win-Now · Sort by floor reliability",  "#06b6d4","#0c4a6e"],
+          ].map(([v,l,desc,activeColor,activeBg])=>(
+            <button key={v} onClick={()=>setGmRisk(v)}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold flex flex-col items-start"
+              title={desc}
+              style={{background:gmRisk===v?activeBg:"#111827",color:gmRisk===v?activeColor:"#6b7280",
+                border:`1px solid ${gmRisk===v?activeColor:"#1f2937"}`}}>
+              {l}
+              <span style={{fontSize:9,opacity:0.7,fontWeight:400,marginTop:1}}>{desc}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Range View */}
       {boardView === "range" && (
         <div>
-          <div className="text-xs mb-3" style={{color:"#6b7280"}}>
-            Each player: dot = ppWA anchor · bar = P20–P80 outcome range based on tier probabilities · colors match predicted tier
-          </div>
-          <RangeView players={filtered} />
+          <RangeView players={filtered} gmRisk={gmRisk} />
         </div>
       )}
 
