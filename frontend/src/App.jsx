@@ -389,7 +389,7 @@ function computeNcaaArchetype(p) {
   // ── Bigs ──────────────────────────────────────────────
   if (pos === "B") {
     if (blkP >= 4  && orbP >= 7)          return "Rim Anchor";
-    if (tp   >= 33 || (htIn >= 82 && ftr > 35)) return "Stretch Big";
+    if ((tp >= 35 && threeF >= 15) || (htIn >= 82 && ftr > 35 && threeF >= 12)) return "Stretch Big";
     if (astP >= 22 && astTov >= 1.5)      return "Passing Big";
     return "Paint Presence";
   }
@@ -502,12 +502,17 @@ function computeCeilingFloor(tiers) {
   const RP = (tiers["Role Player"]  ?? 0) / 100;
   const RE = (tiers.Replacement     ?? 0) / 100;
   const NE = (tiers.Negative        ?? 0) / 100;
-  const ceiling = Math.min(10, Math.round((SS*10 + AS*7 + ST*3 + RP*1) * 10) / 10);
+  // Ceiling: upside-weighted score. Weights scaled so elite prospects (SS≥30%) reach 7-9.
+  const ceiling = Math.min(10, Math.round((SS*15 + AS*8 + ST*4 + RP*1.5) * 10) / 10);
+  // Floor: reliability score (% chance of contributing as Replacement or better).
   const floor   = Math.min(10, Math.round((1 - RE - NE) * 10 * 10) / 10);
-  const riskTag = (ceiling >= 6 && floor <= 4) ? "Boom/Bust"
-                : (ceiling >= 7 && floor >= 5) ? "High Upside"
-                : (floor   >= 7 && ceiling <= 5) ? "Safe Floor"
-                : (floor   >= 6) ? "Bankable" : null;
+  // Risk labels based on raw probabilities — more stable than derived ceiling/floor scores.
+  const starP = (SS + AS) * 100;   // % upside (All-Star+)
+  const bustP = (RE + NE) * 100;   // % bust (Replacement or worse)
+  const riskTag = (starP >= 25 && bustP >= 15) ? "Boom/Bust"
+                : (starP >= 25 && bustP <  12) ? "High Upside"
+                : (bustP <   8 && starP <  20) ? "Safe Floor"
+                : (floor  >=  7) ? "Bankable" : null;
   return { ceiling, floor, riskTag };
 }
 
@@ -1339,8 +1344,8 @@ function ShootingTab({p}) {
                 <g>
                   <text x="290" y="228" textAnchor="middle" fill="#8b5cf6" style={{fontSize:13,fontWeight:"bold"}}>FREE THROW</text>
                   <text x="290" y="256" textAnchor="middle" fill={sc(ft,"ft")} style={{fontSize:24,fontWeight:"bold"}}>{ft!=null?`${fmt(ft)}%`:"—"}</text>
-                  {totalFta!=null&&<text x="290" y="274" textAnchor="middle" fill="#9ca3af" style={{fontSize:11}}>{totalFta} FTA</text>}
-                  {totalFta==null&&<text x="290" y="274" textAnchor="middle" fill="#6b7280" style={{fontSize:11}}>FTR: {ftr!=null?fmt(ftr):"—"}</text>}
+                  {ftaPerGame!=null&&<text x="290" y="274" textAnchor="middle" fill="#9ca3af" style={{fontSize:11}}>{fmt(ftaPerGame,1)} FTA/G {totalFta!=null?`(${totalFta} total)`:""}</text>}
+                  {ftaPerGame==null&&<text x="290" y="274" textAnchor="middle" fill="#6b7280" style={{fontSize:11}}>FTR: {ftr!=null?fmt(ftr):"—"}</text>}
                 </g>
                 {/* 3-POINT */}
                 <g opacity={tp!=null?1:0.3}>
@@ -2943,16 +2948,16 @@ function MethodologyTab() {
             <div className="font-bold mb-2" style={{color:"#f97316"}}>Ceiling / Floor Scores (0–10)</div>
             <p className="mb-2" style={{color:"#94a3b8"}}>Derived from the tier probability distribution — not from raw stats. This ensures they reflect model uncertainty, not just statistical magnitude.</p>
             <div className="px-3 py-2 rounded font-mono text-xs mb-2" style={{background:"#111827",color:"#7dd3fc"}}>
-              Ceiling = P(Superstar)×10 + P(All-Star)×7 + P(Starter)×3 + P(Role Player)×1  [capped at 10]
+              Ceiling = P(SS)×15 + P(AS)×8 + P(Starter)×4 + P(RP)×1.5  [capped at 10]
             </div>
             <div className="px-3 py-2 rounded font-mono text-xs" style={{background:"#111827",color:"#7dd3fc"}}>
               Floor = (1 − P(Replacement) − P(Negative)) × 10  [capped at 10]
             </div>
             <div className="mt-3 grid gap-2" style={{gridTemplateColumns:"repeat(4,1fr)"}}>
-              {[["Boom/Bust","C≥6 ∩ F≤4","⚡ High variance — real star upside + real bust risk","#f59e0b"],
-                ["High Upside","C≥7 ∩ F≥5","Rare: star potential with acceptable downside","#22c55e"],
-                ["Safe Floor","F≥7 ∩ C≤5","Reliable contributor — minimal bust risk","#06b6d4"],
-                ["Bankable","F≥6","Dependable rotation player or better","#3b82f6"]
+              {[["Boom/Bust","starP≥25 ∩ bustP≥15","Star upside + real bust risk — high variance profile","#f59e0b"],
+                ["High Upside","starP≥25 ∩ bustP<12","Star potential with acceptable downside","#22c55e"],
+                ["Safe Floor","bustP<8 ∩ starP<20","Reliable contributor — minimal bust risk","#06b6d4"],
+                ["Bankable","floor≥7","Dependable rotation player or better","#3b82f6"]
               ].map(([tag,rule,desc,color])=>(
                 <div key={tag} className="p-2 rounded" style={{background:"#111827",border:`1px solid ${color}44`}}>
                   <div className="font-bold text-xs mb-0.5" style={{color}}>{tag}</div>
@@ -3025,172 +3030,154 @@ const TIER_STACK = [
 ];
 
 function RangeView({ players, gmRisk }) {
-  // Layout constants
-  const LEFT_NAME = 14, NAME_W = 148, LEFT_PROJ = NAME_W + LEFT_NAME + 6;
-  const PROJ_W = 140, LEFT_BAR = LEFT_PROJ + PROJ_W + 8;
-  const BAR_W = 340, RIGHT_META = 12;
-  const W = LEFT_BAR + BAR_W + RIGHT_META + 80; // 80 for C/F scores
-  const ROW_H = 22, PAD_TOP = 44, PAD_BOT = 28;
-  const H = PAD_TOP + players.length * ROW_H + PAD_BOT;
+  // ── Layout constants ──
+  const LEFT_NAME = 14, NAME_W = 190;
+  const LEFT_BAR  = LEFT_NAME + NAME_W + 8;
+  // Fixed ppWA scale: -10 → +50 = 60 units, 7 px per unit = 420 px total
+  const PPWA_MIN = -10, PPWA_RANGE = 60;
+  const BAR_W    = 420, SCALE = BAR_W / PPWA_RANGE; // 7 px / ppWA unit
+  const W        = LEFT_BAR + BAR_W + 90;            // +90 for C/F scores
+  const ROW_H    = 22, PAD_TOP = 52, PAD_BOT = 32;
+  const H        = PAD_TOP + players.length * ROW_H + PAD_BOT;
 
-  // Convert ppWA value to x-position within a player's bar
-  // (the bar represents full prob distribution left→right)
-  const ppwaToBarX = (ppwa, segments) => {
-    // Find which tier ppWA falls in, compute cumulative x-offset
-    const total = segments.reduce((s, t) => s + t.prob, 0);
-    if (total < 0.001) return LEFT_BAR + BAR_W * 0.5;
-    let cum = 0;
-    for (const t of segments) {
-      const w = (t.prob / total) * BAR_W;
-      if (ppwa <= t.hi || t === segments[segments.length - 1]) {
-        const frac = t.hi === t.lo ? 0.5 : Math.max(0, Math.min(1, (ppwa - t.lo) / (t.hi - t.lo)));
-        return LEFT_BAR + cum + frac * w;
-      }
-      cum += w;
-    }
-    return LEFT_BAR + BAR_W;
-  };
+  // ppWA value → absolute x pixel on the shared scale
+  const ppwaX = (v) => LEFT_BAR + (v - PPWA_MIN) * SCALE;
 
-  // Skewness label from distribution shape
-  const getSkewLabel = (segs) => {
-    const total = segs.reduce((s, t) => s + t.prob, 0);
-    if (total < 0.001) return null;
-    const upper = (segs[4].prob + segs[5].prob) / total; // All-Star + SS
-    const lower = (segs[0].prob + segs[1].prob) / total; // Neg + Repl
-    if (upper > 0.35 && lower < 0.10) return { label:"↗ Upside", color:"#22c55e" };
-    if (upper < 0.08 && lower > 0.25) return { label:"↙ Floor", color:"#06b6d4" };
-    if (upper > 0.25 && lower > 0.20) return { label:"⚡ Volatile", color:"#f59e0b" };
-    return null;
-  };
+  // Tier zones at fixed pixel positions (derived once, shared by all rows)
+  const tierZones = TIER_STACK.map(t => ({
+    ...t,
+    x: ppwaX(t.lo),
+    w: (t.hi - t.lo) * SCALE,
+  }));
+
+  // Axis ticks at every tier boundary + right edge
+  const axisTicks = [-10, -2, 1, 4, 10, 25, 50];
+  // Short tier label for header (Replacement → Repl, Role Player → Role)
+  const shortTierLabel = n =>
+    n==="Role Player"?"Role":n==="Replacement"?"Repl":n==="Negative"?"Neg":n==="All-Star"?"AS":n;
 
   return (
     <div style={{overflowX:"auto", background:"#0a0e17", borderRadius:12, border:"1px solid #1f2937", padding:"0"}}>
       <svg width={W} height={H} style={{display:"block", fontFamily:"'Inter',sans-serif"}}>
 
-        {/* ── Column headers ── */}
-        <text x={LEFT_NAME+2}   y={18} fontSize={8.5} fill="#4b5563" fontWeight="700" letterSpacing="0.07em">RNK  PLAYER</text>
-        {/* Two-row header for archetype columns */}
-        <text x={LEFT_PROJ+2}   y={12} fontSize={7.5} fill="#374151" fontWeight="600">NCAA ROLE</text>
-        <text x={LEFT_PROJ+2}   y={22} fontSize={7.5} fill="#4b5563" fontWeight="600">→ NBA PROJECTION</text>
-        <text x={LEFT_BAR+2}    y={12} fontSize={7.5} fill="#4b5563" fontWeight="600" letterSpacing="0.06em">OUTCOME DISTRIBUTION  (each segment = tier probability)</text>
-        <text x={LEFT_BAR+BAR_W+14} y={12} fontSize={7.5} fill="#fbbf24" fontWeight="600">C</text>
-        <text x={LEFT_BAR+BAR_W+26} y={12} fontSize={7.5} fill="#06b6d4" fontWeight="600">F</text>
-        <text x={LEFT_BAR+2}    y={22} fontSize={7.5} fill="#374151">
-          {TIER_STACK.map(t=>t.name).join("  ·  ")}
-        </text>
+        {/* ── Tier label row (above bar area) ── */}
+        <text x={LEFT_NAME+2} y={14} fontSize={8.5} fill="#4b5563" fontWeight="700" letterSpacing="0.07em">RNK  PLAYER</text>
+        <text x={LEFT_BAR+BAR_W+18} y={14} fontSize={7.5} fill="#fbbf24" fontWeight="600" textAnchor="middle">C</text>
+        <text x={LEFT_BAR+BAR_W+36} y={14} fontSize={7.5} fill="#06b6d4" fontWeight="600" textAnchor="middle">F</text>
 
-        {/* Tier legend blocks */}
-        {TIER_STACK.map((t,i) => {
-          const cumW = TIER_STACK.slice(0,i).reduce((s,_)=>s+42,0);
-          return <rect key={t.name} x={LEFT_BAR+2+cumW} y={26} width={38} height={4} rx={2} fill={t.color} opacity={0.4}/>;
-        })}
+        {tierZones.map(t => (
+          <text key={`lbl-${t.name}`}
+            x={t.x + t.w/2} y={16}
+            fontSize={6.5} fill={t.color} fontWeight="700" textAnchor="middle" opacity={0.8}>
+            {shortTierLabel(t.name)}
+          </text>
+        ))}
 
-        {/* ── Separator line ── */}
+        {/* Axis tick labels (ppWA values) */}
+        {axisTicks.map(v => (
+          <text key={`tick-${v}`} x={ppwaX(v)} y={28}
+            fontSize={7} fill="#374151" textAnchor="middle">{v}</text>
+        ))}
+
+        {/* Tier zone background shading (very subtle) */}
+        {tierZones.map(t => (
+          <rect key={`bg-${t.name}`}
+            x={t.x} y={PAD_TOP-8} width={t.w} height={H-PAD_TOP-PAD_BOT+12}
+            fill={t.color} opacity={0.03}/>
+        ))}
+
+        {/* Tier boundary vertical rules */}
+        {[...tierZones.map(t=>t.x), ppwaX(50)].map((xv,i) => (
+          <line key={`bnd-${i}`} x1={xv} y1={PAD_TOP-8} x2={xv} y2={H-PAD_BOT+4}
+            stroke="#374151" strokeWidth={0.4} opacity={0.35}/>
+        ))}
+
+        {/* ── Header separator ── */}
         <line x1={LEFT_NAME} y1={PAD_TOP-4} x2={W-4} y2={PAD_TOP-4} stroke="#1f2937" strokeWidth={1}/>
-        <line x1={LEFT_PROJ-4} y1={PAD_TOP-4} x2={LEFT_PROJ-4} y2={H-PAD_BOT} stroke="#1f2937" strokeWidth={0.5}/>
-        <line x1={LEFT_BAR-4}  y1={PAD_TOP-4} x2={LEFT_BAR-4}  y2={H-PAD_BOT} stroke="#1f2937" strokeWidth={0.5}/>
+        <line x1={LEFT_BAR-4} y1={PAD_TOP-4} x2={LEFT_BAR-4} y2={H-PAD_BOT} stroke="#1f2937" strokeWidth={0.5}/>
 
-        {/* ── Players ── */}
+        {/* ── Player rows ── */}
         {players.map((p, i) => {
-          const y = PAD_TOP + i * ROW_H + ROW_H / 2;
-          const tiers = p.tiers || {};
-          const segments = TIER_STACK.map(t => ({ ...t, prob: (tiers[t.name] ?? 0) / 100 }));
-          const total = segments.reduce((s, t) => s + t.prob, 0);
+          const y   = PAD_TOP + i * ROW_H + ROW_H / 2;
+          const trs = p.tiers || {};
+          const segments = tierZones.map(t => ({ ...t, prob: (trs[t.name] ?? 0) / 100 }));
 
-          // Stacked bar: each segment width proportional to probability
-          let cumX = LEFT_BAR;
-          const barSegments = segments.map(t => {
-            const w = total > 0 ? (t.prob / total) * BAR_W : 0;
-            const x = cumX; cumX += w;
-            return { ...t, x, w };
-          });
+          // ppWA anchor clamped to scale
+          const anchor = Math.max(PPWA_MIN, Math.min(50, p.war ?? 0));
+          const xA     = ppwaX(anchor);
 
-          // ppWA anchor position within distribution
-          const anchor = p.war ?? 0;
-          const xA = ppwaToBarX(anchor, segments);
-
-          // Ceiling/floor
           const ceil = p.ceilingScore ?? 5;
           const flr  = p.floorScore  ?? 5;
           const risk = p.riskTag;
-          const riskColor = risk==="Boom/Bust"?"#f59e0b":risk==="High Upside"?"#22c55e":risk==="Safe Floor"?"#06b6d4":risk==="Bankable"?"#3b82f6":"#6b7280";
+          const riskColor = risk==="Boom/Bust"?"#f59e0b"
+            : risk==="High Upside"?"#22c55e"
+            : risk==="Safe Floor"?"#06b6d4"
+            : risk==="Bankable"?"#3b82f6":"#6b7280";
 
-          // GM risk highlight: dim non-relevant end
-          const highlightLeft  = gmRisk === "floor";
-          const highlightRight = gmRisk === "ceiling";
-
-          const ncaaArch = p.ncaaArchetype ?? "—";
-          const nbaProj  = p.nbaProjection  ?? "—";
-          const skew = getSkewLabel(segments);
-          const shortName = p.name.length > 17 ? p.name.slice(0,16)+"…" : p.name;
-
-          // Alternate row tint
-          const rowBg = i % 2 === 0 ? "#0a0e1700" : "#ffffff06";
+          const shortName = p.name.length > 22 ? p.name.slice(0,21)+"…" : p.name;
+          const rowBg     = i % 2 === 0 ? "#0a0e1700" : "#ffffff06";
 
           return (
             <g key={p.name}>
               {/* Row background */}
               <rect x={LEFT_NAME} y={y-ROW_H/2} width={W-LEFT_NAME-4} height={ROW_H} fill={rowBg}/>
 
-              {/* Rank */}
-              <text x={LEFT_NAME+2} y={y+4} fontSize={9} fill="#374151" fontWeight="700">{i+1}</text>
-              {/* Player name */}
+              {/* Rank + Name */}
+              <text x={LEFT_NAME+2}  y={y+4} fontSize={9}  fill="#374151" fontWeight="700">{i+1}</text>
               <text x={LEFT_NAME+22} y={y+4} fontSize={10} fill="#d1d5db" fontWeight="600">{shortName}</text>
 
-              {/* ── NCAA Archetype (what he IS now) ── */}
-              <text x={LEFT_PROJ+2} y={y-1} fontSize={8} fill="#6b7280" fontWeight="600" letterSpacing="0.04em">
-                {ncaaArch.toUpperCase()}
-              </text>
-              {/* ── NBA Projection (what he CAN BECOME) — more prominent ── */}
-              <text x={LEFT_PROJ+2} y={y+9} fontSize={9.5} fill={TC[p.predTier]||"#9ca3af"} fontWeight="700">
-                → {nbaProj}
-              </text>
+              {/* ── Fixed-scale tier zones: opacity encodes probability ──
+                  Each tier occupies its fixed ppWA range on the shared axis.
+                  Bright = high probability; faint = low probability.
+                  This enables cross-player comparison: you can see if one
+                  player's best-case sits below another's worst-case. */}
+              {segments.map(seg => {
+                if (seg.prob < 0.01) return null;
+                const isUpside   = seg.name==="All-Star" || seg.name==="Superstar";
+                const isDownside = seg.name==="Negative" || seg.name==="Replacement";
+                const dimByGM    = (gmRisk==="ceiling" && isDownside)
+                                 || (gmRisk==="floor"   && isUpside);
+                const opacity    = dimByGM
+                  ? seg.prob * 0.2
+                  : Math.min(0.90, seg.prob * 1.6 + 0.07);
+                return (
+                  <rect key={seg.name}
+                    x={seg.x} y={y-5} width={seg.w} height={10}
+                    fill={seg.color} opacity={opacity} rx={1}/>
+                );
+              })}
 
-              {/* ── Stacked tier distribution bar ── */}
-              {barSegments.map(seg => seg.w > 0.5 && (
-                <rect key={seg.name} x={seg.x} y={y-5} width={seg.w} height={10}
-                  fill={seg.color}
-                  opacity={
-                    (highlightRight && (seg.name==="All-Star"||seg.name==="Superstar")) ? 0.85 :
-                    (highlightLeft  && (seg.name==="Role Player"||seg.name==="Starter"||seg.name==="Replacement")) ? 0.85 :
-                    (gmRisk !== "neutral" && !highlightRight && !highlightLeft) ? 0.25 : 0.55
-                  }
-                />
-              ))}
-              {/* Subtle gap lines between segments */}
-              {barSegments.slice(0,-1).map(seg => seg.w > 0.5 && (
-                <line key={`gap-${seg.name}`} x1={seg.x+seg.w} y1={y-5} x2={seg.x+seg.w} y2={y+5}
-                  stroke="#0a0e17" strokeWidth={0.8}/>
+              {/* Tier boundary gap lines within bar */}
+              {tierZones.slice(0,-1).map(t => (
+                <line key={`gap-${t.name}`}
+                  x1={t.x+t.w} y1={y-5} x2={t.x+t.w} y2={y+5}
+                  stroke="#0a0e17" strokeWidth={0.6} opacity={0.5}/>
               ))}
 
-              {/* ppWA anchor line + dot */}
+              {/* ppWA anchor: white vertical rule + dot + value label */}
               <line x1={xA} y1={y-7} x2={xA} y2={y+7} stroke="#fff" strokeWidth={1.5} opacity={0.9}/>
-              <circle cx={xA} cy={y} r={3.5} fill="#fff" stroke="#0a0e17" strokeWidth={1}/>
-              {/* ppWA value above dot */}
-              <text x={xA} y={y-10} fontSize={8.5} fill="#e5e7eb" textAnchor="middle" fontWeight="700">
+              <circle cx={xA} cy={y} r={2.8} fill="#fff" stroke="#0a0e17" strokeWidth={0.8}/>
+              <text x={xA} y={y-10} fontSize={8} fill="#e5e7eb" textAnchor="middle" fontWeight="700">
                 {anchor.toFixed(1)}
               </text>
 
-              {/* Skewness label (right of bar) */}
-              {skew && <text x={LEFT_BAR+BAR_W+4} y={y+4} fontSize={8} fill={skew.color}>{skew.label}</text>}
-
               {/* Ceiling / Floor scores */}
-              <text x={LEFT_BAR+BAR_W+52} y={y-1} fontSize={8} fill="#4b5563" textAnchor="middle">C</text>
-              <text x={LEFT_BAR+BAR_W+52} y={y+9} fontSize={9} fill="#fbbf24" fontWeight="700" textAnchor="middle">{ceil.toFixed(0)}</text>
-              <text x={LEFT_BAR+BAR_W+66} y={y-1} fontSize={8} fill="#4b5563" textAnchor="middle">F</text>
-              <text x={LEFT_BAR+BAR_W+66} y={y+9} fontSize={9} fill="#06b6d4" fontWeight="700" textAnchor="middle">{flr.toFixed(0)}</text>
-
-              {/* Risk tag (if present) */}
-              {risk && <text x={LEFT_BAR+BAR_W+52} y={y+20} fontSize={7} fill={riskColor} textAnchor="middle">{risk}</text>}
+              <text x={LEFT_BAR+BAR_W+18} y={y+4} fontSize={9} fill="#fbbf24" fontWeight="700" textAnchor="middle">{ceil.toFixed(0)}</text>
+              <text x={LEFT_BAR+BAR_W+36} y={y+4} fontSize={9} fill="#06b6d4" fontWeight="700" textAnchor="middle">{flr.toFixed(0)}</text>
+              {risk && (
+                <text x={LEFT_BAR+BAR_W+27} y={y+15} fontSize={6.5} fill={riskColor} textAnchor="middle">{risk}</text>
+              )}
             </g>
           );
         })}
 
-        {/* Bottom axis */}
+        {/* ── Bottom axis ── */}
         <line x1={LEFT_BAR} y1={H-PAD_BOT+2} x2={LEFT_BAR+BAR_W} y2={H-PAD_BOT+2} stroke="#1f2937" strokeWidth={1}/>
-        <text x={LEFT_BAR+BAR_W/2} y={H-8} textAnchor="middle" fontSize={8.5} fill="#374151">
-          Probability distribution across outcome tiers · White line = ppWA (expected value anchor)
+        <text x={LEFT_BAR}          y={H-PAD_BOT+14} fontSize={7} fill="#374151">ppWA –10</text>
+        <text x={LEFT_BAR+BAR_W/2} y={H-PAD_BOT+14} fontSize={7} fill="#374151" textAnchor="middle">
+          Fixed outcome scale · opacity = tier probability · white line = ppWA (expected value)
         </text>
+        <text x={LEFT_BAR+BAR_W}   y={H-PAD_BOT+14} fontSize={7} fill="#374151" textAnchor="end">+50</text>
       </svg>
     </div>
   );
@@ -3261,8 +3248,18 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
     // GM Risk Profile overrides sort when in Range view
     if (boardView === "range" && gmRisk !== "neutral") {
       const gmSort = gmRisk === "ceiling"
-        ? (a,b) => (b.ceilingScore??0)*0.65 + (b.war??0)*0.35/3 - ((a.ceilingScore??0)*0.65 + (a.war??0)*0.35/3)
-        : (a,b) => (b.floorScore??0)*0.65   + (b.war??0)*0.35/3 - ((a.floorScore??0)*0.65   + (a.war??0)*0.35/3);
+        // Ceiling-first: ceilingScore (recalibrated) + raw star probability (SS+AS)
+        ? (a,b) => {
+            const scoreB = (b.ceilingScore??0)*0.5 + ((b.tiers?.Superstar??0)+(b.tiers?.["All-Star"]??0))*0.03 + (b.war??0)*0.2;
+            const scoreA = (a.ceilingScore??0)*0.5 + ((a.tiers?.Superstar??0)+(a.tiers?.["All-Star"]??0))*0.03 + (a.war??0)*0.2;
+            return scoreB - scoreA;
+          }
+        // Floor-first: floorScore + inverse bust probability (lower NE+RE = better)
+        : (a,b) => {
+            const scoreB = (b.floorScore??0)*0.5 - ((b.tiers?.Negative??0)+(b.tiers?.Replacement??0))*0.03 + (b.war??0)*0.2;
+            const scoreA = (a.floorScore??0)*0.5 - ((a.tiers?.Negative??0)+(a.tiers?.Replacement??0))*0.03 + (a.war??0)*0.2;
+            return scoreB - scoreA;
+          };
       list = [...list].sort(gmSort);
     } else {
       list = [...list].sort(sortFn[sortBy] || sortFn.war);
