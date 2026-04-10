@@ -22,8 +22,9 @@ import json
 import os
 from pathlib import Path
 from typing import Optional
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
@@ -50,6 +51,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# GZip compression for all responses (minimum size 500 bytes)
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # ═══════════════════════════════════════════════════════════
 # DATA LOADING (compressed api_*.json from Script 11)
@@ -494,14 +498,19 @@ async def get_years():
 
 @app.get("/api/board")
 async def get_board(
-    n: int = Query(500, ge=1, le=2000),
+    response: Response,
+    n: int = Query(200, ge=1, le=2000),
     year: Optional[int] = None,
     position: Optional[str] = None,
 ):
     """
     Big Board: top N players sorted by ppWA (or pred_mu fallback).
     Returns rich profile data so the frontend does NOT need a second fetch.
+    Default n=200 (down from 500) — frontend shows ≤60, this covers all filter combos.
     """
+    # Cache-Control: allow CDN/browser to cache for 10 min, serve stale for 1h while revalidating
+    response.headers["Cache-Control"] = "public, max-age=600, stale-while-revalidate=3600"
+
     profiles = get_profiles()
     results = []
 

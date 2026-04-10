@@ -1711,8 +1711,9 @@ function ProjectionTab({p}) {
             return { label: label || "?", strength: parseInt(str) || 1 };
           });
         };
-        const boosters = parseDrvs(p.projectionBoosters);
-        const limiters = parseDrvs(p.projectionLimiters);
+        // v2Boosters/v2Limiters (new SHAP format) take priority over legacy string fields
+        const boosters = parseDrvs(p.v2Boosters ?? p.projectionBoosters);
+        const limiters = parseDrvs(p.v2Limiters ?? p.projectionLimiters);
         const hasDrvData = boosters.length > 0 || limiters.length > 0;
 
         // Strength pips: filled squares for strength, empty for remaining slots
@@ -3017,6 +3018,46 @@ function MethodologyTab() {
 }
 
 // ═══════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────
+// computeRangePpwa: p10/p50/p90 ppWA from tier distribution
+// Uses CDF interpolation within tier bounds
+// ─────────────────────────────────────────────────────────
+function computeRangePpwa(tiers) {
+  if (!tiers) return { floor: -2, med: 5, ceil: 15 };
+  const ORDER = [
+    { name:"Negative",    lo:-10, hi:-2  },
+    { name:"Replacement", lo:-2,  hi:1   },
+    { name:"Role Player", lo:1,   hi:4   },
+    { name:"Starter",     lo:4,   hi:10  },
+    { name:"All-Star",    lo:10,  hi:25  },
+    { name:"Superstar",   lo:25,  hi:50  },
+  ];
+  const total = ORDER.reduce((s, t) => s + (tiers[t.name] ?? 0), 0);
+  if (total < 0.1) return { floor: -2, med: 5, ceil: 15 };
+  let cum = 0;
+  const cdf = ORDER.map(t => {
+    const p = (tiers[t.name] ?? 0) / total;
+    const seg = { ...t, p, cs: cum, ce: cum + p };
+    cum += p;
+    return seg;
+  });
+  const ppwaAt = q => {
+    for (const s of cdf) {
+      if (q <= s.ce + 0.001) {
+        if (s.p < 0.001) return (s.lo + s.hi) / 2;
+        const frac = Math.max(0, Math.min(1, (q - s.cs) / s.p));
+        return s.lo + frac * (s.hi - s.lo);
+      }
+    }
+    return 50;
+  };
+  return {
+    floor: Math.max(-10, ppwaAt(0.10)),
+    med:   ppwaAt(0.50),
+    ceil:  Math.min(50, ppwaAt(0.90)),
+  };
+}
+
 // RANGE VIEW — probabilistic outcome chart for Big Board
 // ═══════════════════════════════════════════════════════════
 // Tier order for stacked distribution bars (worst → best, left → right)
@@ -3030,154 +3071,159 @@ const TIER_STACK = [
 ];
 
 function RangeView({ players, gmRisk }) {
-  // ── Layout constants ──
-  const LEFT_NAME = 14, NAME_W = 190;
-  const LEFT_BAR  = LEFT_NAME + NAME_W + 8;
-  // Fixed ppWA scale: -10 → +50 = 60 units, 7 px per unit = 420 px total
-  const PPWA_MIN = -10, PPWA_RANGE = 60;
-  const BAR_W    = 420, SCALE = BAR_W / PPWA_RANGE; // 7 px / ppWA unit
-  const W        = LEFT_BAR + BAR_W + 90;            // +90 for C/F scores
-  const ROW_H    = 22, PAD_TOP = 52, PAD_BOT = 32;
-  const H        = PAD_TOP + players.length * ROW_H + PAD_BOT;
+  // ── Show top 30, column-width adapts to N ──
+  const visible = players.slice(0, Math.min(players.length, 30));
+  const N = visible.length;
 
-  // ppWA value → absolute x pixel on the shared scale
-  const ppwaX = (v) => LEFT_BAR + (v - PPWA_MIN) * SCALE;
+  // ── Layout ──
+  const L = 52;                          // left: Y-axis labels
+  const COL_W = Math.max(20, Math.min(30, Math.floor(660 / Math.max(N, 1))));
+  const CHART_W = N * COL_W;
+  const TOP = 22;                        // top margin
+  const CHART_H = 290;                   // ppWA plotting height
+  const NAME_H = 90;                     // rotated names area below
+  const BOT = 28;                        // bottom (legend bar)
+  const W = L + CHART_W + 20;
+  const H = TOP + CHART_H + NAME_H + BOT;
 
-  // Tier zones at fixed pixel positions (derived once, shared by all rows)
-  const tierZones = TIER_STACK.map(t => ({
-    ...t,
-    x: ppwaX(t.lo),
-    w: (t.hi - t.lo) * SCALE,
-  }));
+  // ── ppWA scale: -10 → +50, top = high ──
+  const PPWA_MIN = -10, PPWA_MAX = 50, PPWA_R = 60;
+  const sY = ppwa => TOP + (PPWA_MAX - Math.max(PPWA_MIN, Math.min(PPWA_MAX, ppwa))) * (CHART_H / PPWA_R);
 
-  // Axis ticks at every tier boundary + right edge
-  const axisTicks = [-10, -2, 1, 4, 10, 25, 50];
-  // Short tier label for header (Replacement → Repl, Role Player → Role)
-  const shortTierLabel = n =>
-    n==="Role Player"?"Role":n==="Replacement"?"Repl":n==="Negative"?"Neg":n==="All-Star"?"AS":n;
+  // Y-axis ticks
+  const yTicks = [-10, 0, 10, 20, 30, 40, 50];
+  // Tier boundary lines (at tier lo/hi boundaries)
+  const tierBnds = [-2, 1, 4, 10, 25];
+
+  // GM sort label
+  const gmLabel = gmRisk === "ceiling" ? "⬆ Ceiling Sort — most upside left"
+    : gmRisk === "floor" ? "⬇ Floor Sort — most reliable left" : "";
 
   return (
     <div style={{overflowX:"auto", background:"#0a0e17", borderRadius:12, border:"1px solid #1f2937", padding:"0"}}>
       <svg width={W} height={H} style={{display:"block", fontFamily:"'Inter',sans-serif"}}>
 
-        {/* ── Tier label row (above bar area) ── */}
-        <text x={LEFT_NAME+2} y={14} fontSize={8.5} fill="#4b5563" fontWeight="700" letterSpacing="0.07em">RNK  PLAYER</text>
-        <text x={LEFT_BAR+BAR_W+18} y={14} fontSize={7.5} fill="#fbbf24" fontWeight="600" textAnchor="middle">C</text>
-        <text x={LEFT_BAR+BAR_W+36} y={14} fontSize={7.5} fill="#06b6d4" fontWeight="600" textAnchor="middle">F</text>
+        {/* ── Tier zone backgrounds (horizontal bands) ── */}
+        {TIER_STACK.map(t => {
+          const y1 = sY(t.hi), y2 = sY(t.lo);
+          return <rect key={`bg-${t.name}`} x={L} y={y1} width={CHART_W} height={Math.max(1, y2-y1)} fill={t.color} opacity={0.04}/>;
+        })}
 
-        {tierZones.map(t => (
-          <text key={`lbl-${t.name}`}
-            x={t.x + t.w/2} y={16}
-            fontSize={6.5} fill={t.color} fontWeight="700" textAnchor="middle" opacity={0.8}>
-            {shortTierLabel(t.name)}
-          </text>
+        {/* ── Tier boundary grid lines ── */}
+        {TIER_STACK.map(t => (
+          <line key={`bnd-${t.name}`}
+            x1={L} y1={sY(t.lo)} x2={L+CHART_W} y2={sY(t.lo)}
+            stroke={t.color} strokeWidth={0.5} strokeDasharray="4,3" opacity={0.25}/>
         ))}
 
-        {/* Axis tick labels (ppWA values) */}
-        {axisTicks.map(v => (
-          <text key={`tick-${v}`} x={ppwaX(v)} y={28}
-            fontSize={7} fill="#374151" textAnchor="middle">{v}</text>
+        {/* ── Y-axis tick labels ── */}
+        {yTicks.map(v => (
+          <text key={`yt-${v}`} x={L-5} y={sY(v)+3} fontSize={7} fill="#4b5563" textAnchor="end">{v}</text>
         ))}
 
-        {/* Tier zone background shading (very subtle) */}
-        {tierZones.map(t => (
-          <rect key={`bg-${t.name}`}
-            x={t.x} y={PAD_TOP-8} width={t.w} height={H-PAD_TOP-PAD_BOT+12}
-            fill={t.color} opacity={0.03}/>
-        ))}
+        {/* ── Tier labels on left strip ── */}
+        {TIER_STACK.map(t => {
+          const yMid = sY((t.lo + t.hi) / 2);
+          const lbl = t.name==="Role Player"?"Role":t.name==="Replacement"?"Repl":t.name==="All-Star"?"AS":t.name==="Superstar"?"SS":t.name;
+          return <text key={`yl-${t.name}`} x={3} y={yMid+3} fontSize={6} fill={t.color} opacity={0.65}>{lbl}</text>;
+        })}
 
-        {/* Tier boundary vertical rules */}
-        {[...tierZones.map(t=>t.x), ppwaX(50)].map((xv,i) => (
-          <line key={`bnd-${i}`} x1={xv} y1={PAD_TOP-8} x2={xv} y2={H-PAD_BOT+4}
-            stroke="#374151" strokeWidth={0.4} opacity={0.35}/>
-        ))}
+        {/* ── Chart border ── */}
+        <rect x={L} y={TOP} width={CHART_W} height={CHART_H} fill="none" stroke="#1f2937" strokeWidth={0.5}/>
 
-        {/* ── Header separator ── */}
-        <line x1={LEFT_NAME} y1={PAD_TOP-4} x2={W-4} y2={PAD_TOP-4} stroke="#1f2937" strokeWidth={1}/>
-        <line x1={LEFT_BAR-4} y1={PAD_TOP-4} x2={LEFT_BAR-4} y2={H-PAD_BOT} stroke="#1f2937" strokeWidth={0.5}/>
+        {/* ── GM sort label ── */}
+        {gmLabel && (
+          <text x={L + CHART_W/2} y={TOP - 6} fontSize={7.5} fill="#f97316" textAnchor="middle" opacity={0.85}>{gmLabel}</text>
+        )}
 
-        {/* ── Player rows ── */}
-        {players.map((p, i) => {
-          const y   = PAD_TOP + i * ROW_H + ROW_H / 2;
+        {/* ── Player lollipop bars ─────────────────────────────────────────
+            Each player: vertical bar from p10 (floor) to p90 (ceiling) ppWA.
+            Dot at expected ppWA (war). Players ordered left→right by GM sort.
+            Overlapping bars = players whose projection ranges are genuinely
+            interchangeable — you can see if prospect A's ceiling doesn't
+            reach prospect B's floor, or if they're statistically indistinct.
+        ── */}
+        {visible.map((p, i) => {
+          const xC = L + i * COL_W + COL_W / 2;
+          const { floor: rangeFloor, med: rangeMed, ceil: rangeCeil } = computeRangePpwa(p.tiers);
+          const war = p.war ?? rangeMed;
+
+          const yFloor = sY(rangeFloor);
+          const yCeil  = sY(rangeCeil);
+          const yWar   = sY(war);
+
+          // Dominant tier → bar color
           const trs = p.tiers || {};
-          const segments = tierZones.map(t => ({ ...t, prob: (trs[t.name] ?? 0) / 100 }));
+          const domTier = TIER_STACK.reduce((best, t) =>
+            (trs[t.name]??0) > (trs[best.name]??0) ? t : best, TIER_STACK[0]);
+          const barColor = domTier.color;
 
-          // ppWA anchor clamped to scale
-          const anchor = Math.max(PPWA_MIN, Math.min(50, p.war ?? 0));
-          const xA     = ppwaX(anchor);
+          // Dim upside or downside based on GM focus
+          const upOp  = gmRisk==="floor"   ? 0.22 : 0.90;
+          const dnOp  = gmRisk==="ceiling" ? 0.22 : 0.90;
+          const midOp = 1.0;
 
-          const ceil = p.ceilingScore ?? 5;
-          const flr  = p.floorScore  ?? 5;
-          const risk = p.riskTag;
-          const riskColor = risk==="Boom/Bust"?"#f59e0b"
-            : risk==="High Upside"?"#22c55e"
-            : risk==="Safe Floor"?"#06b6d4"
-            : risk==="Bankable"?"#3b82f6":"#6b7280";
+          const riskTag = p.riskTag;
+          const riskCol = riskTag==="Boom/Bust"?"#f59e0b":riskTag==="High Upside"?"#22c55e":riskTag==="Safe Floor"?"#06b6d4":riskTag==="Bankable"?"#3b82f6":null;
 
-          const shortName = p.name.length > 22 ? p.name.slice(0,21)+"…" : p.name;
-          const rowBg     = i % 2 === 0 ? "#0a0e1700" : "#ffffff06";
+          const lastName  = p.name.split(" ").slice(-1)[0].slice(0, 9);
+          const firstInit = (p.name.split(" ")[0] || "?")[0];
 
           return (
             <g key={p.name}>
-              {/* Row background */}
-              <rect x={LEFT_NAME} y={y-ROW_H/2} width={W-LEFT_NAME-4} height={ROW_H} fill={rowBg}/>
-
-              {/* Rank + Name */}
-              <text x={LEFT_NAME+2}  y={y+4} fontSize={9}  fill="#374151" fontWeight="700">{i+1}</text>
-              <text x={LEFT_NAME+22} y={y+4} fontSize={10} fill="#d1d5db" fontWeight="600">{shortName}</text>
-
-              {/* ── Fixed-scale tier zones: opacity encodes probability ──
-                  Each tier occupies its fixed ppWA range on the shared axis.
-                  Bright = high probability; faint = low probability.
-                  This enables cross-player comparison: you can see if one
-                  player's best-case sits below another's worst-case. */}
-              {segments.map(seg => {
-                if (seg.prob < 0.01) return null;
-                const isUpside   = seg.name==="All-Star" || seg.name==="Superstar";
-                const isDownside = seg.name==="Negative" || seg.name==="Replacement";
-                const dimByGM    = (gmRisk==="ceiling" && isDownside)
-                                 || (gmRisk==="floor"   && isUpside);
-                const opacity    = dimByGM
-                  ? seg.prob * 0.2
-                  : Math.min(0.90, seg.prob * 1.6 + 0.07);
-                return (
-                  <rect key={seg.name}
-                    x={seg.x} y={y-5} width={seg.w} height={10}
-                    fill={seg.color} opacity={opacity} rx={1}/>
-                );
-              })}
-
-              {/* Tier boundary gap lines within bar */}
-              {tierZones.slice(0,-1).map(t => (
-                <line key={`gap-${t.name}`}
-                  x1={t.x+t.w} y1={y-5} x2={t.x+t.w} y2={y+5}
-                  stroke="#0a0e17" strokeWidth={0.6} opacity={0.5}/>
-              ))}
-
-              {/* ppWA anchor: white vertical rule + dot + value label */}
-              <line x1={xA} y1={y-7} x2={xA} y2={y+7} stroke="#fff" strokeWidth={1.5} opacity={0.9}/>
-              <circle cx={xA} cy={y} r={2.8} fill="#fff" stroke="#0a0e17" strokeWidth={0.8}/>
-              <text x={xA} y={y-10} fontSize={8} fill="#e5e7eb" textAnchor="middle" fontWeight="700">
-                {anchor.toFixed(1)}
-              </text>
-
-              {/* Ceiling / Floor scores */}
-              <text x={LEFT_BAR+BAR_W+18} y={y+4} fontSize={9} fill="#fbbf24" fontWeight="700" textAnchor="middle">{ceil.toFixed(0)}</text>
-              <text x={LEFT_BAR+BAR_W+36} y={y+4} fontSize={9} fill="#06b6d4" fontWeight="700" textAnchor="middle">{flr.toFixed(0)}</text>
-              {risk && (
-                <text x={LEFT_BAR+BAR_W+27} y={y+15} fontSize={6.5} fill={riskColor} textAnchor="middle">{risk}</text>
+              {/* Ceiling portion of bar (war → ceiling) */}
+              <line x1={xC} y1={yCeil} x2={xC} y2={yWar}
+                stroke={barColor} strokeWidth={3} opacity={upOp} strokeLinecap="round"/>
+              {/* Floor portion of bar (war → floor) */}
+              <line x1={xC} y1={yWar} x2={xC} y2={yFloor}
+                stroke={barColor} strokeWidth={3} opacity={dnOp} strokeLinecap="round"/>
+              {/* Cap marks */}
+              <line x1={xC-5} y1={yCeil}  x2={xC+5} y2={yCeil}  stroke={barColor} strokeWidth={1.8} opacity={upOp}/>
+              <line x1={xC-5} y1={yFloor} x2={xC+5} y2={yFloor} stroke={barColor} strokeWidth={1.8} opacity={dnOp}/>
+              {/* ppWA dot */}
+              <circle cx={xC} cy={yWar} r={4.5} fill={barColor} stroke="#0a0e17" strokeWidth={1.5} opacity={midOp}/>
+              {/* ppWA label */}
+              <text x={xC} y={yWar-8} fontSize={7.5} fill="#e5e7eb" textAnchor="middle" fontWeight="700">{war.toFixed(1)}</text>
+              {/* Risk abbreviation above ceiling */}
+              {riskTag && riskCol && (
+                <text x={xC} y={yCeil-5} fontSize={6} fill={riskCol} textAnchor="middle" opacity={0.9}>
+                  {riskTag==="Boom/Bust"?"B/B":riskTag==="High Upside"?"↑↑":riskTag==="Safe Floor"?"✓":riskTag==="Bankable"?"★":""}
+                </text>
               )}
+              {/* Rotated name below chart */}
+              <g transform={`translate(${xC}, ${TOP + CHART_H + 6}) rotate(-55)`}>
+                <text fontSize={8.5} fill="#9ca3af" dominantBaseline="middle">{firstInit}. {lastName}</text>
+              </g>
+              {/* Rank number */}
+              <text x={xC} y={TOP+CHART_H+NAME_H-10} fontSize={6.5} fill="#374151" textAnchor="middle">{i+1}</text>
             </g>
           );
         })}
 
-        {/* ── Bottom axis ── */}
-        <line x1={LEFT_BAR} y1={H-PAD_BOT+2} x2={LEFT_BAR+BAR_W} y2={H-PAD_BOT+2} stroke="#1f2937" strokeWidth={1}/>
-        <text x={LEFT_BAR}          y={H-PAD_BOT+14} fontSize={7} fill="#374151">ppWA –10</text>
-        <text x={LEFT_BAR+BAR_W/2} y={H-PAD_BOT+14} fontSize={7} fill="#374151" textAnchor="middle">
-          Fixed outcome scale · opacity = tier probability · white line = ppWA (expected value)
+        {/* ── Bottom tier color legend ── */}
+        {TIER_STACK.map((t, i) => {
+          const lx = L + i * (CHART_W / TIER_STACK.length);
+          const lw = CHART_W / TIER_STACK.length - 3;
+          return (
+            <g key={`leg-${t.name}`}>
+              <rect x={lx} y={TOP+CHART_H+NAME_H+2} width={lw} height={5} rx={2} fill={t.color} opacity={0.5}/>
+              <text x={lx+lw/2} y={TOP+CHART_H+NAME_H+15} fontSize={6} fill={t.color} textAnchor="middle" opacity={0.7}>
+                {t.name==="Role Player"?"Role":t.name}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* ── Y-axis label (rotated) ── */}
+        <text x={8} y={TOP + CHART_H/2} fontSize={7} fill="#4b5563" textAnchor="middle"
+          transform={`rotate(-90, 8, ${TOP + CHART_H/2})`}>
+          ppWA
         </text>
-        <text x={LEFT_BAR+BAR_W}   y={H-PAD_BOT+14} fontSize={7} fill="#374151" textAnchor="end">+50</text>
+
+        {/* ── Caption ── */}
+        <text x={L + CHART_W/2} y={H-3} fontSize={6.5} fill="#374151" textAnchor="middle">
+          bar = p10–p90 projection range · dot = expected ppWA · overlapping bars = interchangeable prospects
+        </text>
       </svg>
     </div>
   );
@@ -3195,8 +3241,8 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
   const fetchBoard = (year) => {
     setLoading(true);
     const url = year && year!=="All"
-      ? `${API_BASE}/board?n=500&year=${year}`
-      : `${API_BASE}/board?n=500`;
+      ? `${API_BASE}/board?n=200&year=${year}`
+      : `${API_BASE}/board?n=200`;
     fetch(url)
       .then(r=>r.json())
       .then(d=>{
@@ -3245,27 +3291,37 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
       repl:    (a,b) => (b.tiers?.Replacement ?? 0) - (a.tiers?.Replacement ?? 0),
       tier:    (a,b) => (tierRank[b.predTier]??0) - (tierRank[a.predTier]??0),
     };
-    // GM Risk Profile overrides sort when in Range view
-    if (boardView === "range" && gmRisk !== "neutral") {
+    // GM Risk Profile overrides default war sort — applies to ALL views (table + range)
+    // Formula: tier-probability weights dominate, war is only a tiebreaker.
+    // This ensures meaningful reordering across ALL 60 positions, not just the tail.
+    //
+    // Ceiling (risk-tolerant GM): maximize star upside
+    //   SS*3 + AS*1  dominates (range ~0–120),  war*0.5 only ties (~0–12)
+    //   → Boom/Bust prospects with high SS float above safe but lower-upside players
+    //
+    // Floor (risk-averse GM): minimize bust probability
+    //   -bustP*2 dominates (range 0 to –60),  war*0.5 ties (~0–12)
+    //   → Reliable contributors with low NE/Replacement float above higher-upside but riskier players
+    if (gmRisk !== "neutral") {
       const gmSort = gmRisk === "ceiling"
-        // Ceiling-first: ceilingScore (recalibrated) + raw star probability (SS+AS)
         ? (a,b) => {
-            const scoreB = (b.ceilingScore??0)*0.5 + ((b.tiers?.Superstar??0)+(b.tiers?.["All-Star"]??0))*0.03 + (b.war??0)*0.2;
-            const scoreA = (a.ceilingScore??0)*0.5 + ((a.tiers?.Superstar??0)+(a.tiers?.["All-Star"]??0))*0.03 + (a.war??0)*0.2;
-            return scoreB - scoreA;
+            const sB = (b.tiers?.Superstar??0)*3 + (b.tiers?.["All-Star"]??0)*1 + (b.war??0)*0.5;
+            const sA = (a.tiers?.Superstar??0)*3 + (a.tiers?.["All-Star"]??0)*1 + (a.war??0)*0.5;
+            return sB - sA;
           }
-        // Floor-first: floorScore + inverse bust probability (lower NE+RE = better)
         : (a,b) => {
-            const scoreB = (b.floorScore??0)*0.5 - ((b.tiers?.Negative??0)+(b.tiers?.Replacement??0))*0.03 + (b.war??0)*0.2;
-            const scoreA = (a.floorScore??0)*0.5 - ((a.tiers?.Negative??0)+(a.tiers?.Replacement??0))*0.03 + (a.war??0)*0.2;
-            return scoreB - scoreA;
+            const bustB = (b.tiers?.Negative??0) + (b.tiers?.Replacement??0);
+            const bustA = (a.tiers?.Negative??0) + (a.tiers?.Replacement??0);
+            const sB = -bustB*2 + (b.war??0)*0.5;
+            const sA = -bustA*2 + (a.war??0)*0.5;
+            return sB - sA;
           };
       list = [...list].sort(gmSort);
     } else {
       list = [...list].sort(sortFn[sortBy] || sortFn.war);
     }
     return list.slice(0, 60);
-  }, [allPlayers, sortBy, posFilter]);
+  }, [allPlayers, sortBy, posFilter, gmRisk]);
 
   const posColors = {Playmaker:"#3b82f6", Wing:"#f97316", Big:"#8b5cf6"};
 
