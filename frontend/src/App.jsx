@@ -3071,158 +3071,187 @@ const TIER_STACK = [
 ];
 
 function RangeView({ players, gmRisk }) {
-  // ── Show top 30, column-width adapts to N ──
-  const visible = players.slice(0, Math.min(players.length, 30));
+  // ── Show top 60 (2 full draft rounds) ──
+  const visible = players.slice(0, 60);
   const N = visible.length;
 
-  // ── Layout ──
-  const L = 52;                          // left: Y-axis labels
-  const COL_W = Math.max(20, Math.min(30, Math.floor(660 / Math.max(N, 1))));
-  const CHART_W = N * COL_W;
-  const TOP = 22;                        // top margin
-  const CHART_H = 290;                   // ppWA plotting height
-  const NAME_H = 90;                     // rotated names area below
-  const BOT = 28;                        // bottom (legend bar)
-  const W = L + CHART_W + 20;
-  const H = TOP + CHART_H + NAME_H + BOT;
+  // ── Layout: horizontal bars, players as rows (top→bottom) ──
+  // Names readable on the left; ppWA scale on the x-axis.
+  const RANK_W   = 24;    // rank number column
+  const NAME_W   = 152;   // player name column
+  const LEFT_CHT = RANK_W + NAME_W;  // 176 — where chart area starts
+  const CHART_W  = 400;   // chart width for ppWA -10→50 (60 units)
+  const RIGHT_PAD = 16;
+  const W = LEFT_CHT + CHART_W + RIGHT_PAD;  // 592
 
-  // ── ppWA scale: -10 → +50, top = high ──
-  const PPWA_MIN = -10, PPWA_MAX = 50, PPWA_R = 60;
-  const sY = ppwa => TOP + (PPWA_MAX - Math.max(PPWA_MIN, Math.min(PPWA_MAX, ppwa))) * (CHART_H / PPWA_R);
+  const PAD_TOP  = 46;    // top: title + x-axis ticks + tier labels
+  const ROW_H    = 14;    // pixel height per player row
+  const PAD_BOT  = 38;    // bottom: legend + caption
+  const H = PAD_TOP + N * ROW_H + PAD_BOT;
 
-  // Y-axis ticks
-  const yTicks = [-10, 0, 10, 20, 30, 40, 50];
-  // Tier boundary lines (at tier lo/hi boundaries)
+  // ppWA → x pixel
+  const PPWA_MIN = -10, PPWA_R = 60;
+  const xBar = ppwa => LEFT_CHT + (Math.max(-10, Math.min(50, ppwa)) - PPWA_MIN) / PPWA_R * CHART_W;
+  // Row i → center y pixel
+  const yC = i => PAD_TOP + i * ROW_H + ROW_H / 2;
+
+  const xTicks   = [-10, 0, 10, 20, 30, 40, 50];
   const tierBnds = [-2, 1, 4, 10, 25];
 
-  // GM sort label
-  const gmLabel = gmRisk === "ceiling" ? "⬆ Ceiling Sort — most upside left"
-    : gmRisk === "floor" ? "⬇ Floor Sort — most reliable left" : "";
+  const sortModeLabel = gmRisk === "ceiling"
+    ? "Ceiling Sort — ranked by p90 ppWA (max upside)"
+    : gmRisk === "floor"
+    ? "Floor Sort — ranked by p10 ppWA (max reliability)"
+    : "Balanced Sort — ranked by (p10 + p90) / 2";
+
+  const posColors = { Playmaker: "#3b82f6", Wing: "#f97316", Big: "#8b5cf6" };
 
   return (
-    <div style={{overflowX:"auto", background:"#0a0e17", borderRadius:12, border:"1px solid #1f2937", padding:"0"}}>
-      <svg width={W} height={H} style={{display:"block", fontFamily:"'Inter',sans-serif"}}>
+    <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: "82vh", background: "#0a0e17", borderRadius: 12, border: "1px solid #1f2937" }}>
+      <svg width={W} height={H} style={{ display: "block", fontFamily: "'Inter',sans-serif" }}>
 
-        {/* ── Tier zone backgrounds (horizontal bands) ── */}
-        {TIER_STACK.map(t => {
-          const y1 = sY(t.hi), y2 = sY(t.lo);
-          return <rect key={`bg-${t.name}`} x={L} y={y1} width={CHART_W} height={Math.max(1, y2-y1)} fill={t.color} opacity={0.04}/>;
-        })}
+        {/* ── Sort mode label (top) ── */}
+        <text x={LEFT_CHT + CHART_W / 2} y={11} fontSize={7} fill="#f97316" textAnchor="middle" opacity={0.8}>
+          {sortModeLabel}
+        </text>
 
-        {/* ── Tier boundary grid lines ── */}
+        {/* ── Tier zone backgrounds (vertical bands) ── */}
         {TIER_STACK.map(t => (
-          <line key={`bnd-${t.name}`}
-            x1={L} y1={sY(t.lo)} x2={L+CHART_W} y2={sY(t.lo)}
-            stroke={t.color} strokeWidth={0.5} strokeDasharray="4,3" opacity={0.25}/>
+          <rect key={`bg-${t.name}`}
+            x={xBar(t.lo)} y={PAD_TOP}
+            width={Math.max(1, xBar(t.hi) - xBar(t.lo))} height={N * ROW_H}
+            fill={t.color} opacity={0.055}
+          />
         ))}
 
-        {/* ── Y-axis tick labels ── */}
-        {yTicks.map(v => (
-          <text key={`yt-${v}`} x={L-5} y={sY(v)+3} fontSize={7} fill="#4b5563" textAnchor="end">{v}</text>
+        {/* ── Tier boundary vertical grid lines ── */}
+        {tierBnds.map(v => (
+          <line key={`bnd-${v}`}
+            x1={xBar(v)} y1={PAD_TOP - 4} x2={xBar(v)} y2={PAD_TOP + N * ROW_H}
+            stroke="#374151" strokeWidth={0.8} strokeDasharray="3,3"
+          />
         ))}
 
-        {/* ── Tier labels on left strip ── */}
+        {/* ── X-axis ticks + labels ── */}
+        {xTicks.map(v => (
+          <g key={`xt-${v}`}>
+            <line x1={xBar(v)} y1={PAD_TOP - 4} x2={xBar(v)} y2={PAD_TOP} stroke="#4b5563" strokeWidth={0.8}/>
+            <text x={xBar(v)} y={PAD_TOP - 6} fontSize={7.5} fill="#4b5563" textAnchor="middle">{v}</text>
+          </g>
+        ))}
+
+        {/* ── Tier labels above chart ── */}
         {TIER_STACK.map(t => {
-          const yMid = sY((t.lo + t.hi) / 2);
-          const lbl = t.name==="Role Player"?"Role":t.name==="Replacement"?"Repl":t.name==="All-Star"?"AS":t.name==="Superstar"?"SS":t.name;
-          return <text key={`yl-${t.name}`} x={3} y={yMid+3} fontSize={6} fill={t.color} opacity={0.65}>{lbl}</text>;
+          const mid = (xBar(t.lo) + xBar(t.hi)) / 2;
+          const lbl = t.name === "Role Player" ? "Role" : t.name === "Replacement" ? "Repl"
+            : t.name === "All-Star" ? "AS" : t.name === "Superstar" ? "SS" : t.name;
+          return (
+            <text key={`tlbl-${t.name}`} x={mid} y={PAD_TOP - 18} fontSize={6.5} fill={t.color} textAnchor="middle" opacity={0.7}>
+              {lbl}
+            </text>
+          );
         })}
+
+        {/* ── "ppWA" axis label ── */}
+        <text x={LEFT_CHT + CHART_W / 2} y={PAD_TOP - 30} fontSize={7} fill="#6b7280" textAnchor="middle">ppWA →</text>
 
         {/* ── Chart border ── */}
-        <rect x={L} y={TOP} width={CHART_W} height={CHART_H} fill="none" stroke="#1f2937" strokeWidth={0.5}/>
+        <rect x={LEFT_CHT} y={PAD_TOP} width={CHART_W} height={N * ROW_H} fill="none" stroke="#1f2937" strokeWidth={0.5}/>
 
-        {/* ── GM sort label ── */}
-        {gmLabel && (
-          <text x={L + CHART_W/2} y={TOP - 6} fontSize={7.5} fill="#f97316" textAnchor="middle" opacity={0.85}>{gmLabel}</text>
-        )}
-
-        {/* ── Player lollipop bars ─────────────────────────────────────────
-            Each player: vertical bar from p10 (floor) to p90 (ceiling) ppWA.
-            Dot at expected ppWA (war). Players ordered left→right by GM sort.
-            Overlapping bars = players whose projection ranges are genuinely
-            interchangeable — you can see if prospect A's ceiling doesn't
-            reach prospect B's floor, or if they're statistically indistinct.
+        {/* ── Player rows ─────────────────────────────────────────────────────
+            Each row: rank + name (left) | horizontal bar p10→p90 + dot at war
+            Overlapping bars across rows = projection ranges that are
+            statistically indistinguishable — prospects you can rank either way.
         ── */}
         {visible.map((p, i) => {
-          const xC = L + i * COL_W + COL_W / 2;
-          const { floor: rangeFloor, med: rangeMed, ceil: rangeCeil } = computeRangePpwa(p.tiers);
-          const war = p.war ?? rangeMed;
+          const { floor: rf, med: rm, ceil: rc } = computeRangePpwa(p.tiers);
+          const war    = p.war ?? rm;
+          const xFloor = xBar(rf);
+          const xCeil  = xBar(rc);
+          const xWar   = xBar(war);
+          const rowY   = yC(i);
+          const barH   = 5;
 
-          const yFloor = sY(rangeFloor);
-          const yCeil  = sY(rangeCeil);
-          const yWar   = sY(war);
-
-          // Dominant tier → bar color
           const trs = p.tiers || {};
-          const domTier = TIER_STACK.reduce((best, t) =>
-            (trs[t.name]??0) > (trs[best.name]??0) ? t : best, TIER_STACK[0]);
+          const domTier = TIER_STACK.reduce(
+            (best, t) => ((trs[t.name] ?? 0) > (trs[best.name] ?? 0) ? t : best),
+            TIER_STACK[0]
+          );
           const barColor = domTier.color;
 
-          // Dim upside or downside based on GM focus
-          const upOp  = gmRisk==="floor"   ? 0.22 : 0.90;
-          const dnOp  = gmRisk==="ceiling" ? 0.22 : 0.90;
-          const midOp = 1.0;
+          // Dim the half that is de-emphasised for the active GM mode
+          const upOp = gmRisk === "floor"    ? 0.22 : 0.85;
+          const dnOp = gmRisk === "ceiling"  ? 0.22 : 0.85;
 
-          const riskTag = p.riskTag;
-          const riskCol = riskTag==="Boom/Bust"?"#f59e0b":riskTag==="High Upside"?"#22c55e":riskTag==="Safe Floor"?"#06b6d4":riskTag==="Bankable"?"#3b82f6":null;
+          const posColor   = posColors[p.pos] || "#6b7280";
+          const nameParts  = p.name.split(" ");
+          const firstInit  = (nameParts[0] || "?")[0];
+          const lastName   = nameParts.slice(1).join(" ").slice(0, 14) || p.name.slice(0, 14);
+          const displayName = `${firstInit}. ${lastName}`;
 
-          const lastName  = p.name.split(" ").slice(-1)[0].slice(0, 9);
-          const firstInit = (p.name.split(" ")[0] || "?")[0];
+          // War label: placed just right of ceiling cap, clamped to SVG width
+          const warLabelX = Math.min(xCeil + 5, W - 10);
 
           return (
             <g key={p.name}>
-              {/* Ceiling portion of bar (war → ceiling) */}
-              <line x1={xC} y1={yCeil} x2={xC} y2={yWar}
-                stroke={barColor} strokeWidth={3} opacity={upOp} strokeLinecap="round"/>
-              {/* Floor portion of bar (war → floor) */}
-              <line x1={xC} y1={yWar} x2={xC} y2={yFloor}
-                stroke={barColor} strokeWidth={3} opacity={dnOp} strokeLinecap="round"/>
-              {/* Cap marks */}
-              <line x1={xC-5} y1={yCeil}  x2={xC+5} y2={yCeil}  stroke={barColor} strokeWidth={1.8} opacity={upOp}/>
-              <line x1={xC-5} y1={yFloor} x2={xC+5} y2={yFloor} stroke={barColor} strokeWidth={1.8} opacity={dnOp}/>
-              {/* ppWA dot */}
-              <circle cx={xC} cy={yWar} r={4.5} fill={barColor} stroke="#0a0e17" strokeWidth={1.5} opacity={midOp}/>
-              {/* ppWA label */}
-              <text x={xC} y={yWar-8} fontSize={7.5} fill="#e5e7eb" textAnchor="middle" fontWeight="700">{war.toFixed(1)}</text>
-              {/* Risk abbreviation above ceiling */}
-              {riskTag && riskCol && (
-                <text x={xC} y={yCeil-5} fontSize={6} fill={riskCol} textAnchor="middle" opacity={0.9}>
-                  {riskTag==="Boom/Bust"?"B/B":riskTag==="High Upside"?"↑↑":riskTag==="Safe Floor"?"✓":riskTag==="Bankable"?"★":""}
-                </text>
+              {/* Subtle alternating row fill */}
+              {i % 2 === 0 && (
+                <rect x={0} y={PAD_TOP + i * ROW_H} width={W} height={ROW_H} fill="#ffffff" opacity={0.012}/>
               )}
-              {/* Rotated name below chart */}
-              <g transform={`translate(${xC}, ${TOP + CHART_H + 6}) rotate(-55)`}>
-                <text fontSize={8.5} fill="#9ca3af" dominantBaseline="middle">{firstInit}. {lastName}</text>
-              </g>
+
+              {/* Position color indicator on far left edge */}
+              <rect x={0} y={PAD_TOP + i * ROW_H + 2} width={3} height={ROW_H - 4} fill={posColor} opacity={0.75} rx={1}/>
+
               {/* Rank number */}
-              <text x={xC} y={TOP+CHART_H+NAME_H-10} fontSize={6.5} fill="#374151" textAnchor="middle">{i+1}</text>
+              <text x={RANK_W - 3} y={rowY + 3.5} fontSize={7.5} fill="#4b5563" textAnchor="end">{i + 1}</text>
+
+              {/* Player name */}
+              <text x={RANK_W + 4} y={rowY + 3.5} fontSize={8} fill={i < 5 ? "#f3f4f6" : "#9ca3af"}
+                textAnchor="start" fontWeight={i < 5 ? "600" : "400"}>
+                {displayName}
+              </text>
+
+              {/* Bar: floor portion (p10 → war) */}
+              <rect x={xFloor} y={rowY - barH / 2} width={Math.max(1, xWar - xFloor)} height={barH}
+                fill={barColor} opacity={dnOp} rx={2}/>
+              {/* Bar: ceiling portion (war → p90) */}
+              <rect x={xWar} y={rowY - barH / 2} width={Math.max(1, xCeil - xWar)} height={barH}
+                fill={barColor} opacity={upOp} rx={2}/>
+
+              {/* End caps */}
+              <line x1={xFloor} y1={rowY - barH / 2 - 1} x2={xFloor} y2={rowY + barH / 2 + 1}
+                stroke={barColor} strokeWidth={1.5} opacity={dnOp}/>
+              <line x1={xCeil}  y1={rowY - barH / 2 - 1} x2={xCeil}  y2={rowY + barH / 2 + 1}
+                stroke={barColor} strokeWidth={1.5} opacity={upOp}/>
+
+              {/* ppWA dot at median */}
+              <circle cx={xWar} cy={rowY} r={3.5} fill={barColor} stroke="#0a0e17" strokeWidth={1.2}/>
+
+              {/* War value label */}
+              <text x={warLabelX} y={rowY + 3.5} fontSize={6.5} fill="#6b7280" textAnchor="start">
+                {war.toFixed(1)}
+              </text>
             </g>
           );
         })}
 
         {/* ── Bottom tier color legend ── */}
         {TIER_STACK.map((t, i) => {
-          const lx = L + i * (CHART_W / TIER_STACK.length);
-          const lw = CHART_W / TIER_STACK.length - 3;
+          const lx = LEFT_CHT + i * (CHART_W / TIER_STACK.length);
+          const lw = CHART_W / TIER_STACK.length - 2;
           return (
             <g key={`leg-${t.name}`}>
-              <rect x={lx} y={TOP+CHART_H+NAME_H+2} width={lw} height={5} rx={2} fill={t.color} opacity={0.5}/>
-              <text x={lx+lw/2} y={TOP+CHART_H+NAME_H+15} fontSize={6} fill={t.color} textAnchor="middle" opacity={0.7}>
-                {t.name==="Role Player"?"Role":t.name}
+              <rect x={lx} y={PAD_TOP + N * ROW_H + 6} width={lw} height={4} rx={1} fill={t.color} opacity={0.5}/>
+              <text x={lx + lw / 2} y={PAD_TOP + N * ROW_H + 18} fontSize={6} fill={t.color} textAnchor="middle" opacity={0.7}>
+                {t.name === "Role Player" ? "Role" : t.name}
               </text>
             </g>
           );
         })}
 
-        {/* ── Y-axis label (rotated) ── */}
-        <text x={8} y={TOP + CHART_H/2} fontSize={7} fill="#4b5563" textAnchor="middle"
-          transform={`rotate(-90, 8, ${TOP + CHART_H/2})`}>
-          ppWA
-        </text>
-
         {/* ── Caption ── */}
-        <text x={L + CHART_W/2} y={H-3} fontSize={6.5} fill="#374151" textAnchor="middle">
-          bar = p10–p90 projection range · dot = expected ppWA · overlapping bars = interchangeable prospects
+        <text x={LEFT_CHT + CHART_W / 2} y={H - 5} fontSize={6} fill="#374151" textAnchor="middle">
+          bar = p10–p90 projection range · dot = median ppWA · overlapping bars = statistically interchangeable prospects
         </text>
       </svg>
     </div>
@@ -3291,37 +3320,29 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
       repl:    (a,b) => (b.tiers?.Replacement ?? 0) - (a.tiers?.Replacement ?? 0),
       tier:    (a,b) => (tierRank[b.predTier]??0) - (tierRank[a.predTier]??0),
     };
-    // GM Risk Profile overrides default war sort — applies to ALL views (table + range)
-    // Formula: tier-probability weights dominate, war is only a tiebreaker.
-    // This ensures meaningful reordering across ALL 60 positions, not just the tail.
+    // ── GM Risk Profile: pure CDF-based ppWA range sort ─────────────────
+    // Compute p10/p50/p90 from tier distribution for every player.
+    // No war contamination — tier probabilities alone drive the ranking.
     //
-    // Ceiling (risk-tolerant GM): maximize star upside
-    //   SS*3 + AS*1  dominates (range ~0–120),  war*0.5 only ties (~0–12)
-    //   → Boom/Bust prospects with high SS float above safe but lower-upside players
+    // Ceiling  (risk-tolerant):  sort by p90 only — max pure upside
+    // Floor    (risk-averse):    sort by p10 only — max floor reliability
+    // Balanced (default):        sort by (p10+p90)/2 — rewards both dimensions
     //
-    // Floor (risk-averse GM): minimize bust probability
-    //   -bustP*2 dominates (range 0 to –60),  war*0.5 ties (~0–12)
-    //   → Reliable contributors with low NE/Replacement float above higher-upside but riskier players
-    if (gmRisk !== "neutral") {
-      const gmSort = gmRisk === "ceiling"
-        ? (a,b) => {
-            const sB = (b.tiers?.Superstar??0)*3 + (b.tiers?.["All-Star"]??0)*1 + (b.war??0)*0.5;
-            const sA = (a.tiers?.Superstar??0)*3 + (a.tiers?.["All-Star"]??0)*1 + (a.war??0)*0.5;
-            return sB - sA;
-          }
-        : (a,b) => {
-            const bustB = (b.tiers?.Negative??0) + (b.tiers?.Replacement??0);
-            const bustA = (a.tiers?.Negative??0) + (a.tiers?.Replacement??0);
-            const sB = -bustB*2 + (b.war??0)*0.5;
-            const sA = -bustA*2 + (a.war??0)*0.5;
-            return sB - sA;
-          };
-      list = [...list].sort(gmSort);
+    // Table view with explicit column sort (war, bpm, age…) bypasses GM sort.
+    const withRanges = list.map(p => ({ ...p, _r: computeRangePpwa(p.tiers) }));
+    if (gmRisk === "ceiling") {
+      withRanges.sort((a, b) => b._r.ceil - a._r.ceil);
+    } else if (gmRisk === "floor") {
+      withRanges.sort((a, b) => b._r.floor - a._r.floor);
+    } else if (boardView === "range") {
+      // Balanced default for range view: midpoint of p10–p90 range
+      withRanges.sort((a, b) => (b._r.ceil + b._r.floor) / 2 - (a._r.ceil + a._r.floor) / 2);
     } else {
-      list = [...list].sort(sortFn[sortBy] || sortFn.war);
+      // Table view: honour the user's column sort choice
+      withRanges.sort(sortFn[sortBy] || sortFn.war);
     }
-    return list.slice(0, 60);
-  }, [allPlayers, sortBy, posFilter, gmRisk]);
+    return withRanges.slice(0, 60);
+  }, [allPlayers, sortBy, posFilter, gmRisk, boardView]);
 
   const posColors = {Playmaker:"#3b82f6", Wing:"#f97316", Big:"#8b5cf6"};
 
@@ -3405,7 +3426,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
           <span className="text-xs font-semibold uppercase tracking-widest" style={{color:"#4b5563"}}>GM Risk Profile</span>
           {[
             ["ceiling","🎰 Ceiling First","Rebuilding · Sort by upside potential","#f59e0b","#78350f"],
-            ["neutral", "⚖️ Balanced",    "Expected value · Sort by ppWA",        "#6b7280","#1f2937"],
+            ["neutral", "⚖️ Balanced",    "Default · Sort by (p10+p90)/2",        "#6b7280","#1f2937"],
             ["floor",  "🛡️ Floor First",  "Win-Now · Sort by floor reliability",  "#06b6d4","#0c4a6e"],
           ].map(([v,l,desc,activeColor,activeBg])=>(
             <button key={v} onClick={()=>setGmRisk(v)}

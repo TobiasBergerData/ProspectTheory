@@ -35,7 +35,7 @@ from fastapi.responses import FileResponse
 app = FastAPI(
     title="ProspectTheory API",
     description="NBA Draft Intelligence — Player profiles, comparisons, and tier predictions",
-    version="2.4.0",  # anthro live fallback vs combine DB, board age filter
+    version="2.12.0",  # horizontal RangeView, pure ppWA range sort, balanced GM default
 )
 
 app.add_middleware(
@@ -214,9 +214,25 @@ def find_player(name: str) -> tuple:
 # ENDPOINTS
 # ═══════════════════════════════════════════════════════════
 
+@app.on_event("startup")
+async def verify_data_quality():
+    """Log key 2026 prospect stats on startup to confirm data is correct post-column-fix."""
+    profiles = get_profiles()
+    boozer = profiles.get("Cameron Boozer", {})
+    reb = boozer.get("reb")
+    ast = boozer.get("ast")
+    stl = boozer.get("stl")
+    blk = boozer.get("blk")
+    # Expected post-fix: reb≈10.2, ast≈4.1, stl≈1.4, blk≈0.6
+    ok = reb is not None and reb > 8
+    print(f"🏀 Data quality check — Cameron Boozer: reb={reb}, ast={ast}, stl={stl}, blk={blk} — {'✅ OK' if ok else '⚠️ COLUMN SHIFT DETECTED'}")
+    if not ok:
+        print("   → Stats shifted: data may be from pre-fix pipeline. Redeploy with corrected api_profiles.json.")
+
+
 @app.get("/")
 async def root():
-    return {"name": "ProspectTheory API", "version": "2.4.0"}
+    return {"name": "ProspectTheory API", "version": "2.12.0"}
 
 
 @app.get("/health")
