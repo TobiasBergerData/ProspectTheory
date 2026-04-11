@@ -3058,6 +3058,75 @@ function computeRangePpwa(tiers) {
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// computeGMUtility: Expected utility of a player under three GM archetypes.
+//
+// Core idea: each GM archetype has a different *marginal utility* for ppWA.
+// Instead of simply ranking by E[ppWA], we rank by E[U(ppWA)] where U is the
+// utility function that captures the GM's risk preferences.
+//
+// Tier midpoints = representative ppWA value for each outcome category.
+// The expected utility is: Σ P(tier_i) × U(midpoint_i)
+//
+// Ceiling GM (convex U):
+//   Each additional ppWA at the top is WORTH MORE than the last.
+//   Going from 25→35 ppWA (Role→Star) is disproportionately valuable.
+//   Bust risk is nearly irrelevant — I'll accept 15% NE to get 20% SS.
+//   → U(x) = x^1.4 × 0.6  for x ≥ 0   (accelerating returns above zero)
+//             x × 0.3       for x < 0   (mild penalty, almost ignored)
+//
+// Floor GM (concave U with steep downside):
+//   Each additional ppWA at the top is worth LESS than the last.
+//   A wasted pick (Negative/Replacement) is existentially bad.
+//   Going from -6→0 is worth far more than going from 17→35.
+//   → U(x) = log(x+1) × 6  for x ≥ 0  (diminishing returns, compressed upside)
+//             -(|x|)^2 × 5  for x < 0  (catastrophic, quadratic punishment)
+//
+// Balanced (linear = true expected value):
+//   E[ppWA] computed via tier-probability-weighted midpoints.
+//   Equivalent to asking: "What is this player worth in expectation?"
+// ─────────────────────────────────────────────────────────────────────────
+const _GM_MIDPOINTS = {
+  "Negative":     -6,    // centre of [-10, -2]
+  "Replacement":  -0.5,  // centre of [ -2,  1]
+  "Role Player":   2.5,  // centre of [  1,  4]
+  "Starter":       7,    // centre of [  4, 10]
+  "All-Star":     17.5,  // centre of [ 10, 25]
+  "Superstar":    35,    // centre of [ 25, 50]
+};
+
+function computeGMUtility(tiers, mode) {
+  if (!tiers) return 0;
+  const total = Object.values(tiers).reduce((s, v) => s + v, 0);
+  if (total < 0.1) return 0;
+
+  const U = {
+    // Convex: Superstar ceiling disproportionately rewarded; bust barely punished.
+    // x^1.4 accelerates above linear: 7→9.2 · 17.5→33 · 35→87 (SS is 2.6× AS)
+    ceiling: x => x >= 0
+      ? Math.pow(x, 1.4) * 0.6          // accelerating returns above zero
+      : x * 0.3,                         // mild bust penalty — ceiling GMs accept risk
+
+    // Concave + catastrophic downside via bust cliff:
+    //   Positive side: sqrt(x)*5 → very compressed (AS≈21, SS≈30 — barely different)
+    //   Negative side: -(|x|+0.5)² * 5 → the +0.5 offset means Replacement (-0.5 ppWA)
+    //     gets -(1.0)²×5 = -5.0 (not near-zero!), Negative (-6 ppWA) gets -211.
+    //     A player with 8% bust risk gets penalised enough to fall below a safer player
+    //     with marginally lower expected value — which is exactly the floor GM's preference.
+    floor: x => x >= 0
+      ? Math.sqrt(x) * 5                              // 2.5→7.9 · 7→13.2 · 17.5→20.9 · 35→29.6
+      : -Math.pow(Math.abs(x) + 0.5, 2) * 5,         // -0.5→-5.0 · -6→-211.25 (bust cliff)
+
+    // Linear: true expected ppWA (no risk distortion)
+    neutral: x => x,
+  };
+
+  const fn = U[mode] || U.neutral;
+  return Object.entries(_GM_MIDPOINTS).reduce((sum, [tier, mid]) => {
+    return sum + (tiers[tier] ?? 0) / total * fn(mid);
+  }, 0);
+}
+
 // RANGE VIEW — probabilistic outcome chart for Big Board
 // ═══════════════════════════════════════════════════════════
 // Tier order for stacked distribution bars (worst → best, left → right)
@@ -3099,10 +3168,10 @@ function RangeView({ players, gmRisk }) {
   const tierBnds = [-2, 1, 4, 10, 25];
 
   const sortModeLabel = gmRisk === "ceiling"
-    ? "Ceiling Sort — ranked by p90 ppWA (max upside)"
+    ? "Ceiling Sort — convex utility: Superstar probability rewarded disproportionately"
     : gmRisk === "floor"
-    ? "Floor Sort — ranked by p10 ppWA (max reliability)"
-    : "Balanced Sort — ranked by (p10 + p90) / 2";
+    ? "Floor Sort — concave utility: bust risk penalized catastrophically (quadratic)"
+    : "Balanced Sort — linear expected value E[ppWA] via tier probabilities";
 
   const posColors = { Playmaker: "#3b82f6", Wing: "#f97316", Big: "#8b5cf6" };
 
@@ -3320,25 +3389,26 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
       repl:    (a,b) => (b.tiers?.Replacement ?? 0) - (a.tiers?.Replacement ?? 0),
       tier:    (a,b) => (tierRank[b.predTier]??0) - (tierRank[a.predTier]??0),
     };
-    // ── GM Risk Profile: pure CDF-based ppWA range sort ─────────────────
-    // Compute p10/p50/p90 from tier distribution for every player.
-    // No war contamination — tier probabilities alone drive the ranking.
+    // ── GM Risk Profile: Expected Utility sort (Option C) ────────────────
+    // Rank players by E[U(ppWA)] where U is the GM-archetype utility function.
+    // See computeGMUtility for the three utility functions.
     //
-    // Ceiling  (risk-tolerant):  sort by p90 only — max pure upside
-    // Floor    (risk-averse):    sort by p10 only — max floor reliability
-    // Balanced (default):        sort by (p10+p90)/2 — rewards both dimensions
-    //
-    // Table view with explicit column sort (war, bpm, age…) bypasses GM sort.
-    const withRanges = list.map(p => ({ ...p, _r: computeRangePpwa(p.tiers) }));
-    if (gmRisk === "ceiling") {
-      withRanges.sort((a, b) => b._r.ceil - a._r.ceil);
-    } else if (gmRisk === "floor") {
-      withRanges.sort((a, b) => b._r.floor - a._r.floor);
-    } else if (boardView === "range") {
-      // Balanced default for range view: midpoint of p10–p90 range
-      withRanges.sort((a, b) => (b._r.ceil + b._r.floor) / 2 - (a._r.ceil + a._r.floor) / 2);
+    // Key property: ceiling/floor are applied even in table view (column sort
+    // still works by falling through to sortFn when neither GM mode is active).
+    // In range view with neutral mode → balanced expected-value sort.
+    const utilityMode = gmRisk !== "neutral" ? gmRisk
+      : boardView === "range" ? "neutral"    // balanced = linear E[ppWA] in range
+      : null;                                 // table view → honour column sort
+
+    const withRanges = list.map(p => ({
+      ...p,
+      _r: computeRangePpwa(p.tiers),
+      _u: utilityMode !== null ? computeGMUtility(p.tiers, utilityMode) : 0,
+    }));
+
+    if (utilityMode !== null) {
+      withRanges.sort((a, b) => b._u - a._u);
     } else {
-      // Table view: honour the user's column sort choice
       withRanges.sort(sortFn[sortBy] || sortFn.war);
     }
     return withRanges.slice(0, 60);
