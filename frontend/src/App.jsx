@@ -802,6 +802,8 @@ function mapProfile(d) {
     shotCreation: d.shotCreation ?? null,
     // Leverage-Weighted Efficiency (self-creation-weighted eFG%)
     leverageEff: d.leverageEff ?? null,
+    // Offensive Skill Curve (usage scalability + peer curve position)
+    skillCurve: d.skillCurve ?? null,
     modernShotProfile: d.modern_shot_profile ?? null,
     sosPctl: d.sos_pctl ?? null,
     teamQuality: d.team_quality_pctl ?? null,
@@ -1786,13 +1788,211 @@ function MindTab({p}) {
         </div>
       </Sec>
 
-      {/* Placeholder for Feature 2 — Sequential Resilience */}
+      {/* ── Feature 2: Offensive Skill Curve ── */}
+      {p.skillCurve && (() => {
+        const sc = p.skillCurve;
+        const seasons = sc.seasons || [];
+        const curSeason = seasons[seasons.length - 1];
+        const multiSeason = sc.nSeasons >= 2 && sc.slope != null;
+
+        // Peer curve: AdjOrtg = -0.0052*USG^2 + 1.6262*USG + 69.51
+        const peerExp = (usg) => Math.round(-0.0052*usg*usg + 1.6262*usg + 69.51);
+
+        // Slope classification
+        const getSlopeLabel = (slope) => {
+          if (slope == null) return null;
+          if (slope >= 4) return {label:"Elite Scaler", color:"#22c55e"};
+          if (slope >= 2) return {label:"Good Scaler", color:"#86efac"};
+          if (slope >= 0) return {label:"Holds Steady", color:"#fbbf24"};
+          return {label:"Drops at Volume", color:"#ef4444"};
+        };
+        const getAstLabel = (slope) => {
+          if (slope == null) return null;
+          if (slope >= 1.5) return {label:"Playmaking Expands", color:"#22c55e"};
+          if (slope >= 0.3) return {label:"Slight Playmaking Gain", color:"#86efac"};
+          if (slope >= -0.3) return {label:"Role Stays Flat", color:"#fbbf24"};
+          return {label:"Scoring-Only at Volume", color:"#ef4444"};
+        };
+
+        const slopeInfo = getSlopeLabel(sc.slope);
+        const astInfo   = getAstLabel(sc.slopeAst);
+        const peerColor = sc.peerPctl >= 80 ? "#22c55e" : sc.peerPctl >= 60 ? "#86efac" : sc.peerPctl >= 40 ? "#fbbf24" : "#ef4444";
+
+        // Mini scatter chart for multi-season players
+        // Map each season onto a 200×100 canvas: USG 8-40, AdjOrtg 60-180
+        const USG_MIN=8, USG_MAX=40, ADJ_MIN=60, ADJ_MAX=180;
+        const toX = (usg) => ((usg - USG_MIN) / (USG_MAX - USG_MIN)) * 180 + 10;
+        const toY = (adj) => ((ADJ_MAX - adj) / (ADJ_MAX - ADJ_MIN)) * 80 + 10;
+
+        // Peer curve points for SVG
+        const curvePoints = [];
+        for (let u = USG_MIN; u <= USG_MAX; u += 2) {
+          curvePoints.push(`${toX(u)},${toY(peerExp(u))}`);
+        }
+
+        return (
+          <Sec icon="📈" title="Offensive Skill Curve"
+            sub={multiSeason ? `${sc.nSeasons}-season development trajectory` : "Peer curve position (cross-season requires 2+ seasons)"}>
+
+            <div style={{fontSize:12,color:"#9ca3af",marginBottom:16,lineHeight:"1.6"}}>
+              {multiSeason
+                ? <>Shows how this player's offensive efficiency and role evolved as usage changed across <strong style={{color:"#e5e7eb"}}>{sc.nSeasons} seasons</strong>. The slope measures AdjOrtg per +1% usage. The AST slope reveals whether this player becomes a playmaker under load or retreats into pure scoring.</>
+                : <>Single-season player. Compares current AdjOrtg against the <strong style={{color:"#e5e7eb"}}>peer curve</strong> — what is expected from a player at this exact usage level. Far above the line = elite efficiency for their offensive role.</>
+              }
+            </div>
+
+            {/* Top row: peer position + slope cards */}
+            <div style={{display:"grid",gridTemplateColumns:multiSeason?"repeat(3,1fr)":"repeat(2,1fr)",gap:10,marginBottom:20}}>
+              {/* Peer Position */}
+              <div style={{background:"#1f2937",borderRadius:8,padding:"10px 12px",textAlign:"center"}}>
+                <div style={{fontSize:20,fontWeight:700,color:peerColor,fontFamily:"Oswald,sans-serif"}}>
+                  {sc.peerPctl != null ? `${sc.peerPctl}th` : "—"}
+                </div>
+                <div style={{fontSize:11,fontWeight:600,color:"#e5e7eb",marginTop:2}}>Peer Curve Pctl</div>
+                <div style={{fontSize:10,color:"#6b7280",marginTop:1}}>
+                  {sc.peerResidual != null ? `${sc.peerResidual > 0 ? "+" : ""}${sc.peerResidual}pt vs expected` : ""}
+                </div>
+              </div>
+
+              {/* Current season */}
+              <div style={{background:"#1f2937",borderRadius:8,padding:"10px 12px",textAlign:"center"}}>
+                <div style={{fontSize:20,fontWeight:700,color:"#f97316",fontFamily:"Oswald,sans-serif"}}>
+                  {sc.curAdjOrtg?.toFixed(0) ?? "—"}
+                </div>
+                <div style={{fontSize:11,fontWeight:600,color:"#e5e7eb",marginTop:2}}>Adj. Off. Rtg</div>
+                <div style={{fontSize:10,color:"#6b7280",marginTop:1}}>at {sc.curUsg?.toFixed(1)}% USG</div>
+              </div>
+
+              {/* Slope (multi-season only) */}
+              {multiSeason && slopeInfo && (
+                <Tip content="AdjOrtg slope: how many points of offensive rating are gained per +1% usage increase across seasons. Positive = grows with responsibility.">
+                  <div style={{background:"#1f2937",borderRadius:8,padding:"10px 12px",textAlign:"center",cursor:"help"}}>
+                    <div style={{fontSize:20,fontWeight:700,color:slopeInfo.color,fontFamily:"Oswald,sans-serif"}}>
+                      {sc.slope > 0 ? "+" : ""}{sc.slope?.toFixed(1)}
+                    </div>
+                    <div style={{fontSize:11,fontWeight:600,color:"#e5e7eb",marginTop:2}}>AdjOrtg/USG%</div>
+                    <div style={{fontSize:10,color:slopeInfo.color,marginTop:1}}>{slopeInfo.label}</div>
+                  </div>
+                </Tip>
+              )}
+            </div>
+
+            {/* AST slope card — multi-season only */}
+            {multiSeason && sc.slopeAst != null && astInfo && (
+              <div style={{background:"#0f172a",borderRadius:8,padding:"12px 14px",marginBottom:16,border:`1px solid ${astInfo.color}33`}}>
+                <div style={{display:"flex",alignItems:"center",gap:12}}>
+                  <div style={{flexShrink:0}}>
+                    <div style={{fontSize:18,fontWeight:700,color:astInfo.color,fontFamily:"Oswald,sans-serif"}}>
+                      {sc.slopeAst > 0 ? "+" : ""}{sc.slopeAst?.toFixed(2)} AST%/USG%
+                    </div>
+                    <div style={{fontSize:11,color:astInfo.color}}>{astInfo.label}</div>
+                    {sc.astSlopePctl != null && (
+                      <div style={{fontSize:10,color:"#6b7280"}}>{sc.astSlopePctl}th percentile vs same-year peers</div>
+                    )}
+                  </div>
+                  <div style={{flex:1,fontSize:11,color:"#9ca3af",lineHeight:"1.5"}}>
+                    {sc.slopeAst >= 1.0
+                      ? "When given more offensive responsibility, this player's assist rate grows alongside. They become MORE of a playmaker at higher usage — hallmark of a true lead creator."
+                      : sc.slopeAst >= 0.3
+                      ? "Moderate playmaking expansion at higher usage. Can handle the ball without completely shifting to isolation scoring."
+                      : sc.slopeAst >= -0.3
+                      ? "Role stays roughly constant regardless of usage — focused scorer who doesn't shift toward creation or distribution."
+                      : "At higher usage, passing drops off. Tends toward isolation at high volume. Best as secondary option or specialist scorer."
+                    }
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Season chart (SVG scatter with peer curve) */}
+            {seasons.length > 0 && (
+              <div style={{background:"#0f172a",borderRadius:8,padding:"12px 14px",marginBottom:16}}>
+                <div style={{fontSize:11,fontWeight:600,color:"#9ca3af",marginBottom:10,letterSpacing:0.5}}>
+                  {multiSeason ? "SEASON TRAJECTORY vs PEER CURVE" : "CURRENT SEASON vs PEER CURVE"}
+                </div>
+                <svg width="100%" viewBox="0 0 200 100" style={{overflow:"visible"}}>
+                  {/* Grid lines */}
+                  {[20,25,30,35].map(u=>(
+                    <line key={u} x1={toX(u)} y1={10} x2={toX(u)} y2={90} stroke="#1f2937" strokeWidth={0.5}/>
+                  ))}
+                  {[80,100,120,140,160].map(a=>(
+                    <line key={a} x1={10} y1={toY(a)} x2={190} y2={toY(a)} stroke="#1f2937" strokeWidth={0.5}/>
+                  ))}
+                  {/* Peer curve */}
+                  <polyline points={curvePoints.join(" ")} fill="none" stroke="#374151" strokeWidth={1.5} strokeDasharray="3,2"/>
+                  {/* Season dots */}
+                  {seasons.map((s,i) => {
+                    const isLatest = i === seasons.length - 1;
+                    const color = isLatest ? "#f97316" : "#60a5fa";
+                    return (
+                      <g key={s.yr}>
+                        <circle cx={toX(s.usg)} cy={toY(s.adjOrtg)} r={isLatest?5:3.5} fill={color} opacity={isLatest?1:0.8}/>
+                        <text x={toX(s.usg)+6} y={toY(s.adjOrtg)-2} fontSize={6} fill={color}>{s.yr}</text>
+                      </g>
+                    );
+                  })}
+                  {/* Axis labels */}
+                  <text x={100} y={98} fontSize={6} fill="#6b7280" textAnchor="middle">Usage %</text>
+                  <text x={4} y={55} fontSize={6} fill="#6b7280" textAnchor="middle" transform="rotate(-90 4 55)">AdjOrtg</text>
+                  <text x={185} y={toY(peerExp(38))+4} fontSize={5} fill="#4b5563">Avg</text>
+                </svg>
+                <div style={{display:"flex",gap:16,marginTop:6,flexWrap:"wrap"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:4}}>
+                    <div style={{width:8,height:2,background:"#4b5563",borderTop:"1px dashed #4b5563"}}/>
+                    <span style={{fontSize:9,color:"#6b7280"}}>Peer avg (AdjOrtg at USG)</span>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:4}}>
+                    <div style={{width:8,height:8,borderRadius:"50%",background:"#f97316"}}/>
+                    <span style={{fontSize:9,color:"#6b7280"}}>Current season</span>
+                  </div>
+                  {multiSeason && (
+                    <div style={{display:"flex",alignItems:"center",gap:4}}>
+                      <div style={{width:8,height:8,borderRadius:"50%",background:"#60a5fa"}}/>
+                      <span style={{fontSize:9,color:"#6b7280"}}>Prior seasons</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Season details table */}
+            {seasons.length > 0 && (
+              <div style={{background:"#0f172a",borderRadius:8,padding:"12px 14px"}}>
+                <div style={{fontSize:11,fontWeight:600,color:"#9ca3af",marginBottom:8,letterSpacing:0.5}}>SEASON-BY-SEASON BREAKDOWN</div>
+                <div style={{display:"grid",gridTemplateColumns:"45px 50px 60px 45px 45px 45px",gap:4}}>
+                  {["Year","USG%","AdjOrtg","TS%","AST%","TO%"].map(h=>(
+                    <div key={h} style={{fontSize:9,color:"#4b5563",textAlign:"right"}}>{h}</div>
+                  ))}
+                  {seasons.map((s,i)=>{
+                    const isLatest = i===seasons.length-1;
+                    const c = isLatest?"#f97316":"#9ca3af";
+                    const adjColor = (s.adjOrtg - peerExp(s.usg)) > 10 ? "#22c55e" : (s.adjOrtg - peerExp(s.usg)) > 0 ? "#fbbf24" : "#ef4444";
+                    return [
+                      <div key={`${s.yr}-yr`} style={{fontSize:11,fontWeight:isLatest?700:400,color:c,textAlign:"right"}}>{s.yr}</div>,
+                      <div key={`${s.yr}-u`}  style={{fontSize:11,color:c,textAlign:"right"}}>{s.usg?.toFixed(1)}%</div>,
+                      <div key={`${s.yr}-a`}  style={{fontSize:11,fontWeight:700,color:adjColor,textAlign:"right"}}>{s.adjOrtg?.toFixed(0)}</div>,
+                      <div key={`${s.yr}-t`}  style={{fontSize:11,color:c,textAlign:"right"}}>{s.ts != null ? `${s.ts.toFixed(1)}%` : "—"}</div>,
+                      <div key={`${s.yr}-ast`}style={{fontSize:11,color:c,textAlign:"right"}}>{s.astP != null ? `${s.astP.toFixed(1)}%` : "—"}</div>,
+                      <div key={`${s.yr}-to`} style={{fontSize:11,color:c,textAlign:"right"}}>{s.toP != null ? `${s.toP.toFixed(1)}%` : "—"}</div>,
+                    ];
+                  })}
+                </div>
+                <div style={{marginTop:8,fontSize:9,color:"#4b5563"}}>
+                  AdjOrtg = BartTorvik Adjusted Offensive Rating (pts/100 poss., opponent-adjusted). Green = ≥10pts above peer avg. AST% = % of teammate FGM assisted.
+                </div>
+              </div>
+            )}
+          </Sec>
+        );
+      })()}
+
+      {/* Placeholder for Feature 3 — Sequential Resilience */}
       <div style={{background:"#111827",borderRadius:12,padding:"16px",border:"1px dashed #374151",opacity:0.6}}>
         <div style={{fontSize:13,fontWeight:600,color:"#6b7280",fontFamily:"Oswald, sans-serif",letterSpacing:0.5}}>
-          📡 SEQUENTIAL RESILIENCE INDEX — Coming Soon
+          📡 IN-SEASON DEVELOPMENT — Coming Soon
         </div>
         <div style={{fontSize:11,color:"#4b5563",marginTop:6}}>
-          How does shooting behavior change after consecutive misses? Does this player adapt or spiral? (PBP cold-streak analysis)
+          First half vs. second half efficiency (opponent-adjusted). Does this player improve over the season? Game-log analysis requires per-game BartTorvik data.
         </div>
       </div>
     </div>
