@@ -798,6 +798,8 @@ function mapProfile(d) {
     // PBP self-creation (real assisted-shot data, 2008-2026)
     pbpSelfCreation: d.self_creation_raw ?? d.overall_self_creation ?? null,
     creationScore: d.creation_score ?? null,
+    // Shot Creation Spectrum (zone-level PBP data)
+    shotCreation: d.shotCreation ?? null,
     modernShotProfile: d.modern_shot_profile ?? null,
     sosPctl: d.sos_pctl ?? null,
     teamQuality: d.team_quality_pctl ?? null,
@@ -1419,6 +1421,114 @@ function ShootingTab({p}) {
           </Tip>
         </div>
       </Sec>
+
+      {/* ═══ SHOT CREATION SPECTRUM ═══ */}
+      {p.shotCreation && p.shotCreation.overall && p.shotCreation.overall.fga >= 30 && (() => {
+        const scd = p.shotCreation;
+        const zones = ["rim","mid","three"].filter(z => scd[z] && scd[z].fga >= 10);
+        if (zones.length === 0) return null;
+        const zoneLabel = {rim:"At Rim", mid:"Mid-Range", three:"3-Point"};
+        const zoneColor = {rim:"#f97316", mid:"#fbbf24", three:"#3b82f6"};
+        const zoneBg    = {rim:"#f9731622", mid:"#fbbf2422", three:"#3b82f622"};
+        const selfColor = (v) => v > 70 ? "#22c55e" : v > 50 ? "#86efac" : v > 30 ? "#fbbf24" : "#94a3b8";
+        // Compute self-created shot distribution (where does this player create from?)
+        const selfMakesByZone = {};
+        let totalSelfMakes = 0;
+        zones.forEach(z => {
+          const d = scd[z];
+          const makes = Math.round(d.fga * (d.pct||0) / 100);
+          const selfMakes = Math.round(makes * (d.selfPct||0) / 100);
+          selfMakesByZone[z] = selfMakes;
+          totalSelfMakes += selfMakes;
+        });
+        return (
+          <Sec icon="🎯" title="Shot Creation Spectrum" sub={`PBP-based creation profile — ${scd.overall.fga} FGA tracked · ${fmt(scd.overall.selfPct||0)}% overall self-created`}>
+            <div className="space-y-3">
+              {/* Zone bars: each zone shows FGA, FG%, self-creation rate */}
+              {zones.map(z => {
+                const d = scd[z];
+                const selfPct = d.selfPct ?? 0;
+                const astPct = 100 - selfPct;
+                const selfShare = totalSelfMakes > 0 ? Math.round(selfMakesByZone[z] / totalSelfMakes * 100) : 0;
+                return (
+                  <div key={z}>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold uppercase tracking-wider" style={{color:zoneColor[z]}}>{zoneLabel[z]}</span>
+                        <span className="text-xs" style={{color:"#6b7280"}}>{d.fga} FGA · {fmt(d.pct)}% FG</span>
+                      </div>
+                      <Tip content={<div>
+                        <div className="font-bold mb-1" style={{color:zoneColor[z]}}>{zoneLabel[z]} Creation</div>
+                        <div>{fmt(selfPct)}% of makes at {zoneLabel[z].toLowerCase()} were self-created (unassisted).</div>
+                        <div className="mt-1">{selfShare > 0 && <>This zone accounts for {selfShare}% of all self-created makes.</>}</div>
+                        <div className="mt-1 text-xs" style={{color:"#94a3b8"}}>Based on {d.fga} field goal attempts from play-by-play data.</div>
+                      </div>}>
+                        <span className="text-xs font-bold cursor-help" style={{color:selfColor(selfPct)}}>{fmt(selfPct)}% self</span>
+                      </Tip>
+                    </div>
+                    {/* Stacked bar: self-created (solid) vs assisted (lighter) */}
+                    <div className="h-6 rounded-md overflow-hidden flex" style={{background:"#1f2937"}}>
+                      <div className="h-full flex items-center justify-center text-xs font-bold" style={{
+                        width: `${selfPct}%`,
+                        background: zoneColor[z],
+                        color: "#fff",
+                        minWidth: selfPct > 8 ? "auto" : "0",
+                      }}>
+                        {selfPct > 15 && `${fmt(selfPct,0)}%`}
+                      </div>
+                      <div className="h-full flex items-center justify-center text-xs" style={{
+                        width: `${astPct}%`,
+                        background: zoneBg[z],
+                        color: zoneColor[z],
+                        minWidth: astPct > 8 ? "auto" : "0",
+                      }}>
+                        {astPct > 15 && `${fmt(astPct,0)}%`}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {/* Legend */}
+              <div className="flex items-center gap-4 text-xs pt-1" style={{color:"#6b7280"}}>
+                <span><span className="inline-block w-3 h-3 rounded-sm mr-1" style={{background:"#f97316",verticalAlign:"middle"}}/> Self-Created</span>
+                <span><span className="inline-block w-3 h-3 rounded-sm mr-1" style={{background:"#f9731633",verticalAlign:"middle"}}/> Assisted</span>
+                {scd.dunk && <span style={{color:"#475569"}}>Dunks: {scd.dunk.fga} FGA ({fmt(scd.dunk.selfPct||0)}% self)</span>}
+              </div>
+              {/* Self-creation distribution: pie-like summary */}
+              {totalSelfMakes > 5 && (
+                <div className="mt-2 px-3 py-2 rounded-lg" style={{background:"#0d1117",border:"1px solid #1e293b"}}>
+                  <div className="text-xs mb-1.5" style={{color:"#6b7280"}}>Self-Created Shot Distribution</div>
+                  <div className="flex gap-1 h-4 rounded-md overflow-hidden">
+                    {zones.map(z => {
+                      const share = totalSelfMakes > 0 ? selfMakesByZone[z] / totalSelfMakes * 100 : 0;
+                      return share > 0 ? (
+                        <Tip key={z} content={<div>{fmt(share,0)}% of self-created makes are {zoneLabel[z].toLowerCase()}</div>}>
+                          <div className="h-full flex items-center justify-center text-xs font-bold cursor-help" style={{
+                            width: `${share}%`,
+                            background: zoneColor[z],
+                            color: "#fff",
+                            minWidth: share > 10 ? "auto" : "0",
+                          }}>
+                            {share > 12 && `${fmt(share,0)}%`}
+                          </div>
+                        </Tip>
+                      ) : null;
+                    })}
+                  </div>
+                  <div className="flex gap-3 mt-1.5 text-xs" style={{color:"#6b7280"}}>
+                    {zones.map(z => {
+                      const share = totalSelfMakes > 0 ? Math.round(selfMakesByZone[z] / totalSelfMakes * 100) : 0;
+                      return share > 0 ? (
+                        <span key={z}><span style={{color:zoneColor[z]}}>{zoneLabel[z]}</span>: {share}%</span>
+                      ) : null;
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </Sec>
+        );
+      })()}
 
       {/* ═══ NBA SHOOTING PROJECTION ═══ */}
       <Sec icon="🔮" title="NBA Shooting Projection" sub={isIntl||useSimplifiedCourt?"Bayesian priors using FT% as primary shooting touch signal (no midrange data available)":"Bayesian Beta-Binomial model (Berger 2022) — FT% + midrange touch predict NBA 3P translation"}>
