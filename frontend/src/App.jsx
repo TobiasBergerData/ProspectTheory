@@ -800,6 +800,8 @@ function mapProfile(d) {
     creationScore: d.creation_score ?? null,
     // Shot Creation Spectrum (zone-level PBP data)
     shotCreation: d.shotCreation ?? null,
+    // Leverage-Weighted Efficiency (self-creation-weighted eFG%)
+    leverageEff: d.leverageEff ?? null,
     modernShotProfile: d.modern_shot_profile ?? null,
     sosPctl: d.sos_pctl ?? null,
     teamQuality: d.team_quality_pctl ?? null,
@@ -1576,6 +1578,227 @@ function ShootingTab({p}) {
     </div>;
   }
 }
+// ═══════════════════════════════════════════════════════════
+// MIND TAB — PBP Advanced Intelligence
+// Feature 1: Leverage-Weighted Efficiency (Self-Creation-Weighted eFG%)
+// ═══════════════════════════════════════════════════════════
+function MindTab({p}) {
+  if (!p) return null;
+
+  const le = p.leverageEff ?? null;
+
+  // ── Score ring helper (similar to ShootingTab style) ──
+  const ScoreRing = ({score, label, sub, color}) => {
+    const pct = Math.max(0, Math.min(100, score ?? 0));
+    const tier = pct >= 80 ? "Elite" : pct >= 60 ? "Above Avg" : pct >= 40 ? "Average" : pct >= 20 ? "Below Avg" : "Low";
+    const tierColor = pct >= 80 ? "#22c55e" : pct >= 60 ? "#86efac" : pct >= 40 ? "#fbbf24" : "#ef4444";
+    return (
+      <div className="flex flex-col items-center" style={{minWidth:90}}>
+        <div style={{position:"relative",width:80,height:80}}>
+          <svg width={80} height={80} viewBox="0 0 80 80">
+            <circle cx={40} cy={40} r={34} fill="none" stroke="#1f2937" strokeWidth={8}/>
+            <circle cx={40} cy={40} r={34} fill="none" stroke={color??tierColor} strokeWidth={8}
+              strokeDasharray={`${pct/100*213.6} 213.6`}
+              strokeLinecap="round"
+              transform="rotate(-90 40 40)"/>
+          </svg>
+          <div style={{position:"absolute",top:0,left:0,width:80,height:80,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column"}}>
+            <span style={{fontSize:18,fontWeight:700,color:"#f9fafb"}}>{pct}</span>
+          </div>
+        </div>
+        <div style={{fontSize:11,fontWeight:600,color:tierColor,marginTop:4,textAlign:"center"}}>{tier}</div>
+        <div style={{fontSize:10,color:"#9ca3af",textAlign:"center",lineHeight:"1.3"}}>{label}</div>
+        {sub&&<div style={{fontSize:9,color:"#6b7280",textAlign:"center"}}>{sub}</div>}
+      </div>
+    );
+  };
+
+  // ── Difficulty premium bar ──
+  const DiffBar = ({value}) => {
+    // value is diffPrem in pp, typical range -15 to +10
+    const clamp = Math.max(-15, Math.min(10, value ?? 0));
+    const pct = ((clamp + 15) / 25) * 100; // map to 0-100 for bar
+    const color = value > 0 ? "#22c55e" : value > -3 ? "#fbbf24" : "#ef4444";
+    const sign = value > 0 ? "+" : "";
+    return (
+      <div style={{width:"100%"}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+          <span style={{fontSize:11,color:"#9ca3af"}}>Worse on self-created</span>
+          <span style={{fontSize:13,fontWeight:700,color}}>{sign}{value?.toFixed(1)}pp</span>
+          <span style={{fontSize:11,color:"#9ca3af"}}>Better on self-created</span>
+        </div>
+        <div style={{background:"#1f2937",borderRadius:6,height:10,position:"relative",overflow:"hidden"}}>
+          {/* Zero marker at 60% of bar (where 0 maps to) */}
+          <div style={{position:"absolute",left:"60%",top:0,bottom:0,width:2,background:"#374151"}}/>
+          <div style={{position:"absolute",left:0,top:0,bottom:0,width:`${pct}%`,background:color,borderRadius:6,transition:"width 0.4s ease"}}/>
+        </div>
+        <div style={{display:"flex",justifyContent:"center",marginTop:4}}>
+          <span style={{fontSize:10,color:"#6b7280"}}>League avg: −1.4pp (self-created shots are harder)</span>
+        </div>
+      </div>
+    );
+  };
+
+  // ── Zone table ──
+  const ZoneRow = ({zone, label, color, data}) => {
+    if (!data) return null;
+    const {eFG, selfPct, fga, lwWeight} = data;
+    const barW = Math.min(100, (lwWeight / 50) * 100); // visual weight bar
+    const efgColor = eFG >= 65 ? "#22c55e" : eFG >= 55 ? "#86efac" : eFG >= 45 ? "#fbbf24" : "#ef4444";
+    const selfColor = selfPct >= 60 ? "#f97316" : selfPct >= 35 ? "#fbbf24" : "#6b7280";
+    return (
+      <div style={{display:"grid",gridTemplateColumns:"80px 1fr 60px 60px 60px",gap:8,alignItems:"center",padding:"6px 0",borderBottom:"1px solid #1f2937"}}>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <div style={{width:8,height:8,borderRadius:"50%",background:color,flexShrink:0}}/>
+          <span style={{fontSize:12,fontWeight:600,color:"#e5e7eb"}}>{label}</span>
+        </div>
+        <div style={{background:"#1f2937",borderRadius:4,height:6,overflow:"hidden"}}>
+          <div style={{width:`${barW}%`,height:"100%",background:color,opacity:0.7}}/>
+        </div>
+        <div style={{textAlign:"right",fontSize:12,fontWeight:700,color:efgColor}}>{eFG?.toFixed(1)}%</div>
+        <div style={{textAlign:"right",fontSize:12,color:selfColor}}>{selfPct?.toFixed(0)}%</div>
+        <div style={{textAlign:"right",fontSize:11,color:"#6b7280"}}>{fga}</div>
+      </div>
+    );
+  };
+
+  const ZONE_CONFIG = {
+    rim:   {label:"Rim",   color:"#f97316"},
+    mid:   {label:"Mid",   color:"#fbbf24"},
+    three: {label:"3-Pt",  color:"#3b82f6"},
+    dunk:  {label:"Dunk",  color:"#a855f7"},
+  };
+
+  // No leverageEff data at all
+  if (!le) {
+    return (
+      <div className="p-6">
+        <div style={{background:"#111827",borderRadius:12,padding:24,textAlign:"center",color:"#6b7280"}}>
+          <div style={{fontSize:18,marginBottom:8}}>🧠</div>
+          <div style={{fontSize:14,fontWeight:600,color:"#9ca3af",marginBottom:8}}>Mind Tab — PBP Intelligence</div>
+          <div style={{fontSize:13}}>
+            {p.source === "intl" ? "Play-by-play data not available for international players." : "No play-by-play data for this player (pre-2008 or insufficient shot volume)."}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const {lweFG, raweFG, diffPrem, score, premPctl, usgPctl, usg, ts, lwTotal, zones} = le;
+
+  // Insight text based on score + diffPrem
+  const getInsight = () => {
+    if (score >= 80 && diffPrem > 0) return "Elite shot creator who maintains efficiency even on difficult, unassisted attempts. Rare trait — translates directly to NBA lead creator role.";
+    if (score >= 80 && diffPrem > -2) return "Elite efficiency on self-created shots. High-volume self-creator who delivers. Projects as a primary or secondary offensive option.";
+    if (score >= 60 && diffPrem > 0) return "Above-average creation efficiency with a positive difficulty premium. Shoots better when creating for himself — sign of real offensive skill.";
+    if (score >= 60) return "Above-average creation efficiency. Production holds up well under self-creation load.";
+    if (score >= 40 && diffPrem < -5) return "Average range, but efficiency drops notably on self-created shots. Better as an off-ball player who benefits from others' creation.";
+    if (score >= 40) return "Average leverage efficiency. Capable self-creator without a clear edge.";
+    if (diffPrem < -8) return "Significant drop in efficiency on self-created shots. Best used as a movement/spot-up player — needs creation support.";
+    return "Below-average creation efficiency. Relies on teammates to generate open looks.";
+  };
+
+  return (
+    <div className="p-4 flex flex-col gap-4">
+
+      {/* Header */}
+      <div style={{background:"#111827",borderRadius:12,padding:"12px 16px",borderLeft:"3px solid #f97316"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+          <span style={{fontSize:16}}>🧠</span>
+          <span style={{fontSize:14,fontWeight:700,color:"#f97316",fontFamily:"Oswald, sans-serif",letterSpacing:1}}>MIND TAB — PBP INTELLIGENCE</span>
+        </div>
+        <div style={{fontSize:11,color:"#6b7280"}}>
+          Play-by-play analysis using {Math.round(lwTotal)} leverage-weighted attempts (BartTorvik 2008–2026)
+        </div>
+      </div>
+
+      {/* ── Feature 1: Leverage-Weighted Efficiency ── */}
+      <Sec icon="⚡" title="Leverage-Weighted Efficiency"
+        sub="How efficient is this player on shots they create themselves?">
+        <div style={{fontSize:12,color:"#9ca3af",marginBottom:16,lineHeight:"1.6"}}>
+          Standard eFG% weights all attempts equally. <strong style={{color:"#e5e7eb"}}>Leverage-Weighted eFG%</strong> up-weights shots the player created for themselves — because unassisted attempts carry higher difficulty and higher game impact. A player who dominates on self-created shots is a self-sufficient scorer.
+        </div>
+
+        {/* Score rings */}
+        <div style={{display:"flex",gap:16,justifyContent:"space-around",marginBottom:24,flexWrap:"wrap"}}>
+          <ScoreRing score={score} label="LW-eFG%" sub="vs cohort" color="#f97316"/>
+          <Tip content="Difficulty Premium: how much more (or less) efficient is this player on self-created shots vs. all shots. Positive = better on hard shots.">
+            <ScoreRing score={premPctl} label="Difficulty Premium" sub="vs cohort" color="#3b82f6"/>
+          </Tip>
+          <Tip content="Usage percentile — what % of team possessions does this player use when on court. High usage = heavy offensive load.">
+            <ScoreRing score={usgPctl} label="Usage Load" sub="vs cohort" color="#a855f7"/>
+          </Tip>
+        </div>
+
+        {/* Key numbers */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:20}}>
+          {[
+            {label:"Self-Created eFG%", val:`${lweFG?.toFixed(1)}%`, sub:"leverage-weighted", color:"#f97316"},
+            {label:"Raw Zone eFG%",     val:`${raweFG?.toFixed(1)}%`, sub:"unweighted baseline", color:"#9ca3af"},
+            {label:"Difficulty Prem.",  val:`${diffPrem>0?"+":""}${diffPrem?.toFixed(1)}pp`, sub:"eFG% difference", color:diffPrem>0?"#22c55e":diffPrem>-3?"#fbbf24":"#ef4444"},
+          ].map(({label,val,sub,color})=>(
+            <div key={label} style={{background:"#1f2937",borderRadius:8,padding:"10px 12px",textAlign:"center"}}>
+              <div style={{fontSize:18,fontWeight:700,color,fontFamily:"Oswald,sans-serif"}}>{val}</div>
+              <div style={{fontSize:11,fontWeight:600,color:"#e5e7eb",marginTop:2}}>{label}</div>
+              <div style={{fontSize:10,color:"#6b7280",marginTop:1}}>{sub}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Difficulty premium bar */}
+        <div style={{background:"#0f172a",borderRadius:8,padding:"12px 14px",marginBottom:20}}>
+          <div style={{fontSize:11,fontWeight:600,color:"#9ca3af",marginBottom:10,letterSpacing:0.5}}>DIFFICULTY PREMIUM SCALE</div>
+          <DiffBar value={diffPrem}/>
+        </div>
+
+        {/* Zone breakdown */}
+        {zones && Object.keys(zones).length > 0 && (
+          <div style={{background:"#0f172a",borderRadius:8,padding:"12px 14px"}}>
+            <div style={{fontSize:11,fontWeight:600,color:"#9ca3af",marginBottom:10,letterSpacing:0.5}}>ZONE BREAKDOWN — LEVERAGE WEIGHT &amp; EFFICIENCY</div>
+            <div style={{display:"grid",gridTemplateColumns:"80px 1fr 60px 60px 60px",gap:8,marginBottom:6}}>
+              <div style={{fontSize:10,color:"#4b5563"}}>Zone</div>
+              <div style={{fontSize:10,color:"#4b5563"}}>LW Weight</div>
+              <div style={{textAlign:"right",fontSize:10,color:"#4b5563"}}>eFG%</div>
+              <div style={{textAlign:"right",fontSize:10,color:"#4b5563"}}>Self%</div>
+              <div style={{textAlign:"right",fontSize:10,color:"#4b5563"}}>FGA</div>
+            </div>
+            {["rim","mid","three","dunk"].map(z => {
+              const cfg = ZONE_CONFIG[z];
+              const zd = zones[z];
+              if (!zd) return null;
+              return <ZoneRow key={z} zone={z} label={cfg.label} color={cfg.color} data={zd}/>;
+            })}
+            <div style={{marginTop:10,fontSize:10,color:"#4b5563"}}>
+              LW Weight = FGA × Self-Creation Rate. eFG% for 3-Pt zone is FG% × 1.5. Self% = % of makes without an assist.
+            </div>
+          </div>
+        )}
+
+        {/* Insight box */}
+        <div style={{marginTop:16,background:"#1a1f2e",border:"1px solid #1e3a5f",borderRadius:8,padding:"12px 14px"}}>
+          <div style={{fontSize:10,fontWeight:700,color:"#60a5fa",letterSpacing:1,marginBottom:6}}>SCOUT INSIGHT</div>
+          <div style={{fontSize:12,color:"#d1d5db",lineHeight:"1.6"}}>{getInsight()}</div>
+          {usg != null && (
+            <div style={{marginTop:8,fontSize:11,color:"#6b7280"}}>
+              Usage: {usg?.toFixed(1)}% ({usgPctl}th pctl) · TS%: {ts?.toFixed(1)}%
+            </div>
+          )}
+        </div>
+      </Sec>
+
+      {/* Placeholder for Feature 2 — Sequential Resilience */}
+      <div style={{background:"#111827",borderRadius:12,padding:"16px",border:"1px dashed #374151",opacity:0.6}}>
+        <div style={{fontSize:13,fontWeight:600,color:"#6b7280",fontFamily:"Oswald, sans-serif",letterSpacing:0.5}}>
+          📡 SEQUENTIAL RESILIENCE INDEX — Coming Soon
+        </div>
+        <div style={{fontSize:11,color:"#4b5563",marginTop:6}}>
+          How does shooting behavior change after consecutive misses? Does this player adapt or spiral? (PBP cold-streak analysis)
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ProjectionTab({p}) {
   if (!p) return null;
   // Prefer v2TierProbs (new model, %-scale already) over legacy prob_* fields
@@ -3700,6 +3923,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
 const TABS = [
   {id:"overview",label:"Overview",icon:"▦"},
   {id:"shooting",label:"Shooting",icon:"🏀"},
+  {id:"mind",label:"Mind",icon:"🧠"},
   {id:"projection",label:"Projection",icon:"◆"},
   {id:"scouting",label:"Scouting",icon:"⭐"},
   {id:"body",label:"Body",icon:"📏"},
@@ -3991,6 +4215,7 @@ export default function App() {
             </div>
             {tab==="overview"&&<OverviewTab p={p} compTier={compTier} setCompTier={setCompTier}/>}
             {tab==="shooting"&&<ShootingTab p={p}/>}
+            {tab==="mind"&&<MindTab p={p}/>}
             {tab==="projection"&&<ProjectionTab p={p}/>}
             {tab==="scouting"&&<ScoutingTab p={p}/>}
             {tab==="body"&&<BodyTab p={p}/>}
