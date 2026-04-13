@@ -771,7 +771,8 @@ function mapProfile(d) {
       if (ap != null && tp2 != null && tp2 > 0) return Math.round(ap / tp2 * 100) / 100;
       return null;
     })(),
-    bpm: d.bpm, obpm: d.obpm, dbpm: d.dbpm, ortg: d.ortg ?? d.ORtg ?? d.offensive_rating,
+    bpm: d.bpm, obpm: d.obpm, dbpm: d.dbpm, ogbpm: d.ogbpm ?? null, btPid: d.pid ?? null,
+    ortg: d.ortg ?? d.ORtg ?? d.offensive_rating,
     usg: normRate(d.usg ?? d.usg_p),
     ts: normShootPct(d.ts_pct ?? d.ts),
     fg: normShootPct(d.fg_pct ?? d.fg),
@@ -911,8 +912,8 @@ const BadgeChip = ({text,color="#22c55e"}) => {
 
 const TierBadge = ({tier}) => <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{background:(TC[tier]||"#6b7280")+"22",color:TC[tier]||"#6b7280",border:`1px solid ${(TC[tier]||"#6b7280")}44`}}>{tier}</span>;
 
-const StatCell = ({label,val,pctl,suffix=""}) => (
-  <div className="text-center p-2 rounded-lg" style={{background:valBg(pctl)}}>
+const StatCell = ({label,val,pctl,suffix="",tooltip}) => (
+  <div className="text-center p-2 rounded-lg" style={{background:valBg(pctl)}} title={tooltip}>
     <div className="text-xs uppercase tracking-wider mb-0.5" style={{color:"#9ca3af"}}>{label}</div>
     <div className="text-xl font-bold" style={{color:valColor(pctl),fontFamily:"'Oswald',sans-serif"}}>{fmt(val)}{suffix}</div>
     {pctl!=null&&<div className="text-xs mt-0.5" style={{color:valColor(pctl)}}>{Math.round(pctl)}th</div>}
@@ -1031,10 +1032,12 @@ function OverviewTab({p, compTier, setCompTier}) {
       </Sec>
       <Sec icon="⚡" title="Advanced" sub="Rate stats that capture efficiency and impact independent of role. BPM and ORtg are the strongest NBA translation signals.">
         <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
-          {[["BPM",p.bpm,p.pctl?.bpm],["OBPM",p.obpm,p.pctl?.obpm],["DBPM",p.dbpm,p.pctl?.dbpm],["ORtg",p.ortg,p.pctl?.ortg],
+          {[["BPM",p.bpm,p.pctl?.bpm],["OBPM",p.obpm,p.pctl?.obpm],
+            ...(p.ogbpm != null ? [["O-GBPM",p.ogbpm,null]] : []),
+            ["DBPM",p.dbpm,p.pctl?.dbpm],["ORtg",p.ortg,p.pctl?.ortg],
             ["USG%",p.usg,p.pctl?.usg],["TS%",p.ts,p.pctl?.ts],["AST%",p.astP,p.pctl?.ast],["TO%",p.toP,p.pctl?.to],
             ["ORB%",p.orbP,p.pctl?.orb],["DRB%",p.drbP,p.pctl?.drb],["STL%",p.stlP,p.pctl?.stl],["BLK%",p.blkP,p.pctl?.blk]
-          ].map(([l,v,pc])=><StatCell key={l} label={l} val={v} pctl={pc}/>)}
+          ].map(([l,v,pc])=><StatCell key={l} label={l} val={v} pctl={pc} tooltip={l==="O-GBPM"?"Offensive Game-Adjusted BPM (BartTorvik) — opponent-adjusted offensive impact":undefined}/>)}
         </div>
       </Sec>
 
@@ -1581,6 +1584,331 @@ function ShootingTab({p}) {
   }
 }
 // ═══════════════════════════════════════════════════════════
+// CLASS SCATTER + IN-SEASON DEVELOPMENT
+// Feature 3 of Mind Tab — fetches cohort & game log data
+// ═══════════════════════════════════════════════════════════
+function ClassScatterAndDev({p}) {
+  const [cohort,  setCohort]  = useState(null);  // {players:[{name,usg,ortg,pos,war}]}
+  const [gameLogs, setGameLogs] = useState(null); // {games:[{game_num,usg,efg,ortg,opp_ortg,...}]}
+  const [glLoading, setGlLoading] = useState(false);
+  const [chartMode, setChartMode] = useState("class"); // "class" | "games"
+
+  const yr = p?.skillCurve?.curUsg != null ? (p.seasonLines||[]).slice(-1)[0]?.yr : p?.yr;
+
+  useEffect(() => {
+    if (!p || !yr) return;
+    // Fetch class cohort
+    fetch(`${API_BASE.replace("/api","")}/api/cohort/${yr}?n=300`)
+      .then(r => r.json())
+      .then(d => setCohort(d))
+      .catch(() => setCohort({players:[]}));
+  }, [p?.name, yr]);
+
+  useEffect(() => {
+    if (!p?.name || !yr) return;
+    setGlLoading(true);
+    fetch(`${API_BASE.replace("/api","")}/api/gamelogs/${encodeURIComponent(p.name)}?year=${yr}`)
+      .then(r => r.json())
+      .then(d => { setGameLogs(d); setGlLoading(false); })
+      .catch(() => { setGameLogs({games:[]}); setGlLoading(false); });
+  }, [p?.name, yr]);
+
+  if (!p) return null;
+
+  const peerExp = (usg) => -0.0052*usg*usg + 1.6262*usg + 69.51;
+  const playerUsg  = p.usg  || p.skillCurve?.curUsg || 0;
+  const playerOrtg = p.ortg || p.skillCurve?.curAdjOrtg || 0;
+
+  // ── CLASS SCATTER ─────────────────────────────────────────
+  const ClassScatter = () => {
+    const W=560, H=280, PAD={l:44,r:20,t:20,b:36};
+    const IW = W-PAD.l-PAD.r, IH = H-PAD.t-PAD.b;
+
+    const pts = (cohort?.players || []).filter(c => c.usg >= 8 && c.ortg >= 70);
+    const allUsg  = pts.map(c=>c.usg);
+    const allOrtg = pts.map(c=>c.ortg);
+    const minU = Math.max(8,  (allUsg.length  ? Math.min(...allUsg)  : 8)  - 2);
+    const maxU = Math.min(42, (allUsg.length  ? Math.max(...allUsg)  : 38) + 2);
+    const minO = Math.max(80, (allOrtg.length ? Math.min(...allOrtg) : 90) - 5);
+    const maxO = Math.min(175,(allOrtg.length ? Math.max(...allOrtg) : 160)+ 5);
+
+    const xS = (u) => PAD.l + (u - minU)/(maxU - minU) * IW;
+    const yS = (o) => PAD.t + IH - (o - minO)/(maxO - minO) * IH;
+
+    // Peer curve line
+    const curveUsg = [];
+    for (let u=minU; u<=maxU; u+=0.5) curveUsg.push(u);
+    const curvePts = curveUsg.map(u => `${xS(u).toFixed(1)},${yS(peerExp(u)).toFixed(1)}`).join(" ");
+
+    // Grid lines
+    const yTicks = [];
+    const step = maxO-minO > 60 ? 20 : 10;
+    for (let o=Math.ceil(minO/step)*step; o<=maxO; o+=step) yTicks.push(o);
+    const xTicks = [10,15,20,25,30,35,40].filter(u=>u>=minU&&u<=maxU);
+
+    const isLoading = cohort === null;
+
+    return (
+      <div>
+        {isLoading ? (
+          <div style={{height:H,display:"flex",alignItems:"center",justifyContent:"center",color:"#4b5563",fontSize:12}}>
+            Loading class data…
+          </div>
+        ) : (
+          <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{overflow:"visible"}}>
+            {/* Grid */}
+            {yTicks.map(o=>(
+              <g key={o}>
+                <line x1={PAD.l} x2={W-PAD.r} y1={yS(o)} y2={yS(o)} stroke="#1f2937" strokeWidth={1}/>
+                <text x={PAD.l-4} y={yS(o)+4} textAnchor="end" fontSize={9} fill="#6b7280">{o}</text>
+              </g>
+            ))}
+            {xTicks.map(u=>(
+              <g key={u}>
+                <line x1={xS(u)} x2={xS(u)} y1={PAD.t} y2={H-PAD.b} stroke="#1f2937" strokeWidth={1}/>
+                <text x={xS(u)} y={H-PAD.b+14} textAnchor="middle" fontSize={9} fill="#6b7280">{u}%</text>
+              </g>
+            ))}
+            {/* Axis labels */}
+            <text x={W/2} y={H-2} textAnchor="middle" fontSize={10} fill="#6b7280">Usage %</text>
+            <text x={10} y={H/2} textAnchor="middle" fontSize={10} fill="#6b7280" transform={`rotate(-90,10,${H/2})`}>AdjOrtg</text>
+            {/* Peer curve */}
+            <polyline points={curvePts} fill="none" stroke="#f97316" strokeWidth={1.5} strokeDasharray="4,3" opacity={0.5}/>
+            {/* Quadrant hint */}
+            {playerUsg > (minU+maxU)/2 && playerOrtg > peerExp(playerUsg) && (
+              <text x={W-PAD.r-5} y={PAD.t+12} textAnchor="end" fontSize={8} fill="#22c55e" opacity={0.5}>High Vol · High Eff</text>
+            )}
+            {/* Class dots */}
+            {pts.filter(c=>c.name!==p.name).map((c,i)=>(
+              <circle key={i} cx={xS(c.usg)} cy={yS(c.ortg)} r={3}
+                fill={c.ortg > peerExp(c.usg) ? "#374151" : "#1f2937"}
+                stroke={c.ortg > peerExp(c.usg) ? "#4b5563" : "#374151"}
+                strokeWidth={0.5} opacity={0.7}/>
+            ))}
+            {/* Selected player */}
+            {playerUsg > 0 && playerOrtg > 0 && (
+              <g>
+                <circle cx={xS(playerUsg)} cy={yS(playerOrtg)} r={7} fill="#f97316" opacity={0.9}/>
+                <circle cx={xS(playerUsg)} cy={yS(playerOrtg)} r={7} fill="none" stroke="#fed7aa" strokeWidth={1.5}/>
+                <text x={xS(playerUsg)+10} y={yS(playerOrtg)+4} fontSize={10} fontWeight="bold" fill="#f97316"
+                  style={{textShadow:"0 0 4px #000"}}>
+                  {p.name?.split(" ").slice(-1)[0]}
+                </text>
+              </g>
+            )}
+            {/* Peer curve label */}
+            <text x={xS(maxU)-5} y={yS(peerExp(maxU))-5} fontSize={8} fill="#f97316" opacity={0.6} textAnchor="end">
+              peer avg
+            </text>
+          </svg>
+        )}
+        {!isLoading && pts.length > 0 && (
+          <div style={{fontSize:10,color:"#6b7280",marginTop:4,textAlign:"right"}}>
+            {pts.length} players · {yr} class · orange line = peer curve
+            {playerOrtg > peerExp(playerUsg)
+              ? <span style={{color:"#22c55e"}}> · {p.name?.split(" ")[0]} is <strong>above</strong> peer curve</span>
+              : <span style={{color:"#ef4444"}}> · {p.name?.split(" ")[0]} is <strong>below</strong> peer curve</span>}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ── GAME SCATTER ──────────────────────────────────────────
+  const GameScatter = () => {
+    const games = (gameLogs?.games || []).filter(g => g.usg != null && g.ortg != null && g.min >= 10);
+    if (glLoading) return <div style={{height:200,display:"flex",alignItems:"center",justifyContent:"center",color:"#4b5563",fontSize:12}}>Loading game logs…</div>;
+    if (games.length === 0) return (
+      <div style={{background:"#0f172a",borderRadius:8,padding:"14px 16px",border:"1px dashed #374151"}}>
+        <div style={{fontSize:12,fontWeight:600,color:"#6b7280"}}>📡 Game log data not yet loaded</div>
+        <div style={{fontSize:11,color:"#4b5563",marginTop:4}}>
+          Run <code style={{color:"#f97316",background:"#1f2937",padding:"1px 4px",borderRadius:3}}>python scripts/fetch_game_logs.py</code> locally,
+          then commit the DB to populate per-game USG / ORtg scatter.
+        </div>
+      </div>
+    );
+
+    const W=560, H=220, PAD={l:40,r:20,t:16,b:32};
+    const IW=W-PAD.l-PAD.r, IH=H-PAD.t-PAD.b;
+    const allU = games.map(g=>g.usg), allO = games.map(g=>g.ortg);
+    const minU=Math.max(0,Math.min(...allU)-5), maxU=Math.min(60,Math.max(...allU)+5);
+    const minO=Math.max(50,Math.min(...allO)-10), maxO=Math.min(200,Math.max(...allO)+10);
+    const xS=(u)=>PAD.l+(u-minU)/(maxU-minU)*IW;
+    const yS=(o)=>PAD.t+IH-(o-minO)/(maxO-minO)*IH;
+    // Peer expected line (vertical for player's median usg)
+    const medUsg = games.map(g=>g.usg).sort((a,b)=>a-b)[Math.floor(games.length/2)];
+    const pe = peerExp(medUsg);
+
+    const curvePts = [];
+    for (let u=minU; u<=maxU; u+=0.5) curvePts.push(`${xS(u).toFixed(1)},${yS(peerExp(u)).toFixed(1)}`);
+
+    return (
+      <div>
+        <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{overflow:"visible"}}>
+          {/* Grid */}
+          {[100,120,140,160].filter(o=>o>=minO&&o<=maxO).map(o=>(
+            <g key={o}><line x1={PAD.l} x2={W-PAD.r} y1={yS(o)} y2={yS(o)} stroke="#1f2937" strokeWidth={1}/>
+            <text x={PAD.l-4} y={yS(o)+4} textAnchor="end" fontSize={9} fill="#6b7280">{o}</text></g>
+          ))}
+          {[10,20,30,40,50].filter(u=>u>=minU&&u<=maxU).map(u=>(
+            <g key={u}><line x1={xS(u)} x2={xS(u)} y1={PAD.t} y2={H-PAD.b} stroke="#1f2937" strokeWidth={1}/>
+            <text x={xS(u)} y={H-PAD.b+12} textAnchor="middle" fontSize={9} fill="#6b7280">{u}%</text></g>
+          ))}
+          <text x={W/2} y={H} textAnchor="middle" fontSize={10} fill="#6b7280">USG% per game</text>
+          <text x={10} y={H/2} textAnchor="middle" fontSize={10} fill="#6b7280" transform={`rotate(-90,10,${H/2})`}>ORtg</text>
+          {/* Peer curve */}
+          <polyline points={curvePts.join(" ")} fill="none" stroke="#f97316" strokeWidth={1} strokeDasharray="4,3" opacity={0.4}/>
+          {/* Game dots */}
+          {games.map((g,i)=>{
+            const above = g.ortg > peerExp(g.usg);
+            return <circle key={i} cx={xS(g.usg)} cy={yS(g.ortg)} r={4}
+              fill={above?"#22c55e88":"#ef444488"} stroke={above?"#22c55e":"#ef4444"} strokeWidth={0.8} opacity={0.8}/>;
+          })}
+          {/* Median USG vertical line */}
+          <line x1={xS(medUsg)} x2={xS(medUsg)} y1={PAD.t} y2={H-PAD.b} stroke="#f97316" strokeWidth={1} strokeDasharray="3,2" opacity={0.5}/>
+        </svg>
+        <div style={{fontSize:10,color:"#6b7280",marginTop:4,display:"flex",gap:12}}>
+          <span><span style={{color:"#22c55e"}}>●</span> Above peer curve ({games.filter(g=>g.ortg>peerExp(g.usg)).length} games)</span>
+          <span><span style={{color:"#ef4444"}}>●</span> Below ({games.filter(g=>g.ortg<=peerExp(g.usg)).length} games)</span>
+          <span>Median USG: {medUsg?.toFixed(1)}%</span>
+        </div>
+      </div>
+    );
+  };
+
+  // ── DEV TRAJECTORY ────────────────────────────────────────
+  const DevTrajectory = () => {
+    const games = (gameLogs?.games || [])
+      .filter(g => g.game_num != null && g.efg != null && g.min >= 10)
+      .sort((a,b) => a.game_num - b.game_num);
+    if (glLoading) return null;
+    if (games.length < 5) return (
+      <div style={{fontSize:11,color:"#4b5563",padding:"8px 0"}}>
+        {games.length === 0
+          ? "Game log data required for development trajectory analysis."
+          : `Only ${games.length} qualifying games — more data needed.`}
+      </div>
+    );
+
+    // Rolling 5-game eFG% + linear trend
+    const W=560, H=180, PAD={l:40,r:20,t:16,b:32};
+    const IW=W-PAD.l-PAD.r, IH=H-PAD.t-PAD.b;
+    const N = games.length;
+    const K = Math.min(5, Math.floor(N/3)); // rolling window
+
+    const rolling = games.map((g,i) => {
+      const win = games.slice(Math.max(0,i-K+1), i+1);
+      return { n: g.game_num, efg: win.reduce((s,x)=>s+x.efg,0)/win.length,
+               oppAdj: g.opp_ortg ? g.efg * (100/g.opp_ortg) : g.efg };
+    });
+
+    const minE = Math.max(20, Math.min(...rolling.map(r=>r.efg)) - 5);
+    const maxE = Math.min(90, Math.max(...rolling.map(r=>r.efg)) + 5);
+    const xS = (n) => PAD.l + (n-1)/(N-1)*IW;
+    const yS = (e) => PAD.t + IH - (e-minE)/(maxE-minE)*IH;
+
+    // Linear trend for last half vs first half
+    const half = Math.floor(N/2);
+    const firstHalf = rolling.slice(0, half);
+    const secHalf   = rolling.slice(half);
+    const avgFirst  = firstHalf.reduce((s,r)=>s+r.efg,0)/firstHalf.length;
+    const avgSec    = secHalf.reduce((s,r)=>s+r.efg,0)/secHalf.length;
+    const delta     = avgSec - avgFirst;
+    const trendColor = delta > 3 ? "#22c55e" : delta > 0 ? "#86efac" : delta > -3 ? "#fbbf24" : "#ef4444";
+    const trendLabel = delta > 3 ? "Clear improvement" : delta > 0 ? "Slight improvement" : delta > -3 ? "Flat" : "Declining";
+
+    // OLS trend line
+    const xs = rolling.map((_,i)=>i);
+    const ys = rolling.map(r=>r.efg);
+    const xm = xs.reduce((s,x)=>s+x,0)/xs.length;
+    const ym = ys.reduce((s,y)=>s+y,0)/ys.length;
+    const slope = xs.reduce((s,x,i)=>s+(x-xm)*(ys[i]-ym),0) / xs.reduce((s,x)=>s+(x-xm)**2,0.001);
+    const intercept = ym - slope*xm;
+    const trendLine = [
+      `${xS(1).toFixed(1)},${yS(intercept).toFixed(1)}`,
+      `${xS(N).toFixed(1)},${yS(intercept+slope*(N-1)).toFixed(1)}`
+    ].join(" ");
+
+    const linePts = rolling.map(r=>`${xS(r.n).toFixed(1)},${yS(r.efg).toFixed(1)}`).join(" ");
+
+    return (
+      <div>
+        <div style={{display:"flex",gap:12,alignItems:"center",marginBottom:8}}>
+          <div style={{fontSize:11,color:"#9ca3af"}}>
+            {K}-game rolling eFG% · {N} games · First half avg: <strong style={{color:"#e5e7eb"}}>{avgFirst.toFixed(1)}%</strong> → Second half: <strong style={{color:trendColor}}>{avgSec.toFixed(1)}%</strong>
+          </div>
+          <div style={{fontSize:11,fontWeight:700,color:trendColor,background:"#1f2937",borderRadius:6,padding:"2px 8px"}}>
+            {trendLabel} ({delta>0?"+":""}{delta.toFixed(1)}pp)
+          </div>
+        </div>
+        <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{overflow:"visible"}}>
+          {[Math.round(minE/10)*10, Math.round((minE+maxE)/20)*10, Math.round(maxE/10)*10].filter(e=>e>=minE&&e<=maxE).map(e=>(
+            <g key={e}><line x1={PAD.l} x2={W-PAD.r} y1={yS(e)} y2={yS(e)} stroke="#1f2937" strokeWidth={1}/>
+            <text x={PAD.l-4} y={yS(e)+4} textAnchor="end" fontSize={9} fill="#6b7280">{e}%</text></g>
+          ))}
+          {[1,Math.ceil(N*0.25),Math.ceil(N*0.5),Math.ceil(N*0.75),N].filter((v,i,a)=>a.indexOf(v)===i).map(n=>(
+            <g key={n}><text x={xS(n)} y={H-PAD.b+12} textAnchor="middle" fontSize={9} fill="#6b7280">G{n}</text></g>
+          ))}
+          <text x={W/2} y={H} textAnchor="middle" fontSize={10} fill="#6b7280">Game #</text>
+          <text x={10} y={H/2} textAnchor="middle" fontSize={10} fill="#6b7280" transform={`rotate(-90,10,${H/2})`}>eFG%</text>
+          {/* Half divider */}
+          <line x1={xS(half+0.5)} x2={xS(half+0.5)} y1={PAD.t} y2={H-PAD.b} stroke="#374151" strokeWidth={1} strokeDasharray="3,2"/>
+          {/* OLS trend */}
+          <polyline points={trendLine} fill="none" stroke={trendColor} strokeWidth={1.5} strokeDasharray="5,3" opacity={0.7}/>
+          {/* Rolling line */}
+          <polyline points={linePts} fill="none" stroke="#60a5fa" strokeWidth={2}/>
+          {rolling.map((r,i)=><circle key={i} cx={xS(r.n)} cy={yS(r.efg)} r={3} fill="#60a5fa" opacity={0.7}/>)}
+        </svg>
+        <div style={{fontSize:10,color:"#6b7280",marginTop:6}}>
+          <span style={{color:"#60a5fa"}}>— rolling eFG%</span>
+          <span style={{color:trendColor,marginLeft:12}}>--- trend</span>
+          <span style={{marginLeft:12}}>| = season midpoint</span>
+          {delta > 2 && <span style={{color:"#22c55e",marginLeft:12}}>✓ Progressive improvement detected</span>}
+          {delta < -2 && <span style={{color:"#f59e0b",marginLeft:12}}>⚠ Efficiency declined over season</span>}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* 3A: Class Scatter */}
+      <Sec icon="🏀" title={`${yr} Class: USG vs AdjOrtg`}
+        sub={`All top prospects, ${yr} — orange dot = ${p.name?.split(" ")[0]}. Orange dashed = peer curve.`}>
+        <div style={{display:"flex",gap:8,marginBottom:8}}>
+          {["class","games"].map(m=>(
+            <button key={m} onClick={()=>setChartMode(m)}
+              style={{fontSize:11,padding:"3px 10px",borderRadius:6,border:"none",cursor:"pointer",
+                background: chartMode===m?"#f97316":"#1f2937",
+                color: chartMode===m?"#fff":"#9ca3af",fontWeight:600}}>
+              {m==="class"?"Class Scatter":"Game Scatter"}
+            </button>
+          ))}
+        </div>
+        {chartMode==="class" ? <ClassScatter /> : <GameScatter />}
+      </Sec>
+
+      {/* 3B: In-Season Development Trajectory */}
+      {(gameLogs?.games?.length > 0 || glLoading) && (
+        <Sec icon="📈" title="In-Season Development Trajectory"
+          sub="Rolling eFG% by game number. Trend line reveals whether the player improved, regressed, or held steady over the season.">
+          <DevTrajectory />
+        </Sec>
+      )}
+      {!glLoading && (!gameLogs || gameLogs.games?.length === 0) && (
+        <Sec icon="📡" title="In-Season Development" sub="Game log data not yet available.">
+          <div style={{fontSize:12,color:"#6b7280",padding:"8px 0"}}>
+            Run <code style={{color:"#f97316",background:"#1f2937",padding:"2px 6px",borderRadius:4}}>python scripts/fetch_game_logs.py</code> locally
+            to populate per-game stats. Once committed to DB, this section shows:
+            rolling eFG%, opponent-adjusted efficiency trend, and development signal (improving / flat / regressing).
+          </div>
+        </Sec>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
 // MIND TAB — PBP Advanced Intelligence
 // Feature 1: Leverage-Weighted Efficiency (Self-Creation-Weighted eFG%)
 // ═══════════════════════════════════════════════════════════
@@ -1788,12 +2116,9 @@ function MindTab({p}) {
         </div>
       </Sec>
 
-      {/* ── Feature 2: Offensive Skill Curve ── */}
+      {/* ── Feature 2: Offensive Skill Curve (+ Class Scatter) ── */}
       {p.skillCurve && (() => {
         const sc = p.skillCurve;
-        // seasons were removed from DB blobs to save space.
-        // Reconstruct from p.seasonLines (yr, usg, ts, bpm) which the API already serves.
-        // adjOrtg for current season comes from sc.curAdjOrtg; prior seasons get peer-expected.
         const rawLines = (p.seasonLines || []).filter(s => s.yr && s.usg >= 8);
         const seasons = rawLines.map((s, i) => ({
           yr:     s.yr,
@@ -2000,15 +2325,8 @@ function MindTab({p}) {
         );
       })()}
 
-      {/* Placeholder for Feature 3 — Sequential Resilience */}
-      <div style={{background:"#111827",borderRadius:12,padding:"16px",border:"1px dashed #374151",opacity:0.6}}>
-        <div style={{fontSize:13,fontWeight:600,color:"#6b7280",fontFamily:"Oswald, sans-serif",letterSpacing:0.5}}>
-          📡 IN-SEASON DEVELOPMENT — Coming Soon
-        </div>
-        <div style={{fontSize:11,color:"#4b5563",marginTop:6}}>
-          First half vs. second half efficiency (opponent-adjusted). Does this player improve over the season? Game-log analysis requires per-game BartTorvik data.
-        </div>
-      </div>
+      {/* ── Feature 3: Class Scatter + In-Season Development ── */}
+      <ClassScatterAndDev p={p} />
     </div>
   );
 }
