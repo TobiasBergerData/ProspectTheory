@@ -1791,7 +1791,21 @@ function MindTab({p}) {
       {/* ── Feature 2: Offensive Skill Curve ── */}
       {p.skillCurve && (() => {
         const sc = p.skillCurve;
-        const seasons = sc.seasons || [];
+        // seasons were removed from DB blobs to save space.
+        // Reconstruct from p.seasonLines (yr, usg, ts, bpm) which the API already serves.
+        // adjOrtg for current season comes from sc.curAdjOrtg; prior seasons get peer-expected.
+        const rawLines = (p.seasonLines || []).filter(s => s.yr && s.usg >= 8);
+        const seasons = rawLines.map((s, i) => ({
+          yr:     s.yr,
+          usg:    s.usg,
+          adjOrtg: (i === rawLines.length - 1 && sc.curAdjOrtg) ? sc.curAdjOrtg
+                   : Math.round(-0.0052*s.usg*s.usg + 1.6262*s.usg + 69.51 + (sc.peerResidual || 0) * 0.5),
+          ts:     s.ts,
+          astP:   null,   // AST% not in season_lines; shown as — in table
+          toP:    null,
+          obpm:   s.bpm,
+          gp:     s.gp,
+        }));
         const curSeason = seasons[seasons.length - 1];
         const multiSeason = sc.nSeasons >= 2 && sc.slope != null;
 
