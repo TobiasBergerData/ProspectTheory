@@ -1261,17 +1261,20 @@ function ShootingTab({p}) {
     return "#e5e7eb";
   };
 
-  // ═══ DIET BAR COMPONENT ═══
-  const DietBar = ({label, color, pctOfTotal, children}) => (
+  // ═══ DIET BAR COMPONENT — full-width, taller ═══
+  const DietBar = ({label, color, pctOfTotal, effPct, effType, children}) => (
     pctOfTotal != null && pctOfTotal > 0 ? (
       <div>
         <div className="flex justify-between items-baseline mb-1">
           <span className="text-sm font-semibold" style={{color}}>{label} {children||""}</span>
-          <span className="text-sm font-bold" style={{color:"#e5e7eb"}}>{fmt(pctOfTotal,1)}%</span>
+          <div className="flex items-center gap-3">
+            {effPct != null && <span className="text-xs" style={{color:sc(effPct,effType||"2pt")}}>{fmt(effPct)}%</span>}
+            <span className="text-sm font-bold" style={{color:"#e5e7eb"}}>{fmt(pctOfTotal,1)}% of shots</span>
+          </div>
         </div>
-        <div className="h-8 rounded-lg overflow-hidden" style={{background:"#1f2937"}}>
-          <div className="h-full rounded-lg flex items-center pl-2" style={{width:`${Math.max(4,pctOfTotal)}%`,background:`linear-gradient(90deg,${color}55,${color})`}}>
-            {pctOfTotal>12&&<span className="text-xs font-bold text-white">{fmt(pctOfTotal,0)}%</span>}
+        <div className="h-10 rounded-lg overflow-hidden w-full" style={{background:"#1f2937"}}>
+          <div className="h-full rounded-lg flex items-center pl-3" style={{width:`${Math.max(3,pctOfTotal)}%`,background:`linear-gradient(90deg,${color}44,${color}cc)`}}>
+            {pctOfTotal>8&&<span className="text-xs font-bold text-white">{fmt(pctOfTotal,0)}%</span>}
           </div>
         </div>
       </div>
@@ -1374,9 +1377,9 @@ function ShootingTab({p}) {
                 {useSimplifiedCourt ? (
                   /* Simplified: 2P / 3P / FT */
                   <>
-                    <DietBar label="2-Point" color="#f97316" pctOfTotal={twoPctOfTotal}/>
-                    <DietBar label="3-Point" color="#3b82f6" pctOfTotal={threePctOfTotal}/>
-                    <DietBar label="Free Throws" color="#8b5cf6" pctOfTotal={ftPctOfTotal}/>
+                    <DietBar label="2-Point" color="#f97316" pctOfTotal={twoPctOfTotal} effPct={twoPct} effType="2pt"/>
+                    <DietBar label="3-Point" color="#3b82f6" pctOfTotal={threePctOfTotal} effPct={tp} effType="3pt"/>
+                    <DietBar label="Free Throws" color="#8b5cf6" pctOfTotal={ftPctOfTotal} effPct={ft} effType="ft"/>
                   </>
                 ) : (
                   /* Full: Rim(+dunks) / Mid / 3P / FT */
@@ -1385,21 +1388,24 @@ function ShootingTab({p}) {
                       <div>
                         <div className="flex justify-between items-baseline mb-1">
                           <span className="text-sm font-semibold" style={{color:"#f97316"}}>@Rim <span style={{color:"#ef4444",fontSize:11}}>(incl. {dunkPctOfTotal!=null?`${fmt(dunkPctOfTotal,0)}%`:""} dunks)</span></span>
-                          <span className="text-sm font-bold" style={{color:"#e5e7eb"}}>{fmt(rimPctOfTotal,1)}%</span>
+                          <div className="flex items-center gap-3">
+                            {rimPct!=null&&<span className="text-xs" style={{color:sc(rimPct,"rim")}}>{fmt(rimPct)}%</span>}
+                            <span className="text-sm font-bold" style={{color:"#e5e7eb"}}>{fmt(rimPctOfTotal,1)}% of shots</span>
+                          </div>
                         </div>
-                        <div className="h-8 rounded-lg overflow-hidden relative" style={{background:"#1f2937"}}>
-                          <div className="absolute top-0 bottom-0 rounded-l-lg" style={{left:0,width:`${rimPctOfTotal}%`,background:"linear-gradient(90deg,#f9731655,#f97316aa)"}}/>
-                          {dunkPctOfTotal!=null&&<div className="absolute top-0 bottom-0 rounded-l-lg" style={{left:0,width:`${dunkPctOfTotal}%`,background:"linear-gradient(90deg,#ef4444aa,#ef4444dd)"}}/>}
-                          <div className="absolute inset-0 flex items-center pl-2 text-xs font-bold text-white">
+                        <div className="h-10 rounded-lg overflow-hidden relative w-full" style={{background:"#1f2937"}}>
+                          <div className="absolute top-0 bottom-0 rounded-l-lg" style={{left:0,width:`${rimPctOfTotal}%`,background:"linear-gradient(90deg,#f9731644,#f97316cc)"}}/>
+                          {dunkPctOfTotal!=null&&<div className="absolute top-0 bottom-0 rounded-l-lg" style={{left:0,width:`${dunkPctOfTotal}%`,background:"linear-gradient(90deg,#ef444488,#ef4444cc)"}}/>}
+                          <div className="absolute inset-0 flex items-center pl-3 text-xs font-bold text-white">
                             {dunkPctOfTotal!=null&&dunkPctOfTotal>4&&<span className="mr-1" style={{color:"#fecaca"}}>{fmt(dunkPctOfTotal,0)}🏀</span>}
-                            {rimPctOfTotal>15&&<span>{fmt(rimPctOfTotal,0)}%</span>}
+                            {rimPctOfTotal>8&&<span>{fmt(rimPctOfTotal,0)}%</span>}
                           </div>
                         </div>
                       </div>
                     )}
-                    <DietBar label="Mid-Range" color="#fbbf24" pctOfTotal={midPctOfTotal}/>
-                    <DietBar label="3-Point" color="#3b82f6" pctOfTotal={threePctOfTotal}/>
-                    <DietBar label="Free Throws" color="#8b5cf6" pctOfTotal={ftPctOfTotal}/>
+                    <DietBar label="Mid-Range" color="#fbbf24" pctOfTotal={midPctOfTotal} effPct={midPct} effType="mid"/>
+                    <DietBar label="3-Point" color="#3b82f6" pctOfTotal={threePctOfTotal} effPct={tp} effType="3pt"/>
+                    <DietBar label="Free Throws" color="#8b5cf6" pctOfTotal={ftPctOfTotal} effPct={ft} effType="ft"/>
                   </>
                 )}
                 <div className="text-xs mt-1" style={{color:"#4b5563"}}>{estTotalShots > 0 ? `${estTotalShots} total shots` : "Shot volume unknown"}{estTotalShots > 0 && useSimplifiedCourt ? " (estimated)" : estTotalShots > 0 ? ` (${totalFga||"?"} FGA + ${totalFta||"?"} FTA)` : ""}</div>
@@ -1588,10 +1594,13 @@ function ShootingTab({p}) {
 // Feature 3 of Mind Tab — fetches cohort & game log data
 // ═══════════════════════════════════════════════════════════
 function ClassScatterAndDev({p}) {
-  const [cohort,  setCohort]  = useState(null);  // {players:[{name,usg,ortg,pos,war}]}
-  const [gameLogs, setGameLogs] = useState(null); // {games:[{game_num,usg,efg,ortg,opp_ortg,...}]}
+  const [cohort,  setCohort]  = useState(null);
+  const [gameLogs, setGameLogs] = useState(null);
   const [glLoading, setGlLoading] = useState(false);
   const [chartMode, setChartMode] = useState("class"); // "class" | "games"
+  const [devMetric, setDevMetric] = useState("efg");   // "efg" | "usg" | "stl" | "blk" | "min"
+  const [scatterHover, setScatterHover] = useState(null);
+  const [scatterHoverPos, setScatterHoverPos] = useState({x:0,y:0});
 
   const yr = p?.skillCurve?.curUsg != null ? (p.seasonLines||[]).slice(-1)[0]?.yr : p?.yr;
 
@@ -1649,7 +1658,24 @@ function ClassScatterAndDev({p}) {
     const isLoading = cohort === null;
 
     return (
-      <div>
+      <div style={{position:"relative"}}>
+        {/* Hover tooltip */}
+        {scatterHover && (
+          <div style={{
+            position:"fixed",zIndex:100,
+            left:Math.min(scatterHoverPos.x+12,window.innerWidth-190),
+            top:Math.max(scatterHoverPos.y-10,8),
+            background:"#1e293b",border:"1px solid #475569",
+            borderRadius:8,padding:"7px 11px",pointerEvents:"none",
+            boxShadow:"0 4px 16px rgba(0,0,0,0.5)",minWidth:160,
+          }}>
+            <div style={{fontSize:12,fontWeight:700,color:"#e5e7eb",marginBottom:3}}>{scatterHover.name}</div>
+            <div style={{fontSize:10,color:"#9ca3af"}}>
+              USG: <strong style={{color:"#f97316"}}>{scatterHover.usg?.toFixed(1)}%</strong> · AdjOrtg: <strong style={{color: scatterHover.ortg > peerExp(scatterHover.usg) ? "#22c55e" : "#ef4444"}}>{scatterHover.ortg?.toFixed(0)}</strong>
+            </div>
+            {scatterHover.pos && <div style={{fontSize:10,color:"#6b7280"}}>{scatterHover.pos}</div>}
+          </div>
+        )}
         {isLoading ? (
           <div style={{height:H,display:"flex",alignItems:"center",justifyContent:"center",color:"#4b5563",fontSize:12}}>
             Loading class data…
@@ -1678,19 +1704,22 @@ function ClassScatterAndDev({p}) {
             {playerUsg > (minU+maxU)/2 && playerOrtg > peerExp(playerUsg) && (
               <text x={W-PAD.r-5} y={PAD.t+12} textAnchor="end" fontSize={8} fill="#22c55e" opacity={0.5}>High Vol · High Eff</text>
             )}
-            {/* Class dots */}
+            {/* Class dots — hoverable */}
             {pts.filter(c=>c.name!==p.name).map((c,i)=>(
               <circle key={i} cx={xS(c.usg)} cy={yS(c.ortg)} r={3}
-                fill={c.ortg > peerExp(c.usg) ? "#374151" : "#1f2937"}
-                stroke={c.ortg > peerExp(c.usg) ? "#4b5563" : "#374151"}
-                strokeWidth={0.5} opacity={0.7}/>
+                fill={c.ortg > peerExp(c.usg) ? "#3b82f622" : "#1f2937"}
+                stroke={c.ortg > peerExp(c.usg) ? "#60a5fa" : "#374151"}
+                strokeWidth={0.6} opacity={0.75}
+                style={{cursor:"pointer"}}
+                onMouseEnter={(e)=>{setScatterHover(c);setScatterHoverPos({x:e.clientX,y:e.clientY});}}
+                onMouseLeave={()=>setScatterHover(null)}/>
             ))}
             {/* Selected player */}
             {playerUsg > 0 && playerOrtg > 0 && (
               <g>
                 <circle cx={xS(playerUsg)} cy={yS(playerOrtg)} r={7} fill="#f97316" opacity={0.9}/>
                 <circle cx={xS(playerUsg)} cy={yS(playerOrtg)} r={7} fill="none" stroke="#fed7aa" strokeWidth={1.5}/>
-                <text x={xS(playerUsg)+10} y={yS(playerOrtg)+4} fontSize={10} fontWeight="bold" fill="#f97316"
+                <text x={xS(playerUsg)+10} y={yS(playerOrtg)+4} fontSize={9} fontWeight="bold" fill="#f97316"
                   style={{textShadow:"0 0 4px #000"}}>
                   {p.name?.split(" ").slice(-1)[0]}
                 </text>
@@ -1778,93 +1807,121 @@ function ClassScatterAndDev({p}) {
 
   // ── DEV TRAJECTORY ────────────────────────────────────────
   const DevTrajectory = () => {
-    const games = (gameLogs?.games || [])
-      .filter(g => g.game_num != null && g.efg != null && g.min >= 10)
-      .sort((a,b) => a.game_num - b.game_num);
+    const allGames = (gameLogs?.games || []).sort((a,b) => a.game_num - b.game_num);
     if (glLoading) return null;
+
+    // Metric definitions
+    const METRICS = {
+      efg:  {label:"eFG%",         unit:"%", color:"#60a5fa", getter:g=>g.efg,   minVal:20, maxVal:85,
+             desc:"Effective field goal % per game — captures 3-point value. Measures shooting efficiency."},
+      ts:   {label:"True Shooting",unit:"%", color:"#22c55e", getter:g=>g.ortg?(g.pts/(2*(g.pts/(g.ortg/100)||1))):null, minVal:30, maxVal:90,
+             desc:"Approximate True Shooting (pts / 2×estimated FGA). Better efficiency measure when FT volume is significant."},
+      usg:  {label:"USG%",         unit:"%", color:"#f97316", getter:g=>g.usg,   minVal:8,  maxVal:55,
+             desc:"Usage rate per game — % of team possessions used by this player. Measures offensive load."},
+      stl:  {label:"Steals",       unit:"", color:"#a855f7",  getter:g=>g.stl,   minVal:0,  maxVal:5,
+             desc:"Raw steals per game. Rising trend signals improving defensive activity and anticipation."},
+      blk:  {label:"Blocks",       unit:"", color:"#ef4444",  getter:g=>g.blk,   minVal:0,  maxVal:6,
+             desc:"Raw blocks per game. Rising trend signals growing rim-protection impact."},
+      min:  {label:"Minutes",      unit:"", color:"#fbbf24",  getter:g=>g.min,   minVal:0,  maxVal:40,
+             desc:"Minutes played per game. Rising trend indicates growing coach trust and role expansion."},
+    };
+
+    const metric = METRICS[devMetric] || METRICS.efg;
+    const games = allGames.filter(g => g.game_num != null && metric.getter(g) != null && g.min >= 8);
+
     if (games.length < 5) return (
       <div style={{fontSize:11,color:"#4b5563",padding:"8px 0"}}>
         {games.length === 0
-          ? "Game log data required for development trajectory analysis."
-          : `Only ${games.length} qualifying games — more data needed.`}
+          ? "Game log data required for development trajectory analysis. Run fetch_game_logs.py to populate."
+          : `Only ${games.length} qualifying games — need ≥5 to show trajectory.`}
       </div>
     );
 
-    // Rolling 5-game eFG% + linear trend
-    const W=560, H=180, PAD={l:40,r:20,t:16,b:32};
+    const W=560, H=180, PAD={l:42,r:20,t:16,b:32};
     const IW=W-PAD.l-PAD.r, IH=H-PAD.t-PAD.b;
     const N = games.length;
-    const K = Math.min(5, Math.floor(N/3)); // rolling window
+    const K = Math.min(5, Math.max(3, Math.floor(N/4)));
 
+    const rawVals = games.map(g => metric.getter(g) ?? 0);
     const rolling = games.map((g,i) => {
-      const win = games.slice(Math.max(0,i-K+1), i+1);
-      return { n: g.game_num, efg: win.reduce((s,x)=>s+x.efg,0)/win.length,
-               oppAdj: g.opp_ortg ? g.efg * (100/g.opp_ortg) : g.efg };
+      const win = rawVals.slice(Math.max(0,i-K+1), i+1);
+      return { n: g.game_num, v: win.reduce((s,x)=>s+x,0)/win.length };
     });
 
-    const minE = Math.max(20, Math.min(...rolling.map(r=>r.efg)) - 5);
-    const maxE = Math.min(90, Math.max(...rolling.map(r=>r.efg)) + 5);
+    const minV = Math.max(metric.minVal, Math.min(...rolling.map(r=>r.v)) - (metric.unit==="%"?5:0.3));
+    const maxV = Math.min(metric.maxVal, Math.max(...rolling.map(r=>r.v)) + (metric.unit==="%"?5:0.3));
     const xS = (n) => PAD.l + (n-1)/(N-1)*IW;
-    const yS = (e) => PAD.t + IH - (e-minE)/(maxE-minE)*IH;
+    const yS = (v) => PAD.t + IH - Math.max(0,Math.min(1,(v-minV)/(maxV-minV)))*IH;
 
-    // Linear trend for last half vs first half
     const half = Math.floor(N/2);
-    const firstHalf = rolling.slice(0, half);
-    const secHalf   = rolling.slice(half);
-    const avgFirst  = firstHalf.reduce((s,r)=>s+r.efg,0)/firstHalf.length;
-    const avgSec    = secHalf.reduce((s,r)=>s+r.efg,0)/secHalf.length;
-    const delta     = avgSec - avgFirst;
-    const trendColor = delta > 3 ? "#22c55e" : delta > 0 ? "#86efac" : delta > -3 ? "#fbbf24" : "#ef4444";
-    const trendLabel = delta > 3 ? "Clear improvement" : delta > 0 ? "Slight improvement" : delta > -3 ? "Flat" : "Declining";
+    const avgFirst = rolling.slice(0,half).reduce((s,r)=>s+r.v,0)/(half||1);
+    const avgSec   = rolling.slice(half).reduce((s,r)=>s+r.v,0)/((N-half)||1);
+    const delta    = avgSec - avgFirst;
+    const isPos    = delta > 0;
+    const trendColor = Math.abs(delta) < 0.5 ? "#fbbf24" : isPos ? "#22c55e" : "#ef4444";
+    const trendLabel = Math.abs(delta) < 0.5 ? "Flat" : isPos ? `↑ Improving` : `↓ Declining`;
 
-    // OLS trend line
+    // OLS trend
     const xs = rolling.map((_,i)=>i);
-    const ys = rolling.map(r=>r.efg);
+    const ys = rolling.map(r=>r.v);
     const xm = xs.reduce((s,x)=>s+x,0)/xs.length;
     const ym = ys.reduce((s,y)=>s+y,0)/ys.length;
-    const slope = xs.reduce((s,x,i)=>s+(x-xm)*(ys[i]-ym),0) / xs.reduce((s,x)=>s+(x-xm)**2,0.001);
+    const slope = xs.reduce((s,x,i)=>s+(x-xm)*(ys[i]-ym),0)/xs.reduce((s,x)=>s+(x-xm)**2,0.001);
     const intercept = ym - slope*xm;
-    const trendLine = [
-      `${xS(1).toFixed(1)},${yS(intercept).toFixed(1)}`,
-      `${xS(N).toFixed(1)},${yS(intercept+slope*(N-1)).toFixed(1)}`
-    ].join(" ");
+    const y0 = yS(intercept), yN = yS(intercept+slope*(N-1));
+    const linePts = rolling.map(r=>`${xS(r.n).toFixed(1)},${yS(r.v).toFixed(1)}`).join(" ");
 
-    const linePts = rolling.map(r=>`${xS(r.n).toFixed(1)},${yS(r.efg).toFixed(1)}`).join(" ");
+    const yTicks = [];
+    const step = (maxV-minV) > 20 ? 10 : (maxV-minV) > 5 ? 5 : 1;
+    for (let v=Math.ceil(minV/step)*step; v<=maxV; v+=step) yTicks.push(v);
 
     return (
       <div>
+        {/* Metric picker */}
+        <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
+          {Object.entries(METRICS).map(([key,m])=>(
+            <button key={key} onClick={()=>setDevMetric(key)} style={{
+              fontSize:10,padding:"3px 8px",borderRadius:5,border:"none",cursor:"pointer",
+              background:devMetric===key ? m.color : "#1f2937",
+              color:devMetric===key ? "#000" : "#9ca3af",fontWeight:600}}>
+              {m.label}
+            </button>
+          ))}
+        </div>
+        <div style={{fontSize:10,color:"#6b7280",marginBottom:8}}>{metric.desc}</div>
         <div style={{display:"flex",gap:12,alignItems:"center",marginBottom:8}}>
           <div style={{fontSize:11,color:"#9ca3af"}}>
-            {K}-game rolling eFG% · {N} games · First half avg: <strong style={{color:"#e5e7eb"}}>{avgFirst.toFixed(1)}%</strong> → Second half: <strong style={{color:trendColor}}>{avgSec.toFixed(1)}%</strong>
+            {K}-game rolling {metric.label} · {N} games · 1st half avg: <strong style={{color:"#e5e7eb"}}>{avgFirst.toFixed(1)}{metric.unit}</strong> → 2nd half: <strong style={{color:trendColor}}>{avgSec.toFixed(1)}{metric.unit}</strong>
           </div>
           <div style={{fontSize:11,fontWeight:700,color:trendColor,background:"#1f2937",borderRadius:6,padding:"2px 8px"}}>
-            {trendLabel} ({delta>0?"+":""}{delta.toFixed(1)}pp)
+            {trendLabel} ({delta>0?"+":""}{delta.toFixed(1)}{metric.unit})
           </div>
         </div>
         <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{overflow:"visible"}}>
-          {[Math.round(minE/10)*10, Math.round((minE+maxE)/20)*10, Math.round(maxE/10)*10].filter(e=>e>=minE&&e<=maxE).map(e=>(
-            <g key={e}><line x1={PAD.l} x2={W-PAD.r} y1={yS(e)} y2={yS(e)} stroke="#1f2937" strokeWidth={1}/>
-            <text x={PAD.l-4} y={yS(e)+4} textAnchor="end" fontSize={9} fill="#6b7280">{e}%</text></g>
+          {yTicks.map(v=>(
+            <g key={v}><line x1={PAD.l} x2={W-PAD.r} y1={yS(v)} y2={yS(v)} stroke="#1f2937" strokeWidth={1}/>
+            <text x={PAD.l-4} y={yS(v)+4} textAnchor="end" fontSize={8} fill="#6b7280">{v}{metric.unit}</text></g>
           ))}
-          {[1,Math.ceil(N*0.25),Math.ceil(N*0.5),Math.ceil(N*0.75),N].filter((v,i,a)=>a.indexOf(v)===i).map(n=>(
-            <g key={n}><text x={xS(n)} y={H-PAD.b+12} textAnchor="middle" fontSize={9} fill="#6b7280">G{n}</text></g>
+          {[1,Math.ceil(N*0.25),Math.ceil(N*0.5),Math.ceil(N*0.75),N].filter((v,i,a)=>a.indexOf(v)===i&&v>=1&&v<=N).map(n=>(
+            <text key={n} x={xS(n)} y={H-PAD.b+12} textAnchor="middle" fontSize={8} fill="#6b7280">G{n}</text>
           ))}
-          <text x={W/2} y={H} textAnchor="middle" fontSize={10} fill="#6b7280">Game #</text>
-          <text x={10} y={H/2} textAnchor="middle" fontSize={10} fill="#6b7280" transform={`rotate(-90,10,${H/2})`}>eFG%</text>
-          {/* Half divider */}
+          <text x={W/2} y={H} textAnchor="middle" fontSize={9} fill="#6b7280">Game #</text>
+          <text x={10} y={H/2} textAnchor="middle" fontSize={9} fill="#6b7280" transform={`rotate(-90,10,${H/2})`}>{metric.label}</text>
+          {/* Season midpoint */}
           <line x1={xS(half+0.5)} x2={xS(half+0.5)} y1={PAD.t} y2={H-PAD.b} stroke="#374151" strokeWidth={1} strokeDasharray="3,2"/>
           {/* OLS trend */}
-          <polyline points={trendLine} fill="none" stroke={trendColor} strokeWidth={1.5} strokeDasharray="5,3" opacity={0.7}/>
+          <line x1={xS(1)} y1={y0} x2={xS(N)} y2={yN} stroke={trendColor} strokeWidth={1.5} strokeDasharray="5,3" opacity={0.7}/>
           {/* Rolling line */}
-          <polyline points={linePts} fill="none" stroke="#60a5fa" strokeWidth={2}/>
-          {rolling.map((r,i)=><circle key={i} cx={xS(r.n)} cy={yS(r.efg)} r={3} fill="#60a5fa" opacity={0.7}/>)}
+          <polyline points={linePts} fill="none" stroke={metric.color} strokeWidth={2}/>
+          {rolling.map((r,i)=><circle key={i} cx={xS(r.n)} cy={yS(r.v)} r={2.5} fill={metric.color} opacity={0.75}/>)}
         </svg>
-        <div style={{fontSize:10,color:"#6b7280",marginTop:6}}>
-          <span style={{color:"#60a5fa"}}>— rolling eFG%</span>
-          <span style={{color:trendColor,marginLeft:12}}>--- trend</span>
-          <span style={{marginLeft:12}}>| = season midpoint</span>
-          {delta > 2 && <span style={{color:"#22c55e",marginLeft:12}}>✓ Progressive improvement detected</span>}
-          {delta < -2 && <span style={{color:"#f59e0b",marginLeft:12}}>⚠ Efficiency declined over season</span>}
+        <div style={{fontSize:10,color:"#6b7280",marginTop:5,display:"flex",gap:12,flexWrap:"wrap"}}>
+          <span style={{color:metric.color}}>— {K}-game rolling avg</span>
+          <span style={{color:trendColor}}>--- trend (OLS)</span>
+          <span>| = season midpoint</span>
+          {Math.abs(delta) > 1.5 && <span style={{color:trendColor}}>
+            {isPos ? "✓ Progressive improvement" : "⚠ Declining trend"} over season
+          </span>}
         </div>
       </div>
     );
@@ -1888,22 +1945,11 @@ function ClassScatterAndDev({p}) {
         {chartMode==="class" ? <ClassScatter /> : <GameScatter />}
       </Sec>
 
-      {/* 3B: In-Season Development Trajectory */}
-      {(gameLogs?.games?.length > 0 || glLoading) && (
-        <Sec icon="📈" title="In-Season Development Trajectory"
-          sub="Rolling eFG% by game number. Trend line reveals whether the player improved, regressed, or held steady over the season.">
-          <DevTrajectory />
-        </Sec>
-      )}
-      {!glLoading && (!gameLogs || gameLogs.games?.length === 0) && (
-        <Sec icon="📡" title="In-Season Development" sub="Game log data not yet available.">
-          <div style={{fontSize:12,color:"#6b7280",padding:"8px 0"}}>
-            Run <code style={{color:"#f97316",background:"#1f2937",padding:"2px 6px",borderRadius:4}}>python scripts/fetch_game_logs.py</code> locally
-            to populate per-game stats. Once committed to DB, this section shows:
-            rolling eFG%, opponent-adjusted efficiency trend, and development signal (improving / flat / regressing).
-          </div>
-        </Sec>
-      )}
+      {/* 3B: In-Season Development Trajectory — always shown */}
+      <Sec icon="📈" title="In-Season Development Trajectory"
+        sub="Rolling per-game stats over the season. Select a metric: eFG% (shooting efficiency), True Shooting, USG% (offensive load), Steals, Blocks, or Minutes. Trend line reveals improvement, regression, or steady performance.">
+        <DevTrajectory />
+      </Sec>
     </div>
   );
 }
@@ -2098,8 +2144,10 @@ function MindTab({p}) {
               if (!zd) return null;
               return <ZoneRow key={z} zone={z} label={cfg.label} color={cfg.color} data={zd}/>;
             })}
-            <div style={{marginTop:10,fontSize:10,color:"#4b5563"}}>
-              LW Weight = FGA × Self-Creation Rate. eFG% for 3-Pt zone is FG% × 1.5. Self% = % of makes without an assist.
+            <div style={{marginTop:12,padding:"8px 10px",background:"#1a2033",borderRadius:6,fontSize:10,color:"#6b7280",lineHeight:"1.7"}}>
+              <span style={{color:"#9ca3af",fontWeight:600}}>LW Weight</span> = FGA × Self-Creation Rate — measures how much of a player's offense runs through this zone under their own steam. A high-volume zone with low self-creation matters less than it appears.{" "}
+              <span style={{color:"#9ca3af",fontWeight:600}}>eFG%</span> = effective FG efficiency per zone; 3-pt shots are scaled ×1.5 to put them on equal terms with 2s.{" "}
+              <span style={{color:"#9ca3af",fontWeight:600}}>Self%</span> = share of makes that were unassisted — a proxy for shot creation vs. catch-and-shoot.
             </div>
           </div>
         )}
@@ -2113,6 +2161,9 @@ function MindTab({p}) {
               Usage: {usg?.toFixed(1)}% ({usgPctl}th pctl) · TS%: {ts?.toFixed(1)}%
             </div>
           )}
+          <div style={{marginTop:10,padding:"7px 10px",background:"#111827",borderRadius:5,fontSize:10,color:"#4b5563",lineHeight:"1.6"}}>
+            <span style={{color:"#374151",fontWeight:600}}>How this is derived:</span> The insight combines two signals — Difficulty Premium (how hard the player's shots are relative to peers) and OGBPM rank within their class. High scorers on both → "elite offensive weapon". Low difficulty + high volume → "volume scorer". The thresholds are: diffPrem &gt; +1.5 = elite difficulty, &gt; 0.5 = above-average; OGBPM top-10% = elite, bottom-30% = below-average.
+          </div>
         </div>
       </Sec>
 
@@ -2216,7 +2267,39 @@ function MindTab({p}) {
               )}
             </div>
 
-            {/* AST slope card — multi-season only */}
+            {/* AST slope card — multi-season: trajectory; single-season: snapshot */}
+            {!multiSeason && p.astP != null && (() => {
+              const ast = p.astP ?? 0;
+              const usgVal = sc.curUsg ?? p.usg ?? 0;
+              const ato = p.astTov ?? null;
+              const role = ast >= 30 ? {label:"Primary Playmaker", color:"#22c55e"}
+                         : ast >= 20 ? {label:"Dual-Role Creator", color:"#86efac"}
+                         : ast >= 12 ? {label:"Secondary Facilitator", color:"#fbbf24"}
+                         : {label:"Scorer / Off-Ball", color:"#f97316"};
+              return (
+                <div style={{background:"#0f172a",borderRadius:8,padding:"12px 14px",marginBottom:16,border:`1px solid ${role.color}33`}}>
+                  <div style={{display:"flex",alignItems:"center",gap:12}}>
+                    <div style={{flexShrink:0,minWidth:130}}>
+                      <div style={{fontSize:18,fontWeight:700,color:role.color,fontFamily:"Oswald,sans-serif"}}>
+                        {ast.toFixed(1)}% AST
+                      </div>
+                      <div style={{fontSize:11,color:role.color}}>{role.label}</div>
+                      {ato != null && <div style={{fontSize:10,color:"#6b7280",marginTop:2}}>AST/TO: {ato.toFixed(1)}</div>}
+                    </div>
+                    <div style={{flex:1,fontSize:11,color:"#9ca3af",lineHeight:"1.5"}}>
+                      {ast >= 30
+                        ? `At ${usgVal?.toFixed(1)}% usage, this player doubles as a primary distributor. AST% in the top tier indicates a true lead-creator profile.`
+                        : ast >= 20
+                        ? `Balanced scorer-facilitator. Capable of creating for others while maintaining meaningful usage. Versatile offensive weapon.`
+                        : ast >= 12
+                        ? `Primarily a scoring-oriented player with secondary passing. Can facilitate in spot situations but not a primary engine.`
+                        : `Low assist rate signals an off-ball scorer or specialist. Offensive value concentrated in individual scoring, not creation.`
+                      }
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
             {multiSeason && sc.slopeAst != null && astInfo && (
               <div style={{background:"#0f172a",borderRadius:8,padding:"12px 14px",marginBottom:16,border:`1px solid ${astInfo.color}33`}}>
                 <div style={{display:"flex",alignItems:"center",gap:12}}>
@@ -3182,10 +3265,19 @@ function ScoutingTab({p}) {
   );
 }
 function BodyTab({p}) {
-  const [wsAdj, setWsAdj] = useState(0);
-  const [wtAdj, setWtAdj] = useState(0);
-  const [dynComps, setDynComps] = useState(null);   // null = show pre-loaded comps
-  const [dynLoading, setDynLoading] = useState(false);
+  const [wsFilter, setWsFilter] = useState(0);   // wingspan filter: ±inches to highlight range
+  const [wtFilter, setWtFilter] = useState(0);   // weight filter: ±lbs
+  const [combineData, setCombineData] = useState(null);
+  const [hoverPlayer, setHoverPlayer] = useState(null);
+  const [hoverPos, setHoverPos] = useState({x:0,y:0});
+
+  // ── Fetch combine data on mount ──
+  useEffect(() => {
+    fetch(`${API_BASE.replace("/api","")}/api/combine`)
+      .then(r => r.json())
+      .then(d => setCombineData(d.players || []))
+      .catch(() => setCombineData([]));
+  }, []);
 
   // ── Wingspan estimate (Ape Index by position when not measured) ──
   const apeIndex = p.pos==="Playmaker" ? 1.04 : p.pos==="Big" ? 1.06 : 1.05;
@@ -3198,10 +3290,8 @@ function BodyTab({p}) {
   const estimatedWt = p.wt || Math.round(posBmi * htM * htM * 2.205);
   const isWtEstimated = !p.wt;
 
-  const adjWs = estimatedWs + wsAdj;
-  const adjWt = estimatedWt + wtAdj;
-  const wsDelta = adjWs - (p.htIn||78);
-  const apeRatio = adjWs / (p.htIn||78);
+  const wsDelta = estimatedWs - (p.htIn||78);
+  const apeRatio = estimatedWs / (p.htIn||78);
 
   // ── Frame labels ──
   const wsLabel = wsDelta > 6 ? "Elite Length / Disruptor Frame"
@@ -3210,49 +3300,124 @@ function BodyTab({p}) {
     : "Negative Wingspan";
   const wsLabelColor = wsDelta > 6 ? "#22c55e" : wsDelta > 3 ? "#86efac" : wsDelta > 0 ? "#6b7280" : "#ef4444";
   const posMedianWt = p.pos==="Playmaker" ? 190 : p.pos==="Big" ? 240 : 215;
-  const wtDeviation = adjWt - posMedianWt;
+  const wtDeviation = estimatedWt - posMedianWt;
   const wtLabel = wtDeviation > 15 ? "High Strength / Power Build"
     : wtDeviation < -15 ? "Slight Frame / Needs Development"
     : "Average Frame";
   const wtLabelColor = wtDeviation > 15 ? "#22c55e" : wtDeviation < -15 ? "#ef4444" : "#6b7280";
 
-  // ── Combine data (if available) ──
   const hasCombine = p.comb != null;
-
-  // Pre-loaded comps (on initial load, before any slider adjustment)
-  // sim is already stored correctly from the backend's normalized similarity field
-  const staticComps = useMemo(() => {
-    return (p.anthroComps || []).slice().sort((a, b) => b.sim - a.sim);
-  }, [p.anthroComps]);
-
-  // ── Client-side re-sort when sliders change (instant, no network call) ──
-  // Re-computes distances from the prospect's adjusted measurements to each stored comp.
-  // Distance formula mirrors the backend: ht×1.0, wt×0.5, ws×1.5 — same weights.
-  useEffect(() => {
-    if (wsAdj === 0 && wtAdj === 0) { setDynComps(null); return; }
-    const baseHt = p.htIn || 78;
-    const baseWt = estimatedWt + wtAdj;
-    const baseWs = estimatedWs + wsAdj;
-    const resorted = staticComps.map(c => {
-      const ht_d = Math.abs((c.ht || baseHt) - baseHt);
-      const wt_d = Math.abs((c.wt || baseWt) - baseWt) * 0.5;
-      const ws_d = Math.abs((c.ws || baseWs) - baseWs) * 1.5;
-      const dist = Math.sqrt(ht_d ** 2 + wt_d ** 2 + ws_d ** 2);
-      const sim = Math.max(0, Math.min(100, Math.round((3.0 - dist) / 3.0 * 100)));
-      return { ...c, dist, sim };
-    }).sort((a, b) => a.dist - b.dist);
-    setDynComps(resorted);
-  }, [wsAdj, wtAdj, staticComps, estimatedWt, estimatedWs, p.htIn]);
-
-  const displayComps = dynComps ?? staticComps;
-
-  // GM-facing NBA success metrics
-  const nbaComps = displayComps.filter(c => c.nba);
-  const nbaRate = displayComps.length > 0 ? Math.round(nbaComps.length / displayComps.length * 100) : null;
-  const tierCounts = nbaComps.reduce((acc, c) => { acc[c.tier] = (acc[c.tier]||0)+1; return acc; }, {});
-
   const htDisplay = p.ht || (p.htIn ? `${Math.floor(p.htIn/12)}'${p.htIn%12}"` : "—");
-  const isAdjusted = wsAdj !== 0 || wtAdj !== 0;
+
+  // ── Combine scatter helpers ──
+  const CombineScatter = () => {
+    const pts = (combineData || []).filter(c => c.ht && c.ws);
+    if (combineData === null) return <div style={{height:320,display:"flex",alignItems:"center",justifyContent:"center",color:"#4b5563",fontSize:12}}>Loading combine data…</div>;
+    if (pts.length === 0) return <div style={{height:100,display:"flex",alignItems:"center",justifyContent:"center",color:"#4b5563",fontSize:12}}>No combine data available</div>;
+
+    const W=580, H=320, PAD={l:46,r:20,t:16,b:38};
+    const IW=W-PAD.l-PAD.r, IH=H-PAD.t-PAD.b;
+
+    const allHt = pts.map(c=>c.ht);
+    const allWs = pts.map(c=>c.ws);
+    const minHt=Math.max(68,Math.min(...allHt)-1), maxHt=Math.min(96,Math.max(...allHt)+1);
+    const minWs=Math.max(70,Math.min(...allWs)-1), maxWs=Math.min(100,Math.max(...allWs)+1);
+    const xS=(ht)=>PAD.l+(ht-minHt)/(maxHt-minHt)*IW;
+    const yS=(ws)=>PAD.t+IH-(ws-minWs)/(maxWs-minWs)*IH;
+
+    const pHt = p.htIn || (hasCombine ? p.comb?.height_ns : null);
+    const pWs = p.ws || (hasCombine ? p.comb?.wingspan : null) || estimatedWs;
+    const pWt = p.wt || (hasCombine ? p.comb?.weight : null) || estimatedWt;
+
+    // Filter: highlight players within wsFilter/wtFilter range of the prospect
+    const inRange = (c) => {
+      if (wsFilter===0 && wtFilter===0) return true;
+      const wsDiff = wsFilter>0 ? Math.abs((c.ws||0)-(pWs||0)) <= wsFilter : true;
+      const wtDiff = wtFilter>0 ? Math.abs((c.wt||0)-(pWt||0)) <= wtFilter : true;
+      return wsDiff && wtDiff;
+    };
+
+    const rSize = (wt) => {
+      if (!wt) return 4;
+      return Math.max(3, Math.min(9, ((wt - 170) / 130) * 6 + 3));
+    };
+
+    const xTicks = [70,72,74,76,78,80,82,84,86,88].filter(v=>v>=minHt&&v<=maxHt);
+    const yTicks = [72,76,80,84,88,92,96].filter(v=>v>=minWs&&v<=maxWs);
+
+    return (
+      <div style={{position:"relative"}}>
+        {hoverPlayer && (
+          <div style={{
+            position:"fixed",zIndex:100,
+            left:Math.min(hoverPos.x+12,window.innerWidth-220),
+            top:Math.max(hoverPos.y-10,8),
+            background:"#1e293b",border:"1px solid #475569",
+            borderRadius:8,padding:"8px 12px",pointerEvents:"none",
+            boxShadow:"0 4px 20px rgba(0,0,0,0.6)",minWidth:180,
+          }}>
+            <div style={{fontSize:13,fontWeight:700,color:"#f97316",marginBottom:4}}>{hoverPlayer.name}</div>
+            <div style={{fontSize:11,color:"#9ca3af"}}>Draft {hoverPlayer.year} · {hoverPlayer.pos||"?"}</div>
+            <div style={{fontSize:11,color:"#e5e7eb",marginTop:4}}>
+              Ht: {Math.floor((hoverPlayer.ht||0)/12)}'{Math.round((hoverPlayer.ht||0)%12)}" ({hoverPlayer.ht?.toFixed(1)}")<br/>
+              WS: {hoverPlayer.ws?.toFixed(1)}" · Δ: {((hoverPlayer.ws||0)-(hoverPlayer.ht||0)).toFixed(1)}"<br/>
+              Wt: {hoverPlayer.wt ? `${hoverPlayer.wt} lbs` : "—"}
+            </div>
+          </div>
+        )}
+        <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{overflow:"visible"}}>
+          {/* Grid */}
+          {yTicks.map(ws=>(
+            <g key={ws}>
+              <line x1={PAD.l} x2={W-PAD.r} y1={yS(ws)} y2={yS(ws)} stroke="#1f2937" strokeWidth={1}/>
+              <text x={PAD.l-4} y={yS(ws)+4} textAnchor="end" fontSize={8} fill="#4b5563">{ws}"</text>
+            </g>
+          ))}
+          {xTicks.map(ht=>(
+            <g key={ht}>
+              <line x1={xS(ht)} x2={xS(ht)} y1={PAD.t} y2={H-PAD.b} stroke="#1f2937" strokeWidth={1}/>
+              <text x={xS(ht)} y={H-PAD.b+12} textAnchor="middle" fontSize={8} fill="#4b5563">{Math.floor(ht/12)}'{ht%12}"</text>
+            </g>
+          ))}
+          {/* Equal wingspan line (ws=ht) */}
+          <line x1={xS(minHt)} x2={xS(Math.min(maxHt,maxWs))} y1={yS(minHt)} y2={yS(Math.min(maxHt,maxWs))}
+            stroke="#374151" strokeWidth={1} strokeDasharray="4,3" opacity={0.5}/>
+          <text x={xS(minHt)+2} y={yS(minHt)-3} fontSize={8} fill="#4b5563" opacity={0.6}>WS=Ht</text>
+          {/* Axis labels */}
+          <text x={W/2} y={H-PAD.b+26} textAnchor="middle" fontSize={10} fill="#6b7280">Height (no shoes)</text>
+          <text x={12} y={H/2} textAnchor="middle" fontSize={10} fill="#6b7280" transform={`rotate(-90,12,${H/2})`}>Wingspan</text>
+          {/* All combine players */}
+          {pts.filter(c=>c.name!==p.name).map((c,i)=>{
+            const hilit = inRange(c) && (wsFilter>0||wtFilter>0);
+            const r = rSize(c.wt);
+            const baseColor = hilit ? "#60a5fa" : "#374151";
+            const stroke = hilit ? "#93c5fd" : "#4b5563";
+            return (
+              <circle key={i} cx={xS(c.ht)} cy={yS(c.ws)} r={r}
+                fill={baseColor} stroke={stroke} strokeWidth={0.5} opacity={hilit?0.85:0.55}
+                style={{cursor:"pointer"}}
+                onMouseEnter={(e)=>{setHoverPlayer(c);setHoverPos({x:e.clientX,y:e.clientY});}}
+                onMouseLeave={()=>setHoverPlayer(null)}/>
+            );
+          })}
+          {/* Prospect dot */}
+          {pHt && pWs && (
+            <g>
+              <circle cx={xS(pHt)} cy={yS(pWs)} r={rSize(pWt)+3} fill="#f97316" stroke="#fed7aa" strokeWidth={2} opacity={0.95}/>
+              <text x={xS(pHt)+12} y={yS(pWs)+4} fontSize={11} fontWeight="bold" fill="#f97316"
+                style={{textShadow:"0 0 4px #000"}}>{p.name?.split(" ").slice(-1)[0]}</text>
+            </g>
+          )}
+        </svg>
+        <div style={{fontSize:10,color:"#6b7280",marginTop:4,display:"flex",gap:16,flexWrap:"wrap"}}>
+          <span><span style={{display:"inline-block",width:10,height:10,borderRadius:"50%",background:"#374151",marginRight:4,verticalAlign:"middle"}}/>All combine players (hover for details)</span>
+          {(wsFilter>0||wtFilter>0)&&<span style={{color:"#60a5fa"}}><span style={{display:"inline-block",width:10,height:10,borderRadius:"50%",background:"#60a5fa",marginRight:4,verticalAlign:"middle"}}/>Within filter range</span>}
+          <span><span style={{display:"inline-block",width:10,height:10,borderRadius:"50%",background:"#f97316",marginRight:4,verticalAlign:"middle"}}/>Selected player</span>
+          <span style={{color:"#4b5563"}}>Point size ∝ weight · {pts.length} combine players (2000–2024)</span>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-5">
@@ -3303,190 +3468,53 @@ function BodyTab({p}) {
           </div>
         )}
 
-        {/* ── Scout Scenario Sliders ── */}
-        <div className="p-4 rounded-xl" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
-          <div className="text-xs uppercase tracking-wider font-bold mb-4" style={{color:"#6b7280"}}>
-            Scenario Modeling — How do the comps change?
-          </div>
-          <div className="space-y-5">
-            {/* Weight slider */}
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <div>
-                  <span className="text-sm font-semibold" style={{color:"#e5e7eb"}}>Weight</span>
-                  <span className="text-xs ml-2" style={{color:"#6b7280"}}>{isWtEstimated ? "≈ estimated" : "measured"}</span>
-                </div>
-                <div className="text-sm font-bold" style={{color: wtAdj > 0 ? "#22c55e" : wtAdj < 0 ? "#ef4444" : "#f97316"}}>
-                  {adjWt} lbs {wtAdj !== 0 && <span style={{fontSize:11}}>({wtAdj > 0 ? "+" : ""}{wtAdj})</span>}
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-xs w-16 text-right" style={{color:"#6b7280"}}>−30 lbs</span>
-                <input type="range" min={-30} max={30} step={1} value={wtAdj}
-                  onChange={e => setWtAdj(+e.target.value)} className="flex-1" style={{accentColor:"#f97316"}}/>
-                <span className="text-xs w-16" style={{color:"#6b7280"}}>+30 lbs</span>
-              </div>
-              <div className="flex justify-between text-xs mt-1" style={{color:"#374151"}}>
-                <span>Leaner / Weight loss</span>
-                <span style={{color:"#4b5563"}}>Base</span>
-                <span>Heavier / Muscle gain</span>
-              </div>
+      </Sec>
+
+      {/* ── NBA COMBINE SCATTER ── */}
+      <Sec icon="📐" title="NBA Combine: Height vs. Wingspan"
+        sub="All draft combine attendees 2000–2024. X-axis = height (no shoes), Y-axis = wingspan, point size = weight. Orange = selected player. Hover any dot for measurements. Use sliders to highlight players in a similar body profile.">
+        {/* Filter sliders */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 p-4 rounded-xl" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+          <div>
+            <div className="flex justify-between mb-1.5">
+              <span className="text-sm font-semibold" style={{color:"#e5e7eb"}}>Wingspan filter range</span>
+              <span className="text-sm font-bold" style={{color:wsFilter>0?"#60a5fa":"#6b7280"}}>
+                {wsFilter===0?"Off":`±${wsFilter}"`}
+              </span>
             </div>
-            {/* Wingspan slider */}
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <div>
-                  <span className="text-sm font-semibold" style={{color:"#e5e7eb"}}>Wingspan</span>
-                  <span className="text-xs ml-2" style={{color: isWsEstimated ? "#fbbf24" : "#6b7280"}}>{isWsEstimated ? "≈ estimated — use slider to model uncertainty" : "measured"}</span>
-                </div>
-                <div className="text-sm font-bold" style={{color: wsAdj > 0 ? "#22c55e" : wsAdj < 0 ? "#ef4444" : "#f97316"}}>
-                  {adjWs.toFixed(1)}" {wsAdj !== 0 && <span style={{fontSize:11}}>({wsAdj > 0 ? "+" : ""}{wsAdj}")</span>}
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-xs w-16 text-right" style={{color:"#6b7280"}}>−6"</span>
-                <input type="range" min={-6} max={6} step={0.25} value={wsAdj}
-                  onChange={e => setWsAdj(+e.target.value)} className="flex-1" style={{accentColor:"#f97316"}}/>
-                <span className="text-xs w-16" style={{color:"#6b7280"}}>+6"</span>
-              </div>
-              <div className="flex justify-between text-xs mt-1" style={{color:"#374151"}}>
-                <span>Short wingspan</span>
-                <span style={{color:"#4b5563"}}>Base estimate</span>
-                <span>Elite length</span>
-              </div>
+            <input type="range" min={0} max={6} step={0.5} value={wsFilter}
+              onChange={e=>setWsFilter(+e.target.value)} className="w-full" style={{accentColor:"#60a5fa"}}/>
+            <div className="flex justify-between text-xs mt-1" style={{color:"#374151"}}>
+              <span>Off (show all)</span><span>Narrow window</span><span>±6"</span>
             </div>
           </div>
-          {isAdjusted && (
-            <div className="mt-3 flex items-center justify-between">
-              <div className="text-xs" style={{color:"#fbbf24"}}>
-                ⚡ Scenario active — comps updated for adjusted measurements
-              </div>
-              <button onClick={() => { setWsAdj(0); setWtAdj(0); }} className="text-xs px-2 py-1 rounded"
-                style={{background:"#1f2937",color:"#9ca3af"}}>Reset</button>
+          <div>
+            <div className="flex justify-between mb-1.5">
+              <span className="text-sm font-semibold" style={{color:"#e5e7eb"}}>Weight filter range</span>
+              <span className="text-sm font-bold" style={{color:wtFilter>0?"#60a5fa":"#6b7280"}}>
+                {wtFilter===0?"Off":`±${wtFilter} lbs`}
+              </span>
+            </div>
+            <input type="range" min={0} max={40} step={5} value={wtFilter}
+              onChange={e=>setWtFilter(+e.target.value)} className="w-full" style={{accentColor:"#60a5fa"}}/>
+            <div className="flex justify-between text-xs mt-1" style={{color:"#374151"}}>
+              <span>Off (show all)</span><span>Similar weight</span><span>±40 lbs</span>
+            </div>
+          </div>
+          {(wsFilter>0||wtFilter>0)&&(
+            <div className="md:col-span-2 flex justify-end">
+              <button onClick={()=>{setWsFilter(0);setWtFilter(0);}}
+                className="text-xs px-3 py-1 rounded" style={{background:"#1f2937",color:"#9ca3af"}}>Reset filters</button>
             </div>
           )}
         </div>
-      </Sec>
-
-      {/* ── NBA PHYSICAL COMPS ── */}
-      <Sec icon="👥"
-        title={isAdjusted ? `Anthropometric Comps — Scenario (${wtAdj > 0 ? "+" : ""}${wtAdj || ""}${wtAdj !== 0 ? " lbs" : ""}${wtAdj !== 0 && wsAdj !== 0 ? " · " : ""}${wsAdj > 0 ? "+" : ""}${wsAdj !== 0 ? wsAdj + '"' : ""})` : "Anthropometric Comps"}
-        sub={`Physical similarity across the NBA draft database (Height 60% · Weight 20% · Wingspan 20%). No stats — body type only. ${isAdjusted ? "Results re-queried from full database at adjusted measurements." : "Adjust sliders to model scenarios: 'What if he adds 20 lbs?' or 'What if his wingspan is longer than estimated?'"}`}>
-
-        {/* NBA Success Banner */}
-        {displayComps.length > 0 && (
-          <div className="flex items-center gap-4 p-4 rounded-xl mb-4" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
-            <div className="text-center px-4" style={{borderRight:"1px solid #1f2937"}}>
-              <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#6b7280"}}>NBA Rate</div>
-              <div className="text-3xl font-bold" style={{color: nbaRate >= 70 ? "#22c55e" : nbaRate >= 40 ? "#fbbf24" : "#ef4444", fontFamily:"'Oswald',sans-serif"}}>
-                {nbaRate ?? "—"}%
-              </div>
-              <div className="text-xs mt-0.5" style={{color:"#4b5563"}}>{nbaComps.length}/{displayComps.length} made it</div>
-            </div>
-            <div className="flex-1">
-              <div className="text-xs uppercase tracking-wider mb-2 font-semibold" style={{color:"#6b7280"}}>Outcomes of physical comps</div>
-              <div className="flex flex-wrap gap-1.5">
-                {Object.entries(tierCounts).filter(([t]) => t).sort(([,a],[,b]) => b-a).map(([tier, count]) => (
-                  <div key={tier} className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs" style={{background:(TC[tier]||"#6b7280")+"22",border:`1px solid ${(TC[tier]||"#6b7280")}44`}}>
-                    <span style={{color:TC[tier]||"#6b7280"}}>{tier}</span>
-                    <span className="font-bold" style={{color:"#e5e7eb"}}>×{count}</span>
-                  </div>
-                ))}
-                {nbaComps.length === 0 && <span className="text-xs" style={{color:"#4b5563"}}>No NBA players in comps</span>}
-              </div>
-            </div>
-            {dynLoading && <div className="text-xs" style={{color:"#f97316"}}>Updating…</div>}
-          </div>
-        )}
-
-        {dynLoading && !displayComps.length ? (
-          <div className="text-center py-8" style={{color:"#6b7280"}}>Recalculating comps…</div>
-        ) : displayComps.length > 0 ? (
-          <div className="space-y-1.5">
-            {(() => {
-              // Normalize similarity relative to best match in this player's comp set.
-              // Best comp = 100%; remaining comps scaled down proportionally.
-              // Avoids the "all show 76-77%" problem from similar absolute distances.
-              const hasSim = displayComps.some(c => typeof c.sim === "number");
-              const rawVals = displayComps.map(c =>
-                hasSim ? (c.sim ?? 0) : Math.max(0, 100 - (c.dist || 0) * 4)
-              );
-              const maxVal = Math.max(...rawVals, 1);
-              const minVal = Math.min(...rawVals, 0);
-              const range  = Math.max(maxVal - minVal, 1);
-              // Scale to 60–100 range so even the worst comp shows meaningful bar
-              const normSim = rawVals.map(v => Math.round(60 + ((v - minVal) / range) * 40));
-
-              return displayComps.map((c, i) => {
-              const htStr = c.ht ? `${Math.floor(c.ht/12)}'${c.ht%12}"` : "—";
-              const wsDeltaC = c.ws && c.ht ? (c.ws - c.ht).toFixed(1) : null;
-              const simC = normSim[i];
-              // Bar fills orange → more orange = closer match; no traffic-light encoding
-              const barOpacity = 0.5 + (simC / 100) * 0.5;
-              return (
-                <div key={i} className="flex items-center gap-3 px-3 py-2.5 rounded-lg" style={{background: i < 3 ? "#0d1117" : "#0a0e1799", border: i < 3 ? "1px solid #1f2937" : "1px solid #1f293744"}}>
-                  {/* Rank */}
-                  <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-                    style={{background: i < 3 ? "#f9731622" : "#1f293766", color: i < 3 ? "#f97316" : "#6b7280"}}>
-                    {i+1}
-                  </div>
-                  {/* Name + NBA badge */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-sm" style={{color: c.nba ? "#e5e7eb" : "#9ca3af"}}>{c.name}</span>
-                      {c.nba && c.tier && <TierBadge tier={c.tier}/>}
-                      {!c.nba && <span className="text-xs px-1.5 py-0 rounded" style={{background:"#1f2937",color:"#4b5563"}}>Never NBA</span>}
-                    </div>
-                    {/* Physical measurements — no stats */}
-                    <div className="text-xs mt-0.5 flex gap-3" style={{color:"#6b7280"}}>
-                      <span>{htStr}</span>
-                      {c.wt && <span>{c.wt} lbs</span>}
-                      {c.ws && <span>WS {c.ws}"</span>}
-                      {wsDeltaC && <span style={{color: Number(wsDeltaC) >= 3 ? "#86efac" : Number(wsDeltaC) < 0 ? "#ef444488" : "#6b7280"}}>Δ{Number(wsDeltaC) >= 0 ? "+" : ""}{wsDeltaC}"</span>}
-                    </div>
-                  </div>
-                  {/* Similarity bar — normalized, orange-only, no traffic-light */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    <div className="w-20">
-                      <div className="h-2 rounded-full overflow-hidden" style={{background:"#1f2937"}}>
-                        <div className="h-full rounded-full transition-all"
-                          style={{width:`${simC}%`, background:`rgba(249,115,22,${barOpacity})`}}/>
-                      </div>
-                    </div>
-                    <span className="w-10 text-xs font-bold text-right" style={{color:`rgba(249,115,22,${barOpacity})`}}>
-                      {i === 0 ? "Best" : `#${i+1}`}
-                    </span>
-                  </div>
-                </div>
-              );
-              });
-            })()}
-          </div>
-        ) : (
-          <div className="text-center py-8 rounded-lg" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
-            {p.hasCombine === false ? (
-              <>
-                <div className="text-2xl mb-2">📋</div>
-                <div className="text-base font-semibold mb-1" style={{color:"#f97316"}}>No NBA Combine Attendance</div>
-                <div className="text-sm mb-2" style={{color:"#9ca3af"}}>
-                  This prospect has not attended the NBA Combine. Physical comps are only shown for players with verified combine measurements.
-                </div>
-                <div className="text-xs px-4" style={{color:"#6b7280"}}>
-                  Combine attendance itself is a signal — top prospects are typically invited. Use the sliders above to estimate body type scenarios.
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="text-lg mb-1" style={{color:"#6b7280"}}>No anthropometric data available</div>
-                <div className="text-xs" style={{color:"#4b5563"}}>Physical comps require height, weight, or wingspan data in the database.</div>
-              </>
-            )}
-          </div>
-        )}
+        <CombineScatter />
       </Sec>
     </div>
   );
 }
+
+// ─ old anthro comps code removed ─
 
 // ═══════════════════════════════════════════════════════════
 // TAB: COMPS (Statistical Prospect-to-Prospect — anthro in Body tab)
@@ -3649,6 +3677,11 @@ function MethodologyTab() {
     {cat:"Archetype Classification",items:[],desc:"18 NBA archetypes assigned by position + dominant role scores. Playmaker archetypes: Scoring Playmaker, Floor General, Spacing Guard, Defensive Guard, Non-Specialized Playmaker. Wing: Initiator Wing, Scoring Wing, 3-and-D, Defensive Wing, Point Forward, Slashing Wing, Non-Specialized Wing. Big: Stretch Big, Stretch Rim Protector, Rim Protector, Short Roll Playmaker, Passing Hub, Glass Cleaner, Scoring Big, Non-Specialized Big. Primary archetype from pipeline, secondary/tertiary from role-score matching within position."},
     {cat:"Tier Feasibility (vs NBA)",items:[],desc:"Position-specific comparison against NBA tier benchmarks (p25-p75 corridors). For each tier (Replacement through All-Star), core metrics are checked: Wings = TS%+3P%, Playmakers = AST%+TO%, Bigs = BLK%+ORB%. If a core metric exceeds p75 of the target tier, deficiencies in secondary metrics are marked 'Compensated' (yellow) instead of 'Critical Gap' (red)."},
     {cat:"Data Sources & Coverage",items:[],desc:"NCAA: BartTorvik (34k+ player-seasons 2008-2026, per-game + advanced + shooting zones). International: RealGM (9k+ player-seasons across 12 European leagues). NBA Outcomes: NBA API Advanced stats (27 seasons, PIE + minutes for peak computation). Anthropometrics: NBA Draft Combine measurements + Databallr wingspan data. Scouting: Scout consensus rankings (2008-2026) for humble/draft-stock adjustment."},
+    {cat:"OGBPM (Mind Tab — Skill Curve)",items:[],desc:"OGBPM = BartTorvik Offensive Game-adjusted Box Plus/Minus. It is a box-score-derived estimate of a player's offensive contribution relative to an average D1 player, expressed in points per 100 possessions. Unlike true xRAPM (which requires ridge regression on possession-level lineup data), OGBPM is computable from box-score stats and is the best available proxy for NCAA offensive impact. Important: OGBPM is collinear with Usage% and AdjOrtg — it is not an independent 'third signal' but a condensed summary of the same offensive production. In the Skill Curve, OGBPM rank within the draft class places the player in the talent distribution of their cohort."},
+    {cat:"Zone Breakdown (Shooting → Mind)",items:[],desc:"Each shooting zone (Rim, Mid-Range, 3-Pointer, Dunk) is evaluated on three dimensions: (1) LW Weight = FGA × Self-Creation Rate — the volume of shots a player generates under their own initiative in that zone. High volume with low self-creation (catch-and-shoot) is weighted less than equivalent self-created volume. (2) eFG% = effective field goal percentage per zone; 3-point attempts are scaled ×1.5 to compare them fairly to 2-point shots. (3) Self% = share of makes that were unassisted — a proxy for shot-creation vs. catch-and-shoot proficiency. The Difficulty Premium is the average shot difficulty relative to position peers (negative = easier shots, positive = harder)."},
+    {cat:"Development Trajectory (Mind Tab)",items:[],desc:"For players with game-log data, a rolling-average curve is plotted for the selected metric. Rolling window K = max(3, min(5, N/4)) games, balancing noise reduction with responsiveness. Available metrics: eFG% (shooting efficiency), True Shooting% (eFG adjusted for free throws), USG% (usage rate — share of team possessions used), Steals per game, Blocks per game, Minutes per game. An OLS trend line (linear regression) is fitted across the rolling values; positive slope = developmental improvement, negative = regression. Shown only when game-log data is available."},
+    {cat:"NBA Combine Body Scatter (Body Tab)",items:[],desc:"Scatter plot of 510 NBA Draft Combine participants (2000–2024). X-axis = Height without shoes (inches), Y-axis = Wingspan (inches), Point size = Weight (lbs). Selected prospect is highlighted in orange; all other Combine players are shown as gray dots. Hover over any point to see name, draft year, position, height, wingspan, wingspan delta (wingspan − height), and weight. The filter sliders constrain the visible Combine dots to players in a similar wingspan range and weight bucket — useful for identifying physical comps within a realistic body-type band."},
+    {cat:"Passer / Scorer Profile (Mind Tab)",items:[],desc:"For all players (single- and multi-season): a Passer/Scorer snapshot is shown based on current AST% and USG%. Thresholds: AST% ≥30% = Primary Playmaker, ≥20% = Dual-Role Creator, ≥12% = Secondary Facilitator, <12% = Scorer/Off-Ball. For multi-season players with at least 2 seasons, a slope-based card also appears showing how AST%/USG% evolves as responsibility increases — positive slope = playmaking expands at volume, negative = isolation tendency. The AST/TO ratio supplements the profile as a decision-quality proxy."},
   ];
   /* ── Pipeline Flow Diagram ── */
   const PipelineDiagram = () => {
@@ -4455,12 +4488,12 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
 const TABS = [
   {id:"overview",label:"Overview",icon:"▦"},
   {id:"shooting",label:"Shooting",icon:"🏀"},
-  {id:"mind",label:"Mind",icon:"🧠"},
-  {id:"projection",label:"Projection",icon:"◆"},
-  {id:"scouting",label:"Scouting",icon:"⭐"},
   {id:"body",label:"Body",icon:"📏"},
+  {id:"mind",label:"Mind",icon:"🧠"},
+  {id:"scouting",label:"Scouting",icon:"⭐"},
   {id:"comps",label:"Comps",icon:"⇄"},
   {id:"methodology",label:"Method",icon:"📖"},
+  {id:"projection",label:"Projection",icon:"◆"},
 ];
 
 export default function App() {
@@ -4747,12 +4780,12 @@ export default function App() {
             </div>
             {tab==="overview"&&<OverviewTab p={p} compTier={compTier} setCompTier={setCompTier}/>}
             {tab==="shooting"&&<ShootingTab p={p}/>}
-            {tab==="mind"&&<MindTab p={p}/>}
-            {tab==="projection"&&<ProjectionTab p={p}/>}
-            {tab==="scouting"&&<ScoutingTab p={p}/>}
             {tab==="body"&&<BodyTab p={p}/>}
+            {tab==="mind"&&<MindTab p={p}/>}
+            {tab==="scouting"&&<ScoutingTab p={p}/>}
             {tab==="comps"&&<CompsTab p={p}/>}
             {tab==="methodology"&&<MethodologyTab/>}
+            {tab==="projection"&&<ProjectionTab p={p}/>}
           </>
         )}
       </main>
