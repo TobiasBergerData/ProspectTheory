@@ -313,8 +313,9 @@ function computeBadges(p) {
   if (isIntl && age < 19 && bpm > 2.0)                              green.push("Pro-Ready Teen");
 
   // ═══ YELLOW BADGES ═══
-  // Moreyballer: ≥75% of shots from rim + 3P (excludes mid-range)
-  if (p.rimF != null && p.threeF != null && rimF + threeF >= 75)    yellow.push("Moreyballer");
+  // Moreyballer: ≥75% of shots from rim + 3P (excludes mid-range).
+  // Only require rimF data; threeF defaults to 0 (valid: rim-only players qualify without 3P data).
+  if (p.rimF != null && rimF + threeF >= 75)    yellow.push("Moreyballer");
   // Latent Sniper (stricter)
   if (ft > 85 && tp < 33)                                           yellow.push("Latent Sniper");
   // Latent Touch (broader)
@@ -1705,15 +1706,18 @@ function ClassScatterAndDev({p}) {
               <text x={W-PAD.r-5} y={PAD.t+12} textAnchor="end" fontSize={8} fill="#22c55e" opacity={0.5}>High Vol · High Eff</text>
             )}
             {/* Class dots — hoverable */}
-            {pts.filter(c=>c.name!==p.name).map((c,i)=>(
-              <circle key={i} cx={xS(c.usg)} cy={yS(c.ortg)} r={3}
-                fill={c.ortg > peerExp(c.usg) ? "#3b82f622" : "#1f2937"}
-                stroke={c.ortg > peerExp(c.usg) ? "#60a5fa" : "#374151"}
-                strokeWidth={0.6} opacity={0.75}
-                style={{cursor:"pointer"}}
-                onMouseEnter={(e)=>{setScatterHover(c);setScatterHoverPos({x:e.clientX,y:e.clientY});}}
-                onMouseLeave={()=>setScatterHover(null)}/>
-            ))}
+            {pts.filter(c=>c.name!==p.name).map((c,i)=>{
+              const abovePeer = c.ortg > peerExp(c.usg);
+              return (
+                <circle key={i} cx={xS(c.usg)} cy={yS(c.ortg)} r={3.5}
+                  fill={abovePeer ? "#1e3a5f" : "#2d2d3d"}
+                  stroke={abovePeer ? "#60a5fa" : "#6b7280"}
+                  strokeWidth={0.8} opacity={0.85}
+                  style={{cursor:"pointer"}}
+                  onMouseEnter={(e)=>{setScatterHover(c);setScatterHoverPos({x:e.clientX,y:e.clientY});}}
+                  onMouseLeave={()=>setScatterHover(null)}/>
+              );
+            })}
             {/* Selected player */}
             {playerUsg > 0 && playerOrtg > 0 && (
               <g>
@@ -2018,18 +2022,14 @@ function MindTab({p}) {
   // ── Zone table ──
   const ZoneRow = ({zone, label, color, data}) => {
     if (!data) return null;
-    const {eFG, selfPct, fga, lwWeight} = data;
-    const barW = Math.min(100, (lwWeight / 50) * 100); // visual weight bar
+    const {eFG, selfPct, fga} = data;
     const efgColor = eFG >= 65 ? "#22c55e" : eFG >= 55 ? "#86efac" : eFG >= 45 ? "#fbbf24" : "#ef4444";
     const selfColor = selfPct >= 60 ? "#f97316" : selfPct >= 35 ? "#fbbf24" : "#6b7280";
     return (
-      <div style={{display:"grid",gridTemplateColumns:"80px 1fr 60px 60px 60px",gap:8,alignItems:"center",padding:"6px 0",borderBottom:"1px solid #1f2937"}}>
+      <div style={{display:"grid",gridTemplateColumns:"90px 60px 60px 50px",gap:8,alignItems:"center",padding:"5px 0",borderBottom:"1px solid #1f2937"}}>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
           <div style={{width:8,height:8,borderRadius:"50%",background:color,flexShrink:0}}/>
           <span style={{fontSize:12,fontWeight:600,color:"#e5e7eb"}}>{label}</span>
-        </div>
-        <div style={{background:"#1f2937",borderRadius:4,height:6,overflow:"hidden"}}>
-          <div style={{width:`${barW}%`,height:"100%",background:color,opacity:0.7}}/>
         </div>
         <div style={{textAlign:"right",fontSize:12,fontWeight:700,color:efgColor}}>{eFG?.toFixed(1)}%</div>
         <div style={{textAlign:"right",fontSize:12,color:selfColor}}>{selfPct?.toFixed(0)}%</div>
@@ -2131,9 +2131,8 @@ function MindTab({p}) {
         {zones && Object.keys(zones).length > 0 && (
           <div style={{background:"#0f172a",borderRadius:8,padding:"12px 14px"}}>
             <div style={{fontSize:11,fontWeight:600,color:"#9ca3af",marginBottom:10,letterSpacing:0.5}}>ZONE BREAKDOWN — LEVERAGE WEIGHT &amp; EFFICIENCY</div>
-            <div style={{display:"grid",gridTemplateColumns:"80px 1fr 60px 60px 60px",gap:8,marginBottom:6}}>
+            <div style={{display:"grid",gridTemplateColumns:"90px 60px 60px 50px",gap:8,marginBottom:6}}>
               <div style={{fontSize:10,color:"#4b5563"}}>Zone</div>
-              <div style={{fontSize:10,color:"#4b5563"}}>LW Weight</div>
               <div style={{textAlign:"right",fontSize:10,color:"#4b5563"}}>eFG%</div>
               <div style={{textAlign:"right",fontSize:10,color:"#4b5563"}}>Self%</div>
               <div style={{textAlign:"right",fontSize:10,color:"#4b5563"}}>FGA</div>
@@ -2144,10 +2143,10 @@ function MindTab({p}) {
               if (!zd) return null;
               return <ZoneRow key={z} zone={z} label={cfg.label} color={cfg.color} data={zd}/>;
             })}
-            <div style={{marginTop:12,padding:"8px 10px",background:"#1a2033",borderRadius:6,fontSize:10,color:"#6b7280",lineHeight:"1.7"}}>
-              <span style={{color:"#9ca3af",fontWeight:600}}>LW Weight</span> = FGA × Self-Creation Rate — measures how much of a player's offense runs through this zone under their own steam. A high-volume zone with low self-creation matters less than it appears.{" "}
-              <span style={{color:"#9ca3af",fontWeight:600}}>eFG%</span> = effective FG efficiency per zone; 3-pt shots are scaled ×1.5 to put them on equal terms with 2s.{" "}
-              <span style={{color:"#9ca3af",fontWeight:600}}>Self%</span> = share of makes that were unassisted — a proxy for shot creation vs. catch-and-shoot.
+            <div style={{marginTop:10,padding:"7px 10px",background:"#1a2033",borderRadius:6,fontSize:10,color:"#6b7280",lineHeight:"1.7"}}>
+              <span style={{color:"#9ca3af",fontWeight:600}}>eFG%</span> = effective field goal % per zone; 3-pt shots scaled ×1.5 (equal-value comparison to 2s).{" "}
+              <span style={{color:"#9ca3af",fontWeight:600}}>Self%</span> = % of makes that were unassisted — shot creation vs. catch-and-shoot.{" "}
+              <span style={{color:"#9ca3af",fontWeight:600}}>FGA</span> = raw attempt count.
             </div>
           </div>
         )}
@@ -2188,13 +2187,16 @@ function MindTab({p}) {
         // Peer curve: AdjOrtg = -0.0052*USG^2 + 1.6262*USG + 69.51
         const peerExp = (usg) => Math.round(-0.0052*usg*usg + 1.6262*usg + 69.51);
 
-        // Slope classification
+        // Slope classification: individual AdjOrtg/USG slope across seasons.
+        // Typical: efficiency DROPS slightly at higher volume. Holding flat or growing is the positive signal.
+        // Peer curve derivative at avg USG (~22%) ≈ +0.88/1% USG (cross-sectional, not individual).
+        // Labels reflect individual trajectory vs typical decay.
         const getSlopeLabel = (slope) => {
           if (slope == null) return null;
-          if (slope >= 4) return {label:"Elite Scaler", color:"#22c55e"};
-          if (slope >= 2) return {label:"Good Scaler", color:"#86efac"};
-          if (slope >= 0) return {label:"Holds Steady", color:"#fbbf24"};
-          return {label:"Drops at Volume", color:"#ef4444"};
+          if (slope >= 2.5) return {label:"Scales with Volume", color:"#22c55e"};   // rare — efficiency actively grows
+          if (slope >= 0.5) return {label:"Holds Efficiency", color:"#86efac"};     // beats typical individual decay
+          if (slope >= -1.0) return {label:"Normal Volume Decay", color:"#fbbf24"}; // expected — most players here
+          return {label:"Efficiency Drops at Volume", color:"#ef4444"};             // concerning volume limitation
         };
         const getAstLabel = (slope) => {
           if (slope == null) return null;
@@ -2377,38 +2379,183 @@ function MindTab({p}) {
               </div>
             )}
 
-            {/* Season details table */}
-            {seasons.length > 0 && (
-              <div style={{background:"#0f172a",borderRadius:8,padding:"12px 14px"}}>
-                <div style={{fontSize:11,fontWeight:600,color:"#9ca3af",marginBottom:8,letterSpacing:0.5}}>SEASON-BY-SEASON BREAKDOWN</div>
-                <div style={{display:"grid",gridTemplateColumns:"45px 50px 60px 45px 45px 45px",gap:4}}>
-                  {["Year","USG%","AdjOrtg","TS%","AST%","TO%"].map(h=>(
-                    <div key={h} style={{fontSize:9,color:"#4b5563",textAlign:"right"}}>{h}</div>
-                  ))}
-                  {seasons.map((s,i)=>{
-                    const isLatest = i===seasons.length-1;
-                    const c = isLatest?"#f97316":"#9ca3af";
-                    const adjColor = (s.adjOrtg - peerExp(s.usg)) > 10 ? "#22c55e" : (s.adjOrtg - peerExp(s.usg)) > 0 ? "#fbbf24" : "#ef4444";
-                    return [
-                      <div key={`${s.yr}-yr`} style={{fontSize:11,fontWeight:isLatest?700:400,color:c,textAlign:"right"}}>{s.yr}</div>,
-                      <div key={`${s.yr}-u`}  style={{fontSize:11,color:c,textAlign:"right"}}>{s.usg?.toFixed(1)}%</div>,
-                      <div key={`${s.yr}-a`}  style={{fontSize:11,fontWeight:700,color:adjColor,textAlign:"right"}}>{s.adjOrtg?.toFixed(0)}</div>,
-                      <div key={`${s.yr}-t`}  style={{fontSize:11,color:c,textAlign:"right"}}>{s.ts != null ? `${s.ts.toFixed(1)}%` : "—"}</div>,
-                      <div key={`${s.yr}-ast`}style={{fontSize:11,color:c,textAlign:"right"}}>{s.astP != null ? `${s.astP.toFixed(1)}%` : "—"}</div>,
-                      <div key={`${s.yr}-to`} style={{fontSize:11,color:c,textAlign:"right"}}>{s.toP != null ? `${s.toP.toFixed(1)}%` : "—"}</div>,
-                    ];
-                  })}
-                </div>
-                <div style={{marginTop:8,fontSize:9,color:"#4b5563"}}>
-                  AdjOrtg = BartTorvik Adjusted Offensive Rating (pts/100 poss., opponent-adjusted). Green = ≥10pts above peer avg. AST% = % of teammate FGM assisted.
-                </div>
-              </div>
-            )}
           </Sec>
         );
       })()}
 
-      {/* ── Feature 3: Class Scatter + In-Season Development ── */}
+      {/* ── Sequential Resilience ── */}
+      {(() => {
+        const lines = (p.seasonLines || []).filter(s => s.yr && s.usg >= 8 && s.bpm != null);
+        if (lines.length < 2) return null;
+
+        const bpms = lines.map(s => s.bpm);
+        const mean = bpms.reduce((a,b)=>a+b,0)/bpms.length;
+        const variance = bpms.reduce((a,b)=>a+(b-mean)**2,0)/bpms.length;
+        const stdDev = Math.sqrt(variance);
+        // CV = stdDev / |mean|, but BPM can be negative — use absolute mean or floor at 1
+        const cv = stdDev / (Math.abs(mean) + 1);
+
+        // OLS trend across seasons (use index as x)
+        const xs = lines.map((_,i)=>i);
+        const xm = xs.reduce((a,b)=>a+b,0)/xs.length;
+        const ym = mean;
+        const bpmSlope = xs.reduce((a,x,i)=>a+(x-xm)*(bpms[i]-ym),0) /
+                         xs.reduce((a,x)=>a+(x-xm)**2,0.001);
+
+        // Bounce-back: did the player improve after their worst season (if it's not the last)?
+        const minIdx = bpms.indexOf(Math.min(...bpms));
+        const bounceBack = minIdx < bpms.length-1
+          ? bpms[minIdx+1] - bpms[minIdx]
+          : null;
+
+        // Consistency score: 0-100, lower CV = higher score
+        const consistency = Math.max(0, Math.min(100, Math.round(100 - cv * 80)));
+        const cColor = consistency >= 70 ? "#22c55e" : consistency >= 45 ? "#fbbf24" : "#ef4444";
+        const cLabel = consistency >= 70 ? "Consistent" : consistency >= 45 ? "Moderate Variance" : "High Variance";
+
+        const trendColor = bpmSlope > 0.5 ? "#22c55e" : bpmSlope > -0.5 ? "#fbbf24" : "#ef4444";
+        const trendLabel = bpmSlope > 1.5 ? "Strong Rise" : bpmSlope > 0.5 ? "Rising" : bpmSlope > -0.5 ? "Flat" : bpmSlope > -1.5 ? "Declining" : "Sharp Decline";
+
+        return (
+          <Sec icon="🔁" title="Sequential Resilience"
+            sub={`Season-to-season BPM consistency across ${lines.length} seasons (${lines[0].yr}–${lines[lines.length-1].yr}). Measures whether a player's impact holds up over time.`}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:14}}>
+              {/* Consistency */}
+              <div style={{background:"#0f172a",borderRadius:8,padding:"10px 12px",textAlign:"center"}}>
+                <div style={{fontSize:22,fontWeight:700,color:cColor,fontFamily:"Oswald,sans-serif"}}>{consistency}</div>
+                <div style={{fontSize:11,fontWeight:600,color:"#e5e7eb",marginTop:2}}>Consistency</div>
+                <div style={{fontSize:10,color:cColor,marginTop:1}}>{cLabel}</div>
+              </div>
+              {/* BPM Trajectory */}
+              <div style={{background:"#0f172a",borderRadius:8,padding:"10px 12px",textAlign:"center"}}>
+                <div style={{fontSize:22,fontWeight:700,color:trendColor,fontFamily:"Oswald,sans-serif"}}>
+                  {bpmSlope>0?"+":""}{bpmSlope.toFixed(2)}
+                </div>
+                <div style={{fontSize:11,fontWeight:600,color:"#e5e7eb",marginTop:2}}>BPM/Season Slope</div>
+                <div style={{fontSize:10,color:trendColor,marginTop:1}}>{trendLabel}</div>
+              </div>
+              {/* Bounce-back */}
+              <div style={{background:"#0f172a",borderRadius:8,padding:"10px 12px",textAlign:"center"}}>
+                {bounceBack != null ? (
+                  <>
+                    <div style={{fontSize:22,fontWeight:700,color:bounceBack>0?"#22c55e":"#ef4444",fontFamily:"Oswald,sans-serif"}}>
+                      {bounceBack>0?"+":""}{bounceBack.toFixed(1)}
+                    </div>
+                    <div style={{fontSize:11,fontWeight:600,color:"#e5e7eb",marginTop:2}}>Bounce-Back Δ</div>
+                    <div style={{fontSize:10,color:bounceBack>0?"#22c55e":"#ef4444",marginTop:1}}>
+                      {bounceBack > 1 ? "Recovered well" : bounceBack > 0 ? "Slight recovery" : "Did not recover"}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{fontSize:22,fontWeight:700,color:"#6b7280",fontFamily:"Oswald,sans-serif"}}>—</div>
+                    <div style={{fontSize:11,fontWeight:600,color:"#e5e7eb",marginTop:2}}>Bounce-Back</div>
+                    <div style={{fontSize:10,color:"#4b5563",marginTop:1}}>Worst season = last</div>
+                  </>
+                )}
+              </div>
+            </div>
+            {/* Mini BPM timeline */}
+            <div style={{background:"#0f172a",borderRadius:8,padding:"10px 12px"}}>
+              <div style={{fontSize:10,color:"#6b7280",marginBottom:8,fontWeight:600,letterSpacing:0.5}}>BPM TIMELINE</div>
+              <div style={{display:"flex",alignItems:"flex-end",gap:6,height:48}}>
+                {lines.map((s,i)=>{
+                  const normalizedH = Math.max(4, Math.min(48, ((s.bpm - Math.min(...bpms)) / (Math.max(...bpms) - Math.min(...bpms) + 0.01)) * 44 + 4));
+                  const isLatest = i===lines.length-1;
+                  const barColor = s.bpm > 6 ? "#22c55e" : s.bpm > 2 ? "#86efac" : s.bpm > -1 ? "#fbbf24" : "#ef4444";
+                  return (
+                    <div key={s.yr} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                      <div style={{fontSize:9,color:isLatest?"#f97316":"#6b7280",fontWeight:isLatest?700:400}}>{s.bpm>0?"+":""}{s.bpm?.toFixed(1)}</div>
+                      <div style={{width:"100%",height:normalizedH,background:barColor,borderRadius:2,opacity:isLatest?1:0.7}}/>
+                      <div style={{fontSize:8,color:isLatest?"#f97316":"#4b5563"}}>{s.yr}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div style={{marginTop:10,padding:"7px 10px",background:"#111827",borderRadius:6,fontSize:10,color:"#4b5563",lineHeight:"1.6"}}>
+              <span style={{color:"#374151",fontWeight:600}}>How this is computed:</span> Consistency (0–100) = 100 − CV×80 where CV = σ/|mean BPM|. BPM Slope = OLS across seasons (positive = improving year-over-year). Bounce-Back = BPM delta in the season immediately following the player's worst season.
+            </div>
+          </Sec>
+        );
+      })()}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// TAB: DEVELOPMENT TRAJECTORY
+// Season-by-Season table + Class Scatter + In-Season DevTrajectory
+// ═══════════════════════════════════════════════════════════
+function DevTrajectoryTab({p}) {
+  if (!p) return null;
+
+  // Season-by-season: reuse peer curve from skillCurve section
+  const peerExpDev = (usg) => -0.0052*usg*usg + 1.6262*usg + 69.51;
+
+  const SeasonTable = () => {
+    if (!p.skillCurve) return null;
+    const sc = p.skillCurve;
+    const rawLines = (p.seasonLines || []).filter(s => s.yr && s.usg >= 8);
+    if (rawLines.length === 0) return null;
+    const seasons = rawLines.map((s, i) => ({
+      yr: s.yr, usg: s.usg, ts: s.ts, astP: s.astP, toP: s.toP, bpm: s.bpm,
+      adjOrtg: (i === rawLines.length-1 && sc.curAdjOrtg)
+        ? sc.curAdjOrtg
+        : Math.round(-0.0052*s.usg*s.usg + 1.6262*s.usg + 69.51 + (sc.peerResidual||0)*0.5),
+    }));
+
+    return (
+      <Sec icon="📅" title="Season-by-Season Breakdown"
+        sub="All seasons with meaningful playing time (≥8% USG). Orange = most recent season. AdjOrtg colour: green ≥10 pts above peer curve, yellow = above, red = below.">
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+            <thead>
+              <tr>
+                {["Year","USG%","AdjOrtg","vs Peer","TS%","AST%","TO%","BPM"].map(h=>(
+                  <th key={h} style={{textAlign:"right",fontSize:10,color:"#4b5563",padding:"4px 8px",borderBottom:"1px solid #1f2937",fontWeight:500}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {seasons.map((s,i)=>{
+                const isLatest = i===seasons.length-1;
+                const c = isLatest?"#f97316":"#9ca3af";
+                const diff = s.adjOrtg - peerExpDev(s.usg);
+                const adjColor = diff > 10 ? "#22c55e" : diff > 0 ? "#fbbf24" : "#ef4444";
+                const bpmColor = (s.bpm??0) > 5 ? "#22c55e" : (s.bpm??0) > 0 ? "#fbbf24" : "#ef4444";
+                // Delta vs prior season
+                const prev = i > 0 ? seasons[i-1] : null;
+                const bpmDelta = prev && s.bpm != null && prev.bpm != null ? s.bpm - prev.bpm : null;
+                return (
+                  <tr key={s.yr} style={{background:isLatest?"#1a1a2e":"transparent"}}>
+                    <td style={{textAlign:"right",padding:"5px 8px",fontWeight:isLatest?700:400,color:c}}>{s.yr}</td>
+                    <td style={{textAlign:"right",padding:"5px 8px",color:c}}>{s.usg?.toFixed(1)}%</td>
+                    <td style={{textAlign:"right",padding:"5px 8px",fontWeight:700,color:adjColor}}>{s.adjOrtg?.toFixed(0)}</td>
+                    <td style={{textAlign:"right",padding:"5px 8px",fontSize:11,color:adjColor}}>{diff>0?"+":""}{diff.toFixed(0)}</td>
+                    <td style={{textAlign:"right",padding:"5px 8px",color:c}}>{s.ts!=null?`${s.ts.toFixed(1)}%`:"—"}</td>
+                    <td style={{textAlign:"right",padding:"5px 8px",color:c}}>{s.astP!=null?`${s.astP.toFixed(1)}%`:"—"}</td>
+                    <td style={{textAlign:"right",padding:"5px 8px",color:c}}>{s.toP!=null?`${s.toP.toFixed(1)}%`:"—"}</td>
+                    <td style={{textAlign:"right",padding:"5px 8px",color:bpmColor,fontWeight:600}}>
+                      {s.bpm!=null?s.bpm.toFixed(1):"—"}
+                      {bpmDelta!=null&&<span style={{fontSize:9,marginLeft:3,color:bpmDelta>0?"#22c55e":"#ef4444"}}>{bpmDelta>0?"+":""}{bpmDelta.toFixed(1)}</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div style={{marginTop:8,fontSize:9,color:"#4b5563"}}>
+          AdjOrtg = BartTorvik opponent-adjusted offensive rating (pts/100). Peer curve: -0.0052·USG²+1.63·USG+69.5. vs Peer = AdjOrtg − peer expected. BPM delta = change vs prior season.
+        </div>
+      </Sec>
+    );
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <SeasonTable />
       <ClassScatterAndDev p={p} />
     </div>
   );
@@ -3426,8 +3573,8 @@ function BodyTab({p}) {
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
           {[
             ["Height", htDisplay, false, null],
-            ["Weight", `${adjWt} lbs`, isWtEstimated, wtLabelColor],
-            ["Wingspan", `${adjWs.toFixed(1)}"`, isWsEstimated, wsLabelColor],
+            ["Weight", `${estimatedWt} lbs`, isWtEstimated, wtLabelColor],
+            ["Wingspan", `${estimatedWs.toFixed(1)}"`, isWsEstimated, wsLabelColor],
             ["WS Delta", `${wsDelta >= 0 ? "+" : ""}${wsDelta.toFixed(1)}"`, false, wsLabelColor],
             ["Ape Index", apeRatio.toFixed(3), false, apeRatio >= 1.06 ? "#22c55e" : apeRatio < 1.02 ? "#ef4444" : "#6b7280"],
           ].map(([l, v, est, accent]) => (
@@ -4492,8 +4639,9 @@ const TABS = [
   {id:"mind",label:"Mind",icon:"🧠"},
   {id:"scouting",label:"Scouting",icon:"⭐"},
   {id:"comps",label:"Comps",icon:"⇄"},
-  {id:"methodology",label:"Method",icon:"📖"},
+  {id:"devtrajectory",label:"Development",icon:"📈"},
   {id:"projection",label:"Projection",icon:"◆"},
+  {id:"methodology",label:"Method",icon:"📖"},
 ];
 
 export default function App() {
@@ -4784,8 +4932,9 @@ export default function App() {
             {tab==="mind"&&<MindTab p={p}/>}
             {tab==="scouting"&&<ScoutingTab p={p}/>}
             {tab==="comps"&&<CompsTab p={p}/>}
-            {tab==="methodology"&&<MethodologyTab/>}
+            {tab==="devtrajectory"&&<DevTrajectoryTab p={p}/>}
             {tab==="projection"&&<ProjectionTab p={p}/>}
+            {tab==="methodology"&&<MethodologyTab/>}
           </>
         )}
       </main>
