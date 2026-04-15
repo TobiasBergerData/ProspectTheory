@@ -1531,9 +1531,9 @@ function ShootingTab({p}) {
               </div>
               {/* Self-creation distribution: pie-like summary */}
               {totalSelfMakes > 5 && (
-                <div className="mt-2 px-3 py-2 rounded-lg" style={{background:"#0d1117",border:"1px solid #1e293b"}}>
-                  <div className="text-xs mb-1.5" style={{color:"#6b7280"}}>Self-Created Shot Distribution</div>
-                  <div className="flex gap-1 h-4 rounded-md overflow-hidden">
+                <div className="mt-3 py-3 rounded-lg" style={{background:"#0d1117",border:"1px solid #1e293b"}}>
+                  <div className="text-xs mb-2 px-3 font-semibold" style={{color:"#9ca3af"}}>Self-Created Shot Distribution</div>
+                  <div className="flex gap-0.5 h-8 rounded-md overflow-hidden mx-1">
                     {zones.map(z => {
                       const share = totalSelfMakes > 0 ? selfMakesByZone[z] / totalSelfMakes * 100 : 0;
                       return share > 0 ? (
@@ -3863,6 +3863,8 @@ function CompsTab({p}) {
 // TAB: METHODOLOGY
 // ═══════════════════════════════════════════════════════════
 function MethodologyTab() {
+  const [methodView, setMethodView] = useState("quick"); // "quick" | "deep"
+
   const sections = [
     {cat:"ppWA Projection Model (v2)",items:["monteCarlo","posClassification"],desc:"Core engine: position-stratified ElasticNet regression + calibrated Elite Detector, trained on 1,784 NCAA and international prospects (draft classes 2010–2016) with verified NBA outcomes. Target variable: Peak Wins Added — best 3-consecutive-season window in first 8 NBA years (min 200 minutes/season). Features: 8–12 theoretically grounded variables per position group (Playmaker / Wing / Big), including age, BPM percentile, BPM trajectory, conference strength, free-throw rate, athleticism score, and position-specific shooting/playmaking signals. Output: ppWA = Projected Peak Wins Added (a single, interpretable number: 'this player projects to add X wins above replacement at his peak'). Validated on holdout classes 2017–2019: Spearman ρ = 0.460 (craftednba.com benchmark: 0.373), MAR = 12.0 per class."},
     {cat:"International Adjustments",items:[],desc:"International players receive three adjustments: (1) League Strength via empirical bridge-player ratios (2,655 players who played both intl and NBA). Euroleague=1.40, ACB=1.39, BBL=1.18 (NCAA Power=1.0 anchor). (2) Liga-BPM-Scaler: Raw BPM proxy (PER+eDiff) is multiplied by a league-specific scaler (Euroleague ×2.1, ACB ×1.9, NBL ×1.65, etc.) to translate to NCAA-equivalent BPM before feature engineering. (3) Conf-adj post-hoc with translatable-USG-aware caps for strong leagues."},
@@ -3969,6 +3971,33 @@ function MethodologyTab() {
 
   return (
     <div className="space-y-6">
+      {/* ── View Toggle ── */}
+      <div style={{display:"flex",gap:8,marginBottom:4}}>
+        {[["quick","Quick View"],["deep","Deep Dive"]].map(([k,l])=>(
+          <button key={k} onClick={()=>setMethodView(k)} style={{
+            fontSize:12,padding:"6px 16px",borderRadius:8,border:"none",cursor:"pointer",
+            background:methodView===k?"#f97316":"#1f2937",
+            color:methodView===k?"#000":"#9ca3af",fontWeight:600}}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {/* ── QUICK VIEW ── */}
+      {methodView === "quick" && (
+        <Sec icon="🎯" title="How It Works — Plain Language" sub="Explaining ProspectTheory to a casual basketball fan.">
+          <div style={{fontSize:13,color:"#d1d5db",lineHeight:"1.8"}}>
+            <p style={{marginBottom:12}}>ProspectTheory evaluates NBA draft prospects by asking one question: <strong style={{color:"#f97316"}}>How many wins will this player add to an NBA team at their peak?</strong> That number is called <strong style={{color:"#e5e7eb"}}>ppWA (Projected Peak Wins Added)</strong>.</p>
+            <p style={{marginBottom:12}}>We trained a machine learning model on every college/international prospect drafted from 2010–2016 whose NBA career we can now evaluate with full hindsight. The model learned which college stats, body measurements, and scouting signals actually predict NBA success — and which ones are just noise.</p>
+            <p style={{marginBottom:12}}>For each prospect, we compute 5 core "DNA pillars": <span style={{color:"#f97316"}}>Feel</span> (basketball IQ proxy), <span style={{color:"#f97316"}}>Shooting</span> (projected NBA 3P ability), <span style={{color:"#f97316"}}>Defense</span>, <span style={{color:"#f97316"}}>Athleticism</span>, and <span style={{color:"#f97316"}}>Self-Creation</span> (can they create their own shot?). These 5 scores, along with age, position, and conference strength, feed into the projection model.</p>
+            <p style={{marginBottom:12}}>The model outputs tier probabilities (how likely is this player to become a Superstar? All-Star? Starter? Role Player?), a best-fit NBA archetype, and a ranked comparison to historical prospects who looked statistically similar at the same age.</p>
+            <p style={{color:"#6b7280"}}>Validated on 3 holdout draft classes (2017–19) with a Spearman rank correlation of ρ = 0.46, beating the industry benchmark (0.37). Not perfect — but better than the alternative of gut feeling alone.</p>
+          </div>
+        </Sec>
+      )}
+
+      {/* ── DEEP DIVE ── */}
+      {methodView === "deep" && <>
       {/* ── Pipeline Diagram ── */}
       <Sec icon="🔬" title="Model Pipeline" sub="How data flows from raw sources through feature engineering to final projections.">
         <PipelineDiagram/>
@@ -4107,6 +4136,7 @@ function MethodologyTab() {
           })}
         </div>
       </Sec>
+      </>}
     </div>
   );
 }
@@ -4766,14 +4796,23 @@ export default function App() {
       ]).then(([profRes, statsRes, anthroRes]) => {
         // Use full profile if available, fall back to board profile
         const updated = profRes?.profile ? mapProfile(profRes.profile) : {...boardProfile};
-        if (statsRes?.comps) updated.statComps = statsRes.comps.map(c => {
+        if (statsRes?.comps) {
+          // Similarity values from DB are composite Z-score distances (raw ~1.0-3.0).
+          // Higher = more similar. Need to scale to 0-100% relative to the max in the group.
+          const rawSims = statsRes.comps.map(c => Number(c.similarity ?? 0)).filter(v => v > 0);
+          const maxSim = rawSims.length > 0 ? Math.max(...rawSims) : 1;
+          const minSim = rawSims.length > 0 ? Math.min(...rawSims) : 0;
+          const simRange = maxSim - minSim || 1;
+          updated.statComps = statsRes.comps.map(c => {
           let sim = null;
           if (c.similarity != null) {
             const raw = Number(c.similarity);
-            if (raw > 100) sim = Math.max(0, Math.round(100 - raw / 5));
-            else if (raw > 1 && raw <= 100) sim = Math.round(raw);
-            else if (raw >= 0 && raw <= 1) sim = Math.round(raw * 100);
-            else sim = Math.max(0, Math.round(100 - Math.abs(raw) * 2));
+            if (raw > 50) sim = Math.round(raw); // already percentage (legacy format)
+            else if (raw > 0) {
+              // Scale: top comp → ~97%, worst in list → ~65%
+              sim = Math.round(65 + (raw - minSim) / simRange * 32);
+            }
+            else sim = 0;
           }
           return {
             name:c.name, pos:c.position||c.pos, sim,
@@ -4785,6 +4824,7 @@ export default function App() {
             badges:c.badges?c.badges.split("|").filter(Boolean):[],
           };
         });
+        } // end statComps mapping
         if (anthroRes) {
           updated.hasCombine = anthroRes.has_combine ?? (anthroRes.comps?.length > 0);
           updated.anthroComps = (anthroRes.comps||[]).map(c=>({
@@ -4809,25 +4849,30 @@ export default function App() {
       ]);
       if (profRes?.profile) {
         const mapped = mapProfile(profRes.profile);
-        if (statsRes?.comps) mapped.statComps = statsRes.comps.map(c => {
-          let sim = null;
-          if (c.similarity != null) {
-            const raw = Number(c.similarity);
-            if (raw > 100) sim = Math.max(0, Math.round(100 - raw / 5));
-            else if (raw > 1 && raw <= 100) sim = Math.round(raw);
-            else if (raw >= 0 && raw <= 1) sim = Math.round(raw * 100);
-            else sim = Math.max(0, Math.round(100 - Math.abs(raw) * 2));
-          }
-          return {
-            name:c.name, pos:c.position||c.pos, sim,
-            tier:c.tier||"", nba:!!c.made_nba, bpm:c.bpm, usg:c.usg, ts:c.ts,
-            astP:c.ast_p, toP:c.to_p, orbP:c.orb_p, drbP:c.drb_p,
-            stlP:c.stl_p, blkP:c.blk_p, ftr:c.ftr,
-            rimPct:c.rim_pct, tp:c.tp_pct, ft:c.ft_pct, dunkR:c.dunk_r,
-            ht:c.height||c.ht,
-            badges:c.badges?c.badges.split("|").filter(Boolean):[],
-          };
-        });
+        if (statsRes?.comps) {
+          const rawSims2 = statsRes.comps.map(c => Number(c.similarity ?? 0)).filter(v => v > 0);
+          const maxSim2 = rawSims2.length > 0 ? Math.max(...rawSims2) : 1;
+          const minSim2 = rawSims2.length > 0 ? Math.min(...rawSims2) : 0;
+          const simRange2 = maxSim2 - minSim2 || 1;
+          mapped.statComps = statsRes.comps.map(c => {
+            let sim = null;
+            if (c.similarity != null) {
+              const raw = Number(c.similarity);
+              if (raw > 50) sim = Math.round(raw);
+              else if (raw > 0) sim = Math.round(65 + (raw - minSim2) / simRange2 * 32);
+              else sim = 0;
+            }
+            return {
+              name:c.name, pos:c.position||c.pos, sim,
+              tier:c.tier||"", nba:!!c.made_nba, bpm:c.bpm, usg:c.usg, ts:c.ts,
+              astP:c.ast_p, toP:c.to_p, orbP:c.orb_p, drbP:c.drb_p,
+              stlP:c.stl_p, blkP:c.blk_p, ftr:c.ftr,
+              rimPct:c.rim_pct, tp:c.tp_pct, ft:c.ft_pct, dunkR:c.dunk_r,
+              ht:c.height||c.ht,
+              badges:c.badges?c.badges.split("|").filter(Boolean):[],
+            };
+          });
+        }
         if (anthroRes) {
           mapped.hasCombine = anthroRes.has_combine ?? (anthroRes.comps?.length > 0);
           mapped.anthroComps = (anthroRes.comps||[]).map(c=>({
