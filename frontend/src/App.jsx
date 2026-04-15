@@ -2394,30 +2394,42 @@ function MindTab({p}) {
                   {multiSeason ? "SEASON TRAJECTORY vs PEER CURVE" : "CURRENT SEASON vs PEER CURVE"}
                 </div>
                 <svg width="100%" viewBox="0 0 200 100" style={{overflow:"visible"}}>
-                  {/* Grid lines */}
-                  {[20,25,30,35].map(u=>(
-                    <line key={u} x1={toX(u)} y1={10} x2={toX(u)} y2={90} stroke="#1f2937" strokeWidth={0.5}/>
-                  ))}
+                  {/* Grid + Y-axis tick labels */}
                   {[80,100,120,140,160].map(a=>(
-                    <line key={a} x1={10} y1={toY(a)} x2={190} y2={toY(a)} stroke="#1f2937" strokeWidth={0.5}/>
+                    <g key={a}>
+                      <line x1={10} y1={toY(a)} x2={190} y2={toY(a)} stroke="#1f2937" strokeWidth={0.5}/>
+                      <text x={8} y={toY(a)+2} textAnchor="end" fontSize={5} fill="#6b7280">{a}</text>
+                    </g>
                   ))}
-                  {/* Peer curve */}
-                  <polyline points={curvePoints.join(" ")} fill="none" stroke="#374151" strokeWidth={1.5} strokeDasharray="3,2"/>
+                  {/* X-axis tick labels */}
+                  {[10,15,20,25,30,35,40].map(u=>(
+                    <g key={u}>
+                      <line x1={toX(u)} y1={10} x2={toX(u)} y2={90} stroke="#1f2937" strokeWidth={0.5}/>
+                      <text x={toX(u)} y={96} textAnchor="middle" fontSize={5} fill="#6b7280">{u}%</text>
+                    </g>
+                  ))}
+                  {/* Peer curve (declining: higher usage = lower efficiency) */}
+                  <polyline points={curvePoints.join(" ")} fill="none" stroke="#ef4444" strokeWidth={1.5} opacity={0.7}/>
+                  <text x={toX(38)} y={toY(peerExp(38))-3} fontSize={4.5} fill="#ef4444" textAnchor="end" opacity={0.7}>peer avg</text>
                   {/* Season dots */}
                   {seasons.map((s,i) => {
                     const isLatest = i === seasons.length - 1;
                     const color = isLatest ? "#f97316" : "#60a5fa";
+                    const abovePeer = s.adjOrtg > peerExp(s.usg);
                     return (
                       <g key={s.yr}>
-                        <circle cx={toX(s.usg)} cy={toY(s.adjOrtg)} r={isLatest?5:3.5} fill={color} opacity={isLatest?1:0.8}/>
-                        <text x={toX(s.usg)+6} y={toY(s.adjOrtg)-2} fontSize={6} fill={color}>{s.yr}</text>
+                        <circle cx={toX(s.usg)} cy={toY(s.adjOrtg)} r={isLatest?5:3.5}
+                          fill={abovePeer ? color : "#ef4444"} opacity={isLatest?1:0.8}
+                          stroke={isLatest?"#fed7aa":"none"} strokeWidth={1}/>
+                        <text x={toX(s.usg)+6} y={toY(s.adjOrtg)-2} fontSize={6} fill={color} fontWeight={isLatest?"bold":"normal"}>
+                          {s.yr} ({s.adjOrtg?.toFixed(0)})
+                        </text>
                       </g>
                     );
                   })}
                   {/* Axis labels */}
-                  <text x={100} y={98} fontSize={6} fill="#6b7280" textAnchor="middle">Usage %</text>
-                  <text x={4} y={55} fontSize={6} fill="#6b7280" textAnchor="middle" transform="rotate(-90 4 55)">AdjOrtg</text>
-                  <text x={185} y={toY(peerExp(38))+4} fontSize={5} fill="#4b5563">Avg</text>
+                  <text x={100} y={99} fontSize={5.5} fill="#6b7280" textAnchor="middle">Usage %</text>
+                  <text x={3} y={55} fontSize={5.5} fill="#6b7280" textAnchor="middle" transform="rotate(-90 3 55)">AdjOrtg</text>
                 </svg>
                 <div style={{display:"flex",gap:16,marginTop:6,flexWrap:"wrap"}}>
                   <div style={{display:"flex",alignItems:"center",gap:4}}>
@@ -4918,15 +4930,15 @@ export default function App() {
       <header className="sticky top-0 z-50 px-4 md:px-8 py-3" style={{background:"rgba(8,11,18,0.92)",backdropFilter:"blur(12px)",borderBottom:"1px solid #1f293744"}}>
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3 cursor-pointer" onClick={()=>{setSel(null);setTab("overview");}}>
-            {/* Logo: bell curve + basketball seams — orange lines on dark */}
+            {/* Logo: bell curve + basketball seams */}
             <svg width="36" height="36" viewBox="0 0 100 100" style={{flexShrink:0}}>
               <rect width="100" height="100" rx="14" fill="#0d1117"/>
-              <path d="M8 92 C12 75,25 12,50 12 C75 12,88 75,92 92" fill="none" stroke="#f97316" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"/>
-              <line x1="50" y1="12" x2="50" y2="92" stroke="#f97316" strokeWidth="4" strokeLinecap="round"/>
-              <path d="M22 55 C35 55,65 55,78 55" fill="none" stroke="#f97316" strokeWidth="4" strokeLinecap="round"/>
-              <path d="M30 22 C38 46,62 46,70 22" fill="none" stroke="#f97316" strokeWidth="4" strokeLinecap="round"/>
-              <path d="M15 78 C24 60,35 65,42 92" fill="none" stroke="#f97316" strokeWidth="3.5" strokeLinecap="round"/>
-              <path d="M85 78 C76 60,65 65,58 92" fill="none" stroke="#f97316" strokeWidth="3.5" strokeLinecap="round"/>
+              <path d="M10 90 C14 72,28 14,50 14 C72 14,86 72,90 90" fill="none" stroke="#f97316" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"/>
+              <line x1="50" y1="14" x2="50" y2="90" stroke="#f97316" strokeWidth="3.5" strokeLinecap="round"/>
+              <line x1="22" y1="52" x2="78" y2="52" stroke="#f97316" strokeWidth="3.5" strokeLinecap="round"/>
+              <path d="M28 20 C36 48,64 48,72 20" fill="none" stroke="#f97316" strokeWidth="3.5" strokeLinecap="round"/>
+              <path d="M17 74 C28 56,38 62,44 90" fill="none" stroke="#f97316" strokeWidth="3" strokeLinecap="round"/>
+              <path d="M83 74 C72 56,62 62,56 90" fill="none" stroke="#f97316" strokeWidth="3" strokeLinecap="round"/>
             </svg>
             <div>
               <div className="font-bold text-sm tracking-wider" style={{fontFamily:"'Oswald',sans-serif",color:"#f97316"}}>PROSPECT THEORY</div>
