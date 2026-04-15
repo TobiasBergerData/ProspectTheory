@@ -1646,7 +1646,10 @@ function ClassScatterAndDev({p}) {
 
   if (!p) return null;
 
-  const peerExp = (usg) => -0.0052*usg*usg + 1.6262*usg + 69.51;
+  // Usage-efficiency tradeoff: AdjOrtg DECLINES as usage increases.
+  // At USG=10% (spot-up): ~147. At USG=25% (secondary): ~121. At USG=35% (primary): ~100.
+  // This is the INDIVIDUAL expectation, not the cross-sectional population effect.
+  const peerExp = (usg) => 160 - 1.2*usg - 0.015*usg*usg;
   const playerUsg  = p.usg  || p.skillCurve?.curUsg || 0;
   const playerOrtg = p.ortg || p.skillCurve?.curAdjOrtg || 0;
 
@@ -2052,27 +2055,32 @@ function MindTab({p}) {
   const ZoneRow = ({zone, label, color, data}) => {
     if (!data) return null;
     const {eFG, selfPct, fga} = data;
+    const asstPct = selfPct != null ? (100 - selfPct) : null; // assisted = 1 - self%
     const avg = ZONE_AVG[zone] || {};
+    const avgAsst = avg.selfPct != null ? (100 - avg.selfPct) : null;
     const efgColor = eFG >= 65 ? "#22c55e" : eFG >= 55 ? "#86efac" : eFG >= 45 ? "#fbbf24" : "#ef4444";
     const selfColor = selfPct >= 60 ? "#f97316" : selfPct >= 35 ? "#fbbf24" : "#6b7280";
+    const asstColor = asstPct >= 70 ? "#60a5fa" : asstPct >= 50 ? "#3b82f6" : "#6b7280";
     const efgDelta = avg.eFG ? eFG - avg.eFG : null;
-    const selfDelta = avg.selfPct ? selfPct - avg.selfPct : null;
     return (
-      <div style={{display:"grid",gridTemplateColumns:"80px 70px 60px 70px 60px 45px",gap:6,alignItems:"center",padding:"5px 0",borderBottom:"1px solid #1f2937"}}>
-        <div style={{display:"flex",alignItems:"center",gap:5}}>
-          <div style={{width:7,height:7,borderRadius:"50%",background:color,flexShrink:0}}/>
+      <div style={{display:"grid",gridTemplateColumns:"70px 65px 50px 55px 50px 55px 50px 40px",gap:4,alignItems:"center",padding:"5px 0",borderBottom:"1px solid #1f2937"}}>
+        <div style={{display:"flex",alignItems:"center",gap:4}}>
+          <div style={{width:6,height:6,borderRadius:"50%",background:color,flexShrink:0}}/>
           <span style={{fontSize:11,fontWeight:600,color:"#e5e7eb"}}>{label}</span>
         </div>
         <div style={{textAlign:"right",fontSize:12,fontWeight:700,color:efgColor}}>
           {eFG?.toFixed(1)}%
-          {efgDelta!=null&&<span style={{fontSize:9,marginLeft:3,color:efgDelta>0?"#22c55e":"#ef4444"}}>{efgDelta>0?"+":""}{efgDelta.toFixed(1)}</span>}
+          {efgDelta!=null&&<span style={{fontSize:8,marginLeft:2,color:efgDelta>0?"#22c55e":"#ef4444"}}>{efgDelta>0?"+":""}{efgDelta.toFixed(0)}</span>}
         </div>
         <div style={{textAlign:"right",fontSize:10,color:"#4b5563"}}>{avg.eFG?.toFixed(1)}%</div>
-        <div style={{textAlign:"right",fontSize:12,color:selfColor}}>
+        <div style={{textAlign:"right",fontSize:12,fontWeight:600,color:selfColor}}>
           {selfPct?.toFixed(0)}%
-          {selfDelta!=null&&<span style={{fontSize:9,marginLeft:3,color:"#6b7280"}}>{selfDelta>0?"+":""}{selfDelta.toFixed(0)}</span>}
         </div>
         <div style={{textAlign:"right",fontSize:10,color:"#4b5563"}}>{avg.selfPct?.toFixed(0)}%</div>
+        <div style={{textAlign:"right",fontSize:12,color:asstColor}}>
+          {asstPct?.toFixed(0)}%
+        </div>
+        <div style={{textAlign:"right",fontSize:10,color:"#4b5563"}}>{avgAsst?.toFixed(0)}%</div>
         <div style={{textAlign:"right",fontSize:11,color:"#6b7280"}}>{fga}</div>
       </div>
     );
@@ -2177,13 +2185,15 @@ function MindTab({p}) {
         {/* Zone breakdown */}
         {zones && Object.keys(zones).length > 0 && (
           <div style={{background:"#0f172a",borderRadius:8,padding:"12px 14px"}}>
-            <div style={{fontSize:11,fontWeight:600,color:"#9ca3af",marginBottom:10,letterSpacing:0.5}}>ZONE BREAKDOWN — LEVERAGE WEIGHT &amp; EFFICIENCY</div>
-            <div style={{display:"grid",gridTemplateColumns:"80px 70px 60px 70px 60px 45px",gap:6,marginBottom:6}}>
+            <div style={{fontSize:11,fontWeight:600,color:"#9ca3af",marginBottom:10,letterSpacing:0.5}}>ZONE BREAKDOWN — EFFICIENCY &amp; CREATION</div>
+            <div style={{display:"grid",gridTemplateColumns:"70px 65px 50px 55px 50px 55px 50px 40px",gap:4,marginBottom:6}}>
               <div style={{fontSize:9,color:"#4b5563"}}>Zone</div>
-              <div style={{textAlign:"right",fontSize:9,color:"#9ca3af",fontWeight:600}}>eFG%</div>
-              <div style={{textAlign:"right",fontSize:9,color:"#4b5563"}}>Avg</div>
-              <div style={{textAlign:"right",fontSize:9,color:"#9ca3af",fontWeight:600}}>Self%</div>
-              <div style={{textAlign:"right",fontSize:9,color:"#4b5563"}}>Avg</div>
+              <div style={{textAlign:"right",fontSize:9,color:"#f97316",fontWeight:600}}>eFG%</div>
+              <div style={{textAlign:"right",fontSize:8,color:"#4b5563"}}>Avg</div>
+              <div style={{textAlign:"right",fontSize:9,color:"#f97316",fontWeight:600}}>Self%</div>
+              <div style={{textAlign:"right",fontSize:8,color:"#4b5563"}}>Avg</div>
+              <div style={{textAlign:"right",fontSize:9,color:"#60a5fa",fontWeight:600}}>Asst%</div>
+              <div style={{textAlign:"right",fontSize:8,color:"#4b5563"}}>Avg</div>
               <div style={{textAlign:"right",fontSize:9,color:"#4b5563"}}>FGA</div>
             </div>
             {["rim","mid","three","dunk"].map(z => {
@@ -2540,7 +2550,7 @@ function DevTrajectoryTab({p}) {
   if (!p) return null;
 
   // Season-by-season: reuse peer curve from skillCurve section
-  const peerExpDev = (usg) => -0.0052*usg*usg + 1.6262*usg + 69.51;
+  const peerExpDev = (usg) => 160 - 1.2*usg - 0.015*usg*usg;
 
   const SeasonTable = () => {
     if (!p.skillCurve) return null;
