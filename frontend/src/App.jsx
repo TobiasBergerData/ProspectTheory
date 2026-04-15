@@ -4919,7 +4919,16 @@ export default function App() {
       <header className="sticky top-0 z-50 px-4 md:px-8 py-3" style={{background:"rgba(8,11,18,0.92)",backdropFilter:"blur(12px)",borderBottom:"1px solid #1f293744"}}>
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3 cursor-pointer" onClick={()=>{setSel(null);setTab("overview");}}>
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm" style={{background:"linear-gradient(135deg,#f97316,#ea580c)",color:"#000"}}>PT</div>
+            {/* Logo: bell curve + basketball seams carved from orange square */}
+            <svg width="36" height="36" viewBox="0 0 100 100" style={{flexShrink:0}}>
+              <rect width="100" height="100" rx="14" fill="#f97316"/>
+              <path d="M10 88 C10 88,28 14,50 14 C72 14,90 88,90 88" fill="none" stroke="#0d1117" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round"/>
+              <line x1="50" y1="14" x2="50" y2="88" stroke="#0d1117" strokeWidth="4.5" strokeLinecap="round"/>
+              <line x1="18" y1="56" x2="82" y2="56" stroke="#0d1117" strokeWidth="4.5" strokeLinecap="round"/>
+              <path d="M30 18 C38 44,62 44,70 18" fill="none" stroke="#0d1117" strokeWidth="4.5" strokeLinecap="round"/>
+              <path d="M18 72 C28 56,36 62,38 88" fill="none" stroke="#0d1117" strokeWidth="3.5" strokeLinecap="round"/>
+              <path d="M82 72 C72 56,64 62,62 88" fill="none" stroke="#0d1117" strokeWidth="3.5" strokeLinecap="round"/>
+            </svg>
             <div>
               <div className="font-bold text-sm tracking-wider" style={{fontFamily:"'Oswald',sans-serif",color:"#f97316"}}>PROSPECT THEORY</div>
               <div className="flex items-center gap-2">
