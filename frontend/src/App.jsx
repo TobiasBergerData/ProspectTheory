@@ -355,8 +355,9 @@ function computeBadges(p) {
       && !red.includes("Spacing Killer"))  red.push("Non-Spacing Perimeter");
   // All-Offense Big — only if BLK% and DBPM data exist
   if (isB && p.blkP != null && p.dbpm != null && blkP < 2.5 && dbpm < 1.5)  red.push("All-Offense Big");
-  // FT Concern — only if FT% data exists
-  if (p.ft != null && ft < 65 && usg > 25)                          red.push("FT Concern");
+  // FT Concern — requires real FT% data (≥30% filters out data artefacts with 0-5 FT attempts)
+  // 1612 players had ft_pct < 65 including many with ft=0.8% (1-2 FTA entire season).
+  if (p.ft != null && ft >= 30 && ft < 65 && usg > 25)              red.push("FT Concern");
   // Passive Defender — low stocks + low fouls = not engaging (Session 9b)
   const stocks = (p.stlP ?? 0) + (p.blkP ?? 0);
   const fouls40 = p.fouls40 ?? 0;
@@ -727,12 +728,18 @@ function mapProfile(d) {
   // Additional stat-validation: server badges must also pass client-side stat checks
   const statValidate = (badge) => {
     const _astP = tmpP.astP ?? 0;
-    const _astTov = tmpP.astTov ?? 1.5;
-    const _selfCreation = d.self_creation ?? d.self_creation_idx ?? d.self_creation_pct ?? 0;
+    // Only enforce astTov check if the field actually exists in the data.
+    // Many profiles don't store ast_to/ast_tov, and the fallback default (1.5) must not
+    // incorrectly reject badges like Floor General (Trae Young: ast_p=48 but ast_to missing → default 1.5 < 2.2 → WRONG).
+    const hasAstTovData = d.ast_to != null || d.ast_tov != null || d.astTov != null;
+    const _astTov = hasAstTovData ? (tmpP.astTov ?? 1.5) : 2.5; // assume adequate when not stored
+    // self_creation_raw is the correct field in the DB (not self_creation/self_creation_pct)
+    const _selfCreation = d.self_creation_raw ?? d.self_creation ?? d.self_creation_idx ?? d.self_creation_pct ?? 0;
     if (badge === "Passing Hub" && !(_astP > 18 && _astTov > 1.2)) return false;
-    if (badge === "Floor General" && !(_astTov > 2.2 && _astP > 25)) return false; // matches computeBadges thresholds
+    if (badge === "Floor General" && !(_astP > 25)) return false; // primary gate: high AST%
+    if (badge === "Floor General" && hasAstTovData && !(_astTov > 1.8)) return false; // secondary: astTov only when available
     if (badge === "Self-Creator" && !(_selfCreation > 70)) return false;
-    if (badge === "Tunnel Vision" && !(tmpP.astTov != null && _astTov < 0.8)) return false;
+    if (badge === "Tunnel Vision" && !(hasAstTovData && _astTov < 0.8)) return false;
     return true;
   };
   const serverGreen = filterByPos(
@@ -878,7 +885,13 @@ function mapProfile(d) {
     // Session 9: per-player feature contribution drivers
     projectionBoosters: d.projection_boosters ?? d.proj_boost ?? "",
     projectionLimiters: d.projection_limiters ?? d.proj_limit ?? "",
-    statComps:[], anthroComps:[], hasCombine: null, seasonLines: d.seasonLines || [],
+    statComps:[], anthroComps:[], hasCombine: null,
+    // Filter seasonLines: only seasons up to and including the player's draft year (p.yr)
+    // and with meaningful GP (≥8) to exclude name-collision artefacts from same-name players.
+    seasonLines: (d.seasonLines || []).filter(s =>
+      (s.gp == null || s.gp >= 8) &&
+      (d.yr == null || s.yr == null || s.yr <= d.yr)
+    ),
     comb: d.combine || null,
     posPlaymaker:d.pos_playmaker, posWing:d.pos_wing, posBig:d.pos_big,
   };
@@ -4328,6 +4341,7 @@ function RangeView({ players, gmRisk }) {
             TIER_STACK[0]
           );
           const barColor = domTier.color;
+          const posColor = posColors[p.pos] || "#6b7280";
 
           // Dim the half that is de-emphasised for the active GM mode
           const upOp = gmRisk === "floor"    ? 0.22 : 0.85;
@@ -4348,8 +4362,8 @@ function RangeView({ players, gmRisk }) {
                 <rect x={0} y={PAD_TOP + i * ROW_H} width={W} height={ROW_H} fill="#ffffff" opacity={0.012}/>
               )}
 
-              {/* Tier color indicator on far left edge — matches the bar color */}
-              <rect x={0} y={PAD_TOP + i * ROW_H + 2} width={3} height={ROW_H - 4} fill={barColor} opacity={0.85} rx={1}/>
+              {/* Position color indicator — left edge: blue=Playmaker, orange=Wing, purple=Big */}
+              <rect x={0} y={PAD_TOP + i * ROW_H + 2} width={3} height={ROW_H - 4} fill={posColor} opacity={0.8} rx={1}/>
 
               {/* Rank number */}
               <text x={RANK_W - 3} y={rowY + 3.5} fontSize={7.5} fill="#4b5563" textAnchor="end">{i + 1}</text>
@@ -4398,9 +4412,17 @@ function RangeView({ players, gmRisk }) {
           );
         })}
 
+        {/* ── Position legend (left edge indicators) ── */}
+        {[["Playmaker","#3b82f6"],["Wing","#f97316"],["Big","#8b5cf6"]].map(([pos,col],i)=>(
+          <g key={pos}>
+            <rect x={4 + i * 56} y={H - 20} width={4} height={8} rx={1} fill={col} opacity={0.8}/>
+            <text x={12 + i * 56} y={H - 13} fontSize={6} fill={col} opacity={0.75}>{pos}</text>
+          </g>
+        ))}
+
         {/* ── Caption ── */}
         <text x={LEFT_CHT + CHART_W / 2} y={H - 5} fontSize={6} fill="#374151" textAnchor="middle">
-          bar = p10–p90 projection range · dot = median ppWA · overlapping bars = statistically interchangeable prospects
+          bar = p10–p90 projection range · dot = median ppWA · overlapping bars = statistically interchangeable prospects · left stripe = position
         </text>
       </svg>
     </div>
