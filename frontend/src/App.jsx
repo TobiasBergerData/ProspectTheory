@@ -1531,9 +1531,9 @@ function ShootingTab({p}) {
               </div>
               {/* Self-creation distribution: pie-like summary */}
               {totalSelfMakes > 5 && (
-                <div className="mt-3 py-3 rounded-lg" style={{background:"#0d1117",border:"1px solid #1e293b"}}>
-                  <div className="text-xs mb-2 px-3 font-semibold" style={{color:"#9ca3af"}}>Self-Created Shot Distribution</div>
-                  <div className="flex gap-0.5 h-8 rounded-md overflow-hidden mx-1">
+                <div className="mt-3 py-4 rounded-lg" style={{background:"#0d1117",border:"1px solid #1e293b"}}>
+                  <div className="text-sm mb-3 px-3 font-bold" style={{color:"#e5e7eb"}}>Self-Created Shot Distribution</div>
+                  <div className="flex gap-0.5 rounded-lg overflow-hidden" style={{height:40,margin:"0 8px"}}>
                     {zones.map(z => {
                       const share = totalSelfMakes > 0 ? selfMakesByZone[z] / totalSelfMakes * 100 : 0;
                       return share > 0 ? (
@@ -3514,23 +3514,26 @@ function BodyTab({p}) {
     const W=580, H=320, PAD={l:46,r:20,t:16,b:38};
     const IW=W-PAD.l-PAD.r, IH=H-PAD.t-PAD.b;
 
-    const allHt = pts.map(c=>c.ht);
+    // AXES: X = Wingspan, Y = Height (user request)
     const allWs = pts.map(c=>c.ws);
-    const minHt=Math.max(68,Math.min(...allHt)-1), maxHt=Math.min(96,Math.max(...allHt)+1);
+    const allHt = pts.map(c=>c.ht);
     const minWs=Math.max(70,Math.min(...allWs)-1), maxWs=Math.min(100,Math.max(...allWs)+1);
-    const xS=(ht)=>PAD.l+(ht-minHt)/(maxHt-minHt)*IW;
-    const yS=(ws)=>PAD.t+IH-(ws-minWs)/(maxWs-minWs)*IH;
+    const minHt=Math.max(68,Math.min(...allHt)-1), maxHt=Math.min(96,Math.max(...allHt)+1);
+    const xS=(ws)=>PAD.l+(ws-minWs)/(maxWs-minWs)*IW;  // X = wingspan
+    const yS=(ht)=>PAD.t+IH-(ht-minHt)/(maxHt-minHt)*IH;  // Y = height
 
     const pHt = p.htIn || (hasCombine ? p.comb?.height_ns : null);
-    const pWs = p.ws || (hasCombine ? p.comb?.wingspan : null) || estimatedWs;
+    const pWsBase = p.ws || (hasCombine ? p.comb?.wingspan : null) || estimatedWs;
     const pWt = p.wt || (hasCombine ? p.comb?.weight : null) || estimatedWt;
 
-    // Filter: highlight players within wsFilter/wtFilter range of the prospect
+    // Wingspan slider dynamically MOVES the player dot on the X axis
+    // wsFilter > 0: simulates "what if wingspan were ±N inches different"
+    const pWs = pWsBase + wsFilter;  // dynamic adjustment!
+
+    // Highlight combine players near the simulated wingspan
     const inRange = (c) => {
-      if (wsFilter===0 && wtFilter===0) return true;
-      const wsDiff = wsFilter>0 ? Math.abs((c.ws||0)-(pWs||0)) <= wsFilter : true;
-      const wtDiff = wtFilter>0 ? Math.abs((c.wt||0)-(pWt||0)) <= wtFilter : true;
-      return wsDiff && wtDiff;
+      if (wsFilter === 0) return true;
+      return Math.abs((c.ws||0) - pWs) <= 2;  // within 2" of simulated position
     };
 
     const rSize = (wt) => {
@@ -3538,8 +3541,8 @@ function BodyTab({p}) {
       return Math.max(3, Math.min(9, ((wt - 170) / 130) * 6 + 3));
     };
 
-    const xTicks = [70,72,74,76,78,80,82,84,86,88].filter(v=>v>=minHt&&v<=maxHt);
-    const yTicks = [72,76,80,84,88,92,96].filter(v=>v>=minWs&&v<=maxWs);
+    const xTicks = [72,74,76,78,80,82,84,86,88,90,92,94].filter(v=>v>=minWs&&v<=maxWs);
+    const yTicks = [68,70,72,74,76,78,80,82,84,86,88].filter(v=>v>=minHt&&v<=maxHt);
 
     return (
       <div style={{position:"relative"}}>
@@ -3562,46 +3565,47 @@ function BodyTab({p}) {
           </div>
         )}
         <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{overflow:"visible"}}>
-          {/* Grid */}
-          {yTicks.map(ws=>(
-            <g key={ws}>
-              <line x1={PAD.l} x2={W-PAD.r} y1={yS(ws)} y2={yS(ws)} stroke="#1f2937" strokeWidth={1}/>
-              <text x={PAD.l-4} y={yS(ws)+4} textAnchor="end" fontSize={8} fill="#4b5563">{ws}"</text>
-            </g>
-          ))}
-          {xTicks.map(ht=>(
+          {/* Grid — Y = Height */}
+          {yTicks.map(ht=>(
             <g key={ht}>
-              <line x1={xS(ht)} x2={xS(ht)} y1={PAD.t} y2={H-PAD.b} stroke="#1f2937" strokeWidth={1}/>
-              <text x={xS(ht)} y={H-PAD.b+12} textAnchor="middle" fontSize={8} fill="#4b5563">{Math.floor(ht/12)}'{ht%12}"</text>
+              <line x1={PAD.l} x2={W-PAD.r} y1={yS(ht)} y2={yS(ht)} stroke="#1f2937" strokeWidth={1}/>
+              <text x={PAD.l-4} y={yS(ht)+4} textAnchor="end" fontSize={8} fill="#4b5563">{Math.floor(ht/12)}'{ht%12}"</text>
             </g>
           ))}
-          {/* Equal wingspan line (ws=ht) */}
-          <line x1={xS(minHt)} x2={xS(Math.min(maxHt,maxWs))} y1={yS(minHt)} y2={yS(Math.min(maxHt,maxWs))}
+          {/* Grid — X = Wingspan */}
+          {xTicks.map(ws=>(
+            <g key={ws}>
+              <line x1={xS(ws)} x2={xS(ws)} y1={PAD.t} y2={H-PAD.b} stroke="#1f2937" strokeWidth={1}/>
+              <text x={xS(ws)} y={H-PAD.b+12} textAnchor="middle" fontSize={8} fill="#4b5563">{ws}"</text>
+            </g>
+          ))}
+          {/* Equal line (ws=ht) */}
+          <line x1={xS(minWs)} x2={xS(Math.min(maxWs,maxHt))} y1={yS(minWs)} y2={yS(Math.min(maxWs,maxHt))}
             stroke="#374151" strokeWidth={1} strokeDasharray="4,3" opacity={0.5}/>
-          <text x={xS(minHt)+2} y={yS(minHt)-3} fontSize={8} fill="#4b5563" opacity={0.6}>WS=Ht</text>
+          <text x={xS(minWs)+2} y={yS(minWs)-3} fontSize={8} fill="#4b5563" opacity={0.6}>WS=Ht</text>
           {/* Axis labels */}
-          <text x={W/2} y={H-PAD.b+26} textAnchor="middle" fontSize={10} fill="#6b7280">Height (no shoes)</text>
-          <text x={12} y={H/2} textAnchor="middle" fontSize={10} fill="#6b7280" transform={`rotate(-90,12,${H/2})`}>Wingspan</text>
-          {/* All combine players */}
+          <text x={W/2} y={H-PAD.b+28} textAnchor="middle" fontSize={10} fill="#6b7280">Wingspan (inches)</text>
+          <text x={12} y={H/2} textAnchor="middle" fontSize={10} fill="#6b7280" transform={`rotate(-90,12,${H/2})`}>Height (no shoes)</text>
+          {/* All combine players: X=ws, Y=ht */}
           {pts.filter(c=>c.name!==p.name).map((c,i)=>{
-            const hilit = inRange(c) && (wsFilter>0||wtFilter>0);
+            const hilit = inRange(c) && wsFilter > 0;
             const r = rSize(c.wt);
             const baseColor = hilit ? "#60a5fa" : "#374151";
             const stroke = hilit ? "#93c5fd" : "#4b5563";
             return (
-              <circle key={i} cx={xS(c.ht)} cy={yS(c.ws)} r={r}
+              <circle key={i} cx={xS(c.ws)} cy={yS(c.ht)} r={r}
                 fill={baseColor} stroke={stroke} strokeWidth={0.5} opacity={hilit?0.85:0.55}
                 style={{cursor:"pointer"}}
                 onMouseEnter={(e)=>{setHoverPlayer(c);setHoverPos({x:e.clientX,y:e.clientY});}}
                 onMouseLeave={()=>setHoverPlayer(null)}/>
             );
           })}
-          {/* Prospect dot */}
+          {/* Prospect dot — moves with wsFilter! */}
           {pHt && pWs && (
             <g>
-              <circle cx={xS(pHt)} cy={yS(pWs)} r={rSize(pWt)+3} fill="#f97316" stroke="#fed7aa" strokeWidth={2} opacity={0.95}/>
-              <text x={xS(pHt)+12} y={yS(pWs)+4} fontSize={11} fontWeight="bold" fill="#f97316"
-                style={{textShadow:"0 0 4px #000"}}>{p.name?.split(" ").slice(-1)[0]}</text>
+              <circle cx={xS(pWs)} cy={yS(pHt)} r={rSize(pWt)+3} fill="#f97316" stroke="#fed7aa" strokeWidth={2} opacity={0.95}/>
+              <text x={xS(pWs)+12} y={yS(pHt)+4} fontSize={11} fontWeight="bold" fill="#f97316"
+                style={{textShadow:"0 0 4px #000"}}>{p.name?.split(" ").slice(-1)[0]}{wsFilter!==0?` (${wsFilter>0?"+":""}${wsFilter}")`:""}</text>
             </g>
           )}
         </svg>
@@ -3667,40 +3671,25 @@ function BodyTab({p}) {
       </Sec>
 
       {/* ── NBA COMBINE SCATTER ── */}
-      <Sec icon="📐" title="NBA Combine: Height vs. Wingspan"
-        sub="All draft combine attendees 2000–2024. X-axis = height (no shoes), Y-axis = wingspan, point size = weight. Orange = selected player. Hover any dot for measurements. Use sliders to highlight players in a similar body profile.">
-        {/* Filter sliders */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 p-4 rounded-xl" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
-          <div>
-            <div className="flex justify-between mb-1.5">
-              <span className="text-sm font-semibold" style={{color:"#e5e7eb"}}>Wingspan filter range</span>
-              <span className="text-sm font-bold" style={{color:wsFilter>0?"#60a5fa":"#6b7280"}}>
-                {wsFilter===0?"Off":`±${wsFilter}"`}
-              </span>
-            </div>
-            <input type="range" min={0} max={6} step={0.5} value={wsFilter}
-              onChange={e=>setWsFilter(+e.target.value)} className="w-full" style={{accentColor:"#60a5fa"}}/>
-            <div className="flex justify-between text-xs mt-1" style={{color:"#374151"}}>
-              <span>Off (show all)</span><span>Narrow window</span><span>±6"</span>
-            </div>
+      <Sec icon="📐" title="NBA Combine: Wingspan vs. Height"
+        sub="All draft combine attendees 2000–2024. X = wingspan, Y = height, point size = weight. Orange dot = selected player (moves with slider). Drag the wingspan slider to simulate different wingspans and see where the player would land.">
+        {/* Wingspan simulator slider */}
+        <div className="mb-4 p-4 rounded-xl" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+          <div className="flex justify-between mb-1.5">
+            <span className="text-sm font-semibold" style={{color:"#e5e7eb"}}>Wingspan Simulator</span>
+            <span className="text-sm font-bold" style={{color:wsFilter!==0?"#f97316":"#6b7280"}}>
+              {wsFilter===0 ? `Actual: ${(p.ws||estimatedWs).toFixed(1)}"` : `Simulated: ${((p.ws||estimatedWs)+wsFilter).toFixed(1)}" (${wsFilter>0?"+":""}${wsFilter}")`}
+            </span>
           </div>
-          <div>
-            <div className="flex justify-between mb-1.5">
-              <span className="text-sm font-semibold" style={{color:"#e5e7eb"}}>Weight filter range</span>
-              <span className="text-sm font-bold" style={{color:wtFilter>0?"#60a5fa":"#6b7280"}}>
-                {wtFilter===0?"Off":`±${wtFilter} lbs`}
-              </span>
-            </div>
-            <input type="range" min={0} max={40} step={5} value={wtFilter}
-              onChange={e=>setWtFilter(+e.target.value)} className="w-full" style={{accentColor:"#60a5fa"}}/>
-            <div className="flex justify-between text-xs mt-1" style={{color:"#374151"}}>
-              <span>Off (show all)</span><span>Similar weight</span><span>±40 lbs</span>
-            </div>
+          <input type="range" min={-4} max={6} step={0.5} value={wsFilter}
+            onChange={e=>setWsFilter(+e.target.value)} className="w-full" style={{accentColor:"#f97316"}}/>
+          <div className="flex justify-between text-xs mt-1" style={{color:"#374151"}}>
+            <span>−4" shorter</span><span>Actual wingspan</span><span>+6" longer</span>
           </div>
-          {(wsFilter>0||wtFilter>0)&&(
-            <div className="md:col-span-2 flex justify-end">
-              <button onClick={()=>{setWsFilter(0);setWtFilter(0);}}
-                className="text-xs px-3 py-1 rounded" style={{background:"#1f2937",color:"#9ca3af"}}>Reset filters</button>
+          {wsFilter!==0&&(
+            <div className="mt-2 flex justify-end">
+              <button onClick={()=>setWsFilter(0)}
+                className="text-xs px-3 py-1 rounded" style={{background:"#1f2937",color:"#9ca3af"}}>Reset to actual</button>
             </div>
           )}
         </div>
