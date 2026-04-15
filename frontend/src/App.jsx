@@ -291,8 +291,9 @@ function computeBadges(p) {
   // Transition Terror (with fallback for no dunk data)
   if ((isG || isW) && p.stlP != null && stlP > 2.5 && dunkR > 8)    green.push("Transition Terror");
   else if ((isG || isW) && stlP > 2.8 && twoPct > 55)               green.push("Transition Terror");
-  // FT Grifter
-  if (p.ftr != null && ftr > 45 && (rimF > 25 || usg > 24))         green.push("FT Grifter");
+  // FT Grifter: elite contact creator. Threshold raised to 60 FTA/100 FGA (true outlier).
+  // rimF > 35 guards against players who only draw fouls on few rim attempts.
+  if (p.ftr != null && ftr > 60 && (rimF > 35 || usg > 26))         green.push("FT Grifter");
   // Efficient High Usage
   if (p.usg != null && usg > 28 && toP < 12 && ts > 58)             green.push("Efficient High Usage");
   // High Feel Athlete
@@ -327,8 +328,8 @@ function computeBadges(p) {
   else if ((isW || isB) && ftr > 45 && astP > 15)                   yellow.push("Interior Engine");
 
   // ═══ RED BADGES ═══
-  // Spacing Killer — only if 3P data actually exists
-  if ((isG || isW) && p.tp != null && p.threeF != null && tp < 30 && threeF < 18)  red.push("Spacing Killer");
+  // Spacing Killer — stricter: very low 3P% AND very low 3PA rate
+  if ((isG || isW) && p.tp != null && p.threeF != null && tp < 28 && threeF < 16)  red.push("Spacing Killer");
   // Efficiency Trap
   if (p.usg != null && p.ts != null && usg > 26 && ts < 52)         red.push("Efficiency Trap");
   // Empty Calorie Scorer (stricter bust signal)
@@ -349,8 +350,9 @@ function computeBadges(p) {
   if (isB && p.drbP != null && p.blkP != null && (drbP < 15 || blkP < 1.5))  red.push("Liability Big");
   // Defensive Target (adjusted)
   if (isG && htIn < 74 && p.dbpm != null && dbpm < -1.0)            red.push("Defensive Target");
-  // Non-Spacing Perimeter — guards AND wings who can't shoot
-  if ((isG || isW) && p.tp != null && p.threeF != null && tp < 30 && threeF < 20)  red.push("Non-Spacing Perimeter");
+  // Non-Spacing Perimeter — only if Spacing Killer not already assigned (avoid double-badge)
+  if ((isG || isW) && p.tp != null && p.threeF != null && tp < 30 && threeF < 20
+      && !red.includes("Spacing Killer"))  red.push("Non-Spacing Perimeter");
   // All-Offense Big — only if BLK% and DBPM data exist
   if (isB && p.blkP != null && p.dbpm != null && blkP < 2.5 && dbpm < 1.5)  red.push("All-Offense Big");
   // FT Concern — only if FT% data exists
@@ -1034,11 +1036,17 @@ function OverviewTab({p, compTier, setCompTier}) {
       <Sec icon="⚡" title="Advanced" sub="Rate stats that capture efficiency and impact independent of role. BPM and ORtg are the strongest NBA translation signals.">
         <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
           {[["BPM",p.bpm,p.pctl?.bpm],["OBPM",p.obpm,p.pctl?.obpm],
-            ...(p.ogbpm != null ? [["O-GBPM",p.ogbpm,null]] : []),
+            ...(p.ogbpm != null ? [["O-GBPM", p.ogbpm,
+              p.pctl?.ogbpm ??
+              // Client-side percentile estimate: lookup table (D1 NCAA OGBPM distribution)
+              (p.ogbpm >= 12 ? 99 : p.ogbpm >= 9 ? 97 : p.ogbpm >= 7 ? 94 : p.ogbpm >= 5 ? 89
+               : p.ogbpm >= 3 ? 79 : p.ogbpm >= 1 ? 63 : p.ogbpm >= 0 ? 51
+               : p.ogbpm >= -1 ? 39 : p.ogbpm >= -3 ? 22 : p.ogbpm >= -5 ? 10 : 4)
+            ]] : []),
             ["DBPM",p.dbpm,p.pctl?.dbpm],["ORtg",p.ortg,p.pctl?.ortg],
             ["USG%",p.usg,p.pctl?.usg],["TS%",p.ts,p.pctl?.ts],["AST%",p.astP,p.pctl?.ast],["TO%",p.toP,p.pctl?.to],
             ["ORB%",p.orbP,p.pctl?.orb],["DRB%",p.drbP,p.pctl?.drb],["STL%",p.stlP,p.pctl?.stl],["BLK%",p.blkP,p.pctl?.blk]
-          ].map(([l,v,pc])=><StatCell key={l} label={l} val={v} pctl={pc} tooltip={l==="O-GBPM"?"Offensive Game-Adjusted BPM (BartTorvik) — opponent-adjusted offensive impact":undefined}/>)}
+          ].map(([l,v,pc])=><StatCell key={l} label={l} val={v} pctl={pc} tooltip={l==="O-GBPM"?"Offensive Game-Adjusted BPM (BartTorvik) — opponent-adjusted offensive impact. Percentile vs. all D1 players.":undefined}/>)}
         </div>
       </Sec>
 
@@ -1935,7 +1943,7 @@ function ClassScatterAndDev({p}) {
     <div className="flex flex-col gap-4">
       {/* 3A: Class Scatter */}
       <Sec icon="🏀" title={`${yr} Class: USG vs AdjOrtg`}
-        sub={`All top prospects, ${yr} — orange dot = ${p.name?.split(" ")[0]}. Orange dashed = peer curve.`}>
+        sub={`All ${yr} class prospects. Orange dot = ${p.name?.split(" ")[0]}. Orange dashed = cross-sectional peer curve (not causal — higher-usage players are better players on average, not more efficient because of usage). Blue = above-peer efficiency, gray = below.`}>
         <div style={{display:"flex",gap:8,marginBottom:8}}>
           {["class","games"].map(m=>(
             <button key={m} onClick={()=>setChartMode(m)}
@@ -2020,19 +2028,38 @@ function MindTab({p}) {
   };
 
   // ── Zone table ──
+  // NCAA D1 approximate league-average zone stats (BartTorvik 2020-2024 average)
+  const ZONE_AVG = {
+    rim:   {eFG: 62.5, selfPct: 42},
+    mid:   {eFG: 40.2, selfPct: 58},
+    three: {eFG: 51.8, selfPct: 38},  // ~34.5% × 1.5
+    dunk:  {eFG: 76.0, selfPct: 22},
+  };
+
   const ZoneRow = ({zone, label, color, data}) => {
     if (!data) return null;
     const {eFG, selfPct, fga} = data;
+    const avg = ZONE_AVG[zone] || {};
     const efgColor = eFG >= 65 ? "#22c55e" : eFG >= 55 ? "#86efac" : eFG >= 45 ? "#fbbf24" : "#ef4444";
     const selfColor = selfPct >= 60 ? "#f97316" : selfPct >= 35 ? "#fbbf24" : "#6b7280";
+    const efgDelta = avg.eFG ? eFG - avg.eFG : null;
+    const selfDelta = avg.selfPct ? selfPct - avg.selfPct : null;
     return (
-      <div style={{display:"grid",gridTemplateColumns:"90px 60px 60px 50px",gap:8,alignItems:"center",padding:"5px 0",borderBottom:"1px solid #1f2937"}}>
-        <div style={{display:"flex",alignItems:"center",gap:6}}>
-          <div style={{width:8,height:8,borderRadius:"50%",background:color,flexShrink:0}}/>
-          <span style={{fontSize:12,fontWeight:600,color:"#e5e7eb"}}>{label}</span>
+      <div style={{display:"grid",gridTemplateColumns:"80px 70px 60px 70px 60px 45px",gap:6,alignItems:"center",padding:"5px 0",borderBottom:"1px solid #1f2937"}}>
+        <div style={{display:"flex",alignItems:"center",gap:5}}>
+          <div style={{width:7,height:7,borderRadius:"50%",background:color,flexShrink:0}}/>
+          <span style={{fontSize:11,fontWeight:600,color:"#e5e7eb"}}>{label}</span>
         </div>
-        <div style={{textAlign:"right",fontSize:12,fontWeight:700,color:efgColor}}>{eFG?.toFixed(1)}%</div>
-        <div style={{textAlign:"right",fontSize:12,color:selfColor}}>{selfPct?.toFixed(0)}%</div>
+        <div style={{textAlign:"right",fontSize:12,fontWeight:700,color:efgColor}}>
+          {eFG?.toFixed(1)}%
+          {efgDelta!=null&&<span style={{fontSize:9,marginLeft:3,color:efgDelta>0?"#22c55e":"#ef4444"}}>{efgDelta>0?"+":""}{efgDelta.toFixed(1)}</span>}
+        </div>
+        <div style={{textAlign:"right",fontSize:10,color:"#4b5563"}}>{avg.eFG?.toFixed(1)}%</div>
+        <div style={{textAlign:"right",fontSize:12,color:selfColor}}>
+          {selfPct?.toFixed(0)}%
+          {selfDelta!=null&&<span style={{fontSize:9,marginLeft:3,color:"#6b7280"}}>{selfDelta>0?"+":""}{selfDelta.toFixed(0)}</span>}
+        </div>
+        <div style={{textAlign:"right",fontSize:10,color:"#4b5563"}}>{avg.selfPct?.toFixed(0)}%</div>
         <div style={{textAlign:"right",fontSize:11,color:"#6b7280"}}>{fga}</div>
       </div>
     );
@@ -2095,8 +2122,11 @@ function MindTab({p}) {
           Standard eFG% weights all attempts equally. <strong style={{color:"#e5e7eb"}}>Leverage-Weighted eFG%</strong> up-weights shots the player created for themselves — because unassisted attempts carry higher difficulty and higher game impact. A player who dominates on self-created shots is a self-sufficient scorer.
         </div>
 
-        {/* Score rings */}
-        <div style={{display:"flex",gap:16,justifyContent:"space-around",marginBottom:24,flexWrap:"wrap"}}>
+        {/* ── Section: Percentile Rankings ── */}
+        <div style={{fontSize:10,fontWeight:700,color:"#6b7280",letterSpacing:1.2,marginBottom:10,borderBottom:"1px solid #1f2937",paddingBottom:6}}>
+          PERCENTILE RANKINGS — vs {(p.seasonLines||[]).slice(-1)[0]?.yr || "current"} class cohort
+        </div>
+        <div style={{display:"flex",gap:16,justifyContent:"space-around",marginBottom:20,flexWrap:"wrap"}}>
           <ScoreRing score={score} label="LW-eFG%" sub="vs cohort" color="#f97316"/>
           <Tip content="Difficulty Premium: how much more (or less) efficient is this player on self-created shots vs. all shots. Positive = better on hard shots.">
             <ScoreRing score={premPctl} label="Difficulty Premium" sub="vs cohort" color="#3b82f6"/>
@@ -2106,6 +2136,10 @@ function MindTab({p}) {
           </Tip>
         </div>
 
+        {/* ── Section: Shot Quality Metrics ── */}
+        <div style={{fontSize:10,fontWeight:700,color:"#6b7280",letterSpacing:1.2,marginBottom:10,borderBottom:"1px solid #1f2937",paddingBottom:6}}>
+          SHOT QUALITY — self-created vs. assisted attempts
+        </div>
         {/* Key numbers */}
         <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:20}}>
           {[
@@ -2131,11 +2165,13 @@ function MindTab({p}) {
         {zones && Object.keys(zones).length > 0 && (
           <div style={{background:"#0f172a",borderRadius:8,padding:"12px 14px"}}>
             <div style={{fontSize:11,fontWeight:600,color:"#9ca3af",marginBottom:10,letterSpacing:0.5}}>ZONE BREAKDOWN — LEVERAGE WEIGHT &amp; EFFICIENCY</div>
-            <div style={{display:"grid",gridTemplateColumns:"90px 60px 60px 50px",gap:8,marginBottom:6}}>
-              <div style={{fontSize:10,color:"#4b5563"}}>Zone</div>
-              <div style={{textAlign:"right",fontSize:10,color:"#4b5563"}}>eFG%</div>
-              <div style={{textAlign:"right",fontSize:10,color:"#4b5563"}}>Self%</div>
-              <div style={{textAlign:"right",fontSize:10,color:"#4b5563"}}>FGA</div>
+            <div style={{display:"grid",gridTemplateColumns:"80px 70px 60px 70px 60px 45px",gap:6,marginBottom:6}}>
+              <div style={{fontSize:9,color:"#4b5563"}}>Zone</div>
+              <div style={{textAlign:"right",fontSize:9,color:"#9ca3af",fontWeight:600}}>eFG%</div>
+              <div style={{textAlign:"right",fontSize:9,color:"#4b5563"}}>Avg</div>
+              <div style={{textAlign:"right",fontSize:9,color:"#9ca3af",fontWeight:600}}>Self%</div>
+              <div style={{textAlign:"right",fontSize:9,color:"#4b5563"}}>Avg</div>
+              <div style={{textAlign:"right",fontSize:9,color:"#4b5563"}}>FGA</div>
             </div>
             {["rim","mid","three","dunk"].map(z => {
               const cfg = ZONE_CONFIG[z];
@@ -3569,14 +3605,14 @@ function BodyTab({p}) {
   return (
     <div className="space-y-5">
       {/* ── PHYSICAL PROFILE ── */}
-      <Sec icon="📏" title="Physical Profile" sub={`Measurements${isWsEstimated||isWtEstimated ? " (≈ = estimated from position average)" : ""}. Wingspan Delta = Wingspan − Height. NBA average: +3" to +4". Ape Index > 1.05 = above average length.`}>
+      <Sec icon="📏" title="Physical Profile" sub={`Measurements${isWsEstimated||isWtEstimated ? " (≈ = estimated from position average)" : ""}. Wingspan Delta = Wingspan − Height. NBA average: +3" to +4". Wingspan Ratio > 1.05 = above average length.`}>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
           {[
             ["Height", htDisplay, false, null],
             ["Weight", `${estimatedWt} lbs`, isWtEstimated, wtLabelColor],
             ["Wingspan", `${estimatedWs.toFixed(1)}"`, isWsEstimated, wsLabelColor],
             ["WS Delta", `${wsDelta >= 0 ? "+" : ""}${wsDelta.toFixed(1)}"`, false, wsLabelColor],
-            ["Ape Index", apeRatio.toFixed(3), false, apeRatio >= 1.06 ? "#22c55e" : apeRatio < 1.02 ? "#ef4444" : "#6b7280"],
+            ["Wingspan Ratio", apeRatio.toFixed(3), false, apeRatio >= 1.06 ? "#22c55e" : apeRatio < 1.02 ? "#ef4444" : "#6b7280"],
           ].map(([l, v, est, accent]) => (
             <div key={l} className="rounded-lg p-3 text-center" style={{background:"#0d1117", border: accent ? `1px solid ${accent}33` : "1px solid #1f2937"}}>
               <div className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>{l}{est ? " ≈" : ""}</div>
@@ -4297,7 +4333,6 @@ function RangeView({ players, gmRisk }) {
           const upOp = gmRisk === "floor"    ? 0.22 : 0.85;
           const dnOp = gmRisk === "ceiling"  ? 0.22 : 0.85;
 
-          const posColor   = posColors[p.pos] || "#6b7280";
           const nameParts  = p.name.split(" ");
           const firstInit  = (nameParts[0] || "?")[0];
           const lastName   = nameParts.slice(1).join(" ").slice(0, 14) || p.name.slice(0, 14);
@@ -4313,8 +4348,8 @@ function RangeView({ players, gmRisk }) {
                 <rect x={0} y={PAD_TOP + i * ROW_H} width={W} height={ROW_H} fill="#ffffff" opacity={0.012}/>
               )}
 
-              {/* Position color indicator on far left edge */}
-              <rect x={0} y={PAD_TOP + i * ROW_H + 2} width={3} height={ROW_H - 4} fill={posColor} opacity={0.75} rx={1}/>
+              {/* Tier color indicator on far left edge — matches the bar color */}
+              <rect x={0} y={PAD_TOP + i * ROW_H + 2} width={3} height={ROW_H - 4} fill={barColor} opacity={0.85} rx={1}/>
 
               {/* Rank number */}
               <text x={RANK_W - 3} y={rowY + 3.5} fontSize={7.5} fill="#4b5563" textAnchor="end">{i + 1}</text>
