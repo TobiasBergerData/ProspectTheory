@@ -4960,14 +4960,16 @@ export default function App() {
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3 cursor-pointer" onClick={()=>{setSel(null);setTab("overview");}}>
             {/* Logo: bell curve + basketball seams */}
-            <svg width="36" height="36" viewBox="0 0 100 100" style={{flexShrink:0}}>
-              <rect width="100" height="100" rx="14" fill="#0d1117"/>
-              <path d="M10 90 C14 72,28 14,50 14 C72 14,86 72,90 90" fill="none" stroke="#f97316" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"/>
-              <line x1="50" y1="14" x2="50" y2="90" stroke="#f97316" strokeWidth="3.5" strokeLinecap="round"/>
-              <line x1="22" y1="52" x2="78" y2="52" stroke="#f97316" strokeWidth="3.5" strokeLinecap="round"/>
-              <path d="M28 20 C36 48,64 48,72 20" fill="none" stroke="#f97316" strokeWidth="3.5" strokeLinecap="round"/>
-              <path d="M17 74 C28 56,38 62,44 90" fill="none" stroke="#f97316" strokeWidth="3" strokeLinecap="round"/>
-              <path d="M83 74 C72 56,62 62,56 90" fill="none" stroke="#f97316" strokeWidth="3" strokeLinecap="round"/>
+            <svg width="36" height="36" viewBox="0 0 200 200" style={{flexShrink:0}}>
+              <rect width="200" height="200" rx="28" fill="#0d1117"/>
+              <g fill="none" stroke="#f97316" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 180 C20 180,50 140,60 90 C70 40,85 20,100 20 C115 20,130 40,140 90 C150 140,180 180,180 180" strokeWidth="9"/>
+                <path d="M100 20 L100 180" strokeWidth="7"/>
+                <path d="M52 120 C70 105,130 105,148 120" strokeWidth="7"/>
+                <path d="M68 42 C80 75,120 75,132 42" strokeWidth="7"/>
+                <path d="M35 160 C50 125,70 135,85 180" strokeWidth="6"/>
+                <path d="M165 160 C150 125,130 135,115 180" strokeWidth="6"/>
+              </g>
             </svg>
             <div>
               <div className="font-bold text-sm tracking-wider" style={{fontFamily:"'Oswald',sans-serif",color:"#f97316"}}>PROSPECT THEORY</div>
