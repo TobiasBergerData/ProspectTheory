@@ -1836,7 +1836,11 @@ function ClassScatterAndDev({p}) {
   // ── DEV TRAJECTORY ────────────────────────────────────────
   const DevTrajectory = () => {
     const allGames = (gameLogs?.games || []).sort((a,b) => a.game_num - b.game_num);
-    if (glLoading) return null;
+    if (glLoading) return (
+      <div style={{height:60,display:"flex",alignItems:"center",justifyContent:"center",color:"#4b5563",fontSize:12}}>
+        Loading in-season data…
+      </div>
+    );
 
     // Metric definitions
     const METRICS = {
@@ -1858,10 +1862,18 @@ function ClassScatterAndDev({p}) {
     const games = allGames.filter(g => g.game_num != null && metric.getter(g) != null && g.min >= 8);
 
     if (games.length < 5) return (
-      <div style={{fontSize:11,color:"#4b5563",padding:"8px 0"}}>
-        {games.length === 0
-          ? "Game log data required for development trajectory analysis. Run fetch_game_logs.py to populate."
-          : `Only ${games.length} qualifying games — need ≥5 to show trajectory.`}
+      <div style={{background:"#0f172a",borderRadius:8,padding:"14px 16px",border:"1px dashed #1e3a5f",textAlign:"center"}}>
+        <div style={{fontSize:13,color:"#4b5563",marginBottom:6}}>📊 In-Season Development</div>
+        <div style={{fontSize:11,color:"#374151"}}>
+          {games.length === 0
+            ? "Game-log data not yet available for this player. Run the game log fetch locally to enable per-game rolling trends."
+            : `Only ${games.length} qualifying games — need ≥5 for rolling trend analysis.`}
+        </div>
+        {games.length === 0 && (
+          <div style={{marginTop:10,fontSize:10,color:"#1e3a5f",background:"#111827",borderRadius:4,padding:"4px 8px",display:"inline-block"}}>
+            <code style={{color:"#f97316"}}>python scripts/fetch_game_logs.py --top-only</code>
+          </div>
+        )}
       </div>
     );
 
@@ -2411,6 +2423,19 @@ function MindTab({p}) {
                   {/* Peer curve (declining: higher usage = lower efficiency) */}
                   <polyline points={curvePoints.join(" ")} fill="none" stroke="#ef4444" strokeWidth={1.5} opacity={0.7}/>
                   <text x={toX(38)} y={toY(peerExp(38))-3} fontSize={4.5} fill="#ef4444" textAnchor="end" opacity={0.7}>peer avg</text>
+                  {/* ±1 SD band around peer curve */}
+                  <path d={
+                    `M ${[...Array(15)].map((_,i)=>{const u=USG_MIN+i*2;return `${toX(u)},${toY(peerExp(u)+18)}`;}).join(" L ")}` +
+                    ` L ${[...Array(15)].reverse().map((_,i)=>{const u=USG_MAX-i*2;return `${toX(u)},${toY(peerExp(u)-18)}`;}).join(" L ")} Z`
+                  } fill="#374151" opacity={0.2}/>
+                  {/* Denser peer cloud: show scatter of typical D1 prospects */}
+                  {[10,13,16,19,22,25,28,31,34,37,40].map(u => {
+                    const base = peerExp(u);
+                    return [-18,-12,-6,0,6,12,18].map((off,oi) => (
+                      <circle key={`p-${u}-${oi}`} cx={toX(u)+(Math.sin(u*oi)*1.5)} cy={toY(base+off)}
+                        r={0.9} fill="#4b5563" opacity={0.35}/>
+                    ));
+                  })}
                   {/* Season dots */}
                   {seasons.map((s,i) => {
                     const isLatest = i === seasons.length - 1;
@@ -3438,16 +3463,16 @@ function ScoutingTab({p}) {
                     {isTriggered && !isRanked && <div className="mt-1 text-xs" style={{color:"#fb923c"}}>✓ Triggered by pipeline thresholds</div>}
                   </div>
                 }>
-                  <div className={`rounded-lg cursor-help transition-all ${isPrimary ? "ring-2 p-4" : isRanked ? "p-4" : "p-3"}`}
+                  <div className={`rounded-lg cursor-help transition-all ${isPrimary ? "p-4" : isRanked ? "p-4" : "p-3"}`}
                     style={{
                       background: isRanked
-                        ? cardColor + (isPrimary ? "1e" : isSecondary ? "14" : "0e")
-                        : isTriggered ? "#f9731608" : "#0d1117",
+                        ? cardColor + (isPrimary ? "30" : isSecondary ? "22" : "16")
+                        : isTriggered ? "#f9731610" : "#0d1117",
                       border: `${isPrimary?"2":"1"}px solid ${isRanked
-                        ? cardColor + (isPrimary ? "cc" : isSecondary ? "77" : "44")
-                        : isTriggered ? "#f9731622" : "#1f293744"}`,
+                        ? cardColor + (isPrimary ? "ff" : isSecondary ? "99" : "55")
+                        : isTriggered ? "#f9731633" : "#1f293766"}`,
                       opacity: cardOpacity,
-                      outline: isPrimary ? `2px solid ${O.pri}55` : "none",
+                      boxShadow: isPrimary ? `0 0 12px ${O.pri}33` : "none",
                     }}>
                     <div className="flex items-center gap-2">
                       {rank && (
@@ -4895,8 +4920,11 @@ export default function App() {
         PLAYERS[name] = mapped;
         setProfileCache(prev => ({...prev, [name]: mapped}));
       }
-    } catch(e) { console.error("Profile fetch failed:", e); }
-    setProfileLoading(false);
+    } catch(e) {
+      console.error("Profile fetch failed:", e);
+    } finally {
+      setProfileLoading(false);
+    }
   };
 
   useEffect(()=>{
@@ -4919,9 +4947,10 @@ export default function App() {
   },[search]);
 
   const p = sel ? (profileCache[sel] || PLAYERS[sel] || null) : null;
-  // pReady: full profile loaded — accept ppwa OR legacy pctl+stats signal
+  // pReady: show profile as soon as we have ANY meaningful data
+  // Board data has war/bpm/usg; full profile adds pctl/ppwa/feel etc.
   const pReady = p && (
-    (p.ppwa != null) ||
+    p.ppwa != null || p.war != null || p.bpm != null ||
     (p.pctl != null && (p.pts != null || p.usg != null || p.feel != null))
   );
 
@@ -4971,9 +5000,16 @@ export default function App() {
             <BigBoardView onSelect={selectPlayer} boardData={boardData} setBoardData={setBoardData} loading={loading} setLoading={setLoading} availableYears={availableYears} yearFilter={yearFilter} setYearFilter={setYearFilter}/>
           )
         ) : profileLoading && !pReady ? (
-          <div className="flex flex-col items-center justify-center py-20">
-            <div className="w-12 h-12 rounded-full border-4 border-t-transparent animate-spin mb-4" style={{borderColor:"#f97316",borderTopColor:"transparent"}}/>
-            <p className="text-sm" style={{color:"#6b7280"}}>Loading profile...</p>
+          <div className="max-w-4xl mx-auto py-8">
+            <div className="animate-pulse space-y-4">
+              <div className="h-6 w-48 rounded" style={{background:"#1f2937"}}/>
+              <div className="h-32 rounded-xl" style={{background:"#111827"}}/>
+              <div className="grid grid-cols-4 gap-3">
+                {[1,2,3,4].map(i=><div key={i} className="h-20 rounded-lg" style={{background:"#1f2937"}}/>)}
+              </div>
+              <div className="h-48 rounded-xl" style={{background:"#111827"}}/>
+            </div>
+            <p className="text-sm mt-4 text-center" style={{color:"#6b7280"}}>Loading {sel}...</p>
           </div>
         ) : !pReady ? (
           <div className="text-center py-20">
