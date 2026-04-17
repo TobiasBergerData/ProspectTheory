@@ -1771,63 +1771,54 @@ function ClassScatterAndDev({p}) {
     );
   };
 
-  // ── GAME SCATTER ──────────────────────────────────────────
+  // ── RECENT GAMES TABLE ────────────────────────────────────
+  // Shows last 15 games: #, Date, Opponent, PTS, REB, AST, STL, BLK, eFG%, TS%
+  // Color coding: eFG/TS green ≥55%, yellow ≥45%, red <45%
   const GameScatter = () => {
-    const games = (gameLogs?.games || []).filter(g => g.usg != null && g.ortg != null && g.min >= 10);
-    if (glLoading) return <div style={{height:200,display:"flex",alignItems:"center",justifyContent:"center",color:"#4b5563",fontSize:12}}>Loading game logs…</div>;
-    if (games.length === 0) return (
+    if (glLoading) return <div style={{height:120,display:"flex",alignItems:"center",justifyContent:"center",color:"#4b5563",fontSize:12}}>Loading game logs…</div>;
+    const allGames = (gameLogs?.games || []).sort((a,b)=>a.game_num-b.game_num);
+    if (allGames.length === 0) return (
       <div style={{background:"#0f172a",borderRadius:8,padding:"14px 16px",border:"1px dashed #374151"}}>
-        <div style={{fontSize:12,fontWeight:600,color:"#6b7280"}}>📡 Game log data not yet loaded</div>
-        <div style={{fontSize:11,color:"#4b5563",marginTop:4}}>
-          Run <code style={{color:"#f97316",background:"#1f2937",padding:"1px 4px",borderRadius:3}}>python scripts/fetch_game_logs.py</code> locally,
-          then commit the DB to populate per-game USG / ORtg scatter.
-        </div>
+        <div style={{fontSize:12,fontWeight:600,color:"#6b7280"}}>📡 Game log data not yet available for this player.</div>
       </div>
     );
-
-    const W=560, H=220, PAD={l:40,r:20,t:16,b:32};
-    const IW=W-PAD.l-PAD.r, IH=H-PAD.t-PAD.b;
-    const allU = games.map(g=>g.usg), allO = games.map(g=>g.ortg);
-    const minU=Math.max(0,Math.min(...allU)-5), maxU=Math.min(60,Math.max(...allU)+5);
-    const minO=Math.max(50,Math.min(...allO)-10), maxO=Math.min(200,Math.max(...allO)+10);
-    const xS=(u)=>PAD.l+(u-minU)/(maxU-minU)*IW;
-    const yS=(o)=>PAD.t+IH-(o-minO)/(maxO-minO)*IH;
-    // Peer expected line (vertical for player's median usg)
-    const medUsg = games.map(g=>g.usg).sort((a,b)=>a-b)[Math.floor(games.length/2)];
-    const pe = peerExp(medUsg);
-
-    const curvePts = [];
-    for (let u=minU; u<=maxU; u+=0.5) curvePts.push(`${xS(u).toFixed(1)},${yS(peerExp(u)).toFixed(1)}`);
-
+    const recent = allGames.slice(-15);
+    const effColor = (v) => v == null || !isFinite(v) ? "#6b7280" : v >= 55 ? "#22c55e" : v >= 45 ? "#fbbf24" : "#ef4444";
+    const fmtEff = (v) => (v == null || !isFinite(v)) ? "—" : `${v.toFixed(0)}%`;
+    const fmtStat = (v) => v == null ? "—" : v;
     return (
-      <div>
-        <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{overflow:"visible"}}>
-          {/* Grid */}
-          {[100,120,140,160].filter(o=>o>=minO&&o<=maxO).map(o=>(
-            <g key={o}><line x1={PAD.l} x2={W-PAD.r} y1={yS(o)} y2={yS(o)} stroke="#1f2937" strokeWidth={1}/>
-            <text x={PAD.l-4} y={yS(o)+4} textAnchor="end" fontSize={9} fill="#6b7280">{o}</text></g>
-          ))}
-          {[10,20,30,40,50].filter(u=>u>=minU&&u<=maxU).map(u=>(
-            <g key={u}><line x1={xS(u)} x2={xS(u)} y1={PAD.t} y2={H-PAD.b} stroke="#1f2937" strokeWidth={1}/>
-            <text x={xS(u)} y={H-PAD.b+12} textAnchor="middle" fontSize={9} fill="#6b7280">{u}%</text></g>
-          ))}
-          <text x={W/2} y={H} textAnchor="middle" fontSize={10} fill="#6b7280">USG% per game</text>
-          <text x={10} y={H/2} textAnchor="middle" fontSize={10} fill="#6b7280" transform={`rotate(-90,10,${H/2})`}>ORtg</text>
-          {/* Peer curve */}
-          <polyline points={curvePts.join(" ")} fill="none" stroke="#f97316" strokeWidth={1} strokeDasharray="4,3" opacity={0.4}/>
-          {/* Game dots */}
-          {games.map((g,i)=>{
-            const above = g.ortg > peerExp(g.usg);
-            return <circle key={i} cx={xS(g.usg)} cy={yS(g.ortg)} r={4}
-              fill={above?"#22c55e88":"#ef444488"} stroke={above?"#22c55e":"#ef4444"} strokeWidth={0.8} opacity={0.8}/>;
-          })}
-          {/* Median USG vertical line */}
-          <line x1={xS(medUsg)} x2={xS(medUsg)} y1={PAD.t} y2={H-PAD.b} stroke="#f97316" strokeWidth={1} strokeDasharray="3,2" opacity={0.5}/>
-        </svg>
-        <div style={{fontSize:10,color:"#6b7280",marginTop:4,display:"flex",gap:12}}>
-          <span><span style={{color:"#22c55e"}}>●</span> Above peer curve ({games.filter(g=>g.ortg>peerExp(g.usg)).length} games)</span>
-          <span><span style={{color:"#ef4444"}}>●</span> Below ({games.filter(g=>g.ortg<=peerExp(g.usg)).length} games)</span>
-          <span>Median USG: {medUsg?.toFixed(1)}%</span>
+      <div style={{overflowX:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+          <thead>
+            <tr>
+              {["#","Date","Opp","PTS","REB","AST","STL","BLK","eFG%","TS%"].map(h=>(
+                <th key={h} style={{textAlign:["PTS","REB","AST","STL","BLK","eFG%","TS%"].includes(h)?"right":"left",
+                  fontSize:9,color:"#4b5563",padding:"3px 6px",borderBottom:"1px solid #1f2937",fontWeight:500,whiteSpace:"nowrap"}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {recent.map((g,i)=>{
+              const isLast = i===recent.length-1;
+              return (
+                <tr key={g.game_num} style={{background:isLast?"#1a1a2e":"transparent",borderBottom:"1px solid #111827"}}>
+                  <td style={{padding:"4px 6px",color:"#4b5563",fontSize:9}}>{g.game_num}</td>
+                  <td style={{padding:"4px 6px",color:"#6b7280",fontSize:9,whiteSpace:"nowrap"}}>{g.date?.slice(5)||"—"}</td>
+                  <td style={{padding:"4px 6px",color:"#9ca3af",maxWidth:90,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.opp||"—"}</td>
+                  <td style={{padding:"4px 6px",textAlign:"right",fontWeight:700,color:isLast?"#f97316":"#e5e7eb"}}>{fmtStat(g.pts)}</td>
+                  <td style={{padding:"4px 6px",textAlign:"right",color:"#9ca3af"}}>{fmtStat(g.reb)}</td>
+                  <td style={{padding:"4px 6px",textAlign:"right",color:"#9ca3af"}}>{fmtStat(g.ast)}</td>
+                  <td style={{padding:"4px 6px",textAlign:"right",color:"#9ca3af"}}>{fmtStat(g.stl)}</td>
+                  <td style={{padding:"4px 6px",textAlign:"right",color:"#9ca3af"}}>{fmtStat(g.blk)}</td>
+                  <td style={{padding:"4px 6px",textAlign:"right",fontWeight:600,color:effColor(g.efg)}}>{fmtEff(g.efg)}</td>
+                  <td style={{padding:"4px 6px",textAlign:"right",fontWeight:600,color:effColor(g.ts)}}>{fmtEff(g.ts)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div style={{fontSize:9,color:"#374151",marginTop:6}}>
+          Last {recent.length} games · eFG%/TS%: <span style={{color:"#22c55e"}}>≥55% elite</span>, <span style={{color:"#fbbf24"}}>≥45% avg</span>, <span style={{color:"#ef4444"}}>&lt;45% below avg</span>
         </div>
       </div>
     );
@@ -1842,24 +1833,27 @@ function ClassScatterAndDev({p}) {
       </div>
     );
 
-    // Metric definitions
+    // Metric definitions — fields available in game_logs: pts, fgm, fga, fgm3, fga3,
+    // ftm, fta, ast, stl, blk, tov, reb, oreb, dreb, efg, ts, fouls, date, opp, game_num
     const METRICS = {
-      efg:  {label:"eFG%",         unit:"%", color:"#60a5fa", getter:g=>g.efg,   minVal:20, maxVal:85,
-             desc:"Effective field goal % per game — captures 3-point value. Measures shooting efficiency."},
-      ts:   {label:"True Shooting",unit:"%", color:"#22c55e", getter:g=>g.ortg?(g.pts/(2*(g.pts/(g.ortg/100)||1))):null, minVal:30, maxVal:90,
-             desc:"Approximate True Shooting (pts / 2×estimated FGA). Better efficiency measure when FT volume is significant."},
-      usg:  {label:"USG%",         unit:"%", color:"#f97316", getter:g=>g.usg,   minVal:8,  maxVal:55,
-             desc:"Usage rate per game — % of team possessions used by this player. Measures offensive load."},
-      stl:  {label:"Steals",       unit:"", color:"#a855f7",  getter:g=>g.stl,   minVal:0,  maxVal:5,
-             desc:"Raw steals per game. Rising trend signals improving defensive activity and anticipation."},
-      blk:  {label:"Blocks",       unit:"", color:"#ef4444",  getter:g=>g.blk,   minVal:0,  maxVal:6,
-             desc:"Raw blocks per game. Rising trend signals growing rim-protection impact."},
-      min:  {label:"Minutes",      unit:"", color:"#fbbf24",  getter:g=>g.min,   minVal:0,  maxVal:40,
-             desc:"Minutes played per game. Rising trend indicates growing coach trust and role expansion."},
+      pts:  {label:"Points",   unit:"",  color:"#f97316", getter:g=>g.pts,  minVal:0,  maxVal:50,
+             desc:"Points per game — raw scoring volume. Rising trend signals an expanding offensive role."},
+      efg:  {label:"eFG%",     unit:"%", color:"#60a5fa", getter:g=>(g.efg != null && isFinite(g.efg)) ? g.efg : null, minVal:20, maxVal:85,
+             desc:"Effective field goal % — weights 3-pointers at 1.5×. Primary shooting efficiency metric. Only shown when FGA > 0."},
+      ts:   {label:"TS%",      unit:"%", color:"#22c55e", getter:g=>(g.ts != null && isFinite(g.ts) && g.ts > 0) ? g.ts : null, minVal:20, maxVal:90,
+             desc:"True Shooting % — efficiency including free throws. Best single-number shooting metric."},
+      reb:  {label:"Rebounds", unit:"",  color:"#a78bfa", getter:g=>g.reb,  minVal:0,  maxVal:20,
+             desc:"Total rebounds per game. Rising trend signals growing impact on the glass."},
+      ast:  {label:"Assists",  unit:"",  color:"#34d399", getter:g=>g.ast,  minVal:0,  maxVal:15,
+             desc:"Assists per game. Rising trend signals developing playmaking and court vision."},
+      stl:  {label:"Steals",   unit:"",  color:"#a855f7", getter:g=>g.stl,  minVal:0,  maxVal:5,
+             desc:"Steals per game. Rising trend signals improving defensive anticipation."},
+      blk:  {label:"Blocks",   unit:"",  color:"#ef4444", getter:g=>g.blk,  minVal:0,  maxVal:6,
+             desc:"Blocks per game. Rising trend signals growing rim-protection impact."},
     };
 
-    const metric = METRICS[devMetric] || METRICS.efg;
-    const games = allGames.filter(g => g.game_num != null && metric.getter(g) != null && g.min >= 8);
+    const metric = METRICS[devMetric] || METRICS.pts;
+    const games = allGames.filter(g => g.game_num != null && metric.getter(g) != null);
 
     if (games.length < 5) return (
       <div style={{background:"#0f172a",borderRadius:8,padding:"14px 16px",border:"1px dashed #1e3a5f",textAlign:"center"}}>
@@ -1987,7 +1981,7 @@ function ClassScatterAndDev({p}) {
 
       {/* 3B: In-Season Development Trajectory — always shown */}
       <Sec icon="📈" title="In-Season Development Trajectory"
-        sub="Rolling per-game stats over the season. Select a metric: eFG% (shooting efficiency), True Shooting, USG% (offensive load), Steals, Blocks, or Minutes. Trend line reveals improvement, regression, or steady performance.">
+        sub="Rolling per-game stats over the season. Select a metric: Points, eFG%, True Shooting, Rebounds, Assists, Steals, or Blocks. Rolling window K = max(3, min(5, N/4)) games. OLS trend line reveals improvement or regression.">
         <DevTrajectory />
       </Sec>
     </div>
@@ -2586,6 +2580,118 @@ function MindTab({p}) {
 function DevTrajectoryTab({p}) {
   if (!p) return null;
 
+  const [slMetric, setSlMetric] = useState("bpm");
+
+  // ── SEASON LINE CHART ─────────────────────────────────────
+  // Shows how a key stat evolved season over season (uses p.seasonLines)
+  const SeasonLineChart = () => {
+    const SL_METRICS = {
+      pts: {label:"PTS",  color:"#f97316", getter:s=>s.pts,  unit:"",  desc:"Points per game"},
+      reb: {label:"REB",  color:"#a78bfa", getter:s=>s.reb,  unit:"",  desc:"Rebounds per game"},
+      ast: {label:"AST",  color:"#34d399", getter:s=>s.ast,  unit:"",  desc:"Assists per game"},
+      ts:  {label:"TS%",  color:"#60a5fa", getter:s=>s.ts,   unit:"%", desc:"True Shooting %"},
+      bpm: {label:"BPM",  color:"#22c55e", getter:s=>s.bpm,  unit:"",  desc:"Box Plus/Minus — best single-number value proxy"},
+      usg: {label:"USG%", color:"#fbbf24", getter:s=>s.usg,  unit:"%", desc:"Usage rate — offensive load"},
+    };
+    const lines = (p.seasonLines || []).filter(s => s.yr && (s.gp == null || s.gp >= 8));
+    if (lines.length < 2) return null;
+
+    const m = SL_METRICS[slMetric] || SL_METRICS.bpm;
+    const vals = lines.map(s => m.getter(s)).filter(v => v != null && isFinite(v));
+    if (vals.length < 2) return null;
+
+    const W=480, H=170, PAD={l:44,r:18,t:24,b:34};
+    const IW=W-PAD.l-PAD.r, IH=H-PAD.t-PAD.b;
+    const pad = m.unit==="%" ? 3 : 0.8;
+    const minY = Math.min(...vals) - pad;
+    const maxY = Math.max(...vals) + pad;
+    const span = maxY - minY || 1;
+
+    const xS = (i) => PAD.l + (lines.length > 1 ? i/(lines.length-1)*IW : IW/2);
+    const yS = (v) => PAD.t + IH - ((v - minY)/span)*IH;
+
+    // OLS trend
+    const validIdx = lines.map((s,i)=>({i,v:m.getter(s)})).filter(d=>d.v!=null&&isFinite(d.v));
+    const xm = validIdx.reduce((s,d)=>s+d.i,0)/validIdx.length;
+    const ym = validIdx.reduce((s,d)=>s+d.v,0)/validIdx.length;
+    const slope = validIdx.reduce((s,d)=>s+(d.i-xm)*(d.v-ym),0) / (validIdx.reduce((s,d)=>s+(d.i-xm)**2,0)||1);
+    const intercept = ym - slope*xm;
+    const trendPosY = slope > 0.05 ? "#22c55e" : slope < -0.05 ? "#ef4444" : "#fbbf24";
+
+    // Y-axis ticks: 3 values
+    const yTicks = [minY+pad*0.5, (minY+maxY)/2, maxY-pad*0.5].map(v => parseFloat(v.toFixed(1)));
+
+    const polyPts = lines
+      .map((s,i)=>{const v=m.getter(s); return v!=null&&isFinite(v)?`${xS(i).toFixed(1)},${yS(v).toFixed(1)}`:null;})
+      .filter(Boolean).join(" ");
+
+    return (
+      <Sec icon="📊" title="Season Progression"
+        sub={`${m.desc} — season over season. Orange = most recent season. Only seasons with meaningful playing time shown.`}>
+        <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
+          {Object.entries(SL_METRICS).map(([k,mm])=>(
+            <button key={k} onClick={()=>setSlMetric(k)} style={{
+              fontSize:10,padding:"3px 9px",borderRadius:5,border:"none",cursor:"pointer",
+              background:slMetric===k ? mm.color : "#1f2937",
+              color:slMetric===k ? "#000" : "#9ca3af", fontWeight:600}}>
+              {mm.label}
+            </button>
+          ))}
+        </div>
+        <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{overflow:"visible"}}>
+          {/* Zero line (for BPM) */}
+          {minY < 0 && maxY > 0 && (
+            <line x1={PAD.l} x2={W-PAD.r} y1={yS(0)} y2={yS(0)} stroke="#374151" strokeWidth={1} strokeDasharray="4,3"/>
+          )}
+          {/* Y grid + labels */}
+          {yTicks.map(v=>(
+            <g key={v}>
+              <line x1={PAD.l} x2={W-PAD.r} y1={yS(v)} y2={yS(v)} stroke="#1f2937" strokeWidth={1}/>
+              <text x={PAD.l-4} y={yS(v)+4} textAnchor="end" fontSize={8} fill="#6b7280">{v}{m.unit}</text>
+            </g>
+          ))}
+          {/* X labels: season years */}
+          {lines.map((s,i)=>(
+            <text key={s.yr} x={xS(i)} y={H-4} textAnchor="middle" fontSize={9}
+              fill={i===lines.length-1?"#f97316":"#6b7280"}
+              fontWeight={i===lines.length-1?700:400}>{s.yr}</text>
+          ))}
+          {/* Axis label */}
+          <text x={10} y={H/2} textAnchor="middle" fontSize={9} fill="#6b7280" transform={`rotate(-90,10,${H/2})`}>{m.label}</text>
+          {/* OLS trend line */}
+          <line
+            x1={xS(validIdx[0].i)} y1={yS(intercept+slope*validIdx[0].i)}
+            x2={xS(validIdx[validIdx.length-1].i)} y2={yS(intercept+slope*validIdx[validIdx.length-1].i)}
+            stroke={trendPosY} strokeWidth={1.5} strokeDasharray="5,3" opacity={0.6}/>
+          {/* Season line */}
+          <polyline points={polyPts} fill="none" stroke={m.color} strokeWidth={2.5}/>
+          {/* Dots + value labels */}
+          {lines.map((s,i)=>{
+            const v = m.getter(s);
+            if (v == null || !isFinite(v)) return null;
+            const isLast = i===lines.length-1;
+            return (
+              <g key={s.yr}>
+                <circle cx={xS(i)} cy={yS(v)} r={isLast?6:4}
+                  fill={isLast?"#f97316":m.color}
+                  stroke={isLast?"#fed7aa":"transparent"} strokeWidth={1.5}/>
+                <text x={xS(i)} y={yS(v)-10} textAnchor="middle" fontSize={9} fontWeight={700}
+                  fill={isLast?"#f97316":m.color}>
+                  {v.toFixed(1)}{m.unit}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+        <div style={{fontSize:9,color:"#4b5563",marginTop:5,display:"flex",gap:14,flexWrap:"wrap"}}>
+          <span style={{color:m.color}}>— seasonal value</span>
+          <span style={{color:trendPosY}}>--- trend (OLS): {slope>0.05?"↑ improving":slope<-0.05?"↓ declining":"→ flat"}</span>
+          {minY < 0 && maxY > 0 && <span>| = zero</span>}
+        </div>
+      </Sec>
+    );
+  };
+
   // Season-by-season: reuse peer curve from skillCurve section
   const peerExpDev = (usg) => 160 - 1.2*usg - 0.015*usg*usg;
 
@@ -2651,6 +2757,7 @@ function DevTrajectoryTab({p}) {
 
   return (
     <div className="flex flex-col gap-4">
+      <SeasonLineChart />
       <SeasonTable />
       <ClassScatterAndDev p={p} />
     </div>
@@ -3913,7 +4020,7 @@ function MethodologyTab() {
     {cat:"Data Sources & Coverage",items:[],desc:"NCAA: BartTorvik (34k+ player-seasons 2008-2026, per-game + advanced + shooting zones). International: RealGM (9k+ player-seasons across 12 European leagues). NBA Outcomes: NBA API Advanced stats (27 seasons, PIE + minutes for peak computation). Anthropometrics: NBA Draft Combine measurements + Databallr wingspan data. Scouting: Scout consensus rankings (2008-2026) for humble/draft-stock adjustment."},
     {cat:"OGBPM (Mind Tab — Skill Curve)",items:[],desc:"OGBPM = BartTorvik Offensive Game-adjusted Box Plus/Minus. It is a box-score-derived estimate of a player's offensive contribution relative to an average D1 player, expressed in points per 100 possessions. Unlike true xRAPM (which requires ridge regression on possession-level lineup data), OGBPM is computable from box-score stats and is the best available proxy for NCAA offensive impact. Important: OGBPM is collinear with Usage% and AdjOrtg — it is not an independent 'third signal' but a condensed summary of the same offensive production. In the Skill Curve, OGBPM rank within the draft class places the player in the talent distribution of their cohort."},
     {cat:"Zone Breakdown (Shooting → Mind)",items:[],desc:"Each shooting zone (Rim, Mid-Range, 3-Pointer, Dunk) is evaluated on three dimensions: (1) LW Weight = FGA × Self-Creation Rate — the volume of shots a player generates under their own initiative in that zone. High volume with low self-creation (catch-and-shoot) is weighted less than equivalent self-created volume. (2) eFG% = effective field goal percentage per zone; 3-point attempts are scaled ×1.5 to compare them fairly to 2-point shots. (3) Self% = share of makes that were unassisted — a proxy for shot-creation vs. catch-and-shoot proficiency. The Difficulty Premium is the average shot difficulty relative to position peers (negative = easier shots, positive = harder)."},
-    {cat:"Development Trajectory (Mind Tab)",items:[],desc:"For players with game-log data, a rolling-average curve is plotted for the selected metric. Rolling window K = max(3, min(5, N/4)) games, balancing noise reduction with responsiveness. Available metrics: eFG% (shooting efficiency), True Shooting% (eFG adjusted for free throws), USG% (usage rate — share of team possessions used), Steals per game, Blocks per game, Minutes per game. An OLS trend line (linear regression) is fitted across the rolling values; positive slope = developmental improvement, negative = regression. Shown only when game-log data is available."},
+    {cat:"Development Trajectory (Development Tab)",items:[],desc:"For players with game-log data, a rolling-average curve is plotted for the selected metric. Rolling window K = max(3, min(5, N/4)) games, balancing noise reduction with responsiveness. Available metrics: Points, eFG% (effective field goal %), True Shooting% (eFG adjusted for free throws), Rebounds, Assists, Steals, Blocks. An OLS trend line (linear regression) is fitted across the rolling values; positive slope = developmental improvement, negative = regression. Shown only when game-log data is available. The Season Progression chart shows the same stat across multiple seasons for multi-year players."},
     {cat:"NBA Combine Body Scatter (Body Tab)",items:[],desc:"Scatter plot of 510 NBA Draft Combine participants (2000–2024). X-axis = Height without shoes (inches), Y-axis = Wingspan (inches), Point size = Weight (lbs). Selected prospect is highlighted in orange; all other Combine players are shown as gray dots. Hover over any point to see name, draft year, position, height, wingspan, wingspan delta (wingspan − height), and weight. The filter sliders constrain the visible Combine dots to players in a similar wingspan range and weight bucket — useful for identifying physical comps within a realistic body-type band."},
     {cat:"Passer / Scorer Profile (Mind Tab)",items:[],desc:"For all players (single- and multi-season): a Passer/Scorer snapshot is shown based on current AST% and USG%. Thresholds: AST% ≥30% = Primary Playmaker, ≥20% = Dual-Role Creator, ≥12% = Secondary Facilitator, <12% = Scorer/Off-Ball. For multi-season players with at least 2 seasons, a slope-based card also appears showing how AST%/USG% evolves as responsibility increases — positive slope = playmaking expands at volume, negative = isolation tendency. The AST/TO ratio supplements the profile as a decision-quality proxy."},
   ];
