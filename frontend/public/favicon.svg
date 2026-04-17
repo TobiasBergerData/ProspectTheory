@@ -1,17 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
-  <rect width="200" height="200" rx="28" fill="#0d1117"/>
-  <g fill="none" stroke="#f97316" stroke-linecap="round" stroke-linejoin="round">
-    <!-- Bell curve outer shape -->
-    <path d="M20 180 C20 180, 50 140, 60 90 C70 40, 85 20, 100 20 C115 20, 130 40, 140 90 C150 140, 180 180, 180 180" stroke-width="9"/>
-    <!-- Vertical center seam -->
-    <path d="M100 20 L100 180" stroke-width="7"/>
-    <!-- Horizontal cross seam - curves with the bell shape -->
-    <path d="M52 120 C70 105, 130 105, 148 120" stroke-width="7"/>
-    <!-- Upper arc seam -->
-    <path d="M68 42 C80 75, 120 75, 132 42" stroke-width="7"/>
-    <!-- Lower-left arc -->
-    <path d="M35 160 C50 125, 70 135, 85 180" stroke-width="6"/>
-    <!-- Lower-right arc -->
-    <path d="M165 160 C150 125, 130 135, 115 180" stroke-width="6"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%" style="stop-color:#f97316"/><stop offset="100%" style="stop-color:#ea580c"/>
+  </linearGradient></defs>
+  <rect width="32" height="32" rx="6" fill="url(#g)"/>
+  <text x="16" y="23" text-anchor="middle" font-family="Arial Black,sans-serif" font-size="16" font-weight="900" fill="#000">PT</text>
 </svg>

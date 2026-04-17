@@ -4959,18 +4959,7 @@ export default function App() {
       <header className="sticky top-0 z-50 px-4 md:px-8 py-3" style={{background:"rgba(8,11,18,0.92)",backdropFilter:"blur(12px)",borderBottom:"1px solid #1f293744"}}>
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3 cursor-pointer" onClick={()=>{setSel(null);setTab("overview");}}>
-            {/* Logo: bell curve + basketball seams */}
-            <svg width="36" height="36" viewBox="0 0 200 200" style={{flexShrink:0}}>
-              <rect width="200" height="200" rx="28" fill="#0d1117"/>
-              <g fill="none" stroke="#f97316" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M20 180 C20 180,50 140,60 90 C70 40,85 20,100 20 C115 20,130 40,140 90 C150 140,180 180,180 180" strokeWidth="9"/>
-                <path d="M100 20 L100 180" strokeWidth="7"/>
-                <path d="M52 120 C70 105,130 105,148 120" strokeWidth="7"/>
-                <path d="M68 42 C80 75,120 75,132 42" strokeWidth="7"/>
-                <path d="M35 160 C50 125,70 135,85 180" strokeWidth="6"/>
-                <path d="M165 160 C150 125,130 135,115 180" strokeWidth="6"/>
-              </g>
-            </svg>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm" style={{background:"linear-gradient(135deg,#f97316,#ea580c)",color:"#000",flexShrink:0}}>PT</div>
             <div>
               <div className="font-bold text-sm tracking-wider" style={{fontFamily:"'Oswald',sans-serif",color:"#f97316"}}>PROSPECT THEORY</div>
               <div className="flex items-center gap-2">
