@@ -85,7 +85,7 @@ const METHODS = {
   shootScore: {
     name: "Shooting",
     formula: "pctl(FT%) × 0.40 + pctl(3PA/40) × 0.40 + pctl(3P%) × 0.20",
-    desc: "FT% weighted highest because it's the single best predictor of NBA shooting translation (internal analysis, Berger 2025). Volume (3PA/40) valued over raw percentage because willingness to shoot predicts NBA role.",
+    desc: "FT% weighted highest because it's the single best predictor of NBA shooting translation (Berger 2022). Volume (3PA/40) valued over raw percentage because willingness to shoot predicts NBA role.",
   },
   defScore: {
     name: "Defensive Impact",
@@ -123,7 +123,7 @@ const METHODS = {
     desc: "The Bayesian prior for NBA 3P%. Based on FT% (neuromuscular touch consistency) and midrange accuracy (shooting-range indicator). A player with 85% FT + 28% 3P has vastly more latent potential than one with 65% FT + 35% 3P. Replaces TS% as the primary touch indicator.",
   },
   fourFactors: {
-    name: "Possession Impact & Carefree Playability (CFFR)",
+    name: "Possession Impact (CFFR)",
     formula: "reliability × (0.40 × z_eFG + 0.25 × z_TOV + 0.20 × z_ORB + 0.15 × z_FTR)",
     desc: "Usage-role-adjusted Four Factors measuring possession efficiency. Players bucketed by usage (Primary ≥28%, Secondary ≥22%, Finisher ≥15%, LowUsage <15%). Each factor z-scored within role × season. NPV > +2.0 = 'Elite Floor Raiser', +0.5–2.0 = 'Winning Piece', −0.5–0.5 = 'Role Dependent', < −1.0 = 'High Maintenance'. This is NOT a talent rating — it's an efficiency index measuring how 'expensive' it is for a coach to keep this player on the floor.",
   },
@@ -151,7 +151,7 @@ const BADGE_DEFS = {
   // ── YELLOW — Shot profile / style tags (neither good nor bad) ──
   "Moreyballer":            { cat:"yellow", rule:"≥75% of shots from rim + 3P + FTs",   desc:"Shot distribution is heavily skewed toward high-value zones (rim, 3P, free throws) with minimal mid-range. Named after former Rockets GM Daryl Morey who popularized this approach. This reflects shot selection only — not skill level." },
   // ── GREEN — Elite NBA-scalable skills ──
-  "Elite Shooting":         { cat:"green", rule:"3P%>40 & 3P_Freq>30% & FT%>85",       desc:"Top-tier shooting across both lines + elite volume. Most translatable skill in modern NBA. Berger (2023): FT% is the #1 predictor." },
+  "Elite Shooting":         { cat:"green", rule:"3P%>40 & 3P_Freq>30% & FT%>85",       desc:"Top-tier shooting across both lines + elite volume. Most translatable skill in modern NBA. Berger (2022): FT% is the #1 predictor." },
   "Floor General":          { cat:"green", rule:"(G/W) AST/TO>2.2 & AST%>25",          desc:"Elite decision-making with vision. Creates for others without turnovers — the rarest guard/wing skill." },
   "Two-Way Wing":           { cat:"green", rule:"(W) 3P%>35 & (STL%>2.2 OR DBPM>2.0)",desc:"Shooting + perimeter defense. Most coveted role player archetype in modern NBA. Immediate starter value." },
   "Modern Rim Anchor":      { cat:"green", rule:"(B) BLK%>4.0 & DBPM>2.5",            desc:"Elite rim protection with overall defensive impact. Anchors a top-10 defense by itself." },
@@ -659,20 +659,35 @@ function mapProfile(d) {
 
   // Always compute client badges (for consistency board↔profile)
   const resolvedPos = resolvePosition(d);
+  // ast/tov fallback: DB stores to_p but sometimes no explicit ast_to. Compute from ast_p/to_p
+  // to guarantee hasAstTovData gate (prevents Boozer-style Floor General false positives at 1.7).
+  const _astP_raw = d.ast_p ?? d.astP;
+  const _toP_raw  = d.to_p  ?? d.toP;
+  const _astTov_raw = (d.ast_to ?? d.astTov ?? d.ast_tov) ??
+    ((_astP_raw != null && _toP_raw != null && _toP_raw > 0) ? _astP_raw / _toP_raw : null);
   const tmpP = {
     pos: resolvedPos,
-    ft:d.ft_pct??d.ft, tp:d.tp_pct??d.tp, threeF:d.three_f??d.three_freq??d.threeF,
-    astP:d.ast_p??d.astP, astTov:d.ast_to??d.astTov??d.ast_tov, stlP:d.stl_p??d.stlP,
-    blkP:d.blk_p??d.blkP, usg:d.usg??d.usg_p, toP:d.to_p??d.toP,
-    ts:d.ts_pct??d.ts, ftr:d.ftr??d.ft_rate, rimF:d.rim_f??d.rim_freq??d.rimF,
-    rimPct:d.rim_pct??d.rimPct, dbpm:d.dbpm, obpm:d.obpm, bpm:d.bpm,
-    feel:d.feel??0, funcAth:d.func_ath??0,
-    htIn:d.ht??d.height_in??d.college_height_inches,
-    drbP:d.drb_p??d.drbP, dunkR:d.dunk_r??d.dunk_rate??d.dunkR, age:d.age,
-    shootScore:d.shoot_score, efg:d.efg_pct??d.efg,
+    // All shooting % fields run through normShootPct — 2026 profiles store decimals (0.39),
+    // pre-2026 store percentages (38.5). Without normalization, every 2026 prospect fails
+    // thresholds like `tp > 40` for Elite Shooting etc.
+    ft: normShootPct(d.ft_pct ?? d.ft),
+    tp: normShootPct(d.tp_pct ?? d.tp),
+    ts: normShootPct(d.ts_pct ?? d.ts),
+    efg: normShootPct(d.efg_pct ?? d.efg),
+    rimPct: normShootPct(d.rim_pct ?? d.rimPct),
     twoPct: normShootPct(d.two_pct ?? d.two_p_pct ?? d.twoP_per),
-    fouls40:d.fouls_40??0, min:d.min??0, pts:d.pts??0, fg:d.fg_pct??0,
-    source:d.source, league:d.league,
+    threeF: d.three_f ?? d.three_freq ?? d.threeF,
+    astP: _astP_raw, astTov: _astTov_raw, stlP: d.stl_p ?? d.stlP,
+    blkP: d.blk_p ?? d.blkP, usg: d.usg ?? d.usg_p, toP: _toP_raw,
+    ftr: d.ftr ?? d.ft_rate, rimF: d.rim_f ?? d.rim_freq ?? d.rimF,
+    dbpm: d.dbpm, obpm: d.obpm, bpm: d.bpm,
+    feel: d.feel ?? 0, funcAth: d.func_ath ?? 0,
+    htIn: d.ht ?? d.height_in ?? d.college_height_inches,
+    drbP: d.drb_p ?? d.drbP, orbP: d.orb_p ?? d.orbP,
+    dunkR: d.dunk_r ?? d.dunk_rate ?? d.dunkR, age: d.age,
+    shootScore: d.shoot_score,
+    fouls40: d.fouls_40 ?? 0, min: d.min ?? 0, pts: d.pts ?? 0, fg: d.fg_pct ?? 0,
+    source: d.source, league: d.league,
   };
   // ── Archetype pipeline (uses same tmpP stats as badges) ──
   const _ncaaArch = computeNcaaArchetype(tmpP);
@@ -725,21 +740,102 @@ function mapProfile(d) {
     if (allowed === undefined || allowed === null) return true;
     return allowed.includes(pos);
   });
-  // Additional stat-validation: server badges must also pass client-side stat checks
+  // Additional stat-validation: server badges must also pass client-side stat checks.
+  // tmpP.astTov is computed from ast_p/to_p when not explicitly stored (see tmpP above),
+  // so astTov is now always available for NCAA prospects → no more "missing data" bypass.
+  // Thresholds mirror computeBadges exactly; server badges that fail here get rejected.
   const statValidate = (badge) => {
-    const _astP = tmpP.astP ?? 0;
-    // Only enforce astTov check if the field actually exists in the data.
-    // Many profiles don't store ast_to/ast_tov, and the fallback default (1.5) must not
-    // incorrectly reject badges like Floor General (Trae Young: ast_p=48 but ast_to missing → default 1.5 < 2.2 → WRONG).
-    const hasAstTovData = d.ast_to != null || d.ast_tov != null || d.astTov != null;
-    const _astTov = hasAstTovData ? (tmpP.astTov ?? 1.5) : 2.5; // assume adequate when not stored
-    // self_creation_raw is the correct field in the DB (not self_creation/self_creation_pct)
-    const _selfCreation = d.self_creation_raw ?? d.self_creation ?? d.self_creation_idx ?? d.self_creation_pct ?? 0;
-    if (badge === "Passing Hub" && !(_astP > 18 && _astTov > 1.2)) return false;
-    if (badge === "Floor General" && !(_astP > 25)) return false; // primary gate: high AST%
-    if (badge === "Floor General" && hasAstTovData && !(_astTov > 1.8)) return false; // secondary: astTov only when available
-    if (badge === "Self-Creator" && !(_selfCreation > 70)) return false;
-    if (badge === "Tunnel Vision" && !(hasAstTovData && _astTov < 0.8)) return false;
+    const pos    = getBadgePos(tmpP);              // "G" | "W" | "B"
+    const isG = pos === "G", isW = pos === "W", isB = pos === "B";
+    const _astP   = tmpP.astP   ?? 0;
+    const _astTov = tmpP.astTov ?? null;
+    const _stlP   = tmpP.stlP   ?? null;
+    const _blkP   = tmpP.blkP   ?? null;
+    const _usg    = tmpP.usg    ?? 0;
+    const _ts     = tmpP.ts     ?? 0;
+    const _efg    = tmpP.efg    ?? (_ts > 0 ? _ts - 3 : 0);
+    const _ft     = tmpP.ft     ?? null;
+    const _tp     = tmpP.tp     ?? null;
+    const _threeF = tmpP.threeF ?? null;
+    const _ftr    = tmpP.ftr    ?? null;
+    const _rimF   = tmpP.rimF   ?? null;
+    const _dbpm   = tmpP.dbpm   ?? null;
+    const _obpm   = tmpP.obpm   ?? null;
+    const _bpm    = tmpP.bpm    ?? null;
+    const _drbP   = tmpP.drbP   ?? null;
+    const _orbP   = tmpP.orbP   ?? null;
+    const _dunkR  = tmpP.dunkR  ?? 0;
+    const _toP    = tmpP.toP    ?? null;
+    const _feel   = tmpP.feel   ?? null;
+    const _funcAth= tmpP.funcAth?? null;
+    const _htIn   = tmpP.htIn   ?? 78;
+    const _twoPct = tmpP.twoPct ?? null;
+    const _age    = tmpP.age    ?? null;
+    const _isIntl = (tmpP.source && tmpP.source !== "ncaa") || (tmpP.league && tmpP.league !== "NCAA");
+    const _selfCreation = d.self_creation_raw ?? d.self_creation ?? d.self_creation_idx ?? d.self_creation_pct ?? null;
+
+    // ── Passer badges (astTov-sensitive) ──
+    if (badge === "Passing Hub"    && !(isB && _astP > 18 && (_astTov == null || _astTov > 1.2))) return false;
+    if (badge === "Floor General"  && !((isG || isW) && _astP > 25 && (_astTov == null || _astTov > 1.8))) return false;
+    if (badge === "Self-Creator"   && !(_selfCreation != null && _selfCreation > 70)) return false;
+    if (badge === "Tunnel Vision"  && !(_astTov != null && _astTov < 0.8 && _usg > 22)) return false;
+
+    // ── Shooting badges ──
+    if (badge === "Elite Shooting") {
+      if (_tp == null || _ft == null) return false;
+      const g1 = (_tp > 40 && (_threeF ?? 0) > 30 && _ft > 85);
+      const g2 = (_ft > 82 && _tp > 38 && (_threeF ?? 0) > 25);
+      if (!(g1 || g2)) return false;
+    }
+    if (badge === "Latent Sniper"   && !(_ft != null && _tp != null && _ft > 85 && _tp < 33)) return false;
+    if (badge === "Latent Touch"    && !(_ft != null && _tp != null && _ft > 80 && _tp < 32)) return false;
+    if (badge === "Spacing Killer"  && !((isG || isW) && _tp != null && _threeF != null && _tp < 28 && _threeF < 16)) return false;
+    if (badge === "Non-Spacing Perimeter" && !((isG || isW) && _tp != null && _threeF != null && _tp < 30 && _threeF < 20)) return false;
+    if (badge === "FT Concern"      && !(_ft != null && _ft >= 30 && _ft < 65 && _usg > 25)) return false;
+
+    // ── Defense / two-way ──
+    if (badge === "Two-Way Wing"        && !(isW && _tp != null && _tp > 35 && ((_stlP ?? 0) > 2.2 || (_dbpm ?? 0) > 2.0))) return false;
+    if (badge === "Modern Rim Anchor"   && !(isB && (_blkP ?? 0) > 4.0 && (_dbpm ?? 0) > 2.5)) return false;
+    if (badge === "Stocks Machine"      && !(((_stlP ?? 0) + (_blkP ?? 0)) > 4.8)) return false;
+    if (badge === "Versatile Stopper") {
+      const g1 = (isW || isB) && _htIn >= 79 && (_stlP ?? 0) > 1.6 && (_blkP ?? 0) > 1.8;
+      const g2 = _isIntl && (isW || isB) && _htIn >= 79 && (_dbpm ?? 0) > 3.0;
+      if (!(g1 || g2)) return false;
+    }
+    if (badge === "Defensive Stopper Floor" && !(_htIn >= 80 && (_stlP ?? 0) > 2.5)) return false;
+    if (badge === "Transition Terror") {
+      const g1 = (isG || isW) && (_stlP ?? 0) > 2.5 && _dunkR > 8;
+      const g2 = (isG || isW) && (_stlP ?? 0) > 2.8 && (_twoPct ?? 0) > 55;
+      if (!(g1 || g2)) return false;
+    }
+    if (badge === "One-Way Project"    && !(_obpm != null && _dbpm != null && _obpm > 3.0 && _dbpm < -1.5 && (_stlP ?? 99) < 1.0)) return false;
+    if (badge === "Soft Interior"      && !(isB && _ftr != null && _blkP != null && _ftr < 22 && _blkP < 2.0)) return false;
+    if (badge === "Defensive Target"   && !(isG && _htIn < 74 && _dbpm != null && _dbpm < -1.0)) return false;
+    if (badge === "Liability Big"      && !(isB && _drbP != null && _blkP != null && (_drbP < 15 || _blkP < 1.5))) return false;
+    if (badge === "All-Offense Big"    && !(isB && _blkP != null && _dbpm != null && _blkP < 2.5 && _dbpm < 1.5)) return false;
+    if (badge === "Non-Processing Guard" && !(isG && _astTov != null && _astTov < 0.8 && (_toP ?? 0) > 20)) return false;
+
+    // ── Athleticism / efficiency ──
+    if (badge === "Magnetic Hands"     && !(_orbP != null && _drbP != null && _orbP > 12 && _drbP > 25)) return false;
+    if (badge === "FT Grifter"         && !(_ftr != null && _ftr > 60 && ((_rimF ?? 0) > 35 || _usg > 26))) return false;
+    if (badge === "Efficient High Usage" && !(_usg > 28 && (_toP ?? 99) < 12 && _ts > 58)) return false;
+    if (badge === "High Feel Athlete"  && !(_feel != null && _funcAth != null && _feel > 75 && _funcAth > 75)) return false;
+    if (badge === "Lurking Elite"      && !(_bpm != null && _usg < 20 && _bpm > 7.0 && _ts > 62)) return false;
+    if (badge === "Analytics Darling"  && !(_bpm != null && _bpm > 8.0 && _ts > 60 && _usg < 22)) return false;
+    if (badge === "Efficiency Monster" && !(_efg > 60 && _astTov != null && _astTov > 2.0 && (_stlP ?? 0) > 2.0)) return false;
+    if (badge === "Glue-Guy Connector" && !(_astTov != null && _astTov > 2.5 && (_dbpm ?? 0) > 2.0 && _usg < 16)) return false;
+    if (badge === "Efficiency Trap"    && !(_usg > 26 && _ts != null && _ts < 52)) return false;
+    if (badge === "Empty Calorie Scorer" && !(_usg > 28 && _ts != null && _ts < 52 && _astP < 15)) return false;
+    if (badge === "Passive Driver"     && !(_ftr != null && _ftr > 0 && _ftr < 20 && _usg > 20)) return false;
+    if (badge === "Foul Magnet"        && !((tmpP.fouls40 ?? 0) > 4.8)) return false;
+
+    // ── Age-gate badges (international) ──
+    if (badge === "International Prodigy" && !(_isIntl && _age != null && _age < 18.5 && (_bpm ?? 0) > 4.0)) return false;
+    if (badge === "Pro-Ready Teen"        && !(_isIntl && _age != null && _age < 19 && (_bpm ?? 0) > 2.0)) return false;
+
+    // ── "High Feel" (server-only badge, not in computeBadges) ──
+    if (badge === "High Feel" && !(_feel != null && _feel > 70)) return false;
+
     return true;
   };
   const serverGreen = filterByPos(
@@ -838,7 +934,7 @@ function mapProfile(d) {
     pNba:d.pred_p_nba??d.pNba??d.pn,
     predTier: d.v2Tier ?? d.pred_tier ?? d.predicted_tier ?? d.tier,
     ups: d.ups ?? d.ups_raw,
-    // ppWA = Projected Peak Wins Added (Model v2: ElasticNet + Elite Detector)
+    // ppWA = Projected Peak Wins Added (Model v2: HistGradientBoosting + Elite Detector)
     ppwa: d.ppwa ?? null,
     pElite: d.pElite ?? null,
     waFloor: d.waFloor ?? null,
@@ -886,11 +982,17 @@ function mapProfile(d) {
     projectionBoosters: d.projection_boosters ?? d.proj_boost ?? "",
     projectionLimiters: d.projection_limiters ?? d.proj_limit ?? "",
     statComps:[], anthroComps:[], hasCombine: null,
-    // Filter seasonLines: only seasons up to and including the player's draft year (p.yr)
-    // and with meaningful GP (≥8) to exclude name-collision artefacts from same-name players.
+    // Filter seasonLines: realistic pre-draft window around the player's draft year (d.yr).
+    //  • Upper bound (yr <= d.yr) blocks future-season collisions (Donovan Mitchell 2017 vs 2021 namesake).
+    //  • Lower bound blocks past-season collisions (Brandon Jennings 2026 VCU vs 2008 Italy / 2009 Bucks)
+    //    but is source-aware: 6y for NCAA (4y college career + buffer), 10y for non-NCAA prospects
+    //    so international careers (Doncic: Real Madrid from age 16, Steinbach: BBL pro) stay visible
+    //    while still blocking 18+ year-old namesake records.
+    //  • GP ≥ 8 suppresses cup-of-coffee records.
     seasonLines: (d.seasonLines || []).filter(s =>
       (s.gp == null || s.gp >= 8) &&
-      (d.yr == null || s.yr == null || s.yr <= d.yr)
+      (d.yr == null || s.yr == null || s.yr <= d.yr) &&
+      (d.yr == null || s.yr == null || s.yr >= d.yr - (d.source && d.source !== "ncaa" ? 10 : 6))
     ),
     comb: d.combine || null,
     posPlaymaker:d.pos_playmaker, posWing:d.pos_wing, posBig:d.pos_big,
@@ -1200,6 +1302,9 @@ function ShootingTab({p}) {
 
   // ── Shot zone attempts ──
   const rimAtt = zoneAtt(rimF), dunkAtt = zoneAtt(dunkR), midAtt = zoneAtt(midF), threeAtt = zoneAtt(threeF);
+  // Dunk attempts: prefer PBP-tracked count (authoritative) over frequency-based estimate.
+  // Fixes the 39-vs-42 mismatch between the Court viz (freq × totalFga) and the Shot Creation panel (raw PBP).
+  const dunkAttAuthoritative = (p.shotCreation?.dunk?.fga != null && p.shotCreation.dunk.fga > 0) ? p.shotCreation.dunk.fga : dunkAtt;
 
   // ── 2P/3P/FT split for simplified court ──
   let threePA = threeAtt ?? (totalFga && threeF ? Math.round(totalFga * threeF / 100) : null);
@@ -1229,7 +1334,7 @@ function ShootingTab({p}) {
   // ── Shot diet percentages ──
   const estTotalShots = totalShots > 0 ? totalShots : ((twoPA||0) + (threePA||0) + (dietFta||0));
   const rimPctOfTotal = estTotalShots > 0 && rimAtt != null ? Math.round(rimAtt / estTotalShots * 1000) / 10 : null;
-  const dunkPctOfTotal = estTotalShots > 0 && dunkAtt != null ? Math.round(dunkAtt / estTotalShots * 1000) / 10 : null;
+  const dunkPctOfTotal = estTotalShots > 0 && dunkAttAuthoritative != null ? Math.round(dunkAttAuthoritative / estTotalShots * 1000) / 10 : null;
   const midPctOfTotal = estTotalShots > 0 && midAtt != null ? Math.round(midAtt / estTotalShots * 1000) / 10 : null;
   const threePctOfTotal = estTotalShots > 0 && threePA != null ? Math.round(threePA / estTotalShots * 1000) / 10 : null;
   const ftPctOfTotal = estTotalShots > 0 && dietFta != null ? Math.round(dietFta / estTotalShots * 1000) / 10 : null;
@@ -1366,7 +1471,7 @@ function ShootingTab({p}) {
                 <g opacity={hasDunk?1:0.3}>
                   <text x="415" y="42" textAnchor="middle" fill="#ef4444" style={{fontSize:12,fontWeight:"bold"}}>DUNKS</text>
                   <text x="415" y="68" textAnchor="middle" fill={dunkPct!=null?sc(dunkPct,"rim"):"#e5e7eb"} style={{fontSize:20,fontWeight:"bold"}}>{dunkPct!=null?`${fmt(dunkPct)}%`:(hasDunk?`${fmt(dunkR)}% freq`:"N/A")}</text>
-                  {dunkAtt!=null&&<text x="415" y="86" textAnchor="middle" fill="#9ca3af" style={{fontSize:11}}>{dunkAtt} att.</text>}
+                  {dunkAttAuthoritative!=null&&<text x="415" y="86" textAnchor="middle" fill="#9ca3af" style={{fontSize:11}}>{dunkAttAuthoritative} att.</text>}
                 </g>
                 {/* MID */}
                 <g opacity={hasMid?1:0.3}>
@@ -1531,30 +1636,31 @@ function ShootingTab({p}) {
               </div>
               {/* Self-creation distribution: pie-like summary */}
               {totalSelfMakes > 5 && (
-                <div className="mt-3 py-4 rounded-lg" style={{background:"#0d1117",border:"1px solid #1e293b"}}>
-                  <div className="text-sm mb-3 px-3 font-bold" style={{color:"#e5e7eb"}}>Self-Created Shot Distribution</div>
-                  <div className="flex gap-0.5 rounded-lg overflow-hidden" style={{height:40,margin:"0 8px"}}>
+                <div className="mt-3 py-4 px-2 rounded-lg" style={{background:"#0d1117",border:"1px solid #1e293b"}}>
+                  <div className="text-sm mb-3 px-1 font-bold" style={{color:"#e5e7eb"}}>Self-Created Shot Distribution</div>
+                  {/* Full-width distribution bar — matches the Shot Creation Spectrum bars above */}
+                  <div className="flex gap-0.5 rounded-lg overflow-hidden w-full" style={{height:40}}>
                     {zones.map(z => {
                       const share = totalSelfMakes > 0 ? selfMakesByZone[z] / totalSelfMakes * 100 : 0;
                       return share > 0 ? (
                         <Tip key={z} content={<div>{fmt(share,0)}% of self-created makes are {zoneLabel[z].toLowerCase()}</div>}>
-                          <div className="h-full flex items-center justify-center text-xs font-bold cursor-help" style={{
-                            width: `${share}%`,
+                          <div className="h-full flex items-center justify-center text-sm font-bold cursor-help" style={{
+                            flex: `${share} 1 0`,
                             background: zoneColor[z],
                             color: "#fff",
-                            minWidth: share > 10 ? "auto" : "0",
+                            minWidth: share >= 3 ? 0 : "auto",
                           }}>
-                            {share > 12 && `${fmt(share,0)}%`}
+                            {share > 6 && `${fmt(share,0)}%`}
                           </div>
                         </Tip>
                       ) : null;
                     })}
                   </div>
-                  <div className="flex gap-3 mt-1.5 text-xs" style={{color:"#6b7280"}}>
+                  <div className="flex gap-4 mt-2 px-1 text-xs" style={{color:"#9ca3af"}}>
                     {zones.map(z => {
                       const share = totalSelfMakes > 0 ? Math.round(selfMakesByZone[z] / totalSelfMakes * 100) : 0;
                       return share > 0 ? (
-                        <span key={z}><span style={{color:zoneColor[z]}}>{zoneLabel[z]}</span>: {share}%</span>
+                        <span key={z}><span style={{color:zoneColor[z],fontWeight:600}}>{zoneLabel[z]}</span>: {share}%</span>
                       ) : null;
                     })}
                   </div>
@@ -3268,6 +3374,14 @@ function ProjectionTab({p}) {
           </div>
         )}
       </Sec>
+
+      {/* ── UPCOMING: Role Fit & Team Context ─────────────────── */}
+      <div style={{borderRadius:12,padding:"20px 24px",background:"linear-gradient(135deg,#0d1117,#111827)",border:"1px dashed #374151",textAlign:"center"}}>
+        <div style={{fontSize:13,fontWeight:700,color:"#4b5563",marginBottom:6,letterSpacing:"0.05em",textTransform:"uppercase"}}>Role Fit & Team Context — Upcoming</div>
+        <div style={{fontSize:12,color:"#374151",maxWidth:540,margin:"0 auto",lineHeight:1.6}}>
+          ppWA is a team-agnostic projection. Coming next: scheme-dependent fit scores for each of the 30 NBA rosters — how a prospect's archetype interacts with the team's existing shot profile, defensive scheme, and minutes allocation. Same player, different value depending on where he lands.
+        </div>
+      </div>
     </div>
   );
 }
@@ -3671,6 +3785,157 @@ function BodyTab({p}) {
   const hasCombine = p.comb != null;
   const htDisplay = p.ht || (p.htIn ? `${Math.floor(p.htIn/12)}'${p.htIn%12}"` : "—");
 
+  // ── Prospect scatter: alle aktuell geladenen Prospects (ht/ws/wt by position) ──
+  const ProspectScatter = () => {
+    // Quelle: modulare Globals PLAYERS / PLAYER_LIST (vom Board befüllt).
+    // Wir nutzen ausschließlich reale Messwerte — keine Position-Schätzungen —
+    // damit der Plot nicht durch systematische Ape-Index-Annahmen verzerrt wird.
+    const allPts = PLAYER_LIST.map(n => ({name:n, ...PLAYERS[n]}))
+      .filter(q => q.htIn && q.ws && q.wt)
+      .map(q => ({
+        name: q.name,
+        htIn: q.htIn,
+        ws: q.ws,
+        wt: q.wt,
+        pos: q.pos || "?",
+        yr: q.yr || null,
+        source: q.source || "ncaa",
+        isSelected: q.name === p.name,
+      }));
+
+    if (allPts.length < 3) {
+      return <div style={{height:100,display:"flex",alignItems:"center",justifyContent:"center",color:"#4b5563",fontSize:12}}>
+        Nicht genug Prospects mit vollständigen Height/Weight/Wingspan-Daten für Scatter.
+      </div>;
+    }
+
+    const W=580, H=340, PAD={l:46,r:20,t:16,b:38};
+    const IW=W-PAD.l-PAD.r, IH=H-PAD.t-PAD.b;
+
+    // X = Wingspan, Y = Height
+    const allWs = allPts.map(q=>q.ws);
+    const allHt = allPts.map(q=>q.htIn);
+    const minWs=Math.min(...allWs)-1, maxWs=Math.max(...allWs)+1;
+    const minHt=Math.min(...allHt)-1, maxHt=Math.max(...allHt)+1;
+    const xS=(ws)=>PAD.l+(ws-minWs)/(maxWs-minWs)*IW;
+    const yS=(ht)=>PAD.t+IH-(ht-minHt)/(maxHt-minHt)*IH;
+
+    // Punktgröße ~ Gewicht
+    const allWt = allPts.map(q=>q.wt);
+    const minWt=Math.min(...allWt), maxWt=Math.max(...allWt);
+    const rSize = (wt) => {
+      if (maxWt === minWt) return 5;
+      return 4 + ((wt - minWt) / (maxWt - minWt)) * 6; // 4..10px
+    };
+
+    // Positionsfarben (konsistent mit Big Board)
+    const posColor = (pos) => pos === "Playmaker" ? "#3b82f6"
+      : pos === "Big" ? "#8b5cf6"
+      : pos === "Wing" ? "#f97316"
+      : "#6b7280";
+
+    const xTicks = [72,74,76,78,80,82,84,86,88,90,92,94].filter(v=>v>=minWs&&v<=maxWs);
+    const yTicks = [68,70,72,74,76,78,80,82,84,86,88].filter(v=>v>=minHt&&v<=maxHt);
+
+    // Sortierung: selected zuletzt zeichnen (liegt oben)
+    const drawOrder = [...allPts].sort((a,b) => (a.isSelected?1:0) - (b.isSelected?1:0));
+
+    // Position-Counts für Legende
+    const posCounts = allPts.reduce((acc,q) => { acc[q.pos]=(acc[q.pos]||0)+1; return acc; }, {});
+
+    return (
+      <div style={{position:"relative"}}>
+        {hoverPlayer && !hoverPlayer.isCombine && (
+          <div style={{
+            position:"fixed",zIndex:100,
+            left:Math.min(hoverPos.x+12,window.innerWidth-240),
+            top:Math.max(hoverPos.y-10,8),
+            background:"#1e293b",border:"1px solid #475569",
+            borderRadius:8,padding:"8px 12px",pointerEvents:"none",
+            boxShadow:"0 4px 20px rgba(0,0,0,0.6)",minWidth:200,
+          }}>
+            <div style={{fontSize:13,fontWeight:700,color:posColor(hoverPlayer.pos),marginBottom:4}}>{hoverPlayer.name}</div>
+            <div style={{fontSize:11,color:"#9ca3af"}}>{hoverPlayer.pos}{hoverPlayer.yr?` · ${hoverPlayer.yr}`:""}{hoverPlayer.source && hoverPlayer.source!=="ncaa"?` · ${hoverPlayer.source}`:""}</div>
+            <div style={{fontSize:11,color:"#e5e7eb",marginTop:4}}>
+              Ht: {Math.floor(hoverPlayer.htIn/12)}'{hoverPlayer.htIn%12}" ({hoverPlayer.htIn}")<br/>
+              WS: {hoverPlayer.ws.toFixed(1)}" · Δ: {(hoverPlayer.ws-hoverPlayer.htIn).toFixed(1)}"<br/>
+              Wt: {hoverPlayer.wt} lbs
+            </div>
+          </div>
+        )}
+        <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{overflow:"visible"}}>
+          {/* Grid */}
+          {yTicks.map(ht=>(
+            <g key={`y${ht}`}>
+              <line x1={PAD.l} x2={W-PAD.r} y1={yS(ht)} y2={yS(ht)} stroke="#1f2937" strokeWidth={1}/>
+              <text x={PAD.l-4} y={yS(ht)+4} textAnchor="end" fontSize={8} fill="#4b5563">{Math.floor(ht/12)}'{ht%12}"</text>
+            </g>
+          ))}
+          {xTicks.map(ws=>(
+            <g key={`x${ws}`}>
+              <line x1={xS(ws)} x2={xS(ws)} y1={PAD.t} y2={H-PAD.b} stroke="#1f2937" strokeWidth={1}/>
+              <text x={xS(ws)} y={H-PAD.b+12} textAnchor="middle" fontSize={8} fill="#4b5563">{ws}"</text>
+            </g>
+          ))}
+          {/* WS=Ht Referenzlinie */}
+          {(() => {
+            const lo = Math.max(minWs, minHt);
+            const hi = Math.min(maxWs, maxHt);
+            if (hi <= lo) return null;
+            return (
+              <>
+                <line x1={xS(lo)} x2={xS(hi)} y1={yS(lo)} y2={yS(hi)}
+                  stroke="#374151" strokeWidth={1} strokeDasharray="4,3" opacity={0.5}/>
+                <text x={xS(lo)+2} y={yS(lo)-3} fontSize={8} fill="#4b5563" opacity={0.6}>WS=Ht</text>
+              </>
+            );
+          })()}
+          {/* Achsenbeschriftung */}
+          <text x={W/2} y={H-PAD.b+28} textAnchor="middle" fontSize={10} fill="#6b7280">Wingspan (inches)</text>
+          <text x={12} y={H/2} textAnchor="middle" fontSize={10} fill="#6b7280" transform={`rotate(-90,12,${H/2})`}>Height (inches)</text>
+          {/* Punkte (alle — selected zuletzt) */}
+          {drawOrder.map((q,i)=>{
+            const isSel = q.isSelected;
+            const col = posColor(q.pos);
+            const r = rSize(q.wt) + (isSel ? 3 : 0);
+            return (
+              <circle key={i} cx={xS(q.ws)} cy={yS(q.htIn)} r={r}
+                fill={col}
+                stroke={isSel ? "#fed7aa" : col}
+                strokeWidth={isSel ? 2 : 0.5}
+                opacity={isSel ? 1 : 0.35}
+                style={{cursor:"pointer", transition:"opacity 120ms"}}
+                onMouseEnter={(e)=>{setHoverPlayer({...q, isCombine:false});setHoverPos({x:e.clientX,y:e.clientY});}}
+                onMouseMove={(e)=>{if(hoverPlayer){setHoverPos({x:e.clientX,y:e.clientY});}}}
+                onMouseLeave={()=>setHoverPlayer(null)}/>
+            );
+          })}
+          {/* Label für Selected Player (immer sichtbar) */}
+          {(() => {
+            const sel = allPts.find(q => q.isSelected);
+            if (!sel) return null;
+            const lastName = sel.name.split(" ").slice(-1)[0];
+            return (
+              <text x={xS(sel.ws)+rSize(sel.wt)+6} y={yS(sel.htIn)+4}
+                fontSize={12} fontWeight="bold" fill={posColor(sel.pos)}
+                style={{textShadow:"0 0 4px #000, 0 0 4px #000"}}>{lastName}</text>
+            );
+          })()}
+        </svg>
+        <div style={{fontSize:10,color:"#6b7280",marginTop:6,display:"flex",gap:14,flexWrap:"wrap",alignItems:"center"}}>
+          {["Playmaker","Wing","Big"].map(pos => (
+            <span key={pos} style={{display:"inline-flex",alignItems:"center",gap:4}}>
+              <span style={{display:"inline-block",width:10,height:10,borderRadius:"50%",background:posColor(pos)}}/>
+              <span style={{color:"#9ca3af"}}>{pos}</span>
+              <span style={{color:"#4b5563"}}>({posCounts[pos]||0})</span>
+            </span>
+          ))}
+          <span style={{color:"#4b5563"}}>Punktgröße ∝ Gewicht · {allPts.length} Prospects · hover für Details</span>
+        </div>
+      </div>
+    );
+  };
+
   // ── Combine scatter helpers ──
   const CombineScatter = () => {
     const pts = (combineData || []).filter(c => c.ht && c.ws);
@@ -3834,6 +4099,12 @@ function BodyTab({p}) {
           </div>
         )}
 
+      </Sec>
+
+      {/* ── PROSPECT SCATTER (aktuelle Klasse) ── */}
+      <Sec icon="🧭" title="Draft Class Scatter: Wingspan vs. Height"
+        sub="Alle Prospects mit vollständigen Messungen (Height + Wingspan + Weight) in der aktuell geladenen Klasse. X = Wingspan, Y = Height, Punktgröße ∝ Gewicht. Farbe nach Position — ausgewählter Spieler ist hervorgehoben. Hover für Details.">
+        <ProspectScatter />
       </Sec>
 
       {/* ── NBA COMBINE SCATTER ── */}
@@ -4038,7 +4309,7 @@ function MethodologyTab() {
     {cat:"ppWA Projection Model (v2)",items:["monteCarlo","posClassification"],desc:"Core engine: position-stratified HistGradientBoosting (sklearn) + calibrated Elite Detector (logistic), trained on 1,784 NCAA and international prospects (draft classes 2010–2016, N=1,784) with verified NBA outcomes. Target variable: Peak Wins Added — best 3-consecutive-season window in first 8 NBA years (min 200 minutes/season). Features: 8–12 theoretically grounded variables per position group (Playmaker / Wing / Big), including age, BPM percentile, BPM trajectory, conference strength, free-throw rate, athleticism score, and position-specific shooting/playmaking signals. Output: ppWA = Projected Peak Wins Added (a single, interpretable number: 'this player projects to add X wins above replacement at his peak'). Validated on holdout classes 2017–2019: Spearman ρ = 0.460 (craftednba.com published benchmark: 0.373) — this is rank-order correlation on out-of-sample data, not a training-set metric. Cross-validated r = 0.462 (5-fold CV on training set). MAR = 12.0 per class. Note: model was trained exclusively on prospects who were scouted and drafted — undrafted players are extrapolations beyond the training distribution."},
     {cat:"International Adjustments",items:[],desc:"International players receive three adjustments: (1) League Strength via empirical bridge-player ratios (2,655 players who played both intl and NBA). Euroleague=1.40, ACB=1.39, BBL=1.18 (NCAA Power=1.0 anchor). (2) Liga-BPM-Scaler: Raw BPM proxy (PER+eDiff) is multiplied by a league-specific scaler (Euroleague ×2.1, ACB ×1.9, NBL ×1.65, etc.) to translate to NCAA-equivalent BPM before feature engineering. (3) Conf-adj post-hoc with translatable-USG-aware caps for strong leagues."},
     {cat:"The 5 Pillars (DNA Scores)",items:["feel","shootScore","defScore","funcAth","selfCreation","overall"],desc:"Position-adjusted percentile scores (0–100) capturing the fundamental dimensions of prospect evaluation. Each pillar uses era-adjusted percentiles computed against ~34k college + ~9k international players since 2008. Box Creation (Ben Taylor method) measures total offensive creation: Scoring Creation (USG×TS) + Assist Creation (AST%×teammate possessions). Works identically for NCAA and international players."},
-    {cat:"Shooting Projection",items:["projNba3p","projNba3pa","projNba3par","touchPrior"],desc:"Bayesian Beta-Binomial model for NBA 3P shooting translation. Prior: FT%-based 'motor touch' (strongest single predictor of NBA shooting per internal analysis, Berger 2025). κ=200 pseudo-attempts means low-volume college shooters regress heavily toward their FT% prior. For players without midrange data (internationals, pre-2010), a simplified FT%-only prior is used with higher FT% weighting."},
+    {cat:"Shooting Projection",items:["projNba3p","projNba3pa","projNba3par","touchPrior"],desc:"Bayesian Beta-Binomial model for NBA 3P shooting translation. Prior: FT%-based 'motor touch' (strongest single predictor of NBA shooting per Berger 2022). κ=200 pseudo-attempts means low-volume college shooters regress heavily toward their FT% prior. For players without midrange data (internationals, pre-2010), a simplified FT%-only prior is used with higher FT% weighting."},
     {cat:"Possession Impact (CFFR)",items:["fourFactors"],desc:"Context-Free Four Factor Rating measuring possession efficiency per Dean Oliver's framework. Usage-role adjusted: Primary (USG≥28%), Secondary (≥22%), Finisher (≥15%), Low-Usage (<15%). Each factor (eFG% 40%, TO% 25%, ORB% 20%, FTr 15%) is percentiled WITHIN the player's usage bucket, so a primary scorer with 52% eFG rates correctly against peers, not low-usage finishers."},
     {cat:"Role Inference Matrix",items:[],desc:"14 NBA roles scored as z-scores relative to position peers. Offensive: Scorer, Playmaker, Spacer, Driver, Crasher. Defensive: On-Ball, Switch Potential, Rim Protect, Rebounder. Hybrid: Connector, Helio-Scorer, Event Creator, Zone Pressure, Micro-Spacer. Each role combines 2-4 statistical inputs weighted by NBA translation research. Z≥+2.0 = Elite, ≥+1.0 = Impact, <-1.0 = Liability."},
     {cat:"Archetype Classification",items:[],desc:"18 NBA archetypes assigned by position + dominant role scores. Playmaker archetypes: Scoring Playmaker, Floor General, Spacing Guard, Defensive Guard, Non-Specialized Playmaker. Wing: Initiator Wing, Scoring Wing, 3-and-D, Defensive Wing, Point Forward, Slashing Wing, Non-Specialized Wing. Big: Stretch Big, Stretch Rim Protector, Rim Protector, Short Roll Playmaker, Passing Hub, Glass Cleaner, Scoring Big, Non-Specialized Big. Primary archetype from pipeline, secondary/tertiary from role-score matching within position."},
@@ -4106,7 +4377,7 @@ function MethodologyTab() {
         {/* Row 3: Two-Component Model */}
         <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:4}}>
           <div style={boxStyle("#ef4444")}>
-            <div style={{color:"#ef4444", fontSize:12, fontWeight:700, fontFamily:"'Oswald',sans-serif"}}>ElasticNet Regression</div>
+            <div style={{color:"#ef4444", fontSize:12, fontWeight:700, fontFamily:"'Oswald',sans-serif"}}>HistGradientBoosting</div>
             <div style={{color:"#6b7280", fontSize:10, marginTop:3}}>Position-stratified<br/>8–12 features per group<br/>→ wa_pred (continuous)</div>
           </div>
           <div style={boxStyle("#8b5cf6")}>
@@ -4905,7 +5176,9 @@ export default function App() {
   const [tab,setTab]=useState("overview");
   const [search,setSearch]=useState("");
   const [showS,setShowS]=useState(false);
-  const [compTier,setCompTier]=useState("Replacement");
+  // Default comparison tier: "Starter" is the most informative baseline for first-round prospects
+  // (Replacement is trivially passed by every lottery pick, All-Star is aspirational).
+  const [compTier,setCompTier]=useState("Starter");
 
   const [boardData,setBoardData]=useState([]);
   const [profileCache,setProfileCache]=useState({});
@@ -5165,7 +5438,8 @@ export default function App() {
                     <div className="flex flex-wrap items-center gap-2 mt-1 text-sm" style={{color:"#9ca3af"}}>
                       <span className="px-2 py-0.5 rounded text-xs font-semibold" style={{background:"#f9731622",color:"#f97316"}}>{p.pos}</span>
                       {(() => {
-                        const allArch = (p.archetypesAll || p.archetype || "").split("|").filter(Boolean);
+                        // Cap to top-3 archetypes in header to avoid visual clutter (pipeline may emit up to 7 matches for versatile players)
+                        const allArch = (p.archetypesAll || p.archetype || "").split("|").filter(Boolean).slice(0, 3);
                         return allArch.map((a, i) => {
                           const ac = ARCH_COLORS[a] || "#60a5fa";
                           return (
