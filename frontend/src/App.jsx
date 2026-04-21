@@ -1643,16 +1643,18 @@ function ShootingTab({p}) {
                     {zones.map(z => {
                       const share = totalSelfMakes > 0 ? selfMakesByZone[z] / totalSelfMakes * 100 : 0;
                       return share > 0 ? (
-                        <Tip key={z} content={<div>{fmt(share,0)}% of self-created makes are {zoneLabel[z].toLowerCase()}</div>}>
-                          <div className="h-full flex items-center justify-center text-sm font-bold cursor-help" style={{
-                            flex: `${share} 1 0`,
-                            background: zoneColor[z],
-                            color: "#fff",
-                            minWidth: share >= 3 ? 0 : "auto",
-                          }}>
-                            {share > 6 && `${fmt(share,0)}%`}
-                          </div>
-                        </Tip>
+                        // Flex-Item MUSS das direkte Kind des flex-Containers sein.
+                        // Tip wrappt in <span inline-block>, deshalb hier ein div drumherum.
+                        <div key={z} className="h-full" style={{flex:`${share} 1 0`, minWidth: share >= 3 ? 0 : "auto"}}>
+                          <Tip content={<div>{fmt(share,0)}% of self-created makes are {zoneLabel[z].toLowerCase()}</div>} block>
+                            <div className="h-full flex items-center justify-center text-sm font-bold cursor-help w-full" style={{
+                              background: zoneColor[z],
+                              color: "#fff",
+                            }}>
+                              {share > 6 && `${fmt(share,0)}%`}
+                            </div>
+                          </Tip>
+                        </div>
                       ) : null;
                     })}
                   </div>
