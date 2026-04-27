@@ -1002,6 +1002,56 @@ function mapProfile(d) {
 let PLAYERS = {};
 let PLAYER_LIST = [];
 
+// ── Canonical identity helpers ──────────────────────────────────────────
+// The backend now serves every profile with a stable `player_id` + a
+// URL-safe `slug`. The UI still keys its state by *display name* for
+// simplicity, but two distinct people can share the same display name
+// (e.g. two Cameron Boozers). We solve that at install-time by adding a
+// disambiguating suffix "· <team> '<yy>" to collision-affected entries —
+// that becomes both the React key AND the implicit secondary-line
+// displayed next to the player's name.
+//
+// The original display name remains on `entry.name`, the slug on
+// `entry.slug`, and the player_id on `entry.player_id`. All fetches
+// should prefer slug to stay collision-safe end-to-end.
+function playerKeyFor(entry) {
+  const rawName = entry?.name || "";
+  if (!rawName) return entry?.slug || "";
+  return rawName;
+}
+function disambiguateKey(entry) {
+  const base = entry?.name || "Unknown";
+  const team = entry?.team || "";
+  const yr = entry?.yr;
+  const yyStr = (yr != null && Number.isFinite(+yr)) ? `'${String(yr).slice(-2)}` : "";
+  const suffix = [team, yyStr].filter(Boolean).join(" ");
+  return suffix ? `${base} · ${suffix}` : base;
+}
+function installPlayers(players) {
+  // First pass: count display-name occurrences
+  const counts = {};
+  players.forEach(pl => {
+    const k = pl?.name || "";
+    if (!k) return;
+    counts[k] = (counts[k] || 0) + 1;
+  });
+  // Second pass: install with disambiguated keys on collisions
+  players.forEach(pl => {
+    const mapped = mapProfile(pl) || {};
+    mapped.player_id = pl.player_id || mapped.player_id;
+    mapped.slug = pl.slug || mapped.slug;
+    mapped.name = pl.name || mapped.name;
+    const key = (counts[pl.name] || 0) > 1 ? disambiguateKey(pl) : playerKeyFor(pl);
+    // If the disambiguated key *still* collides (identical team+year), append pid
+    let finalKey = key;
+    if (PLAYERS[finalKey] && PLAYERS[finalKey].player_id !== mapped.player_id) {
+      finalKey = `${key} [${mapped.player_id}]`;
+    }
+    PLAYERS[finalKey] = mapped;
+    PLAYER_LIST.push(finalKey);
+  });
+}
+
 // ═══════════════════════════════════════════════════════════
 // SHARED COMPONENTS
 // ═══════════════════════════════════════════════════════════
@@ -4921,11 +4971,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
         const players = d.players||[];
         setBoardData(players);
         PLAYERS={};PLAYER_LIST=[];
-        players.forEach(pl=>{
-          const mapped = mapProfile(pl);
-          PLAYERS[pl.name]=mapped;
-          PLAYER_LIST.push(pl.name);
-        });
+        installPlayers(players);
         setLoading(false);
       })
       .catch(e=>{console.error("Board fetch failed:",e);setLoading(false);});
@@ -5210,33 +5256,81 @@ export default function App() {
             const players = d.players||[];
             setBoardData(players);
             PLAYERS={};PLAYER_LIST=[];
-            players.forEach(pl=>{
-              const mapped = mapProfile(pl);
-              PLAYERS[pl.name]=mapped;
-              PLAYER_LIST.push(pl.name);
-            });
+            installPlayers(players);
             setLoading(false);
+            // Initial URL parse: if landing on /player/<slug>, auto-select.
+            if (typeof window !== "undefined") {
+              const m = window.location.pathname.match(/^\/player\/([^/]+)\/?$/);
+              if (m) {
+                const wanted = decodeURIComponent(m[1]);
+                const found = Object.entries(PLAYERS).find(
+                  ([_, pl]) => pl.slug === wanted || String(pl.player_id) === wanted
+                );
+                if (found) selectPlayer(found[0]);
+              }
+            }
           });
       })
       .catch(e=>{console.error("Board fetch failed:",e);setLoading(false);});
   },[]);
 
+  // Browser-Back/Forward + sel→URL sync.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onPop = () => {
+      const m = window.location.pathname.match(/^\/player\/([^/]+)\/?$/);
+      if (m) {
+        const wanted = decodeURIComponent(m[1]);
+        const found = Object.entries(PLAYERS).find(
+          ([_, pl]) => pl.slug === wanted || String(pl.player_id) === wanted
+        );
+        if (found && found[0] !== sel) selectPlayer(found[0]);
+      } else if (sel) {
+        setSel(null);
+      }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [sel]);
+
+  // When returning to board view (sel cleared), restore root URL.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (sel === null && window.location.pathname !== '/') {
+      window.history.pushState({}, '', '/');
+    }
+  }, [sel]);
+
   const selectPlayer = async (name) => {
     setSel(name); setSearch(""); setShowS(false); setTab("overview");
+    // Push slug-based URL so each player has a shareable, SEO-friendly address.
+    const _bp = PLAYERS[name];
+    const _slug = _bp?.slug || _bp?.player_id || name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    if (_slug && typeof window !== "undefined" && window.location.pathname !== `/player/${_slug}`) {
+      window.history.pushState({slug: _slug}, '', `/player/${_slug}`);
+    }
     if (profileCache[name]) return;
+
+    // Prefer slug/player_id in the API path — the display name may be a
+    // disambiguated key like "Cameron Boozer · Duke '26" and the backend
+    // won't resolve it. Fall back to the raw display name for legacy rows
+    // (search results not yet enriched by the board).
+    const boardProfile = PLAYERS[name];
+    const apiIdent = encodeURIComponent(
+      boardProfile?.slug || boardProfile?.player_id || boardProfile?.name || name
+    );
 
     // If board already loaded rich profile data (ppwa present), show Overview
     // immediately and load full profile + comps in background — no blocking spinner.
-    const boardProfile = PLAYERS[name];
     const alreadyRich = boardProfile && (boardProfile.ppwa != null || boardProfile.pctl != null);
     if (alreadyRich) {
       setProfileCache(prev => ({...prev, [name]: boardProfile}));
       // Fetch full profile + comps in background (non-blocking)
       // This ensures Shooting/Scouting/Projection tabs always get complete data
       Promise.all([
-        fetch(`${API_BASE}/player/${encodeURIComponent(name)}`).then(r=>r.ok?r.json():null).catch(()=>null),
-        fetch(`${API_BASE}/comps/stats/${encodeURIComponent(name)}`).then(r=>r.ok?r.json():null).catch(()=>null),
-        fetch(`${API_BASE}/comps/anthro/${encodeURIComponent(name)}`).then(r=>r.ok?r.json():null).catch(()=>null),
+        fetch(`${API_BASE}/player/${apiIdent}`).then(r=>r.ok?r.json():null).catch(()=>null),
+        fetch(`${API_BASE}/comps/stats/${apiIdent}`).then(r=>r.ok?r.json():null).catch(()=>null),
+        fetch(`${API_BASE}/comps/anthro/${apiIdent}`).then(r=>r.ok?r.json():null).catch(()=>null),
       ]).then(([profRes, statsRes, anthroRes]) => {
         // Use full profile if available, fall back to board profile
         const updated = profRes?.profile ? mapProfile(profRes.profile) : {...boardProfile};
@@ -5287,12 +5381,17 @@ export default function App() {
     setProfileLoading(true);
     try {
       const [profRes, statsRes, anthroRes] = await Promise.all([
-        fetch(`${API_BASE}/player/${encodeURIComponent(name)}`).then(r=>r.ok?r.json():null),
-        fetch(`${API_BASE}/comps/stats/${encodeURIComponent(name)}`).then(r=>r.ok?r.json():null).catch(()=>null),
-        fetch(`${API_BASE}/comps/anthro/${encodeURIComponent(name)}`).then(r=>r.ok?r.json():null).catch(()=>null),
+        fetch(`${API_BASE}/player/${apiIdent}`).then(r=>r.ok?r.json():null),
+        fetch(`${API_BASE}/comps/stats/${apiIdent}`).then(r=>r.ok?r.json():null).catch(()=>null),
+        fetch(`${API_BASE}/comps/anthro/${apiIdent}`).then(r=>r.ok?r.json():null).catch(()=>null),
       ]);
       if (profRes?.profile) {
         const mapped = mapProfile(profRes.profile);
+        // Carry canonical identity onto the cached entry so downstream
+        // fetches stay slug-routed.
+        mapped.player_id = profRes.player_id || profRes.profile.player_id || mapped.player_id;
+        mapped.slug = profRes.slug || profRes.profile.slug || mapped.slug;
+        mapped.name = profRes.name || profRes.profile.name || mapped.name;
         if (statsRes?.comps) {
           const rawSims2 = statsRes.comps.map(c => Number(c.similarity ?? 0)).filter(v => v > 0);
           const maxSim2 = rawSims2.length > 0 ? Math.max(...rawSims2) : 1;
@@ -5337,17 +5436,51 @@ export default function App() {
 
   useEffect(()=>{
     if(!search||search.length<2){setSearchResults([]);return;}
-    const local = PLAYER_LIST.filter(n=>n.toLowerCase().includes(search.toLowerCase())).slice(0,15);
+    // Local match works across both raw and disambiguated keys ("Cameron
+    // Boozer · Duke '26" contains "Cameron Boozer" so both show up).
+    const ql = search.toLowerCase();
+    const local = PLAYER_LIST.filter(n=>n.toLowerCase().includes(ql)).slice(0,15);
     if(local.length>0) setSearchResults(local);
     const t=setTimeout(()=>{
       fetch(`${API_BASE}/players/search?q=${encodeURIComponent(search)}&limit=15`)
         .then(r=>r.json())
         .then(d=>{
-          const apiNames=(d.results||[]).map(r=>r.name);
+          const results = d.results||[];
+          // Build unique display keys for API results — if a name already
+          // exists under a disambiguated key locally, reuse that key.
+          const apiKeys = results.map(r => {
+            const raw = r.name || "";
+            // If the local list already has this exact name, reuse it.
+            if (PLAYER_LIST.includes(raw)) return raw;
+            // If the same raw name appears under a disambiguated key,
+            // keep a lightweight entry under the raw name (backend will
+            // resolve by slug anyway).
+            return raw;
+          });
           const merged = [...local];
-          apiNames.forEach(n=>{if(!merged.includes(n)) merged.push(n);});
+          apiKeys.forEach(k => { if (k && !merged.includes(k)) merged.push(k); });
           setSearchResults(merged.slice(0,20));
-          apiNames.forEach(n=>{if(!PLAYERS[n]){PLAYER_LIST.push(n);PLAYERS[n]={name:n,pos:"",team:""};}});
+          // Seed PLAYERS with lightweight rows so the dropdown can show
+          // pos/team hints. Carry slug/player_id so selectPlayer() can
+          // hit the backend by slug.
+          results.forEach(r => {
+            const k = r.name;
+            if (!k) return;
+            if (!PLAYERS[k]) {
+              PLAYER_LIST.push(k);
+              PLAYERS[k] = {
+                name: r.name,
+                slug: r.slug,
+                player_id: r.player_id,
+                pos: r.position || "",
+                team: r.team || "",
+              };
+            } else {
+              // Patch identity fields if missing (older cached entries)
+              if (!PLAYERS[k].slug && r.slug) PLAYERS[k].slug = r.slug;
+              if (!PLAYERS[k].player_id && r.player_id) PLAYERS[k].player_id = r.player_id;
+            }
+          });
         })
         .catch(()=>{});
     },300);
@@ -5381,9 +5514,22 @@ export default function App() {
             <input className="w-48 md:w-72 px-4 py-2 rounded-lg text-sm outline-none" style={{background:"#111827",border:"1px solid #374151",color:"#e5e7eb"}} placeholder="Search players..." value={search}
               onChange={e=>{setSearch(e.target.value);setShowS(true)}} onFocus={()=>setShowS(true)} onBlur={()=>setTimeout(()=>setShowS(false),200)}/>
             {showS&&search&&<div className="absolute top-full mt-1 left-0 right-0 rounded-lg overflow-hidden shadow-2xl z-50" style={{background:"#111827",border:"1px solid #374151",maxHeight:200,overflowY:"auto"}}>
-              {searchResults.map(n=><button key={n} className="w-full text-left px-4 py-2.5 text-sm hover:bg-white hover:bg-opacity-5" onMouseDown={()=>selectPlayer(n)} style={{color:"#e5e7eb",borderBottom:"1px solid #1f2937"}}>
-                <span className="font-semibold">{n}</span><span className="ml-2 text-xs" style={{color:"#6b7280"}}>{PLAYERS[n]?.pos} · {PLAYERS[n]?.team}</span>
-              </button>)}
+              {searchResults.map(n=>{
+                const pe = PLAYERS[n] || {};
+                const displayName = pe.name || n;
+                // Secondary line: team · year (or · position if year absent).
+                // Shows up both as natural metadata AND as a disambiguator
+                // when two players share a name.
+                const yr = pe.yr;
+                const secondaryParts = [pe.team, yr ? `'${String(yr).slice(-2)}` : null, pe.pos].filter(Boolean);
+                const secondary = secondaryParts.join(" · ");
+                return (
+                  <button key={n} className="w-full text-left px-4 py-2.5 text-sm hover:bg-white hover:bg-opacity-5" onMouseDown={()=>selectPlayer(n)} style={{color:"#e5e7eb",borderBottom:"1px solid #1f2937"}}>
+                    <span className="font-semibold">{displayName}</span>
+                    {secondary && <span className="ml-2 text-xs" style={{color:"#6b7280"}}>{secondary}</span>}
+                  </button>
+                );
+              })}
             </div>}
           </div>
         </div>
