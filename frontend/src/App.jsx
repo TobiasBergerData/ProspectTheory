@@ -5301,6 +5301,70 @@ export default function App() {
     }
   }, [sel]);
 
+  // SEO meta tags — sync title/description/OG/Twitter to current player or board.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const setMeta = (selector, attrName, attrVal, content) => {
+      let el = document.head.querySelector(selector);
+      if (!el) {
+        el = document.createElement('meta');
+        el.setAttribute(attrName, attrVal);
+        document.head.appendChild(el);
+      }
+      el.setAttribute('content', content);
+    };
+    const setLink = (rel, href) => {
+      let el = document.head.querySelector(`link[rel="${rel}"]`);
+      if (!el) {
+        el = document.createElement('link');
+        el.setAttribute('rel', rel);
+        document.head.appendChild(el);
+      }
+      el.setAttribute('href', href);
+    };
+
+    const baseUrl = "https://prospecttheory.io";
+    let title = "ProspectTheory — NBA Draft Intelligence";
+    let desc  = "Probabilistic NBA draft prospect evaluation using college statistics, combine measurements, and machine learning tier predictions.";
+    let url   = `${baseUrl}/`;
+    let ogType = "website";
+
+    if (sel) {
+      const p = profileCache[sel] || PLAYERS[sel] || {};
+      const slug = p.slug || (typeof sel === "string" ? sel.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : '');
+      const name = p.name || sel;
+      const yr   = p.yr || p.cls || '';
+      const team = p.team || p.conf || '';
+      const tier = p.tier || '';
+      const ppwa = (p.ppwa != null && isFinite(p.ppwa)) ? Math.round(p.ppwa * 10) / 10 : null;
+
+      title = yr ? `${name} · Class of ${yr} — ProspectTheory` : `${name} — ProspectTheory`;
+
+      const dparts = [name];
+      if (team) dparts.push(team);
+      if (yr)   dparts.push(`Class ${yr}`);
+      if (tier) dparts.push(`Projected ${tier}`);
+      if (ppwa != null) dparts.push(`${ppwa} ppWA`);
+      dparts.push("Stats, projection & NBA comps.");
+      desc = dparts.join(' · ').slice(0, 160);
+
+      if (slug) url = `${baseUrl}/player/${slug}`;
+      ogType = "profile";
+    }
+
+    document.title = title;
+    setMeta('meta[name="description"]', 'name', 'description', desc);
+    setMeta('meta[property="og:title"]', 'property', 'og:title', title);
+    setMeta('meta[property="og:description"]', 'property', 'og:description', desc);
+    setMeta('meta[property="og:url"]', 'property', 'og:url', url);
+    setMeta('meta[property="og:type"]', 'property', 'og:type', ogType);
+    setMeta('meta[property="og:site_name"]', 'property', 'og:site_name', 'ProspectTheory');
+    setMeta('meta[name="twitter:card"]', 'name', 'twitter:card', 'summary_large_image');
+    setMeta('meta[name="twitter:title"]', 'name', 'twitter:title', title);
+    setMeta('meta[name="twitter:description"]', 'name', 'twitter:description', desc);
+    setLink('canonical', url);
+  }, [sel, profileCache]);
+
   const selectPlayer = async (name) => {
     setSel(name); setSearch(""); setShowS(false); setTab("overview");
     // Push slug-based URL so each player has a shareable, SEO-friendly address.
