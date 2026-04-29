@@ -5263,10 +5263,37 @@ export default function App() {
               const m = window.location.pathname.match(/^\/player\/([^/]+)\/?$/);
               if (m) {
                 const wanted = decodeURIComponent(m[1]);
+                // 1. Lokaler Lookup im current Board (Top-N aktuelle Saison)
                 const found = Object.entries(PLAYERS).find(
                   ([_, pl]) => pl.slug === wanted || String(pl.player_id) === wanted
                 );
-                if (found) selectPlayer(found[0]);
+                if (found) {
+                  selectPlayer(found[0]);
+                } else {
+                  // 2. Fallback: Spieler ist nicht im aktuellen Board (z.B. ältere
+                  // Draft-Klasse). API-Call holt Profile, dann Spieler ins PLAYERS-
+                  // Lookup adden + selektieren.
+                  fetch(`${API_BASE}/player/${encodeURIComponent(wanted)}`)
+                    .then(r => r.ok ? r.json() : null)
+                    .then(data => {
+                      const prof = data?.profile;
+                      if (!prof) return;
+                      const mapped = mapProfile(prof);
+                      const name = prof.name || mapped.name || wanted;
+                      // Inject ins PLAYERS-Lookup damit selectPlayer den Eintrag findet
+                      PLAYERS[name] = {
+                        ...mapped,
+                        slug: prof.slug || wanted,
+                        player_id: prof.player_id,
+                        name,
+                      };
+                      // Profile in cache vor-laden, damit selectPlayer keine
+                      // doppelte Fetch macht
+                      setProfileCache(prev => ({...prev, [name]: PLAYERS[name]}));
+                      selectPlayer(name);
+                    })
+                    .catch(e => console.warn("Direct player URL fetch failed:", e));
+                }
               }
             }
           });
