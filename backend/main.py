@@ -29,6 +29,9 @@ Run:
 import gzip
 import json
 import os
+import sqlite3
+import zlib
+import threading
 from pathlib import Path
 from typing import Optional
 from fastapi import FastAPI, HTTPException, Query, Response
@@ -76,11 +79,38 @@ _anthro_comps = None
 _search_index = None
 _years_cache = None   # sorted list of unique draft years
 
-# Identity indexes — built lazily on first profile-load. All lookups go
-# through these so we never scan the profiles dict by name.
-_slug_to_pid: dict = None    # {slug: player_id}
-_name_to_pid: dict = None    # {name_lower: player_id}   — first-match wins (collisions will pick most-recent)
-_pid_to_slug: dict = None    # {player_id: slug}
+
+# v3.1: Identity-Lookup-Shims — verhalten sich wie die alten dicts (.get()),
+# fragen aber SQLite. Alle Endpoints koennen unveraendert bleiben.
+class _SlugToPidShim:
+    def get(self, slug, default=None):
+        if not slug: return default
+        row = _db().execute("SELECT player_id FROM profiles WHERE slug=?", (slug,)).fetchone()
+        return row[0] if row else default
+    def __contains__(self, slug):
+        return self.get(slug) is not None
+
+
+class _NameToPidShim:
+    def get(self, name_lower, default=None):
+        if not name_lower: return default
+        row = _db().execute(
+            "SELECT player_id FROM profiles WHERE name_lower=? LIMIT 1",
+            (name_lower,),
+        ).fetchone()
+        return row[0] if row else default
+
+
+class _PidToSlugShim:
+    def get(self, pid, default=None):
+        if not pid: return default
+        row = _db().execute("SELECT slug FROM profiles WHERE player_id=?", (pid,)).fetchone()
+        return row[0] if row else default
+
+
+_slug_to_pid = _SlugToPidShim()
+_name_to_pid = _NameToPidShim()
+_pid_to_slug = _PidToSlugShim()
 
 
 def _get_years() -> list:
@@ -150,7 +180,9 @@ _BOARD_FIELDS = [
 
 
 def load_json(filepath: Path):
-    """Load a JSON file (.json or .json.gz). Returns empty dict if missing."""
+    """Load a JSON file (.json or .json.gz). Returns empty dict if missing.
+    Wird ab v3.1 nur noch als Fallback genutzt; primary storage = SQLite (s.u.).
+    """
     gz_path = Path(str(filepath) + ".gz") if not str(filepath).endswith(".gz") else filepath
     json_path = filepath if not str(filepath).endswith(".gz") else Path(str(filepath)[:-3])
 
@@ -165,135 +197,214 @@ def load_json(filepath: Path):
         return {}
 
 
+# ═══════════════════════════════════════════════════════════
+# SQLite-Backend (v3.1) — Memory-effizient für Render Free Tier
+# ═══════════════════════════════════════════════════════════
+# Vorher: 103-MB-JSON wurde komplett in Memory geladen → ~500 MB RAM-Bedarf
+# bei Python-dict-Overhead. Render Free Tier hat 512 MB → OOM-Kill beim Start.
+#
+# Jetzt: prospecttheory.db wird per-Connection geöffnet, queries laden nur die
+# gefragten rows. Memory pro Request <1 MB. Lazy-decompress nur für detaillierte
+# Profile via /api/player/{slug}.
+DB_PATH = Path(os.environ.get("DATA_DIR", "./data/processed")) / "prospecttheory.db"
+_db_local = threading.local()
+
+def _db():
+    """Thread-local SQLite connection. SQLite-connections sind nicht thread-safe,
+    daher pro Worker-Thread eine eigene."""
+    conn = getattr(_db_local, "conn", None)
+    if conn is None:
+        if not DB_PATH.exists():
+            raise RuntimeError(f"SQLite database not found at {DB_PATH}")
+        conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        _db_local.conn = conn
+    return conn
+
+
+def _decompress_blob(blob):
+    """zlib-decompress + JSON-decode für profiles.data / stat_comps.data / etc."""
+    if blob is None:
+        return None
+    try:
+        return json.loads(zlib.decompress(blob).decode("utf-8"))
+    except Exception as _err:
+        print(f"⚠️ blob decompress failed: {_err}")
+        return None
+
+
+def _ensure_db_present():
+    """Beim ersten Zugriff sicherstellen dass die DB da ist."""
+    if not DB_PATH.exists():
+        print(f"❌ Critical: {DB_PATH} fehlt — Service kann keine Daten servieren.")
+        raise RuntimeError(f"DB missing: {DB_PATH}")
+    return DB_PATH
+
+
+class _SqliteProfilesDict:
+    """Verhält sich wie ein dict[pid -> profile], lädt aber lazy aus SQLite.
+    Notwendig weil bestehende endpoints get_profiles()[pid] und .items() nutzen.
+    Nur Code-Pfade die wirklich iterieren (z.B. /api/board) sollten umgestellt werden."""
+
+    def __getitem__(self, pid):
+        row = _db().execute(
+            "SELECT data FROM profiles WHERE player_id=?", (pid,)
+        ).fetchone()
+        if row is None:
+            raise KeyError(pid)
+        return _decompress_blob(row[0]) or {}
+
+    def get(self, pid, default=None):
+        try:
+            return self[pid]
+        except KeyError:
+            return default
+
+    def __contains__(self, pid):
+        row = _db().execute(
+            "SELECT 1 FROM profiles WHERE player_id=? LIMIT 1", (pid,)
+        ).fetchone()
+        return row is not None
+
+    def __len__(self):
+        return _db().execute("SELECT COUNT(*) FROM profiles").fetchone()[0]
+
+    def items(self):
+        # NOTE: streamt alle profiles - nicht in memory-kritischen pfaden nutzen.
+        # Wird nur fuer Legacy-Code-Pfade gebraucht (z.B. find_player fallback).
+        for row in _db().execute("SELECT player_id, data FROM profiles"):
+            yield row[0], (_decompress_blob(row[1]) or {})
+
+    def values(self):
+        for _pid, prof in self.items():
+            yield prof
+
+    def keys(self):
+        for row in _db().execute("SELECT player_id FROM profiles"):
+            yield row[0]
+
+
+_profiles_dict = None
+
+
 def get_profiles() -> dict:
-    """
-    api_profiles.json is keyed by player_id (11_compress v3). On first
-    load we materialize three lookup tables:
-      _slug_to_pid — URL routing
-      _name_to_pid — legacy name-based URLs / search fallbacks
-      _pid_to_slug — reverse lookup for response enrichment
-    """
-    global _profiles, _slug_to_pid, _name_to_pid, _pid_to_slug
-    if _profiles is None:
-        print("Loading profiles...")
-        _profiles = load_json(DATA_DIR / "api_profiles.json")
-        _slug_to_pid, _name_to_pid, _pid_to_slug = {}, {}, {}
-        legacy_keys = 0
-        for key, p in _profiles.items():
-            pid = p.get("player_id") or (key if ":" in key else None)
-            slug = p.get("slug")
-            name = p.get("name") or (key if ":" not in key else "")
-            if not pid:
-                legacy_keys += 1
-                continue
-            if slug:
-                _slug_to_pid[slug] = pid
-                _pid_to_slug[pid] = slug
-            if name:
-                nl = name.strip().lower()
-                # Keep the first binding; collisions (two "Cameron Boozer") keep
-                # the earliest inserted profile's pid — frontend should prefer
-                # slug-based routing to avoid this.
-                _name_to_pid.setdefault(nl, pid)
-        print(f"  → {len(_profiles):,} profiles, "
-              f"{len(_slug_to_pid):,} slugs, {len(_name_to_pid):,} name bindings"
-              f"{f' ({legacy_keys} legacy keys without pid)' if legacy_keys else ''}")
-    return _profiles
+    """SQLite-backed dict-Interface fuer Profile. Memory-Bedarf konstant.
+    Endpoints die bestehende get_profiles()[pid] nutzen, funktionieren unveraendert."""
+    global _profiles_dict
+    if _profiles_dict is None:
+        _ensure_db_present()
+        _profiles_dict = _SqliteProfilesDict()
+    return _profiles_dict
 
 
 def _ensure_indexes():
-    """Force-build the identity indexes if they haven't been yet."""
-    if _slug_to_pid is None:
-        get_profiles()
+    """No-op in v3.1 — SQLite hat eigene Indexes."""
+    _ensure_db_present()
 
 
 def get_stat_comps() -> dict:
-    global _stat_comps
-    if _stat_comps is None:
-        print("Loading stat comps...")
-        _stat_comps = load_json(DATA_DIR / "api_stat_comps.json")
-        print(f"  → {len(_stat_comps):,} entries")
-    return _stat_comps
+    """Lazy stat-comps Lookup ueber SQLite."""
+    return _SqliteStatCompsDict()
 
 
 def get_anthro_comps() -> dict:
-    global _anthro_comps
-    if _anthro_comps is None:
-        print("Loading anthro comps...")
-        _anthro_comps = load_json(DATA_DIR / "api_anthro_comps.json")
-        print(f"  → {len(_anthro_comps):,} entries")
-    return _anthro_comps
+    """Lazy anthro-comps Lookup ueber SQLite."""
+    return _SqliteAnthroCompsDict()
+
+
+class _SqliteStatCompsDict:
+    """Lazy dict fuer stat_comps - decompress nur bei Lookup."""
+    def __getitem__(self, pid):
+        row = _db().execute("SELECT data FROM stat_comps WHERE player_id=?", (pid,)).fetchone()
+        if row is None: raise KeyError(pid)
+        return _decompress_blob(row[0]) or {}
+    def get(self, pid, default=None):
+        try: return self[pid]
+        except KeyError: return default
+    def __contains__(self, pid):
+        return _db().execute("SELECT 1 FROM stat_comps WHERE player_id=? LIMIT 1", (pid,)).fetchone() is not None
+    def __len__(self):
+        return _db().execute("SELECT COUNT(*) FROM stat_comps").fetchone()[0]
+
+
+class _SqliteAnthroCompsDict:
+    """Lazy dict fuer anthro_comps."""
+    def __getitem__(self, pid):
+        row = _db().execute("SELECT data FROM anthro_comps WHERE player_id=?", (pid,)).fetchone()
+        if row is None: raise KeyError(pid)
+        return _decompress_blob(row[0]) or {}
+    def get(self, pid, default=None):
+        try: return self[pid]
+        except KeyError: return default
+    def __contains__(self, pid):
+        return _db().execute("SELECT 1 FROM anthro_comps WHERE player_id=? LIMIT 1", (pid,)).fetchone() is not None
+    def __len__(self):
+        return _db().execute("SELECT COUNT(*) FROM anthro_comps").fetchone()[0]
 
 
 def get_search_index() -> list:
+    """Search-Index aus SQLite. Klein genug (40k entries × ~80 bytes = ~3 MB) fuer In-Memory."""
     global _search_index
     if _search_index is None:
-        print("Loading search index...")
-        data = load_json(DATA_DIR / "api_search_index.json")
-        if isinstance(data, list):
-            _search_index = data
-        else:
-            # Fallback: build from profiles
-            _search_index = []
-            for name, p in get_profiles().items():
-                _search_index.append({
-                    "n": name, "t": p.get("team", ""),
-                    "p": p.get("pos", ""), "y": p.get("yr"),
-                    "nba": p.get("made_nba", False),
-                    "tier": p.get("tier", ""),
-                    "mu": p.get("pred_mu"), "pn": p.get("pred_p_nba"),
-                })
-            _search_index.sort(key=lambda x: (-(x.get("pn") or 0), -(x.get("mu") or 0)))
-        print(f"  → {len(_search_index):,} players in index")
+        _ensure_db_present()
+        _search_index = []
+        for r in _db().execute("SELECT player_id, slug, name, team, pos, year FROM search"):
+            _search_index.append({
+                "id": r[0], "slug": r[1], "n": r[2],
+                "t": r[3] or "", "p": r[4] or "", "y": r[5],
+            })
+        print(f"Search index lazy-loaded: {len(_search_index):,} entries")
     return _search_index
 
 
 def find_player(ident: str) -> tuple:
-    """
-    Resolve a path parameter to a player profile. Accepts (in priority order):
-      1. player_id     (bt:134971, rg:54148, rg_name:…)
-      2. slug          (cameron-boozer, luka-doncic-real-madrid-18)
-      3. display name  (Cameron Boozer)
-
-    Returns (player_id, profile) or (None, None) if no match.
-
-    The returned profile always carries `player_id`, `slug`, and `name`
-    fields — the caller decides which to surface to clients.
-    """
+    """SQLite-basiert. 3-stage resolution: player_id -> slug -> name (lower)."""
     if not ident:
         return None, None
-
-    profiles = get_profiles()
-
-    # 1) direct player_id lookup (fast path, handles URL-encoded colons)
+    _ensure_db_present()
     pid_candidate = ident.replace("%3A", ":")
-    if pid_candidate in profiles:
-        return pid_candidate, profiles[pid_candidate]
-
-    # 2) slug lookup (URL-safe, canonical routing)
-    pid = _slug_to_pid.get(ident)
-    if pid and pid in profiles:
-        return pid, profiles[pid]
-
-    # 3) case-insensitive name lookup (legacy URLs)
     nl = ident.strip().lower()
-    pid = _name_to_pid.get(nl)
-    if pid and pid in profiles:
-        return pid, profiles[pid]
-
-    return None, None
+    # Eine SQL-query mit OR – SQLite waehlt den richtigen Index automatisch.
+    row = _db().execute(
+        "SELECT player_id, data FROM profiles "
+        "WHERE player_id=? OR slug=? OR name_lower=? LIMIT 1",
+        (pid_candidate, ident, nl),
+    ).fetchone()
+    if row is None:
+        return None, None
+    return row[0], (_decompress_blob(row[1]) or {})
 
 
 def _identity_fields(pid: str, profile: dict) -> dict:
-    """
-    Public identity triple for API responses — always include all three so
-    the client doesn't need a second round-trip to discover a canonical URL.
-    """
+    """Identity triple. Slug aus profile; falls fehlt, separater SQLite-Lookup."""
+    slug = profile.get("slug")
+    if not slug and pid:
+        row = _db().execute("SELECT slug FROM profiles WHERE player_id=?", (pid,)).fetchone()
+        slug = row[0] if row else None
     return {
         "player_id": pid,
-        "slug": profile.get("slug") or _pid_to_slug.get(pid),
+        "slug": slug,
         "name": profile.get("name"),
     }
+
+
+def _pid_to_slug_lookup(pid: str) -> Optional[str]:
+    """SQLite version of the old _pid_to_slug dict lookup."""
+    if not pid:
+        return None
+    row = _db().execute("SELECT slug FROM profiles WHERE player_id=?", (pid,)).fetchone()
+    return row[0] if row else None
+
+
+def _name_to_pid_lookup(name: str) -> Optional[str]:
+    """SQLite version of the old _name_to_pid dict lookup."""
+    if not name:
+        return None
+    row = _db().execute(
+        "SELECT player_id FROM profiles WHERE name_lower=? LIMIT 1",
+        (name.strip().lower(),),
+    ).fetchone()
+    return row[0] if row else None
 
 
 # ═══════════════════════════════════════════════════════════
@@ -654,51 +765,84 @@ async def get_board(
     # Cache-Control: allow CDN/browser to cache for 10 min, serve stale for 1h while revalidating
     response.headers["Cache-Control"] = "public, max-age=600, stale-while-revalidate=3600"
 
-    profiles = get_profiles()
-    _ensure_indexes()
+    _ensure_db_present()
+
+    # SQLite-Query: nutzt board-Tabelle mit Indexes auf year + war.
+    # Memory-Fussabdruck: ~30 KB fuer 200 rows. Vorher: 500+ MB beim JSON-load.
+    # WICHTIG: Klammern um die OR-Bedingung, sonst hat SQL-precedence (OR loose, AND tight)
+    # die confidence-clause faelschlich gegen alle anderen filter "veroden".
+    where = ["(confidence != 'very_low' OR confidence IS NULL)"]
+    params = []
+    if year:
+        where.append("year=?")
+        params.append(year)
+    if position:
+        where.append("pos=?")
+        params.append(position)
+    where.append("(age IS NULL OR age <= 24.5)")
+    where_sql = " AND ".join(where)
+
+    rows = _db().execute(
+        f"SELECT * FROM board WHERE {where_sql} "
+        f"ORDER BY COALESCE(war, mu, 0) DESC LIMIT ?",
+        params + [n],
+    ).fetchall()
+
+    # Wir brauchen zusaetzlich Felder die nur im profiles.data BLOB sind
+    # (z.B. badges, Box-Scores, Roles, archetypes_all). Fuer jeden row laden
+    # wir on-demand das volle Profile - 200 SELECTs gehen via PK-index in
+    # ms-Bereich, kein Memory-Hit.
+    pids = [r["player_id"] for r in rows]
+    blobs = {}
+    if pids:
+        # Bulk-fetch im einem Query, ist effizienter als N einzelne
+        placeholders = ",".join(["?"] * len(pids))
+        for r in _db().execute(
+            f"SELECT player_id, data FROM profiles WHERE player_id IN ({placeholders})",
+            pids,
+        ):
+            blobs[r["player_id"]] = _decompress_blob(r["data"]) or {}
+
     results = []
-
-    for pid, p in profiles.items():
-        # Year filter
-        if year and p.get("yr") != year:
-            continue
-        # Position filter
-        if position and p.get("pos") != position:
-            continue
-        # Skip very-low-confidence entries
-        if p.get("confidence") == "very_low":
-            continue
-        # Age filter: exclude non-prospects (age > 24.5 at time of draft)
-        # Catches 28-34 year-old veterans erroneously included in prospect lists
-        age = p.get("age")
-        if age is not None and age > 24.5:
-            continue
-
-        # Build lightweight-but-rich board entry, keyed by player_id + slug
-        name = p.get("name") or ""
+    for r in rows:
+        pid = r["player_id"]
+        full = blobs.get(pid, {})
         entry = {
             "player_id": pid,
-            "slug": p.get("slug") or _pid_to_slug.get(pid),
-            "name": name,
+            "slug": r["slug"] or full.get("slug"),
+            "name": r["name"],
         }
+        # Erst die board-table-Felder (schnell, denormalized)
+        for k in ("team", "pos", "year", "conf", "source", "made_nba", "tier",
+                  "mu", "ups", "aspm", "war", "age", "career_path",
+                  "overall", "ceiling", "bpm",
+                  "prob_super", "prob_allstar", "prob_starter",
+                  "prob_role", "prob_repl", "prob_out",
+                  "archetype", "confidence",
+                  "intl_tier", "p_intl_eu_impact", "p_intl_eu",
+                  "p_intl_top_eu", "p_intl_pro", "p_intl_fringe"):
+            v = r[k] if k in r.keys() else None
+            if v is not None:
+                # board.year heisst frontend-seitig 'yr'
+                entry["yr" if k == "year" else k] = v
+        # Dann die ergaenzenden Felder aus dem profile blob (badges, box-scores,
+        # roles, archetypes_all, etc.). Wenn doppelt: blob gewinnt fuer
+        # detail-fields, board-table fuer numerics (war/prob_*).
         for field in _BOARD_FIELDS:
             if field in ("name",):
                 continue
-            val = p.get(field)
-            if val is not None:
-                entry[field] = val
+            if field in entry and entry[field] is not None:
+                continue
+            v = full.get(field)
+            if v is not None:
+                entry[field] = v
 
         results.append(entry)
 
-    # Sort by ppWA → pred_mu → pred_p_nba
-    results.sort(key=lambda x: (
-        -(x.get("war") or x.get("ppwa") or x.get("pred_mu") or 0),
-    ))
-
     return {
         "year": year,
-        "count": min(len(results), n),
-        "players": results[:n],
+        "count": len(results),
+        "players": results,
     }
 
 
