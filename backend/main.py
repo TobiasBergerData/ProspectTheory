@@ -304,32 +304,35 @@ def _identity_fields(pid: str, profile: dict) -> dict:
 async def verify_data_quality():
     """
     Log key 2026 prospect stats on startup to confirm data is correct.
-    With the canonical-identity refactor, "Cameron Boozer" is ambiguous
-    (Duke 2026 vs Jacksonville 2021 — different player_ids). We pick the
-    2026 prospect explicitly via slug to stay deterministic.
+    Defensiv: jeder Fehler beim Laden (z.B. korrupte LFS-Pointer-Datei)
+    darf den Startup NICHT blockieren, sonst bindet uvicorn keinen Port
+    und Render meldet 'no open ports detected'.
     """
-    _ensure_indexes()
-    # 2026 Duke prospect lives under the base slug (lowest pid wins in slug
-    # disambiguation); legacy fallback uses name lookup with year filter.
-    pid, boozer = find_player("cameron-boozer")
-    if not boozer:
-        # Legacy fallback: scan for 2026 match
-        for _pid, _p in get_profiles().items():
-            if _p.get("name") == "Cameron Boozer" and _p.get("yr") == 2026:
-                pid, boozer = _pid, _p
-                break
-    boozer = boozer or {}
-    reb = boozer.get("reb")
-    ast = boozer.get("ast")
-    stl = boozer.get("stl")
-    blk = boozer.get("blk")
-    # Expected post-fix: reb≈10.2, ast≈4.1, stl≈1.4, blk≈0.6
-    ok = reb is not None and reb > 8
-    print(f"🏀 Data quality check — Cameron Boozer [pid={pid}]: "
-          f"reb={reb}, ast={ast}, stl={stl}, blk={blk} — "
-          f"{'✅ OK' if ok else '⚠️ COLUMN SHIFT DETECTED'}")
-    if not ok:
-        print("   → Stats shifted: data may be from pre-fix pipeline. Redeploy with corrected api_profiles.json.")
+    try:
+        _ensure_indexes()
+        pid, boozer = find_player("cameron-boozer")
+        if not boozer:
+            for _pid, _p in get_profiles().items():
+                if _p.get("name") == "Cameron Boozer" and _p.get("yr") == 2026:
+                    pid, boozer = _pid, _p
+                    break
+        boozer = boozer or {}
+        reb = boozer.get("reb")
+        ast = boozer.get("ast")
+        stl = boozer.get("stl")
+        blk = boozer.get("blk")
+        ok = reb is not None and reb > 8
+        print(f"🏀 Data quality check — Cameron Boozer [pid={pid}]: "
+              f"reb={reb}, ast={ast}, stl={stl}, blk={blk} — "
+              f"{'✅ OK' if ok else '⚠️ COLUMN SHIFT DETECTED'}")
+        if not ok:
+            print("   → Stats shifted: data may be from pre-fix pipeline. Redeploy with corrected api_profiles.json.")
+    except Exception as _err:
+        # WICHTIG: Fehler hier nicht propagieren - sonst startet uvicorn nicht.
+        # Mit 130-Byte-LFS-Pointer als api_profiles.json -> JSONDecodeError -> App tot.
+        # Lieber API mit leeren Daten servieren und im Log warnen.
+        print(f"⚠️ Startup verify failed ({type(_err).__name__}): {_err}")
+        print("   → API startet trotzdem; api_profiles.json eventuell LFS-Pointer statt JSON.")
 
 
 @app.get("/")
