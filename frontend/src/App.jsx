@@ -5267,22 +5267,36 @@ export default function App() {
                 const found = Object.entries(PLAYERS).find(
                   ([_, pl]) => pl.slug === wanted || String(pl.player_id) === wanted
                 );
+                console.log("[direct-url] wanted slug:", wanted,
+                            "PLAYERS size:", Object.keys(PLAYERS).length,
+                            "found in board:", !!found);
                 if (found) {
+                  console.log("[direct-url] using board entry:", found[0]);
                   selectPlayer(found[0]);
                 } else {
-                  // 2. Fallback: Spieler ist nicht im aktuellen Board (z.B. ältere
+                  // 2. Fallback: Spieler nicht im aktuellen Board (z.B. ältere
                   // Draft-Klasse). API-Call holt Profile, dann Spieler ins PLAYERS-
                   // Lookup adden + selektieren.
-                  fetch(`${API_BASE}/player/${encodeURIComponent(wanted)}`)
-                    .then(r => r.ok ? r.json() : null)
+                  const apiUrl = `${API_BASE}/player/${encodeURIComponent(wanted)}`;
+                  console.log("[direct-url] fetching:", apiUrl);
+                  fetch(apiUrl)
+                    .then(r => {
+                      console.log("[direct-url] status:", r.status);
+                      return r.ok ? r.json() : null;
+                    })
                     .then(data => {
+                      console.log("[direct-url] payload keys:", data ? Object.keys(data) : null);
                       const prof = data?.profile;
-                      if (!prof) return;
+                      if (!prof) {
+                        console.warn("[direct-url] no profile in response — slug not found");
+                        return;
+                      }
                       const mapped = mapProfile(prof);
-                      const name = prof.name || mapped.name || wanted;
+                      const name = prof.name || mapped?.name || wanted;
+                      console.log("[direct-url] resolved name:", name, "slug:", prof.slug);
                       // Inject ins PLAYERS-Lookup damit selectPlayer den Eintrag findet
                       PLAYERS[name] = {
-                        ...mapped,
+                        ...(mapped || {}),
                         slug: prof.slug || wanted,
                         player_id: prof.player_id,
                         name,
@@ -5292,7 +5306,7 @@ export default function App() {
                       setProfileCache(prev => ({...prev, [name]: PLAYERS[name]}));
                       selectPlayer(name);
                     })
-                    .catch(e => console.warn("Direct player URL fetch failed:", e));
+                    .catch(e => console.warn("[direct-url] fetch failed:", e));
                 }
               }
             }
