@@ -5278,35 +5278,63 @@ export default function App() {
                   // Draft-Klasse). API-Call holt Profile, dann Spieler ins PLAYERS-
                   // Lookup adden + selektieren.
                   const apiUrl = `${API_BASE}/player/${encodeURIComponent(wanted)}`;
-                  console.log("[direct-url] fetching:", apiUrl);
-                  fetch(apiUrl)
-                    .then(r => {
-                      console.log("[direct-url] status:", r.status);
-                      return r.ok ? r.json() : null;
-                    })
+                  console.log("[direct-url] fetching direct:", apiUrl);
+
+                  // Two-stage resolver:
+                  // 1) Direct slug-lookup (works for canonical slugs aus Sitemap)
+                  // 2) Falls 404: Name-Search-Fallback (friendly slug like 'luka-doncic'
+                  //    → search → real slug 'luka-doncic-rmb-18-4148')
+                  const resolveProfile = async () => {
+                    let r = await fetch(apiUrl);
+                    if (r.ok) {
+                      console.log("[direct-url] direct hit");
+                      return r.json();
+                    }
+                    console.log("[direct-url] direct 404, trying name-search fallback");
+                    // Slug → Name: "luka-doncic" → "luka doncic"
+                    const nameQuery = wanted.replace(/-/g, ' ');
+                    const sr = await fetch(
+                      `${API_BASE}/players/search?q=${encodeURIComponent(nameQuery)}&limit=1`
+                    );
+                    if (!sr.ok) return null;
+                    const searchData = await sr.json();
+                    const hit = searchData?.results?.[0];
+                    if (!hit?.slug) {
+                      console.warn("[direct-url] name-search returned no result");
+                      return null;
+                    }
+                    console.log("[direct-url] search resolved:", hit.name, "→", hit.slug);
+                    // Update URL to canonical slug (replaceState — kein history-spam)
+                    if (typeof window !== "undefined") {
+                      window.history.replaceState({slug: hit.slug}, '', `/player/${hit.slug}`);
+                    }
+                    // Now fetch with canonical slug
+                    const pr = await fetch(`${API_BASE}/player/${encodeURIComponent(hit.slug)}`);
+                    if (!pr.ok) return null;
+                    return pr.json();
+                  };
+
+                  resolveProfile()
                     .then(data => {
                       console.log("[direct-url] payload keys:", data ? Object.keys(data) : null);
                       const prof = data?.profile;
                       if (!prof) {
-                        console.warn("[direct-url] no profile in response — slug not found");
+                        console.warn("[direct-url] no profile resolved — slug + name-search both failed");
                         return;
                       }
                       const mapped = mapProfile(prof);
                       const name = prof.name || mapped?.name || wanted;
                       console.log("[direct-url] resolved name:", name, "slug:", prof.slug);
-                      // Inject ins PLAYERS-Lookup damit selectPlayer den Eintrag findet
                       PLAYERS[name] = {
                         ...(mapped || {}),
                         slug: prof.slug || wanted,
                         player_id: prof.player_id,
                         name,
                       };
-                      // Profile in cache vor-laden, damit selectPlayer keine
-                      // doppelte Fetch macht
                       setProfileCache(prev => ({...prev, [name]: PLAYERS[name]}));
                       selectPlayer(name);
                     })
-                    .catch(e => console.warn("[direct-url] fetch failed:", e));
+                    .catch(e => console.warn("[direct-url] resolveProfile failed:", e));
                 }
               }
             }
