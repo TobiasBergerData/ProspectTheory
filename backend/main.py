@@ -488,10 +488,23 @@ async def get_player(slug: str):
     Full player profile. `slug` accepts a slug, player_id, or display name
     (in that priority). Response includes identity triple so the client
     can adopt the canonical slug-based URL.
+
+    seasonLines werden separat aus season_lines-Table geladen (12_json_to_sqlite
+    hat sie aus dem profile-blob ausgelagert um Profile kompakter zu halten).
     """
     pid, profile = find_player(slug)
     if profile is None:
         raise HTTPException(404, f"Player '{slug}' not found")
+
+    # Season-Lines aus separater Table joinen
+    sl_row = _db().execute(
+        "SELECT data FROM season_lines WHERE player_id=?", (pid,)
+    ).fetchone()
+    if sl_row is not None:
+        seasons = _decompress_blob(sl_row[0])
+        if seasons is not None:
+            profile["seasonLines"] = seasons
+
     return {**_identity_fields(pid, profile), "profile": profile}
 
 
