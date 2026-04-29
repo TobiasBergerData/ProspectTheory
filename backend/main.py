@@ -503,9 +503,41 @@ async def get_player(slug: str):
     if sl_row is not None:
         seasons = _decompress_blob(sl_row[0])
         if seasons is not None:
+            _normalize_season_minutes(seasons)
             profile["seasonLines"] = seasons
 
     return {**_identity_fields(pid, profile), "profile": profile}
+
+
+# ─── Pipeline-Bug-Workaround ──────────────────────────────────────────────
+# api_season_lines.json (BartTorvik-Quelle) liefert ab 2008 das `min`-Feld als
+# Min_per (% der verfuegbaren Spielzeit), NICHT als MPG. 05a_fix_minutes.py
+# konvertiert das fuer die Modell-Features, aber nicht fuer die seasonLines-
+# JSON-Ausgabe. Verteilungs-Audit: 100% aller BartTorvik-Saisons (NCAA ab 2008)
+# sind Prozentwerte; pre-2008 (realgm) und alle intl-cls-Saisons sind echte MPG.
+# Wir korrigieren on-the-fly anhand der Klassen-Markierung.
+_NCAA_CLASSES = {"Fr", "So", "Jr", "Sr", "Gr", "5y", "FR", "SO", "JR", "SR"}
+
+def _normalize_season_minutes(seasons):
+    """Konvertiert BartTorvik Min_per (%) zu MPG (× 0.40) fuer NCAA-Saisons ab 2008.
+    Andere Saisons (intl, pre-2008-NCAA) bleiben unangetastet."""
+    if not isinstance(seasons, list):
+        return
+    for s in seasons:
+        if not isinstance(s, dict):
+            continue
+        m = s.get("min")
+        if m is None or not isinstance(m, (int, float)):
+            continue
+        cls = s.get("cls", "")
+        try:
+            yr = int(float(s.get("yr") or 0))
+        except (TypeError, ValueError):
+            yr = 0
+        # Heuristik: NCAA-Klassenmarkierung (Fr/So/Jr/Sr) + Jahr >= 2008 = BartTorvik
+        # → min ist Min_per und muss × 0.40 multipliziert werden.
+        if cls in _NCAA_CLASSES and yr >= 2008:
+            s["min"] = round(m * 0.40, 1)
 
 
 def _lookup_comp_profile(c: dict) -> tuple:

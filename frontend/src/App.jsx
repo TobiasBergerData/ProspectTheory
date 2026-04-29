@@ -5247,12 +5247,19 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
                     {/* NBA Tier */}
                     <td className="px-3 py-2.5 text-xs font-bold" style={{color:TC[p.predTier]||"#6b7280"}}>{p.predTier||"—"}</td>
                     {/* International Tier — ML-Prediction aus 10e_intl_tier_classifier.
-                        Wird IMMER angezeigt (Board-Spalte zeigt was-if-non-NBA-Outlook).
-                        Bei NBA-Spielern (made_nba) wird Tier ausgegraut, weil die intl-Prediction
-                        dort weniger entscheidungsrelevant ist. */}
+                        Conditional: nur anzeigen wenn die kumulierte NBA-Wahrscheinlichkeit
+                        (Superstar+All-Star+Starter+Role) < 25%. Bei hoher NBA-Wahrsch. ist
+                        die was-if-non-NBA-Aussage inkonsistent und verwirrt User.
+                        Tobias-Vorgabe (2026-04-29): Credibility durch Plausibilitaet. */}
                     {(() => {
+                      const pNbaTot = (Number(p.tiers?.Superstar)||0) + (Number(p.tiers?.["All-Star"])||0)
+                                    + (Number(p.tiers?.Starter)||0)  + (Number(p.tiers?.["Role Player"])||0);
                       const tier = p.intlTier;
-                      if (!tier) return <td className="px-3 py-2.5 text-xs" style={{color:"#374151"}}>—</td>;
+                      // Hide wenn NBA-Wahrsch. >= 25% ODER kein intl_tier vorhanden
+                      // ODER Spieler hat bereits NBA-Karriere (made_nba)
+                      if (!tier || pNbaTot >= 25 || p.madeNba) {
+                        return <td className="px-3 py-2.5 text-xs" style={{color:"#374151"}}>—</td>;
+                      }
                       const INTL_COLORS = {
                         "EuroLeague Impact": "#fbbf24",
                         "EuroLeague":        "#f97316",
@@ -5267,12 +5274,9 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
                         "Pro Basketball":    "Pro Ball",
                         "Fringe Pro":        "Fringe",
                       };
-                      const muted = !!p.madeNba;
                       const color = INTL_COLORS[tier] || "#6b7280";
                       return (
-                        <td className="px-3 py-2.5 text-xs font-semibold"
-                            style={{color: muted ? "#374151" : color, opacity: muted ? 0.5 : 1}}
-                            title={muted ? `${tier} (NBA player — secondary info)` : tier}>
+                        <td className="px-3 py-2.5 text-xs font-semibold" style={{color}} title={tier}>
                           🌍 {SHORT[tier] || tier}
                         </td>
                       );
