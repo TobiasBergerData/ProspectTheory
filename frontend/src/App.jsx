@@ -5294,8 +5294,17 @@ export default function App() {
   }, [sel]);
 
   // When returning to board view (sel cleared), restore root URL.
+  // WICHTIG: ersten Mount überspringen — sonst überschreibt dieser Effect die
+  // /player/<slug>-URL beim Page-Load (sel ist initial null, pathname aber bereits
+  // /player/...). Der initial-URL-Parse-Effect setzt sel via selectPlayer und
+  // pushed dabei selbst die URL — wir wollen hier nicht dazwischenfunken.
+  const sawFirstSelChange = useRef(false);
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (!sawFirstSelChange.current) {
+      sawFirstSelChange.current = true;
+      return;
+    }
     if (sel === null && window.location.pathname !== '/') {
       window.history.pushState({}, '', '/');
     }
