@@ -5299,19 +5299,46 @@ export default function App() {
                     if (!sr.ok) return null;
                     const searchData = await sr.json();
                     const hit = searchData?.results?.[0];
-                    if (!hit?.slug) {
-                      console.warn("[direct-url] name-search returned no result");
+                    if (!hit) {
+                      console.warn("[direct-url] name-search returned 0 results");
                       return null;
                     }
-                    console.log("[direct-url] search resolved:", hit.name, "→", hit.slug);
-                    // Update URL to canonical slug (replaceState — kein history-spam)
-                    if (typeof window !== "undefined") {
-                      window.history.replaceState({slug: hit.slug}, '', `/player/${hit.slug}`);
+
+                    // Slug aus Hit rekonstruieren — Search-Endpoint liefert keinen
+                    // slug-Field, nur name/team/year. Backend-Convention:
+                    //   slug = <name>-<team>-<year-2digit>  (alle lowercase, dashes)
+                    const buildSlug = (parts) => parts
+                      .filter(Boolean)
+                      .join(' ')
+                      .toLowerCase()
+                      .replace(/[^a-z0-9]+/g, '-')
+                      .replace(/^-|-$/g, '');
+
+                    const yr2 = hit.year ? String(Math.floor(hit.year)).slice(-2) : '';
+                    const candidates = [
+                      hit.slug,                                          // falls doch da
+                      buildSlug([hit.name, hit.team, yr2]),               // canonical
+                      buildSlug([hit.name, hit.team]),                    // ohne year
+                      buildSlug([hit.name, yr2]),                         // ohne team
+                      buildSlug([hit.name]),                              // nur name
+                    ].filter(Boolean);
+
+                    console.log("[direct-url] hit:", hit.name, "team:", hit.team,
+                                "year:", hit.year, "slug-candidates:", candidates);
+
+                    // Try jeden Candidate bis einer Profile returnt
+                    for (const cand of candidates) {
+                      const pr = await fetch(`${API_BASE}/player/${encodeURIComponent(cand)}`);
+                      if (pr.ok) {
+                        console.log("[direct-url] resolved via candidate:", cand);
+                        if (typeof window !== "undefined") {
+                          window.history.replaceState({slug: cand}, '', `/player/${cand}`);
+                        }
+                        return pr.json();
+                      }
                     }
-                    // Now fetch with canonical slug
-                    const pr = await fetch(`${API_BASE}/player/${encodeURIComponent(hit.slug)}`);
-                    if (!pr.ok) return null;
-                    return pr.json();
+                    console.warn("[direct-url] no candidate matched, all returned 404");
+                    return null;
                   };
 
                   resolveProfile()
