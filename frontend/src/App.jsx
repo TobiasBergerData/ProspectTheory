@@ -4930,12 +4930,42 @@ function RangeView({ players, gmRisk }) {
                 {displayName}
               </text>
 
-              {/* Bar: floor portion (p10 → war) */}
-              <rect x={xFloor} y={rowY - barH / 2} width={Math.max(1, xWar - xFloor)} height={barH}
-                fill={barColor} opacity={dnOp} rx={2}/>
-              {/* Bar: ceiling portion (war → p90) */}
-              <rect x={xWar} y={rowY - barH / 2} width={Math.max(1, xCeil - xWar)} height={barH}
-                fill={barColor} opacity={upOp} rx={2}/>
+              {/* Tier-Probability-Stack: Bar wird in Tier-Segmente geteilt, Breite per Wahrscheinlichkeit.
+                  Das macht die Modell-Differenzierung visuell sichtbar — zwei Spieler mit gleichem ppWA
+                  koennen ganz unterschiedliche Tier-Verteilungen haben (z.B. Hi-Variance Star vs Safe Starter). */}
+              {(() => {
+                const trs = p.tiers || {};
+                const total = (trs.Negative||0)+(trs.Replacement||0)+(trs["Role Player"]||0)+
+                              (trs.Starter||0)+(trs["All-Star"]||0)+(trs.Superstar||0);
+                if (total < 0.5) {
+                  // Keine echten Tier-Probs: fallback auf alten einheitlichen Bar
+                  return (
+                    <>
+                      <rect x={xFloor} y={rowY - barH/2} width={Math.max(1, xWar-xFloor)} height={barH}
+                        fill={barColor} opacity={dnOp} rx={2}/>
+                      <rect x={xWar} y={rowY - barH/2} width={Math.max(1, xCeil-xWar)} height={barH}
+                        fill={barColor} opacity={upOp} rx={2}/>
+                    </>
+                  );
+                }
+                // Aufteilung der Bar in Segmente proportional zu Tier-Probs.
+                const segWidth = Math.max(1, xCeil - xFloor);
+                let xCursor = xFloor;
+                return TIER_STACK.map((t, ti) => {
+                  const prob = (trs[t.name] || 0) / total;
+                  if (prob < 0.005) return null;
+                  const w = segWidth * prob;
+                  const segX = xCursor;
+                  xCursor += w;
+                  // Opacity je nachdem ob das Segment links oder rechts vom war-Median liegt
+                  const segMid = segX + w/2;
+                  const opacity = segMid < xWar ? dnOp : upOp;
+                  return (
+                    <rect key={`seg-${ti}`} x={segX} y={rowY - barH/2} width={w} height={barH}
+                      fill={t.color} opacity={opacity} rx={ti===0 || ti===TIER_STACK.length-1 ? 2 : 0}/>
+                  );
+                });
+              })()}
 
               {/* End caps */}
               <line x1={xFloor} y1={rowY - barH / 2 - 1} x2={xFloor} y2={rowY + barH / 2 + 1}
@@ -5203,9 +5233,10 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
                         <span className="font-semibold" style={{color:"#e5e7eb"}}>{p.name}</span>
                         {isIntl && <span className="text-xs" style={{color:"#10b981"}}>🌐</span>}
                       </div>
-                      <div className="flex gap-1 mt-0.5">
-                        {(p.badges||[]).slice(0,2).map((b,j)=><span key={j} className="text-xs px-1.5 py-0 rounded" style={{background:"#22c55e22",color:"#22c55e",fontSize:9}}>{b}</span>)}
-                        {(p.redFlags||[]).slice(0,1).map((f,j)=><span key={`r${j}`} className="text-xs px-1.5 py-0 rounded" style={{background:"#ef444422",color:"#ef4444",fontSize:9}}>{f}</span>)}
+                      <div className="flex flex-wrap gap-1 mt-0.5">
+                        {(p.badges||[]).slice(0,4).map((b,j)=><span key={j} className="text-xs px-1.5 py-0 rounded" style={{background:"#22c55e22",color:"#22c55e",fontSize:9}}>{b}</span>)}
+                        {(p.yellowBadges||[]).slice(0,2).map((b,j)=><span key={`y${j}`} className="text-xs px-1.5 py-0 rounded" style={{background:"#eab30822",color:"#eab308",fontSize:9}}>{b}</span>)}
+                        {(p.redFlags||[]).slice(0,2).map((f,j)=><span key={`r${j}`} className="text-xs px-1.5 py-0 rounded" style={{background:"#ef444422",color:"#ef4444",fontSize:9}}>{f}</span>)}
                       </div>
                     </td>
                     <td className="px-3 py-2.5"><span className="px-2 py-0.5 rounded text-xs font-semibold" style={{background:(posColors[p.pos]||"#6b7280")+"22",color:posColors[p.pos]||"#6b7280"}}>{p.pos}</span></td>

@@ -98,8 +98,8 @@ def _get_years() -> list:
 _BOARD_FIELDS = [
     "name", "pos", "team", "yr", "source", "made_nba", "tier", "actual",
     "age", "conf_tier", "conf", "ht", "wt", "wingspan",
-    # ppWA model v2
-    "ppwa", "pElite", "waFloor", "waCeiling", "waSigma",
+    # ppWA model v2 + Pfad-3-Output (war ist der primaere Wert, ppwa optional/legacy)
+    "war", "ppwa", "pElite", "waFloor", "waCeiling", "waSigma",
     "v2Tier", "v2TierProbs", "v2Conf", "posGroup",
     # Legacy prediction fields (fallback)
     "pred_mu", "pred_sigma", "pred_p_nba", "pred_tier",
@@ -709,7 +709,7 @@ async def get_board(
 
     # Sort by ppWA → pred_mu → pred_p_nba
     results.sort(key=lambda x: (
-        -(x.get("ppwa") or x.get("pred_mu") or 0),
+        -(x.get("war") or x.get("ppwa") or x.get("pred_mu") or 0),
     ))
 
     return {
@@ -757,13 +757,14 @@ async def top_players(
             "year": entry.get("y"),
             "made_nba": entry.get("nba"),
             "tier": p.get("v2Tier") or entry.get("tier"),
+            "war": p.get("war"),
             "ppwa": p.get("ppwa"),
             "pElite": p.get("pElite"),
             "pred_mu": entry.get("mu"),
             "pred_p_nba": entry.get("pn"),
         })
     # ppWA as primary sort (fallback: pred_mu)
-    candidates.sort(key=lambda x: (-(x.get("ppwa") or x.get("pred_mu") or 0)))
+    candidates.sort(key=lambda x: (-(x.get("war") or x.get("ppwa") or x.get("pred_mu") or 0)))
     return {"count": min(len(candidates), n), "players": candidates[:n]}
 
 
@@ -785,11 +786,12 @@ async def draft_class(year: int):
                 "position": entry.get("p"),
                 "made_nba": entry.get("nba"),
                 "tier": p.get("v2Tier") or entry.get("tier"),
+                "war": p.get("war"),
                 "ppwa": p.get("ppwa"),
                 "pred_mu": entry.get("mu"),
                 "pred_p_nba": entry.get("pn"),
             })
-    results.sort(key=lambda x: (-(x.get("ppwa") or x.get("pred_mu") or 0)))
+    results.sort(key=lambda x: (-(x.get("war") or x.get("ppwa") or x.get("pred_mu") or 0)))
     return {"year": year, "count": len(results), "players": results}
 
 
