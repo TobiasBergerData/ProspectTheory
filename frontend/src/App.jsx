@@ -700,7 +700,7 @@ function mapProfile(d) {
     Starter:       (d.prob_starter??d.probs?.starter??0)*100,
     "Role Player": (d.prob_role??d.prob_roleplayer??d.probs?.roleplayer??0)*100,
     Replacement:   (d.prob_repl??d.prob_replacement??d.probs?.replacement??0)*100,
-    Negative:      (d.prob_neg??d.prob_negative??d.prob_never??d.probs?.out??0)*100,
+    Negative:      (d.prob_out??d.prob_neg??d.prob_negative??d.prob_never??d.probs?.out??0)*100,
   };
   const { ceiling: _ceilingScore, floor: _floorScore, riskTag: _riskTag } = computeCeilingFloor(_tiersForCF);
 
@@ -958,7 +958,7 @@ function mapProfile(d) {
       Starter:((d.prob_starter??d.probs?.starter??0)*100),
       "Role Player":((d.prob_role??d.prob_roleplayer??d.probs?.roleplayer??0)*100),
       Replacement:((d.prob_repl??d.prob_replacement??d.probs?.replacement??0)*100),
-      "Negative":((d.prob_neg??d.prob_negative??d.prob_never??d.probs?.out??0)*100),
+      "Negative":((d.prob_out??d.prob_neg??d.prob_negative??d.prob_never??d.probs?.out??0)*100),
     },
     ceiling: d.ceiling, floor: d.floor, volatility: d.volatility ?? d.mc_sigma,
     badges: allGreen, redFlags: allRed, yellowBadges: allYellow,
