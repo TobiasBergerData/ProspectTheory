@@ -1,18 +1,27 @@
 """
-ProspectTheory API v2.0 — FastAPI backend serving precomputed player data.
+ProspectTheory API v3.0 — FastAPI backend serving precomputed player data.
 
-Uses compressed api_*.json files from Script 11.
+Uses compressed api_*.json files from Script 11 (v3 canonical identity schema).
+
+Identity model:
+  • Every record keyed by `player_id` (stable, collision-free).
+  • URL-safe `slug` for routing (unique per player_id).
+  • `name` kept as display text; `name_lower` for case-insensitive search.
 
 Endpoints:
-  GET /api/years                        → Available draft years
-  GET /api/board?n=500&year=2026        → Big Board (full profiles, sorted by ppWA)
-  GET /api/players/search?q=name        → Search players by name
-  GET /api/player/{name}                → Full player profile
-  GET /api/comps/stats/{name}           → Statistical comparisons
-  GET /api/comps/anthro/{name}          → Anthropometric comparisons
-  GET /api/tiers/{name}                 → Tier probabilities
-  GET /api/players/top?n=50             → Top N by ppWA
-  GET /api/players/draft/{year}         → All players from a draft year
+  GET /api/years                         → Available draft years
+  GET /api/board?n=500&year=2026         → Big Board (sorted by ppWA)
+  GET /api/players/search?q=name         → Search by name / slug / player_id
+  GET /api/player/{slug}                 → Full player profile by slug
+  GET /api/comps/stats/{slug}            → Statistical comparisons
+  GET /api/comps/anthro/{slug}           → Anthropometric comparisons
+  GET /api/tiers/{slug}                  → Tier probabilities
+  GET /api/players/top?n=50              → Top N by ppWA
+  GET /api/players/draft/{year}          → All players from a draft year
+
+All `{slug}` path parameters also accept a player_id (bt:…, rg:…) or a
+display name for backwards compatibility. The response always carries
+`player_id`, `slug`, and `name` so the frontend can pick the canonical form.
 
 Run:
   uvicorn main:app --host 0.0.0.0 --port 8000 --reload
@@ -35,7 +44,7 @@ from fastapi.responses import FileResponse
 app = FastAPI(
     title="ProspectTheory API",
     description="NBA Draft Intelligence — Player profiles, comparisons, and tier predictions",
-    version="2.12.0",  # horizontal RangeView, pure ppWA range sort, balanced GM default
+    version="3.0.0",  # canonical identity: player_id PK + slug routing (collision-safe)
 )
 
 app.add_middleware(
@@ -66,6 +75,12 @@ _stat_comps = None
 _anthro_comps = None
 _search_index = None
 _years_cache = None   # sorted list of unique draft years
+
+# Identity indexes — built lazily on first profile-load. All lookups go
+# through these so we never scan the profiles dict by name.
+_slug_to_pid: dict = None    # {slug: player_id}
+_name_to_pid: dict = None    # {name_lower: player_id}   — first-match wins (collisions will pick most-recent)
+_pid_to_slug: dict = None    # {player_id: slug}
 
 
 def _get_years() -> list:
@@ -127,6 +142,10 @@ _BOARD_FIELDS = [
     # Projection drivers
     "projection_boosters", "projection_limiters",
     "v2Boosters", "v2Limiters",
+    # 10e: Sekundaeres Intl-Tier-Modell (Board-Spalte + Player-Page-Block)
+    "intl_tier",
+    "p_intl_eu_impact", "p_intl_eu", "p_intl_top_eu",
+    "p_intl_pro", "p_intl_fringe",
 ]
 
 
@@ -147,12 +166,45 @@ def load_json(filepath: Path):
 
 
 def get_profiles() -> dict:
-    global _profiles
+    """
+    api_profiles.json is keyed by player_id (11_compress v3). On first
+    load we materialize three lookup tables:
+      _slug_to_pid — URL routing
+      _name_to_pid — legacy name-based URLs / search fallbacks
+      _pid_to_slug — reverse lookup for response enrichment
+    """
+    global _profiles, _slug_to_pid, _name_to_pid, _pid_to_slug
     if _profiles is None:
         print("Loading profiles...")
         _profiles = load_json(DATA_DIR / "api_profiles.json")
-        print(f"  → {len(_profiles):,} profiles")
+        _slug_to_pid, _name_to_pid, _pid_to_slug = {}, {}, {}
+        legacy_keys = 0
+        for key, p in _profiles.items():
+            pid = p.get("player_id") or (key if ":" in key else None)
+            slug = p.get("slug")
+            name = p.get("name") or (key if ":" not in key else "")
+            if not pid:
+                legacy_keys += 1
+                continue
+            if slug:
+                _slug_to_pid[slug] = pid
+                _pid_to_slug[pid] = slug
+            if name:
+                nl = name.strip().lower()
+                # Keep the first binding; collisions (two "Cameron Boozer") keep
+                # the earliest inserted profile's pid — frontend should prefer
+                # slug-based routing to avoid this.
+                _name_to_pid.setdefault(nl, pid)
+        print(f"  → {len(_profiles):,} profiles, "
+              f"{len(_slug_to_pid):,} slugs, {len(_name_to_pid):,} name bindings"
+              f"{f' ({legacy_keys} legacy keys without pid)' if legacy_keys else ''}")
     return _profiles
+
+
+def _ensure_indexes():
+    """Force-build the identity indexes if they haven't been yet."""
+    if _slug_to_pid is None:
+        get_profiles()
 
 
 def get_stat_comps() -> dict:
@@ -196,18 +248,52 @@ def get_search_index() -> list:
     return _search_index
 
 
-def find_player(name: str) -> tuple:
-    """Case-insensitive player lookup. Returns (canonical_name, profile)."""
+def find_player(ident: str) -> tuple:
+    """
+    Resolve a path parameter to a player profile. Accepts (in priority order):
+      1. player_id     (bt:134971, rg:54148, rg_name:…)
+      2. slug          (cameron-boozer, luka-doncic-real-madrid-18)
+      3. display name  (Cameron Boozer)
+
+    Returns (player_id, profile) or (None, None) if no match.
+
+    The returned profile always carries `player_id`, `slug`, and `name`
+    fields — the caller decides which to surface to clients.
+    """
+    if not ident:
+        return None, None
+
     profiles = get_profiles()
-    # Exact match
-    if name in profiles:
-        return name, profiles[name]
-    # Case-insensitive
-    nl = name.lower()
-    for k, v in profiles.items():
-        if k.lower() == nl:
-            return k, v
+
+    # 1) direct player_id lookup (fast path, handles URL-encoded colons)
+    pid_candidate = ident.replace("%3A", ":")
+    if pid_candidate in profiles:
+        return pid_candidate, profiles[pid_candidate]
+
+    # 2) slug lookup (URL-safe, canonical routing)
+    pid = _slug_to_pid.get(ident)
+    if pid and pid in profiles:
+        return pid, profiles[pid]
+
+    # 3) case-insensitive name lookup (legacy URLs)
+    nl = ident.strip().lower()
+    pid = _name_to_pid.get(nl)
+    if pid and pid in profiles:
+        return pid, profiles[pid]
+
     return None, None
+
+
+def _identity_fields(pid: str, profile: dict) -> dict:
+    """
+    Public identity triple for API responses — always include all three so
+    the client doesn't need a second round-trip to discover a canonical URL.
+    """
+    return {
+        "player_id": pid,
+        "slug": profile.get("slug") or _pid_to_slug.get(pid),
+        "name": profile.get("name"),
+    }
 
 
 # ═══════════════════════════════════════════════════════════
@@ -216,23 +302,39 @@ def find_player(name: str) -> tuple:
 
 @app.on_event("startup")
 async def verify_data_quality():
-    """Log key 2026 prospect stats on startup to confirm data is correct post-column-fix."""
-    profiles = get_profiles()
-    boozer = profiles.get("Cameron Boozer", {})
+    """
+    Log key 2026 prospect stats on startup to confirm data is correct.
+    With the canonical-identity refactor, "Cameron Boozer" is ambiguous
+    (Duke 2026 vs Jacksonville 2021 — different player_ids). We pick the
+    2026 prospect explicitly via slug to stay deterministic.
+    """
+    _ensure_indexes()
+    # 2026 Duke prospect lives under the base slug (lowest pid wins in slug
+    # disambiguation); legacy fallback uses name lookup with year filter.
+    pid, boozer = find_player("cameron-boozer")
+    if not boozer:
+        # Legacy fallback: scan for 2026 match
+        for _pid, _p in get_profiles().items():
+            if _p.get("name") == "Cameron Boozer" and _p.get("yr") == 2026:
+                pid, boozer = _pid, _p
+                break
+    boozer = boozer or {}
     reb = boozer.get("reb")
     ast = boozer.get("ast")
     stl = boozer.get("stl")
     blk = boozer.get("blk")
     # Expected post-fix: reb≈10.2, ast≈4.1, stl≈1.4, blk≈0.6
     ok = reb is not None and reb > 8
-    print(f"🏀 Data quality check — Cameron Boozer: reb={reb}, ast={ast}, stl={stl}, blk={blk} — {'✅ OK' if ok else '⚠️ COLUMN SHIFT DETECTED'}")
+    print(f"🏀 Data quality check — Cameron Boozer [pid={pid}]: "
+          f"reb={reb}, ast={ast}, stl={stl}, blk={blk} — "
+          f"{'✅ OK' if ok else '⚠️ COLUMN SHIFT DETECTED'}")
     if not ok:
         print("   → Stats shifted: data may be from pre-fix pipeline. Redeploy with corrected api_profiles.json.")
 
 
 @app.get("/")
 async def root():
-    return {"name": "ProspectTheory API", "version": "2.12.0"}
+    return {"name": "ProspectTheory API", "version": app.version}
 
 
 @app.get("/health")
@@ -255,6 +357,7 @@ async def search_players(
     limit: int = Query(25, ge=1, le=100),
 ):
     """Search players by name (fuzzy, case-insensitive)."""
+    _ensure_indexes()
     ql = q.lower()
     results = []
     for entry in get_search_index():
@@ -267,7 +370,10 @@ async def search_players(
             continue
         if year and entry.get("y") != year:
             continue
+        pid = entry.get("id") or _name_to_pid.get(name.lower())
         results.append({
+            "player_id": pid,
+            "slug": entry.get("slug") or (_pid_to_slug.get(pid) if pid else None),
             "name": name,
             "team": entry.get("t", ""),
             "position": entry.get("p", ""),
@@ -282,28 +388,51 @@ async def search_players(
     return {"query": q, "count": len(results), "results": results}
 
 
-@app.get("/api/player/{name}")
-async def get_player(name: str):
-    """Full player profile."""
-    canonical, profile = find_player(name)
+@app.get("/api/player/{slug}")
+async def get_player(slug: str):
+    """
+    Full player profile. `slug` accepts a slug, player_id, or display name
+    (in that priority). Response includes identity triple so the client
+    can adopt the canonical slug-based URL.
+    """
+    pid, profile = find_player(slug)
     if profile is None:
-        raise HTTPException(404, f"Player '{name}' not found")
-    return {"name": canonical, "profile": profile}
+        raise HTTPException(404, f"Player '{slug}' not found")
+    return {**_identity_fields(pid, profile), "profile": profile}
 
 
-@app.get("/api/comps/stats/{name}")
+def _lookup_comp_profile(c: dict) -> tuple:
+    """
+    Resolve an inner comp entry to its (player_id, profile). Comps emitted
+    by 11_compress v3 carry `id` + `slug`; legacy comps only have `n`.
+    """
+    profiles = get_profiles()
+    pid = c.get("id")
+    if pid and pid in profiles:
+        return pid, profiles[pid]
+    # Legacy fallback: name-based lookup via our index
+    name = c.get("n", "")
+    if name:
+        fallback_pid = _name_to_pid.get(name.lower())
+        if fallback_pid and fallback_pid in profiles:
+            return fallback_pid, profiles[fallback_pid]
+    return None, {}
+
+
+@app.get("/api/comps/stats/{slug}")
 async def get_statistical_comps(
-    name: str,
+    slug: str,
     nba_only: bool = False,
     limit: int = Query(15, ge=1, le=50),
 ):
-    """Statistical comparisons for a player."""
-    canonical, _ = find_player(name)
-    if canonical is None:
-        raise HTTPException(404, f"Player '{name}' not found")
+    """Statistical comparisons for a player (slug / player_id / name)."""
+    pid, profile = find_player(slug)
+    if pid is None:
+        raise HTTPException(404, f"Player '{slug}' not found")
 
     comps = get_stat_comps()
-    entry = comps.get(canonical, {})
+    # Primary key: player_id (v3). Legacy fallback: lookup by display name.
+    entry = comps.get(pid) or comps.get(profile.get("name", "")) or {}
     comp_list = entry.get("c", [])
 
     if nba_only:
@@ -313,15 +442,15 @@ async def get_statistical_comps(
     # s = Euclidean distance in percentile space; observed range [0.635, 1.716]
     # → normalize to 0–100% similarity: sim = (1.716 - s) / 1.081 * 100
     _S_MAX, _S_RANGE = 1.716, 1.081
-    profiles = get_profiles()
     enriched = []
     for c in comp_list[:limit]:
-        cname = c.get("n", "")
-        cp = profiles.get(cname, {})
+        c_pid, cp = _lookup_comp_profile(c)
         raw_s = c.get("s", _S_MAX)
         similarity = max(0, min(100, round((_S_MAX - raw_s) / _S_RANGE * 100)))
         enriched.append({
-            "name": cname,
+            "player_id": c_pid,
+            "slug": c.get("slug") or (_pid_to_slug.get(c_pid) if c_pid else None),
+            "name": c.get("n", ""),
             # Profile pos is authoritative; comp p-field is a fallback
             "position": cp.get("pos") or c.get("p") or "",
             "similarity": similarity,
@@ -350,24 +479,25 @@ async def get_statistical_comps(
             "badges": cp.get("badges", ""),
         })
 
-    return {"player": canonical, "count": len(enriched), "comps": enriched}
+    return {**_identity_fields(pid, profile), "count": len(enriched), "comps": enriched}
 
 
-@app.get("/api/comps/anthro/{name}")
+@app.get("/api/comps/anthro/{slug}")
 async def get_anthro_comps(
-    name: str,
+    slug: str,
     nba_only: bool = False,
     weight_adj: float = 0,
     wingspan_adj: float = 0,
     limit: int = Query(15, ge=1, le=50),
 ):
     """Anthropometric comparisons with optional weight/wingspan adjustment."""
-    canonical, profile = find_player(name)
-    if canonical is None:
-        raise HTTPException(404, f"Player '{name}' not found")
+    pid, profile = find_player(slug)
+    if pid is None:
+        raise HTTPException(404, f"Player '{slug}' not found")
 
+    canonical = profile.get("name", "")
     comps = get_anthro_comps()
-    entry = comps.get(canonical, {})
+    entry = comps.get(pid) or comps.get(canonical) or {}
     comp_list = entry.get("c", [])
     measurements = entry.get("m", {})
 
@@ -395,11 +525,22 @@ async def get_anthro_comps(
 
         all_anthro = get_anthro_comps()
         all_profs = get_profiles()  # Load once outside loop
-        # Build NBA player set from pre-computed comps (ground truth from NBA outcome data)
-        nba_set = {c.get("n", "") for entry in all_anthro.values() for c in entry.get("c", []) if c.get("nba")}
+        # Build NBA player set from pre-computed comps (ground truth).
+        # Keys can be pid or name; we resolve both to player_id so the set is
+        # collision-safe.
+        nba_set = set()
+        for _k, _e in all_anthro.items():
+            for c in _e.get("c", []):
+                if c.get("nba"):
+                    cid = c.get("id") or _name_to_pid.get((c.get("n", "") or "").lower())
+                    if cid:
+                        nba_set.add(cid)
         live = []
-        for pname, pentry in all_anthro.items():
-            if pname == canonical:
+        for pkey, pentry in all_anthro.items():
+            # pkey is player_id in v3, display name in legacy
+            ppid = pentry.get("player_id") or (pkey if ":" in pkey else
+                                                _name_to_pid.get(pkey.lower()))
+            if ppid == pid:
                 continue
             pm = pentry.get("m", {})
             pht = pm.get("combine_hgt_no_shoes") or pm.get("height")
@@ -407,14 +548,17 @@ async def get_anthro_comps(
             pws = pm.get("combine_wngspn") or pm.get("wingspan")
             if not pht:  # Must have at least height measurement
                 continue
-            pp = all_profs.get(pname, {})
+            pp = all_profs.get(ppid, {}) if ppid else {}
+            pname_disp = pentry.get("name") or pp.get("name") or (pkey if ":" not in pkey else "")
             ht_d = abs(pht - base_ht)
             wt_d = abs((pwt or base_wt) - base_wt) * 0.5
             ws_d = abs((pws or base_ws) - base_ws) * 1.5
             dist = (ht_d**2 + wt_d**2 + ws_d**2) ** 0.5
             live.append({
-                "n": pname, "_dist": dist,
-                "nba": pname in nba_set,
+                "id": ppid,
+                "slug": pentry.get("slug") or (_pid_to_slug.get(ppid) if ppid else None),
+                "n": pname_disp, "_dist": dist,
+                "nba": ppid in nba_set,
                 "tier": pp.get("v2Tier") or pp.get("tier") or "",
                 "ht": pht, "wt": pwt, "ws": pws,
             })
@@ -439,15 +583,15 @@ async def get_anthro_comps(
     # Enrich comp measurements from profiles; normalize field names
     # d = Euclidean distance in inch-space; range [0, ~5.6], typical best < 2.0
     # → similarity: linear 0–3" → 100%–0%
-    profiles = get_profiles()
     enriched_anthro = []
     for c in comp_list[:limit]:
-        cname = c.get("n", "")
-        cp = profiles.get(cname, {})
+        c_pid, cp = _lookup_comp_profile(c)
         dist = c.get("_dist", c.get("d", 0)) or 0
         sim = max(0, min(100, round((3.0 - dist) / 3.0 * 100)))
         enriched_anthro.append({
-            "name": cname,
+            "player_id": c_pid,
+            "slug": c.get("slug") or (_pid_to_slug.get(c_pid) if c_pid else None),
+            "name": c.get("n", ""),
             "distance": round(dist, 3),
             "similarity": sim,
             "made_nba": bool(c.get("nba", False)),
@@ -459,7 +603,7 @@ async def get_anthro_comps(
         })
 
     return {
-        "player": canonical,
+        **_identity_fields(pid, profile),
         "measurements": {
             "height": m_ht,
             "weight": m_wt,
@@ -472,15 +616,15 @@ async def get_anthro_comps(
     }
 
 
-@app.get("/api/tiers/{name}")
-async def get_tiers(name: str):
+@app.get("/api/tiers/{slug}")
+async def get_tiers(slug: str):
     """Tier probability distribution."""
-    canonical, profile = find_player(name)
-    if canonical is None:
-        raise HTTPException(404, f"Player '{name}' not found")
+    pid, profile = find_player(slug)
+    if pid is None:
+        raise HTTPException(404, f"Player '{slug}' not found")
 
     return {
-        "player": canonical,
+        **_identity_fields(pid, profile),
         "pred_mu": profile.get("pred_mu"),
         "pred_sigma": profile.get("pred_sigma"),
         "pred_p_nba": profile.get("pred_p_nba"),
@@ -528,9 +672,10 @@ async def get_board(
     response.headers["Cache-Control"] = "public, max-age=600, stale-while-revalidate=3600"
 
     profiles = get_profiles()
+    _ensure_indexes()
     results = []
 
-    for name, p in profiles.items():
+    for pid, p in profiles.items():
         # Year filter
         if year and p.get("yr") != year:
             continue
@@ -546,10 +691,15 @@ async def get_board(
         if age is not None and age > 24.5:
             continue
 
-        # Build lightweight-but-rich board entry from selected fields
-        entry = {"name": name}
+        # Build lightweight-but-rich board entry, keyed by player_id + slug
+        name = p.get("name") or ""
+        entry = {
+            "player_id": pid,
+            "slug": p.get("slug") or _pid_to_slug.get(pid),
+            "name": name,
+        }
         for field in _BOARD_FIELDS:
-            if field == "name":
+            if field in ("name",):
                 continue
             val = p.get(field)
             if val is not None:
@@ -569,6 +719,15 @@ async def get_board(
     }
 
 
+def _entry_pid(entry: dict) -> str:
+    """Resolve a search-index entry to its player_id (v3 has it, legacy doesn't)."""
+    pid = entry.get("id")
+    if pid:
+        return pid
+    name = entry.get("n", "")
+    return _name_to_pid.get(name.lower()) if name else None
+
+
 @app.get("/api/players/top")
 async def top_players(
     n: int = Query(50, ge=1, le=500),
@@ -577,6 +736,7 @@ async def top_players(
     nba_only: bool = False,
 ):
     """Top N players by ppWA (Projected Peak Wins Added)."""
+    _ensure_indexes()
     profiles = get_profiles()
     candidates = []
     for entry in get_search_index():
@@ -586,8 +746,11 @@ async def top_players(
             continue
         if year and entry.get("y") != year:
             continue
-        p = profiles.get(entry.get("n"), {})
+        pid = _entry_pid(entry)
+        p = profiles.get(pid, {}) if pid else {}
         candidates.append({
+            "player_id": pid,
+            "slug": entry.get("slug") or (_pid_to_slug.get(pid) if pid else None),
             "name": entry.get("n"),
             "team": entry.get("t"),
             "position": entry.get("p"),
@@ -607,12 +770,16 @@ async def top_players(
 @app.get("/api/players/draft/{year}")
 async def draft_class(year: int):
     """All players from a specific draft year."""
+    _ensure_indexes()
     profiles = get_profiles()
     results = []
     for entry in get_search_index():
         if entry.get("y") == year:
-            p = profiles.get(entry.get("n"), {})
+            pid = _entry_pid(entry)
+            p = profiles.get(pid, {}) if pid else {}
             results.append({
+                "player_id": pid,
+                "slug": entry.get("slug") or (_pid_to_slug.get(pid) if pid else None),
                 "name": entry.get("n"),
                 "team": entry.get("t"),
                 "position": entry.get("p"),

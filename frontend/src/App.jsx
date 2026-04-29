@@ -966,8 +966,31 @@ function mapProfile(d) {
     actual:d.tier, peakPie:d.peak_pie??d.nba_peak_actual, nbaName:d.nba_name||"",
     madeNba:d.made_nba, draftYear:d.draftYear??d.draft_year, draftPick:d.draft_pick,
     classRank: d.classRank ?? null,
-    intlTier: d.intlTier ?? null,
-    intlTierProbs: d.intlTierProbs ?? null,
+    // ── Intl-Tier-Modell (10e_intl_tier_classifier.py) ──
+    // Backend liefert: intl_tier (string) + p_intl_eu_impact / p_intl_eu /
+    // p_intl_top_eu / p_intl_pro / p_intl_fringe (probabilities 0..1).
+    // Wir bauen die UI-Struktur intlTierProbs als sortiertes Array {tier, prob, leagues, desc}.
+    intlTier: d.intl_tier ?? d.intlTier ?? null,
+    intlTierProbs: (() => {
+      const has = d.intl_tier || d.p_intl_eu_impact != null || d.p_intl_eu != null;
+      if (!has) return d.intlTierProbs ?? null;
+      const TIER_META = {
+        "EuroLeague Impact": {leagues:"Euroleague", desc:"Top intl. Impact-Spieler. Stamm in der staerksten Liga."},
+        "EuroLeague":        {leagues:"Euroleague / Eurocup",     desc:"Solider Euroleague-Stamm oder Top-Eurocup."},
+        "Top European Liga": {leagues:"ACB / Italian-A / Adriatic", desc:"Stamm in einer der starken Top-Ligen Europas."},
+        "Pro Basketball":    {leagues:"German-BBL / Lithuanian-LKL", desc:"Roster-Spieler in einer Pro-Liga unterhalb Top-Tier."},
+        "Fringe Pro":        {leagues:"Lower Pro / Domestic-only",   desc:"Marginaler Pro-Status, kurze oder lokale Karriere."},
+      };
+      const order = ["EuroLeague Impact","EuroLeague","Top European Liga","Pro Basketball","Fringe Pro"];
+      const probs = {
+        "EuroLeague Impact": Number(d.p_intl_eu_impact ?? 0),
+        "EuroLeague":        Number(d.p_intl_eu ?? 0),
+        "Top European Liga": Number(d.p_intl_top_eu ?? 0),
+        "Pro Basketball":    Number(d.p_intl_pro ?? 0),
+        "Fringe Pro":        Number(d.p_intl_fringe ?? 0),
+      };
+      return order.map(t => ({ tier:t, prob:probs[t]||0, leagues:TIER_META[t].leagues, desc:TIER_META[t].desc }));
+    })(),
     actualIntlLeague:  d.actualIntlLeague  ?? null,
     actualIntlTier:    d.actualIntlTier    ?? null,
     actualIntlLeagues: d.actualIntlLeagues ?? null,
@@ -3259,10 +3282,16 @@ function ProjectionTab({p}) {
       })()}
 
       {/* ═══ INTERNATIONAL CAREER OUTLOOK ═══ */}
-      {/* Only shown for players with P(NBA) < 25% and intl projection available */}
-      {/* Guards: (1) not already in NBA, (2) pElite < 0.15 (not just borderline),
-           (3) ppWA < 10 (model doesn't project as NBA Starter+) */}
-      {p.intlTierProbs && !p.madeNba && pElite != null && pElite < 0.15 && (war == null || war < 10) && (() => {
+      {/* Conditional: nur anzeigen wenn die kumulierte NBA-Wahrscheinlichkeit
+         (Superstar+All-Star+Starter+Role) < 25 %. Das filtert sowohl etablierte
+         NBA-Talente raus als auch borderline-Roleplayer (die noch realistisch
+         NBA werden koennen). 10e-Predictions sind fuer ALLE Spieler verfuegbar
+         — der Threshold steuert nur Display-Sichtbarkeit. */}
+      {(() => {
+        const _pNbaTot = (Number(p.tiers?.Superstar)||0) + (Number(p.tiers?.["All-Star"])||0)
+                       + (Number(p.tiers?.Starter)||0)  + (Number(p.tiers?.["Role Player"])||0);
+        return p.intlTierProbs && !p.madeNba && _pNbaTot < 25;
+      })() && (() => {
         const INTL_COLORS = {
           "EuroLeague Impact": "#fbbf24",
           "EuroLeague":        "#f97316",
@@ -3308,7 +3337,11 @@ function ProjectionTab({p}) {
 
         return (
           <Sec icon="🌍" title="International Career Outlook"
-            sub={`P(NBA) ${(pElite*100).toFixed(0)}% — projected trajectory based on ${war != null ? fmt(war,1) + " ppWA" : "model output"}, calibrated from 254 bridge players (2010–2019).`}>
+            sub={(() => {
+              const _pNba = (Number(p.tiers?.Superstar)||0) + (Number(p.tiers?.["All-Star"])||0)
+                          + (Number(p.tiers?.Starter)||0) + (Number(p.tiers?.["Role Player"])||0);
+              return `NBA-Wahrsch. ${_pNba.toFixed(0)}% — sekundaere Tier-Projektion (10e), trainiert auf 9.205 historischen Non-NBA-Karrieren.`;
+            })()}>
 
             {/* Hero + Actual side-by-side when historical data available */}
             <div className={`grid gap-3 mb-4 ${hasActual ? 'grid-cols-2' : 'grid-cols-1'}`}>
@@ -3382,10 +3415,11 @@ function ProjectionTab({p}) {
             {/* Validation note */}
             <div className="mt-3 p-3 rounded-lg text-xs leading-relaxed" style={{background:"#0d111744",color:"#4b5563"}}>
               <strong style={{color:"#6b7280"}}>Model validation:</strong>{" "}
-              EuroLeague Impact predictions reach EL or higher in 86% of historical cases.
-              Classes 2020–2024: 68–76% within one tier.
-              The model is deliberately conservative — actual careers tend to exceed projections.
-              {hasActual && <span style={{color:"#6b7280"}}> This player's outcome is from verified league data.</span>}
+              5-Klassen-LightGBM, trainiert auf 9.205 historischen Non-NBA-Karrieren
+              (Bias-Fix: erfolgreiche NBA-Karrieren aus dem Training entfernt).
+              5-Fold-CV: 48 % Top-1-Accuracy, 78 % Top-2-Accuracy.
+              In 78 % der Faelle liegt die tatsaechliche Liga in den Top-2-Predictions.
+              {hasActual && <span style={{color:"#6b7280"}}> Tatsaechliche Liga aus realgm-Karriere-Trace.</span>}
             </div>
           </Sec>
         );
@@ -5181,16 +5215,36 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
                     <td className="px-3 py-2.5 text-xs font-semibold" style={{color: p.bpm != null ? (p.bpm > 8 ? "#22c55e" : p.bpm > 4 ? "#86efac" : "#9ca3af") : "#374151"}}>{p.bpm != null ? fmt(p.bpm, 1) : "—"}</td>
                     {/* NBA Tier */}
                     <td className="px-3 py-2.5 text-xs font-bold" style={{color:TC[p.predTier]||"#6b7280"}}>{p.predTier||"—"}</td>
-                    {/* International Tier — only for genuine non-NBA prospects:
-                        not already in NBA, pElite < 15%, ppWA < 10 */}
+                    {/* International Tier — ML-Prediction aus 10e_intl_tier_classifier.
+                        Wird IMMER angezeigt (Board-Spalte zeigt was-if-non-NBA-Outlook).
+                        Bei NBA-Spielern (made_nba) wird Tier ausgegraut, weil die intl-Prediction
+                        dort weniger entscheidungsrelevant ist. */}
                     {(() => {
-                      const ppwa = p.war ?? p.ppwa;
-                      const pEl  = p.pElite;
-                      const showIntl = !p.madeNba && pEl != null && pEl < 0.15 && ppwa != null && ppwa < 10;
-                      if (!showIntl) return <td className="px-3 py-2.5 text-xs" style={{color:"#374151"}}>—</td>;
-                      const INTL_COLORS = {"EL Impact":"#fbbf24","EuroLeague":"#f97316","Top League":"#60a5fa","Pro Ball":"#a78bfa","Fringe":"#6b7280"};
-                      const label = ppwa>=7?"EL Impact":ppwa>=4?"EuroLeague":ppwa>=2?"Top League":ppwa>=0.5?"Pro Ball":"Fringe";
-                      return <td className="px-3 py-2.5 text-xs font-semibold" style={{color:INTL_COLORS[label]||"#6b7280"}}>🌍 {label}</td>;
+                      const tier = p.intlTier;
+                      if (!tier) return <td className="px-3 py-2.5 text-xs" style={{color:"#374151"}}>—</td>;
+                      const INTL_COLORS = {
+                        "EuroLeague Impact": "#fbbf24",
+                        "EuroLeague":        "#f97316",
+                        "Top European Liga": "#60a5fa",
+                        "Pro Basketball":    "#a78bfa",
+                        "Fringe Pro":        "#6b7280",
+                      };
+                      const SHORT = {
+                        "EuroLeague Impact": "EL Impact",
+                        "EuroLeague":        "EuroLeague",
+                        "Top European Liga": "Top Euro",
+                        "Pro Basketball":    "Pro Ball",
+                        "Fringe Pro":        "Fringe",
+                      };
+                      const muted = !!p.madeNba;
+                      const color = INTL_COLORS[tier] || "#6b7280";
+                      return (
+                        <td className="px-3 py-2.5 text-xs font-semibold"
+                            style={{color: muted ? "#374151" : color, opacity: muted ? 0.5 : 1}}
+                            title={muted ? `${tier} (NBA player — secondary info)` : tier}>
+                          🌍 {SHORT[tier] || tier}
+                        </td>
+                      );
                     })()}
                   </tr>
                 );
