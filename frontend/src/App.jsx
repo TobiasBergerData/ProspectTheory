@@ -5052,59 +5052,76 @@ function _tierFromWar(w) {
   return "Out";
 }
 
-const TIER_BOARD_COLS = [
-  { name: "Initiator PG",     match: ["Floor General", "Scoring Playmaker", "Short Roll Playmaker", "Passing Hub"] },
-  { name: "Combo G",          match: ["Non-Specialized Playmaker", "Spacing Guard", "Defensive Guard"] },
-  { name: "Off Guard / Wing", match: ["3-and-D Wing", "Defensive Wing"] },
-  { name: "Off-Ball Wing/4",  match: ["Non-Specialized Wing", "Scoring Wing", "Slashing Wing"] },
-  { name: "Wing/4 Handler",   match: ["Initiator Wing", "Point Forward"] },
-  { name: "Smallball Big",    match: ["Stretch Big", "Stretch Rim Protector"] },
-  { name: "True 5",           match: ["Rim Protector", "Glass Cleaner", "Non-Specialized Big", "Scoring Big"] },
+// Archetype-Sortier-Reihenfolge: pos_group-Cluster (Playmaker → Wing → Big),
+// innerhalb Cluster nach grobem "kreativ-zu-roll-spezifisch"-Spektrum.
+// Spieler-Archetypes die im Class-Pool vorhanden sind werden dynamisch
+// als Spalten gerendert.
+const ARCHETYPE_ORDER = [
+  // Playmaker-Cluster
+  "Floor General", "Scoring Playmaker", "Non-Specialized Playmaker",
+  "Short Roll Playmaker", "Passing Hub", "Spacing Guard", "Defensive Guard",
+  // Wing-Cluster
+  "Initiator Wing", "Point Forward", "Scoring Wing", "Slashing Wing",
+  "Non-Specialized Wing", "3-and-D Wing", "Defensive Wing",
+  // Big-Cluster
+  "Stretch Big", "Stretch Rim Protector", "Scoring Big",
+  "Non-Specialized Big", "Rim Protector", "Glass Cleaner",
 ];
 
 function TierBoardView({ players, onSelect }) {
   // Top 100 nach war (= NBA-roster-relevanter Pool)
   const visible = players.slice(0, 100);
 
-  // Bucket: tier × archetype-column. Tier kommt aus predTier oder per war-Schwelle.
+  // Dynamische Spalten: nur die Archetypes die in Top-100 dieser Class
+  // tatsächlich auftauchen. Sortiert nach ARCHETYPE_ORDER (Playmaker→Wing→Big-Cluster).
+  const presentArchetypes = new Set();
+  visible.forEach(p => { if (p.archetype) presentArchetypes.add(p.archetype); });
+  const cols = ARCHETYPE_ORDER.filter(a => presentArchetypes.has(a));
+  // Falls Archetypes vorhanden sind die nicht in ARCHETYPE_ORDER stehen (zukünftige):
+  presentArchetypes.forEach(a => { if (!cols.includes(a)) cols.push(a); });
+
+  // Bucket: tier × archetype
   const buckets = {};
   TIER_BOARD_TIERS.forEach(t => {
     buckets[t.key] = {};
-    TIER_BOARD_COLS.forEach(c => { buckets[t.key][c.name] = []; });
+    cols.forEach(c => { buckets[t.key][c] = []; });
   });
 
   visible.forEach((p, i) => {
     const rank = i + 1;
-    // Modell-Tier vom Backend, fallback auf war-Schwelle
     const tierKey = p.predTier || _tierFromWar(p.war);
-    if (!buckets[tierKey]) return; // unbekanntes Tier (z.B. "Negative" altes label)
-    // Find col by archetype
-    const arche = p.archetype || "";
-    const col = TIER_BOARD_COLS.find(c => c.match.includes(arche)) || TIER_BOARD_COLS[3];
-    buckets[tierKey][col.name].push({ ...p, _rank: rank });
+    if (!buckets[tierKey]) return;
+    const arche = p.archetype || cols[0];
+    if (!buckets[tierKey][arche]) buckets[tierKey][arche] = [];
+    buckets[tierKey][arche].push({ ...p, _rank: rank });
   });
 
   return (
     <div style={{ overflowX: "auto", background: "#0a0e17", borderRadius: 12, border: "1px solid #1f2937" }}>
-      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1100, fontFamily: "'Inter',sans-serif" }}>
+      <table style={{ borderCollapse: "collapse", width: "100%", fontFamily: "'Inter',sans-serif" }}>
         <thead>
           <tr style={{ background: "#0a0e17", borderBottom: "2px solid #1f2937" }}>
-            {TIER_BOARD_COLS.map(c => (
-              <th key={c.name} style={{ padding: "10px 8px", color: "#9ca3af", fontSize: 11, fontWeight: 600, textAlign: "left", borderRight: "1px solid #1f2937" }}>{c.name}</th>
+            {cols.map(c => (
+              <th key={c} style={{ padding: "10px 8px", color: "#9ca3af", fontSize: 10, fontWeight: 600, textAlign: "left",
+                                    borderRight: "1px solid #1f2937", minWidth: 130, whiteSpace: "nowrap" }}>
+                {c}
+              </th>
             ))}
-            <th style={{ padding: "10px 8px", color: "#9ca3af", fontSize: 11, fontWeight: 600, textAlign: "left" }}>Tier</th>
+            <th style={{ padding: "10px 12px", color: "#9ca3af", fontSize: 10, fontWeight: 600, textAlign: "left", whiteSpace: "nowrap" }}>
+              Tier
+            </th>
           </tr>
         </thead>
         <tbody>
           {TIER_BOARD_TIERS.map(tier => {
-            const tierPlayers = TIER_BOARD_COLS.flatMap(c => buckets[tier.key][c.name]);
+            const tierPlayers = cols.flatMap(c => buckets[tier.key][c] || []);
             if (tierPlayers.length === 0) return null;
             return (
               <tr key={tier.key} style={{ borderTop: `4px solid ${tier.color}` }}>
-                {TIER_BOARD_COLS.map(c => {
-                  const cell = buckets[tier.key][c.name];
+                {cols.map(c => {
+                  const cell = buckets[tier.key][c] || [];
                   return (
-                    <td key={c.name} style={{ padding: "8px 6px", verticalAlign: "top", borderRight: "1px solid #1f293744", minWidth: 130 }}>
+                    <td key={c} style={{ padding: "8px 6px", verticalAlign: "top", borderRight: "1px solid #1f293744" }}>
                       {cell.map(p => (
                         <div key={p.player_id || p.name} onClick={() => onSelect(p.name)}
                              className="cursor-pointer hover:bg-white hover:bg-opacity-5"
@@ -5117,9 +5134,12 @@ function TierBoardView({ players, onSelect }) {
                     </td>
                   );
                 })}
-                {/* Tier-Label-Spalte rechts (wie Ben-Layout) */}
-                <td style={{ padding: "8px 12px", verticalAlign: "top", color: tier.color, fontSize: 13, fontWeight: 700, fontFamily: "'Oswald',sans-serif", whiteSpace: "nowrap" }}>
+                <td style={{ padding: "8px 12px", verticalAlign: "top", color: tier.color, fontSize: 13, fontWeight: 700,
+                              fontFamily: "'Oswald',sans-serif", whiteSpace: "nowrap" }}>
                   {tier.name}
+                  <div style={{ fontSize: 9, fontWeight: 400, color: "#6b7280", marginTop: 2 }}>
+                    {tierPlayers.length} {tierPlayers.length === 1 ? "Spieler" : "Spieler"}
+                  </div>
                 </td>
               </tr>
             );
@@ -5127,7 +5147,8 @@ function TierBoardView({ players, onSelect }) {
         </tbody>
       </table>
       <div style={{ padding: "10px 16px", color: "#6b7280", fontSize: 10, borderTop: "1px solid #1f2937" }}>
-        Top 100 nach ppWA · Tiers ranken-basiert (relativ zur Class) · Spalten = Position-Archetype · Klick = Profil oeffnen
+        Top 100 (NBA-Roster-Pool: 60 Picks + ~40 UDFA/Summer League) · Tiers = Modell-Klassifikation ·
+        Spalten = primaerer NBA-Archetype · Klick = Profil oeffnen
       </div>
     </div>
   );
