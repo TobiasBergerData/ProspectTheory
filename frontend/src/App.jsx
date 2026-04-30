@@ -5052,21 +5052,26 @@ function _tierFromWar(w) {
   return "Out";
 }
 
-// Archetype-Sortier-Reihenfolge: pos_group-Cluster (Playmaker → Wing → Big),
-// innerhalb Cluster nach grobem "kreativ-zu-roll-spezifisch"-Spektrum.
-// Spieler-Archetypes die im Class-Pool vorhanden sind werden dynamisch
-// als Spalten gerendert.
-const ARCHETYPE_ORDER = [
-  // Playmaker-Cluster
-  "Floor General", "Scoring Playmaker", "Non-Specialized Playmaker",
-  "Short Roll Playmaker", "Passing Hub", "Spacing Guard", "Defensive Guard",
-  // Wing-Cluster
-  "Initiator Wing", "Point Forward", "Scoring Wing", "Slashing Wing",
-  "Non-Specialized Wing", "3-and-D Wing", "Defensive Wing",
-  // Big-Cluster
-  "Stretch Big", "Stretch Rim Protector", "Scoring Big",
-  "Non-Specialized Big", "Rim Protector", "Glass Cleaner",
+// Archetype-Cluster mit Position-Group-Mapping. Wird im Tier Board als
+// 2-Header-Layer dargestellt (top: PLAYMAKER / WING / BIG, sub: archetype).
+const ARCHETYPE_CLUSTERS = [
+  { group: "Playmaker", color: "#3b82f6", archetypes: [
+    "Floor General", "Scoring Playmaker", "Non-Specialized Playmaker",
+    "Short Roll Playmaker", "Passing Hub", "Spacing Guard", "Defensive Guard",
+  ]},
+  { group: "Wing", color: "#f97316", archetypes: [
+    "Initiator Wing", "Point Forward", "Scoring Wing", "Slashing Wing",
+    "Non-Specialized Wing", "3-and-D Wing", "Defensive Wing",
+  ]},
+  { group: "Big", color: "#8b5cf6", archetypes: [
+    "Stretch Big", "Stretch Rim Protector", "Scoring Big",
+    "Non-Specialized Big", "Rim Protector", "Glass Cleaner",
+  ]},
 ];
+const ARCHETYPE_ORDER = ARCHETYPE_CLUSTERS.flatMap(c => c.archetypes);
+const ARCHETYPE_TO_GROUP = Object.fromEntries(
+  ARCHETYPE_CLUSTERS.flatMap(c => c.archetypes.map(a => [a, c.group]))
+);
 
 function TierBoardView({ players, onSelect }) {
   // Top 100 nach war (= NBA-roster-relevanter Pool)
@@ -5100,14 +5105,34 @@ function TierBoardView({ players, onSelect }) {
     <div style={{ overflowX: "auto", background: "#0a0e17", borderRadius: 12, border: "1px solid #1f2937" }}>
       <table style={{ borderCollapse: "collapse", width: "100%", fontFamily: "'Inter',sans-serif" }}>
         <thead>
+          {/* Top-Header: Position-Group (PLAYMAKER / WING / BIG) ueber den Archetype-Spalten */}
+          <tr style={{ background: "#0a0e17", borderBottom: "1px solid #1f2937" }}>
+            {ARCHETYPE_CLUSTERS.map(cluster => {
+              const cluster_cols = cluster.archetypes.filter(a => cols.includes(a));
+              if (cluster_cols.length === 0) return null;
+              return (
+                <th key={cluster.group} colSpan={cluster_cols.length}
+                    style={{ padding: "8px 8px", color: cluster.color, fontSize: 11, fontWeight: 700, letterSpacing: "0.1em",
+                             textAlign: "center", borderRight: `2px solid ${cluster.color}33`, textTransform: "uppercase" }}>
+                  {cluster.group}
+                </th>
+              );
+            })}
+            <th style={{ padding: "8px 12px" }}></th>
+          </tr>
+          {/* Sub-Header: konkrete Archetype-Namen */}
           <tr style={{ background: "#0a0e17", borderBottom: "2px solid #1f2937" }}>
-            {cols.map(c => (
-              <th key={c} style={{ padding: "10px 8px", color: "#9ca3af", fontSize: 10, fontWeight: 600, textAlign: "left",
-                                    borderRight: "1px solid #1f2937", minWidth: 130, whiteSpace: "nowrap" }}>
-                {c}
-              </th>
-            ))}
-            <th style={{ padding: "10px 12px", color: "#9ca3af", fontSize: 10, fontWeight: 600, textAlign: "left", whiteSpace: "nowrap" }}>
+            {cols.map(c => {
+              const groupColor = ARCHETYPE_CLUSTERS.find(cl => cl.archetypes.includes(c))?.color || "#9ca3af";
+              return (
+                <th key={c} style={{ padding: "8px 8px", color: "#9ca3af", fontSize: 10, fontWeight: 500, textAlign: "left",
+                                      borderRight: "1px solid #1f2937", borderTop: `1px dashed ${groupColor}33`,
+                                      minWidth: 130, whiteSpace: "nowrap" }}>
+                  {c}
+                </th>
+              );
+            })}
+            <th style={{ padding: "8px 12px", color: "#9ca3af", fontSize: 10, fontWeight: 600, textAlign: "left", whiteSpace: "nowrap" }}>
               Tier
             </th>
           </tr>
@@ -5138,7 +5163,7 @@ function TierBoardView({ players, onSelect }) {
                               fontFamily: "'Oswald',sans-serif", whiteSpace: "nowrap" }}>
                   {tier.name}
                   <div style={{ fontSize: 9, fontWeight: 400, color: "#6b7280", marginTop: 2 }}>
-                    {tierPlayers.length} {tierPlayers.length === 1 ? "Spieler" : "Spieler"}
+                    {tierPlayers.length} {tierPlayers.length === 1 ? "player" : "players"}
                   </div>
                 </td>
               </tr>
@@ -5147,8 +5172,8 @@ function TierBoardView({ players, onSelect }) {
         </tbody>
       </table>
       <div style={{ padding: "10px 16px", color: "#6b7280", fontSize: 10, borderTop: "1px solid #1f2937" }}>
-        Top 100 (NBA-Roster-Pool: 60 Picks + ~40 UDFA/Summer League) · Tiers = Modell-Klassifikation ·
-        Spalten = primaerer NBA-Archetype · Klick = Profil oeffnen
+        Top 100 (NBA roster pool: 60 picks + ~40 UDFA/Summer League) · Tiers = model classification ·
+        Columns = primary NBA archetype · Click = open profile
       </div>
     </div>
   );
