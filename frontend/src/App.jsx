@@ -5022,12 +5022,125 @@ function RangeView({ players, gmRisk }) {
 }
 
 // ═══════════════════════════════════════════════════════════
+// TIER BOARD (Ben-PF-Style: Tiers vertikal, Archetype-Spalten horizontal)
+// ═══════════════════════════════════════════════════════════
+// Inspiration: Ben PF's Tier-Board (twitter.com/bjpf_)
+// 6 Tiers vertikal x 7 Archetype-Spalten horizontal.
+// NBA-Front-Office-Use: 100-Spieler-Pool fuer 60 Picks + ~40 UDFA/Summer League.
+// Plus Intl-Teams: Talent-Einordnung auch fuer Spieler die nicht NBA werden.
+
+// Tiers entsprechen unseren Modell-Tiers (TC-Farben aus oben).
+// Konsistent mit Backend WAR_TIERS (Superstar≥47, All-Star≥33, Starter≥17,
+// Roleplayer≥8.3, Replacement≥0, Out<0).
+const TIER_BOARD_TIERS = [
+  { key: "Superstar",   name: "Superstar",    color: "#fbbf24" },
+  { key: "All-Star",    name: "All-Star",     color: "#f97316" },
+  { key: "Starter",     name: "Starter",      color: "#3b82f6" },
+  { key: "Role Player", name: "Roleplayer",   color: "#06b6d4" },
+  { key: "Replacement", name: "Replacement",  color: "#8b5cf6" },
+  { key: "Out",         name: "Out / Bust",   color: "#6b7280" },
+];
+
+// War-Schwelle als Fallback wenn predTier fehlt (matched 10c WAR_TIERS).
+function _tierFromWar(w) {
+  if (w == null) return "Out";
+  if (w >= 47) return "Superstar";
+  if (w >= 33) return "All-Star";
+  if (w >= 17) return "Starter";
+  if (w >=  8) return "Role Player";
+  if (w >=  0) return "Replacement";
+  return "Out";
+}
+
+const TIER_BOARD_COLS = [
+  { name: "Initiator PG",     match: ["Floor General", "Scoring Playmaker", "Short Roll Playmaker", "Passing Hub"] },
+  { name: "Combo G",          match: ["Non-Specialized Playmaker", "Spacing Guard", "Defensive Guard"] },
+  { name: "Off Guard / Wing", match: ["3-and-D Wing", "Defensive Wing"] },
+  { name: "Off-Ball Wing/4",  match: ["Non-Specialized Wing", "Scoring Wing", "Slashing Wing"] },
+  { name: "Wing/4 Handler",   match: ["Initiator Wing", "Point Forward"] },
+  { name: "Smallball Big",    match: ["Stretch Big", "Stretch Rim Protector"] },
+  { name: "True 5",           match: ["Rim Protector", "Glass Cleaner", "Non-Specialized Big", "Scoring Big"] },
+];
+
+function TierBoardView({ players, onSelect }) {
+  // Top 100 nach war (= NBA-roster-relevanter Pool)
+  const visible = players.slice(0, 100);
+
+  // Bucket: tier × archetype-column. Tier kommt aus predTier oder per war-Schwelle.
+  const buckets = {};
+  TIER_BOARD_TIERS.forEach(t => {
+    buckets[t.key] = {};
+    TIER_BOARD_COLS.forEach(c => { buckets[t.key][c.name] = []; });
+  });
+
+  visible.forEach((p, i) => {
+    const rank = i + 1;
+    // Modell-Tier vom Backend, fallback auf war-Schwelle
+    const tierKey = p.predTier || _tierFromWar(p.war);
+    if (!buckets[tierKey]) return; // unbekanntes Tier (z.B. "Negative" altes label)
+    // Find col by archetype
+    const arche = p.archetype || "";
+    const col = TIER_BOARD_COLS.find(c => c.match.includes(arche)) || TIER_BOARD_COLS[3];
+    buckets[tierKey][col.name].push({ ...p, _rank: rank });
+  });
+
+  return (
+    <div style={{ overflowX: "auto", background: "#0a0e17", borderRadius: 12, border: "1px solid #1f2937" }}>
+      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1100, fontFamily: "'Inter',sans-serif" }}>
+        <thead>
+          <tr style={{ background: "#0a0e17", borderBottom: "2px solid #1f2937" }}>
+            {TIER_BOARD_COLS.map(c => (
+              <th key={c.name} style={{ padding: "10px 8px", color: "#9ca3af", fontSize: 11, fontWeight: 600, textAlign: "left", borderRight: "1px solid #1f2937" }}>{c.name}</th>
+            ))}
+            <th style={{ padding: "10px 8px", color: "#9ca3af", fontSize: 11, fontWeight: 600, textAlign: "left" }}>Tier</th>
+          </tr>
+        </thead>
+        <tbody>
+          {TIER_BOARD_TIERS.map(tier => {
+            const tierPlayers = TIER_BOARD_COLS.flatMap(c => buckets[tier.key][c.name]);
+            if (tierPlayers.length === 0) return null;
+            return (
+              <tr key={tier.key} style={{ borderTop: `4px solid ${tier.color}` }}>
+                {TIER_BOARD_COLS.map(c => {
+                  const cell = buckets[tier.key][c.name];
+                  return (
+                    <td key={c.name} style={{ padding: "8px 6px", verticalAlign: "top", borderRight: "1px solid #1f293744", minWidth: 130 }}>
+                      {cell.map(p => (
+                        <div key={p.player_id || p.name} onClick={() => onSelect(p.name)}
+                             className="cursor-pointer hover:bg-white hover:bg-opacity-5"
+                             style={{ padding: "2px 6px", borderRadius: 4, marginBottom: 2 }}
+                             title={`#${p._rank} · ppWA ${p.war?.toFixed?.(1) ?? "—"} · ${p.archetype || ""}`}>
+                          <span style={{ color: tier.color, fontSize: 12, fontWeight: 500 }}>{p.name}</span>
+                          <span style={{ color: "#6b7280", fontSize: 9, marginLeft: 4 }}>#{p._rank}</span>
+                        </div>
+                      ))}
+                    </td>
+                  );
+                })}
+                {/* Tier-Label-Spalte rechts (wie Ben-Layout) */}
+                <td style={{ padding: "8px 12px", verticalAlign: "top", color: tier.color, fontSize: 13, fontWeight: 700, fontFamily: "'Oswald',sans-serif", whiteSpace: "nowrap" }}>
+                  {tier.name}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <div style={{ padding: "10px 16px", color: "#6b7280", fontSize: 10, borderTop: "1px solid #1f2937" }}>
+        Top 100 nach ppWA · Tiers ranken-basiert (relativ zur Class) · Spalten = Position-Archetype · Klick = Profil oeffnen
+      </div>
+    </div>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════
 // BIG BOARD (No class overview — single view)
 // ═══════════════════════════════════════════════════════════
 function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, availableYears, yearFilter, setYearFilter}) {
   const [sortBy,setSortBy]=useState("war");
   const [posFilter,setPosFilter]=useState("All");
-  const [boardView,setBoardView]=useState("table"); // "table" | "range"
+  const [boardView,setBoardView]=useState("table"); // "table" | "range" | "tier"
   const [gmRisk,setGmRisk]=useState("neutral");    // "ceiling" | "neutral" | "floor"
 
   const fetchBoard = (year) => {
@@ -5101,7 +5214,11 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
     } else {
       withRanges.sort(sortFn[sortBy] || sortFn.war);
     }
-    return withRanges.slice(0, 60);
+    // Top 100 = NBA-roster-relevanter Pool (60 Picks + ~40 UDFA/Summer League).
+    // Tobias 2026-04-30: Front Offices brauchen Sicht auf Spieler die als
+    // Undrafted-Free-Agent ins Camp kommen koennen, plus intl-Teams die fuer
+    // ihre Roster-Entscheidungen Talent ueber den NBA-Cut hinaus einschaetzen.
+    return withRanges.slice(0, 100);
   }, [allPlayers, sortBy, posFilter, gmRisk, boardView]);
 
   const posColors = {Playmaker:"#3b82f6", Wing:"#f97316", Big:"#8b5cf6"};
@@ -5171,7 +5288,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
         </div>
         {/* View toggle */}
         <div className="flex gap-1 ml-auto">
-          {[["table","☰ Table"],["range","◈ Range"]].map(([v,l])=>(
+          {[["table","☰ Table"],["range","◈ Range"],["tier","▥ Tier Board"]].map(([v,l])=>(
             <button key={v} onClick={()=>setBoardView(v)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
               style={{background:boardView===v?"#6d28d9":"#1f2937",color:boardView===v?"#e9d5ff":"#9ca3af"}}>
               {l}
@@ -5205,6 +5322,13 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
       {boardView === "range" && (
         <div>
           <RangeView players={filtered} gmRisk={gmRisk} />
+        </div>
+      )}
+
+      {/* Tier Board View — Ben-Style Tier-Splits + Archetype-Spalten */}
+      {boardView === "tier" && (
+        <div>
+          <TierBoardView players={filtered} onSelect={onSelect} />
         </div>
       )}
 
