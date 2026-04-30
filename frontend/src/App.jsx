@@ -3007,8 +3007,14 @@ function ProjectionTab({p}) {
     {label:"USG%", val:p.usg, desc:"Usage rate — production volume signal", color:p.usg>25?"#22c55e":p.usg>20?"#86efac":"#fbbf24"},
   ].filter(d => d.val != null);
 
-  // ppWA color scale (Wins Added thresholds)
-  const warColor = war >= 25 ? "#fbbf24" : war >= 10 ? "#f97316" : war >= 4 ? "#3b82f6" : war >= 1 ? "#06b6d4" : war > 0 ? "#8b5cf6" : "#6b7280";
+  // ppWA color scale - synced to Backend Tier-Schwellen 2026-04-30:
+  // Superstar>=47, All-Star>=33, Starter>=17, Roleplayer>=8, Replacement>=0, Out<0
+  const warColor = war >= 47 ? "#fbbf24"  // Superstar gold
+                 : war >= 33 ? "#f97316"  // All-Star orange
+                 : war >= 17 ? "#3b82f6"  // Starter blue
+                 : war >=  8 ? "#06b6d4"  // Roleplayer cyan
+                 : war >=  0 ? "#8b5cf6"  // Replacement purple
+                 : "#6b7280";              // Out gray
 
   // Confidence (v2Conf from model, fallback to legacy)
   const rawConf = p.v2Conf || p.confidence;
@@ -5242,7 +5248,17 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
                     <td className="px-3 py-2.5"><span className="px-2 py-0.5 rounded text-xs font-semibold" style={{background:(posColors[p.pos]||"#6b7280")+"22",color:posColors[p.pos]||"#6b7280"}}>{p.pos}</span></td>
                     <td className="px-3 py-2.5 text-xs" style={{color:"#9ca3af"}}>{p.team||p.conf}</td>
                     <td className="px-3 py-2.5 text-xs" style={{color: p.age != null && p.age < 20 ? "#86efac" : "#9ca3af"}}>{p.age != null ? Number(p.age).toFixed(1) : "—"}</td>
-                    <td className="px-3 py-2.5 font-bold" style={{color: p.war != null ? (TC[p.predTier]||"#6b7280") : "#374151", fontFamily:"'Oswald',sans-serif"}}>{p.war != null ? fmt(p.war, 1) : "—"}</td>
+                    <td className="px-3 py-2.5 font-bold" style={{color: (() => {
+                      if (p.war == null) return "#374151";
+                      const w = p.war;
+                      // Synced mit Backend tier thresholds (Superstar>=47, All-Star>=33, Starter>=17, Role>=8, Repl>=0)
+                      if (w >= 47) return "#fbbf24";       // Superstar gold
+                      if (w >= 33) return "#f97316";       // All-Star orange
+                      if (w >= 17) return "#3b82f6";       // Starter blue
+                      if (w >=  8) return "#06b6d4";       // Roleplayer cyan
+                      if (w >=  0) return "#8b5cf6";       // Replacement purple
+                      return "#6b7280";                     // Out gray (negative ppWA)
+                    })(), fontFamily:"'Oswald',sans-serif"}}>{p.war != null ? (p.war >= 10 ? fmt(p.war, 0) : fmt(p.war, 1)) : "—"}</td>
                     <td className="px-3 py-2.5 text-xs font-semibold" style={{color: p.bpm != null ? (p.bpm > 8 ? "#22c55e" : p.bpm > 4 ? "#86efac" : "#9ca3af") : "#374151"}}>{p.bpm != null ? fmt(p.bpm, 1) : "—"}</td>
                     {/* NBA Tier */}
                     <td className="px-3 py-2.5 text-xs font-bold" style={{color:TC[p.predTier]||"#6b7280"}}>{p.predTier||"—"}</td>
