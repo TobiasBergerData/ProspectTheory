@@ -994,6 +994,14 @@ function mapProfile(d) {
     actualIntlLeague:  d.actualIntlLeague  ?? null,
     actualIntlTier:    d.actualIntlTier    ?? null,
     actualIntlLeagues: d.actualIntlLeagues ?? null,
+    // Tobias 2026-05-05: Injury-Saison-Fallback (05a_process_barttorvik.py).
+    // Wenn aktuelle Saison verletzungsbedingt verkuerzt war (GP<15), fallback
+    // auf beste Vorsaison als Pred-Basis. UI zeigt das transparent.
+    //   injuryFallbackSeason = Saison die uebersprungen wurde (z.B. 2026)
+    //   displaySeason = Anzeigesaison (Team/Class), bleibt aktuelle Saison
+    //   season_year = Saison aus der die Stats fuer Pred kamen (Vorsaison)
+    injuryFallbackSeason: d.injury_fallback_season ?? null,
+    displaySeason: d.display_season ?? null,
     ncaaArchetype: _ncaaArch,
     nbaProjection: _nbaProjection,
     ceilingScore: _ceilingScore,
@@ -5408,6 +5416,10 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
                       <div className="flex items-center gap-1">
                         <span className="font-semibold" style={{color:"#e5e7eb"}}>{p.name}</span>
                         {isIntl && <span className="text-xs" style={{color:"#10b981"}}>🌐</span>}
+                        {p.injuryFallbackSeason && (
+                          <span title={`Injury-shortened season ${Math.round(p.injuryFallbackSeason)} — projection based on prior full season`}
+                                className="text-xs cursor-help" style={{color:"#fb923c"}}>🩹</span>
+                        )}
                       </div>
                       <div className="flex flex-wrap gap-1 mt-0.5">
                         {(p.badges||[]).slice(0,4).map((b,j)=><span key={j} className="text-xs px-1.5 py-0 rounded" style={{background:"#22c55e22",color:"#22c55e",fontSize:9}}>{b}</span>)}
@@ -6048,6 +6060,15 @@ export default function App() {
             {p.confidence==="limited"&&(
               <div className="mb-4 p-3 rounded-lg text-sm" style={{background:"#78350f",border:"1px solid #92400e",color:"#fcd34d"}}>
                 ⚡ <strong>Limited Sample</strong> — Based on {Math.round(p.sampleMin||0)} minutes. Interpret with caution.
+              </div>
+            )}
+            {p.injuryFallbackSeason && (
+              <div className="mb-4 p-3 rounded-lg text-sm flex items-start gap-2" style={{background:"#7c2d12",border:"1px solid #9a3412",color:"#fdba74"}}>
+                <span style={{fontSize:"1.2em"}}>🩹</span>
+                <div>
+                  <strong>Injury-Adjusted Projection</strong> — Player's {Math.round(p.injuryFallbackSeason)}-season was injury-shortened.
+                  Prediction is based on the {Math.round(p.season_year || p.year || 0)}-season (full sample) instead. Display info reflects current team/year.
+                </div>
               </div>
             )}
             <div className="flex gap-1 mb-5 overflow-x-auto pb-2" style={{scrollbarWidth:"none"}}>
