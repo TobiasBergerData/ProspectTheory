@@ -3,9 +3,16 @@ services:
     name: prospecttheory-api
     runtime: python
     plan: free
-    # LFS-Pull explizit triggern - sonst sieht Render nur die 130-Byte-Pointer-Dateien
-    # statt der echten 100-MB-JSONs. Bisher hat Render einen alten Cache-Stand serviert.
-    buildCommand: git lfs install --local && git lfs pull && pip install -r requirements.txt
+    # Tobias 2026-05-05: Build-on-Deploy.
+    # Source-JSONs (alle <90 MB → kein LFS noetig) sind im Repo.
+    # build_db.py mergt sie zu prospecttheory.db auf Render-Disk (~30-60s).
+    # Vorteile: kein LFS-Bandwidth-Limit, verlustfreie volle DB.
+    # Falls LFS noch fuer andere Files genutzt: Pull bleibt drin als Fallback.
+    buildCommand: |
+      git lfs install --local || true
+      git lfs pull || true
+      pip install -r requirements.txt
+      python build_db.py
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: DATA_DIR
