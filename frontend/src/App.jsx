@@ -2955,11 +2955,93 @@ function DevTrajectoryTab({p}) {
     </div>
   );
 
+  // ── FIBA NATIONAL TEAM CARD (Tobias 2026-05-05) ─────────────────────
+  // Zeigt Karriere bei FIBA Nationalteam-Events (Junior + Senior).
+  // Hilft NCAA-Talente UND Intl-Talente direkt vergleichen — die einzige Bühne
+  // wo beide gegeneinander spielen. Plus Early-Bloomer-Highlight (Doncic mit 16
+  // bei Senior-Slowenien-Nationalmannschaft = generationaler Talent-Marker).
+  const FibaCard = () => {
+    const apps = Number(p.fiba_total_apps || 0);
+    if (apps < 1) return null;  // kein FIBA-data → keine Karte
+    const youthDom = Number(p.fiba_youth_dominance || 0);
+    const seniorEarly = Number(p.fiba_senior_early || 0);
+    const peakPer = Number(p.fiba_career_peak_per || 0);
+    const hasYouthSignal = youthDom >= 30;
+    const hasEarlySignal = seniorEarly >= 6;
+    const hasElitePer = peakPer >= 25;
+
+    // Pro-Liga Early-Bloomer (intl Pre-NBA)
+    const proSeason = p.intl_first_pro_season;
+    const proBpm = Number(p.intl_first_pro_bpm || 0);
+    const proLeague = p.intl_first_pro_league;
+    const earlyProScore = Number(p.pro_early_bloomer || 0);
+    const hasProEarly = earlyProScore >= 30;
+
+    return (
+      <div style={{background:"#0f172a",borderRadius:12,padding:18,border:"1px solid #1e293b"}}>
+        <div style={{fontSize:13,fontWeight:700,color:"#9ca3af",marginBottom:10,letterSpacing:"0.05em",textTransform:"uppercase"}}>
+          🌍 International Career Signals
+        </div>
+
+        {/* FIBA stats */}
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:12,color:"#6b7280",marginBottom:6}}>FIBA NATIONAL TEAM</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
+            <div style={{padding:8,background:"#1e293b",borderRadius:6}}>
+              <div style={{fontSize:10,color:"#9ca3af",marginBottom:2}}>Career Apps</div>
+              <div style={{fontSize:18,fontWeight:700,color:"#e5e7eb"}}>{apps}</div>
+            </div>
+            <div style={{padding:8,background:"#1e293b",borderRadius:6}}>
+              <div style={{fontSize:10,color:"#9ca3af",marginBottom:2}}>Peak PER</div>
+              <div style={{fontSize:18,fontWeight:700,color:hasElitePer?"#22c55e":"#e5e7eb"}}>{peakPer.toFixed(1)}</div>
+            </div>
+            <div style={{padding:8,background:"#1e293b",borderRadius:6}}>
+              <div style={{fontSize:10,color:"#9ca3af",marginBottom:2}}>Youth Dominance</div>
+              <div style={{fontSize:18,fontWeight:700,color:hasYouthSignal?"#22c55e":"#e5e7eb"}}>{youthDom.toFixed(0)}</div>
+            </div>
+            <div style={{padding:8,background:"#1e293b",borderRadius:6}}>
+              <div style={{fontSize:10,color:"#9ca3af",marginBottom:2}}>Early Senior 🌟</div>
+              <div style={{fontSize:18,fontWeight:700,color:hasEarlySignal?"#fbbf24":"#e5e7eb"}}>{seniorEarly.toFixed(0)}</div>
+            </div>
+          </div>
+          {hasEarlySignal && (
+            <div style={{fontSize:11,color:"#fbbf24",marginTop:6,fontStyle:"italic"}}>
+              ⭐ Early-Bloomer: spielte schon mit jungem Alter im Senior-Nationalteam — generationaler Talent-Marker
+            </div>
+          )}
+        </div>
+
+        {/* Pro-Liga Early Signal (intl only) */}
+        {proSeason && proLeague && (
+          <div>
+            <div style={{fontSize:12,color:"#6b7280",marginBottom:6}}>FIRST PRO LEAGUE PRODUCTION</div>
+            <div style={{padding:10,background:"#1e293b",borderRadius:6,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontSize:13,color:"#e5e7eb"}}>
+                  Saison {proSeason} — {proLeague}
+                </div>
+                <div style={{fontSize:11,color:"#9ca3af",marginTop:2}}>
+                  BPM = {proBpm.toFixed(1)} bei first signifikante Rolle (≥12 MPG)
+                </div>
+              </div>
+              {hasProEarly && (
+                <div style={{padding:"4px 10px",background:"#fbbf2422",border:"1px solid #fbbf24",borderRadius:4,color:"#fbbf24",fontSize:11,fontWeight:600}}>
+                  Early-Bloomer
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col gap-4">
       <SeasonLineChart />
       <SeasonTable />
       <ClassScatterAndDev p={p} />
+      <FibaCard />
       <ConsensusPlaceholder />
     </div>
   );

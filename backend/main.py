@@ -176,6 +176,16 @@ _BOARD_FIELDS = [
     "intl_tier",
     "p_intl_eu_impact", "p_intl_eu", "p_intl_top_eu",
     "p_intl_pro", "p_intl_fringe",
+    # Tobias 2026-05-05: Injury-Saison-Fallback
+    # injury_fallback_season = die uebersprungene (verletzte) Saison
+    # display_season = die Saison fuer UI (Team/Class-Anzeige) — bleibt aktuelle Saison
+    # Stats kommen aus Vorsaison (Pred-Basis), Display zeigt aktuelle Saison
+    "injury_fallback_season", "display_season",
+    # Tobias 2026-05-05: FIBA-Bridge + Pro-Liga Early-Bloomer (intl)
+    "fiba_youth_dominance", "fiba_senior_early",
+    "fiba_career_peak_per", "fiba_total_apps",
+    "pro_early_bloomer",
+    "intl_first_pro_season", "intl_first_pro_bpm", "intl_first_pro_league",
 ]
 
 
@@ -865,7 +875,8 @@ async def get_board(
                   "prob_role", "prob_repl", "prob_out",
                   "archetype", "confidence",
                   "intl_tier", "p_intl_eu_impact", "p_intl_eu",
-                  "p_intl_top_eu", "p_intl_pro", "p_intl_fringe"):
+                  "p_intl_top_eu", "p_intl_pro", "p_intl_fringe",
+                  "injury_fallback_season", "display_season"):
             v = r[k] if k in r.keys() else None
             if v is not None:
                 # board.year heisst frontend-seitig 'yr'
