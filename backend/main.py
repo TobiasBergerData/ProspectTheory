@@ -186,6 +186,8 @@ _BOARD_FIELDS = [
     "fiba_career_peak_per", "fiba_total_apps",
     "pro_early_bloomer",
     "intl_first_pro_season", "intl_first_pro_bpm", "intl_first_pro_league",
+    # Tobias 2026-05-05: Potential-Tier (P>=30%) + counting-stats imputation flag
+    "potential_tier", "counting_stats_imputed",
 ]
 
 

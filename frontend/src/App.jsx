@@ -933,6 +933,11 @@ function mapProfile(d) {
     sigma:d.pred_sigma??d.sigma??d.mc_sigma??d.volatility,
     pNba:d.pred_p_nba??d.pNba??d.pn,
     predTier: d.v2Tier ?? d.pred_tier ?? d.predicted_tier ?? d.tier,
+    // Tobias 2026-05-05: potential_tier zeigt P(A+)≥30%-basierten Tier (statt nur Modal).
+    // Doncic mit S=45% A=51.5% bekommt "Superstar Potential" (45%≥30%), waehrend
+    // predicted_tier "All-Star" bleibt. Macht Pre-Draft-Potenzial sichtbar.
+    potentialTier: d.potential_tier ?? null,
+    countingStatsImputed: d.counting_stats_imputed ?? false,
     ups: d.ups ?? d.ups_raw,
     // ppWA = Projected Peak Wins Added (Model v2: HistGradientBoosting + Elite Detector)
     ppwa: d.ppwa ?? null,
@@ -3144,6 +3149,14 @@ function ProjectionTab({p}) {
               <div className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Predicted Tier</div>
               <div className="text-lg font-bold mt-0.5" style={{color:TC[predTier]||"#6b7280"}}>{predTier}</div>
             </div>
+            {p.potentialTier && p.potentialTier !== "Marginal/Out" && (
+              <div className="text-center" title={`Highest tier where cumulative probability ≥30%. Doncic: P(Superstar)=45% → Superstar Potential. Anders als Predicted Tier (Modal-Wert) macht Potential Tier das Pre-Draft-Potenzial sichtbar.`}>
+                <div className="text-xs uppercase tracking-wider cursor-help" style={{color:"#6b7280"}}>Potential ★</div>
+                <div className="text-lg font-bold mt-0.5" style={{color: p.potentialTier.includes("Superstar") ? "#fbbf24" : p.potentialTier.includes("All-Star") ? "#f97316" : p.potentialTier.includes("Starter") ? "#3b82f6" : "#06b6d4"}}>
+                  {p.potentialTier.replace(" Potential", "")}
+                </div>
+              </div>
+            )}
             <div className="text-center">
               <div className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Career Path</div>
               <div className="text-lg font-bold mt-0.5" style={{color:"#22c55e"}}>{p.careerPath || "NBA"}</div>
@@ -6150,6 +6163,14 @@ export default function App() {
                 <div>
                   <strong>Injury-Adjusted Projection</strong> — Player's {Math.round(p.injuryFallbackSeason)}-season was injury-shortened.
                   Prediction is based on the {Math.round(p.season_year || p.year || 0)}-season (full sample) instead. Display info reflects current team/year.
+                </div>
+              </div>
+            )}
+            {p.countingStatsImputed && (
+              <div className="mb-4 p-3 rounded-lg text-sm flex items-start gap-2" style={{background:"#1e3a5f",border:"1px solid #2563eb",color:"#93c5fd"}}>
+                <span style={{fontSize:"1.2em"}}>ℹ️</span>
+                <div>
+                  <strong>Estimated Counting Stats</strong> — BartTorvik 2008-2010 hat keine per-game stats. PPG/RPG/APG aus Per-100-Possessions × MPG approximiert. Modell nutzt komplette Per-100-Daten — Display-Werte sind Schätzungen.
                 </div>
               </div>
             )}
