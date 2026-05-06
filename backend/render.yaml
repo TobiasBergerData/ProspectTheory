@@ -13,6 +13,12 @@ services:
       git lfs pull || true
       pip install -r requirements.txt
       python build_db.py
+      # Tobias 2026-05-05: Mind-Tab + Skill-Curve + OGBPM benötigen post-DB-Inject.
+      # Reihenfolge wichtig: shotCreation muss VOR leverageEff laufen (Voraussetzung).
+      python inject_shot_creation_spectrum.py
+      python inject_leverage_efficiency.py
+      python inject_skill_curve.py
+      python inject_ogbpm.py
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: DATA_DIR

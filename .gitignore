@@ -3,3 +3,10 @@ node_modules/
 backend/data/processed/api_profiles.json
 backend/data/processed/api_stat_comps.json
 backend/data/processed/api_anthro_comps.json
+# SQLite DBs — werden auf Render aus den JSONs gebaut, NICHT ins Repo
+backend/data/processed/*.db
+backend/data/processed/*.db-shm
+backend/data/processed/*.db-wal
+# Pycache
+__pycache__/
+*.pyc
