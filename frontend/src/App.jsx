@@ -2449,16 +2449,17 @@ function MindTab({p}) {
       <div style={{background:"#111827",borderRadius:12,padding:"12px 16px",borderLeft:"3px solid #f97316"}}>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
           <span style={{fontSize:16}}>🧠</span>
-          <span style={{fontSize:14,fontWeight:700,color:"#f97316",fontFamily:"Oswald, sans-serif",letterSpacing:1}}>MIND TAB — PBP INTELLIGENCE</span>
+          <span style={{fontSize:14,fontWeight:700,color:"#f97316",fontFamily:"Oswald, sans-serif",letterSpacing:1}}>MIND TAB — DECISION MAKING UNDER LOAD</span>
         </div>
-        <div style={{fontSize:11,color:"#6b7280"}}>
-          Play-by-play analysis using {Math.round(lwTotal)} leverage-weighted attempts (BartTorvik 2008–2026)
+        <div style={{fontSize:11,color:"#6b7280",lineHeight:1.5}}>
+          How does this player handle <strong style={{color:"#9ca3af"}}>self-creation</strong>, <strong style={{color:"#9ca3af"}}>increased usage</strong>, and <strong style={{color:"#9ca3af"}}>adverse-event sequences</strong>?
+          Quantitative tendencies — to be confirmed with film. Built on {Math.round(lwTotal)} leverage-weighted attempts {p.mindMetrics ? `+ ${p.mindMetrics.n_actions||0} player-events` : ""} (BartTorvik 2008–2026 + ESPN PBP 2017–2026).
         </div>
       </div>
 
-      {/* ── Feature 1: Leverage-Weighted Efficiency ── */}
-      <Sec icon="⚡" title="Leverage-Weighted Efficiency"
-        sub="How efficient is this player on shots they create themselves?">
+      {/* ── Section 1: Self-Sufficiency Profile (formerly "Leverage-Weighted Efficiency") ── */}
+      <Sec icon="⚡" title="Self-Sufficiency Profile"
+        sub="Step 1: How often does he create alone? · Step 2: How efficient when he does? · Step 3: Does pressure change it? · Step 4: Where does he succeed?">
         <div style={{fontSize:12,color:"#9ca3af",marginBottom:16,lineHeight:"1.6"}}>
           Standard eFG% weights all attempts equally. <strong style={{color:"#e5e7eb"}}>Leverage-Weighted eFG%</strong> up-weights shots the player created for themselves — because unassisted attempts carry higher difficulty and higher game impact. A player who dominates on self-created shots is a self-sufficient scorer.
         </div>
@@ -2530,6 +2531,91 @@ function MindTab({p}) {
           </div>
         )}
 
+        {/* ── Step 3: Pressure-Splits (Tobias 2026-05-09) ── */}
+        {p.mindMetrics && (() => {
+          const mm = p.mindMetrics;
+          const cw = mm.clutch_wp || {};   // win-prob clutch (preferred)
+          const lc = mm.late_clock || {};
+          const ft = mm.ft || {};
+
+          const PressureCard = ({title, sub, fga, efg, delta, type, minSample = 8}) => {
+            const lowSample = (fga || 0) < minSample;
+            const dColor =
+              delta == null   ? "#6b7280"
+              : delta >  3     ? "#22c55e"
+              : delta > -3     ? "#fbbf24"
+              : delta > -10    ? "#fb923c"
+              :                  "#ef4444";
+            const verdict =
+              delta == null    ? "—"
+              : delta >  5     ? "performs better under this pressure"
+              : delta >  0     ? "slightly better"
+              : delta > -3     ? "near baseline"
+              : delta > -10    ? "drop under pressure"
+              :                  "significant drop under pressure";
+            return (
+              <Tip wide content={
+                <div>
+                  <div style={{fontWeight:700,color:dColor,marginBottom:4}}>{title}</div>
+                  <div style={{color:"#cbd5e1",fontSize:11}}>{sub}</div>
+                  <div style={{fontSize:11,color:"#94a3b8",marginTop:4}}>
+                    Sample: {fga||0} {type === "ft" ? "FT" : "FG"} attempts ·{" "}
+                    {fga != null && fga >= 8 ? "stable" : "limited (treat as directional)"}
+                  </div>
+                </div>
+              }>
+                <div style={{background:"#0d1117",border:`1px solid ${dColor}33`,borderRadius:8,padding:"10px 12px",cursor:"help",opacity:lowSample?0.65:1}}>
+                  <div style={{fontSize:10,fontWeight:600,color:"#9ca3af",marginBottom:6}}>{title}</div>
+                  <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:4}}>
+                    <span style={{fontSize:20,fontWeight:700,color:dColor,fontFamily:"Oswald,sans-serif"}}>
+                      {delta != null ? `${delta >= 0 ? "+" : ""}${delta.toFixed(1)}pp` : "—"}
+                    </span>
+                    <span style={{fontSize:10,color:"#6b7280"}}>vs baseline</span>
+                  </div>
+                  <div style={{fontSize:9,color:"#475569",marginBottom:4}}>
+                    {efg != null ? `eFG ${efg.toFixed(1)}% on ${fga||0} attempts` : "no data"}
+                    {lowSample && fga > 0 && <span style={{color:"#fbbf24",marginLeft:4}}>· low sample</span>}
+                  </div>
+                  <div style={{fontSize:10,color:dColor,fontWeight:500}}>{verdict}</div>
+                </div>
+              </Tip>
+            );
+          };
+
+          const hasAny = (cw.fga || lc.fga || (ft.clutch_fta||0) > 0);
+          if (!hasAny) return null;
+
+          return (
+            <div style={{marginTop:18,marginBottom:16}}>
+              <div style={{fontSize:10,fontWeight:700,color:"#6b7280",letterSpacing:1.2,marginBottom:10,borderBottom:"1px solid #1f2937",paddingBottom:6}}>
+                STEP 3 — PRESSURE-AWARE EFFICIENCY · {mm.season} season
+              </div>
+              <div style={{fontSize:11,color:"#9ca3af",marginBottom:12,lineHeight:1.5}}>
+                Self-creation efficiency above measures average attempts. Three pressure contexts often expose mental load:
+                <strong style={{color:"#e5e7eb"}}> close late-game</strong> (win prob 20–80% in 2nd half),
+                <strong style={{color:"#e5e7eb"}}> shot-clock pressure</strong> (≥22 secs into possession), and
+                <strong style={{color:"#e5e7eb"}}> clutch free-throws</strong>. Δ shows efficiency change vs the same player's normal-context attempts.
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(180px, 1fr))",gap:10}}>
+                <PressureCard title="Close Late-Game (FG)"
+                  sub="Win-probability based: 2nd half + outcome uncertain. Real high-leverage moments where pressure is greatest."
+                  fga={cw.fga} efg={cw.efg} delta={cw.delta_efg} type="fg"/>
+                <PressureCard title="Late Shot Clock (FG)"
+                  sub="Possession ≥22 secs in (NCAA shot clock = 30s). Forced shots when offense couldn't get a clean look."
+                  fga={lc.fga} efg={lc.efg} delta={lc.delta_efg} type="fg"/>
+                {ft.clutch_fta != null && ft.clutch_fta >= 5 && (
+                  <PressureCard title="Clutch Free Throws"
+                    sub="FT-attempts in last 5 min Half 2 with score-diff ≤5pt. Pure pressure shot — the foul line never lies."
+                    fga={ft.clutch_fta} efg={ft.clutch_pct} delta={ft.clutch_delta} type="ft" minSample={5}/>
+                )}
+              </div>
+              <div style={{fontSize:10,color:"#475569",marginTop:8,fontStyle:"italic"}}>
+                Pressure-Δ values with &lt;8 attempts are visual placeholders only — the eFG can swing wildly with any single make/miss. Use as a cue for film, not as a verdict.
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Insight box */}
         <div style={{marginTop:16,background:"#1a1f2e",border:"1px solid #1e3a5f",borderRadius:8,padding:"12px 14px"}}>
           <div style={{fontSize:10,fontWeight:700,color:"#60a5fa",letterSpacing:1,marginBottom:6}}>SCOUT INSIGHT</div>
@@ -2545,7 +2631,7 @@ function MindTab({p}) {
         </div>
       </Sec>
 
-      {/* ── Feature 2: Offensive Skill Curve (+ Class Scatter) ── */}
+      {/* ── Section 2: Usage Reaction (formerly "Offensive Skill Curve") ── */}
       {p.skillCurve && (() => {
         const sc = p.skillCurve;
         const rawLines = (p.seasonLines || []).filter(s => s.yr && s.usg >= 8);
@@ -2602,8 +2688,8 @@ function MindTab({p}) {
         }
 
         return (
-          <Sec icon="📈" title="Offensive Skill Curve"
-            sub={multiSeason ? `${sc.nSeasons}-season development trajectory` : "Peer curve position (cross-season requires 2+ seasons)"}>
+          <Sec icon="📈" title="Usage Reaction — Scorer or Passer Under Load?"
+            sub={multiSeason ? `${sc.nSeasons}-season trajectory: when usage rises, does playmaking grow with it (true creator) or shrink (iso scorer)?` : "Single-season snapshot. Compares current AdjOrtg vs. expected at same usage level. Multi-season would reveal scaling profile."}>
 
             <div style={{fontSize:12,color:"#9ca3af",marginBottom:16,lineHeight:"1.6"}}>
               {multiSeason
@@ -2611,6 +2697,46 @@ function MindTab({p}) {
                 : <>Single-season player. Compares current AdjOrtg against the <strong style={{color:"#e5e7eb"}}>peer curve</strong> — what is expected from a player at this exact usage level. Far above the line = elite efficiency for their offensive role.</>
               }
             </div>
+
+            {/* ── Hero: Scorer ↔ Passer Spectrum (multi-season only) ── */}
+            {multiSeason && sc.slopeAst != null && (() => {
+              const s = sc.slopeAst;
+              // Map AST/USG-Slope to spectrum [-2.0 .. +2.0] → [0% .. 100%]
+              const sClamp = Math.max(-2.0, Math.min(2.0, s));
+              const pos = ((sClamp + 2.0) / 4) * 100;
+              const heroColor = s >= 1.0 ? "#22c55e" : s >= 0.3 ? "#86efac" : s >= -0.3 ? "#fbbf24" : s >= -1.0 ? "#fb923c" : "#ef4444";
+              const heroLabel = s >= 1.0 ? "Lead Creator" : s >= 0.3 ? "Dual-Role Creator" : s >= -0.3 ? "Steady Role" : s >= -1.0 ? "Iso Scorer at Volume" : "Pure Volume Scorer";
+              const heroSub = s >= 1.0 ? "playmaking grows substantially with usage — true engine profile"
+                            : s >= 0.3 ? "playmaking grows modestly with usage — versatile creator"
+                            : s >= -0.3 ? "role stays constant at all usage levels — focused specialist"
+                            : s >= -1.0 ? "playmaking shrinks at higher usage — leans iso when given the ball"
+                            : "playmaking collapses at high usage — pure shot-taker";
+              return (
+                <div style={{background:"#0d1117",border:`1px solid ${heroColor}44`,borderRadius:10,padding:"14px 16px",marginBottom:18,boxShadow:`0 0 12px ${heroColor}22`}}>
+                  <div style={{fontSize:10,fontWeight:700,color:"#6b7280",letterSpacing:1.2,marginBottom:8}}>
+                    AT HIGHER USAGE, HE BECOMES MORE OF A...
+                  </div>
+                  {/* Spectrum bar */}
+                  <div style={{position:"relative",height:34,background:"linear-gradient(90deg,#ef4444,#fb923c,#fbbf24,#86efac,#22c55e)",borderRadius:6,marginBottom:10,opacity:0.85}}>
+                    <div style={{position:"absolute",left:`${pos}%`,top:-4,bottom:-4,width:4,marginLeft:-2,background:"#fff",borderRadius:2,boxShadow:"0 0 8px #fff"}}/>
+                    <div style={{position:"absolute",left:0,top:-2,fontSize:10,fontWeight:600,color:"#ef4444cc",padding:"4px 6px"}}>● Pure Scorer</div>
+                    <div style={{position:"absolute",right:0,top:-2,fontSize:10,fontWeight:600,color:"#22c55ecc",padding:"4px 6px",textAlign:"right"}}>Passer ●</div>
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:6}}>
+                    <div>
+                      <div style={{fontSize:18,fontWeight:700,color:heroColor,fontFamily:"Oswald,sans-serif"}}>{heroLabel}</div>
+                      <div style={{fontSize:11,color:"#9ca3af",marginTop:2}}>{heroSub}</div>
+                    </div>
+                    <Tip content={<div>AST/USG slope: <strong>{s>=0?"+":""}{s.toFixed(2)}</strong> AST% per +1% USG.<br/>Across {sc.nSeasons} seasons — does AST% grow as USG% grows?<br/>{sc.astSlopePctl != null && <>Same-year peer rank: {sc.astSlopePctl}th percentile.</>}</div>}>
+                      <div style={{textAlign:"right",cursor:"help"}}>
+                        <div style={{fontSize:22,fontWeight:700,color:heroColor,fontFamily:"Oswald,sans-serif"}}>{s>=0?"+":""}{s.toFixed(2)}</div>
+                        <div style={{fontSize:10,color:"#6b7280"}}>AST%/USG%</div>
+                      </div>
+                    </Tip>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Top row: peer position + slope cards */}
             <div style={{display:"grid",gridTemplateColumns:multiSeason?"repeat(3,1fr)":"repeat(2,1fr)",gap:10,marginBottom:20}}>
@@ -2783,6 +2909,201 @@ function MindTab({p}) {
               </div>
             )}
 
+          </Sec>
+        );
+      })()}
+
+      {/* ══════════════════════════════════════════════════════════════════
+           Section: MENTAL RESILIENCE  (Tobias 2026-05-09)
+           PBP-basierte Reaktionsmuster nach Schlechtphasen.
+           Datenquelle: mindMetrics-Block (inject_mind_metrics.py).
+           Streak = 3 von 4 letzten Player-Actions sind missed/TO/foul/missed-FT.
+           Z-Score gegen Position-Peers + 95%-CI für Punkt-Schätzer.
+         ══════════════════════════════════════════════════════════════════ */}
+      {p.mindMetrics && (() => {
+        const mm = p.mindMetrics;
+        const limited = mm.limited_sample;
+
+        // Tendency-Bar mit Z-Score-Visualisierung + CI-Spannweite
+        // type: "neutral" → high oder low können beide Bedeutung haben
+        // type: "adverse" → high = bad (mehr TOs/Fouls)
+        // type: "positive" → high = good (Bounceback eFG)
+        const TendBar = ({label, sub, m, type, hint}) => {
+          if (!m || m.idx == null) return (
+            <div style={{background:"#0d1117",border:"1px solid #1f2937",borderRadius:8,padding:"10px 12px",opacity:0.5}}>
+              <div style={{fontSize:11,fontWeight:600,color:"#6b7280"}}>{label}</div>
+              <div style={{fontSize:10,color:"#4b5563",marginTop:4}}>insufficient data</div>
+            </div>
+          );
+          const z = m.z;
+          const idx = m.idx;
+          const lo = m.lo, hi = m.hi;
+          // CI excludes 1.0 = statistically significant deviation from baseline
+          const sigDev = (lo != null && hi != null && (lo > 1.0 || hi < 1.0));
+          // Color logic: based on type + z (or fallback to idx if no z)
+          let barColor = "#9ca3af";
+          let pillColor = "#6b7280";
+          let verdict = "near baseline";
+          const zEff = z != null ? z : (idx > 1.0 ? 0.5 : idx < 1.0 ? -0.5 : 0);
+          if (type === "adverse") {
+            if (zEff >= 1.5)      { barColor = "#ef4444"; pillColor = "#ef4444"; verdict = "much more under stress"; }
+            else if (zEff >= 0.5) { barColor = "#fbbf24"; pillColor = "#fbbf24"; verdict = "slightly more under stress"; }
+            else if (zEff <= -1.5){ barColor = "#22c55e"; pillColor = "#22c55e"; verdict = "much less under stress"; }
+            else if (zEff <= -0.5){ barColor = "#86efac"; pillColor = "#86efac"; verdict = "slightly less under stress"; }
+          } else if (type === "positive") {
+            if (zEff >= 1.5)      { barColor = "#22c55e"; pillColor = "#22c55e"; verdict = "much better under stress"; }
+            else if (zEff >= 0.5) { barColor = "#86efac"; pillColor = "#86efac"; verdict = "slightly better"; }
+            else if (zEff <= -1.5){ barColor = "#ef4444"; pillColor = "#ef4444"; verdict = "much worse under stress"; }
+            else if (zEff <= -0.5){ barColor = "#fbbf24"; pillColor = "#fbbf24"; verdict = "slightly worse"; }
+          } else {
+            if (Math.abs(zEff) >= 1.5)      { barColor = "#f97316"; pillColor = "#f97316"; verdict = "notable deviation"; }
+            else if (Math.abs(zEff) >= 0.5) { barColor = "#fdba74"; pillColor = "#9ca3af"; verdict = "some tendency"; }
+          }
+
+          // Map z to bar position [-2.5σ, +2.5σ] → [0%, 100%]
+          const zClamp = Math.max(-2.5, Math.min(2.5, zEff));
+          const zPos   = ((zClamp + 2.5) / 5) * 100;
+          // CI position (only if available + we have z to anchor):
+          // Approximation: use ratio idx/lo and idx/hi mapped relative to z
+          // (Wald CI is on log-scale so we estimate width via ratio of CI bounds)
+          let ciLeft = null, ciWidth = null;
+          if (lo != null && hi != null && idx != null && idx > 0) {
+            // log-ratio half-width
+            const halfHi = Math.log(hi / idx);
+            const halfLo = Math.log(idx / lo);
+            // approximate translation to z-units (rough, but visual)
+            // assume idx is centered around population mean ~1.0; CI extent in σ ≈ log-CI / 0.3
+            const sdEst = 0.3;
+            const ciLoZ = Math.max(-2.5, zEff - halfLo / sdEst);
+            const ciHiZ = Math.min(2.5,  zEff + halfHi / sdEst);
+            ciLeft  = ((ciLoZ + 2.5) / 5) * 100;
+            ciWidth = ((ciHiZ - ciLoZ) / 5) * 100;
+          }
+
+          return (
+            <Tip wide content={
+              <div>
+                <div style={{fontWeight:700,color:barColor,marginBottom:4}}>{label}</div>
+                <div style={{color:"#cbd5e1",fontSize:11,marginBottom:6}}>{hint}</div>
+                <div style={{fontSize:11,color:"#94a3b8"}}>
+                  Index = post-streak rate ÷ baseline rate. <span style={{color:barColor,fontWeight:600}}>1.0 = no change</span>.
+                </div>
+                <div style={{fontSize:11,color:"#94a3b8",marginTop:4}}>
+                  Raw index: <code style={{color:"#7dd3fc"}}>{idx?.toFixed(2)}</code>
+                  {(lo != null && hi != null) && <> · 95% CI [<code style={{color:"#7dd3fc"}}>{lo?.toFixed(2)}, {hi?.toFixed(2)}</code>]</>}
+                  {z != null && <> · z = <code style={{color:"#7dd3fc"}}>{z>=0?"+":""}{z.toFixed(2)}σ</code> (vs {mm.pos_group||"position"} peers)</>}
+                </div>
+                {sigDev && <div style={{fontSize:11,color:"#fbbf24",marginTop:4}}>⚠ CI excludes 1.0 — statistically significant deviation from baseline.</div>}
+              </div>
+            }>
+              <div style={{background:"#0d1117",border:`1px solid ${barColor}33`,borderRadius:8,padding:"10px 12px",cursor:"help"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:6}}>
+                  <div>
+                    <div style={{fontSize:11,fontWeight:600,color:"#e5e7eb"}}>{label}</div>
+                    <div style={{fontSize:9,color:"#6b7280",marginTop:1}}>{sub}</div>
+                  </div>
+                  <div style={{display:"flex",alignItems:"baseline",gap:8}}>
+                    <span style={{fontSize:18,fontWeight:700,color:barColor,fontFamily:"Oswald,sans-serif"}}>
+                      {z != null ? `${z>=0?"+":""}${z.toFixed(1)}σ` : `×${idx?.toFixed(2)}`}
+                    </span>
+                    <span style={{fontSize:9,color:"#475569"}}>
+                      ({idx?.toFixed(2)}×)
+                    </span>
+                  </div>
+                </div>
+                {/* Z-score scale: -2.5σ → 0 → +2.5σ */}
+                <div style={{position:"relative",height:14,background:"#1f2937",borderRadius:4,overflow:"hidden"}}>
+                  {/* Center marker (z=0) */}
+                  <div style={{position:"absolute",left:"50%",top:0,bottom:0,width:1,background:"#374151"}}/>
+                  {/* CI band (visual) */}
+                  {ciLeft != null && (
+                    <div style={{position:"absolute",left:`${ciLeft}%`,top:3,bottom:3,width:`${ciWidth}%`,background:`${barColor}33`,borderRadius:2}}/>
+                  )}
+                  {/* Z marker */}
+                  <div style={{position:"absolute",left:`${zPos}%`,top:0,bottom:0,width:3,marginLeft:-1.5,background:barColor,borderRadius:1,boxShadow:`0 0 4px ${barColor}88`}}/>
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:8,color:"#475569",marginTop:3}}>
+                  <span>−2σ</span><span>0</span><span>+2σ</span>
+                </div>
+                <div style={{fontSize:10,color:pillColor,marginTop:6,fontWeight:500}}>
+                  {sigDev && <span style={{color:"#fbbf24",marginRight:4}}>⚠</span>}
+                  {verdict}
+                </div>
+              </div>
+            </Tip>
+          );
+        };
+
+        // Profile-Headline based on z-scores (only "auffällig" if |z| > 1.5 OR CI excludes 1.0)
+        const auffaellig = [];
+        const cards = [
+          {key:"hothead",    m:mm.hothead,    type:"adverse",  label:"Hothead",         sub:"more fouls under stress",       hint:"After multi-event slumps: does PF-Rate spike vs. baseline? High = frustration tells in fouls."},
+          {key:"overdriver", m:mm.overdriver, type:"adverse",  label:"Overdriver",      sub:"more TOs under stress",         hint:"After multi-event slumps: does TO-Rate spike vs. baseline? High = forces plays when frustrated."},
+          {key:"passive",    m:mm.passive,    type:"neutral",  label:"Engagement",      sub:"actions taken under stress",    hint:"After multi-event slumps: how many actions does he take in the next 4 plays vs. expected? Low = withdraws / checks out."},
+          {key:"aggressor",  m:mm.aggressor,  type:"neutral",  label:"Shot-Seeking",    sub:"more shots under stress",       hint:"After multi-event slumps: does FGA-Rate spike (force shots) or fall (fade away)? Both extremes can be tells."},
+          {key:"bounceback", m:mm.bounceback, type:"positive", label:"Bounceback eFG",  sub:"shooting recovers under stress",hint:"After multi-event slumps: does eFG% on subsequent shots recover? High = clutch shot-making mentality."},
+        ];
+        for (const c of cards) {
+          if (!c.m || c.m.idx == null) continue;
+          const sig = (c.m.lo != null && c.m.hi != null && (c.m.lo > 1.0 || c.m.hi < 1.0));
+          const big = (c.m.z != null && Math.abs(c.m.z) >= 1.5);
+          if (sig || big) auffaellig.push({...c, z: c.m.z});
+        }
+
+        let profileLine = "No statistically significant pattern stands out — this player's stress responses look near-typical for his position peers.";
+        if (auffaellig.length > 0) {
+          // Sort by absolute z descending
+          auffaellig.sort((a,b) => Math.abs(b.z||0) - Math.abs(a.z||0));
+          const top = auffaellig[0];
+          const dirText =
+            top.key === "hothead"    ? (top.z > 0 ? "fouls more after setbacks (frustration tell)" : "stays composed — fouls less than peers")
+          : top.key === "overdriver" ? (top.z > 0 ? "forces plays — TOs spike after setbacks" : "highly disciplined — TOs stay flat or drop")
+          : top.key === "passive"    ? (top.z < 0 ? "withdraws after setbacks (engagement drops)" : "leans into the game more after setbacks")
+          : top.key === "aggressor"  ? (top.z > 0 ? "becomes shot-seeker after setbacks" : "takes fewer shots after setbacks (more cautious)")
+          : top.key === "bounceback" ? (top.z > 0 ? "shooting efficiency rises under stress" : "shooting efficiency drops under stress")
+          : "";
+          profileLine = `Notable tendency: ${dirText}.`;
+          if (auffaellig.length > 1) {
+            profileLine += ` (${auffaellig.length-1} additional pattern${auffaellig.length>2?"s":""} also flagged.)`;
+          }
+        }
+
+        return (
+          <Sec icon="🧠" title="Mental Resilience"
+            sub={`Behavioral tendencies after adverse-event streaks (n=${mm.n_streaks||0} streaks observed in ${mm.season} season). Within-position z-scores vs ${mm.pos_group||"peers"}.`}>
+            {/* Disclaimer banner — ALWAYS visible */}
+            <div style={{background:"#1e3a5f22",border:"1px solid #1e3a5f",borderRadius:8,padding:"10px 12px",marginBottom:14}}>
+              <div style={{fontSize:11,color:"#7dd3fc",fontWeight:600,marginBottom:4}}>📋 How to read this section</div>
+              <div style={{fontSize:11,color:"#cbd5e1",lineHeight:1.6}}>
+                These are <strong>behavioral tendencies observed in play-by-play data</strong>, not deterministic claims. A "streak" is defined as ≥3 adverse events (missed FG, turnover, foul, missed FT) in a player's last 4 actions; we then track how he behaves in his next 4 actions.
+                Patterns shown here are <strong style={{color:"#fbbf24"}}>quantitative starting points for film review</strong> — confirm with tape before drawing conclusions. Causal interpretation requires controlling for game-state, coach-reactions, and matchup — which we don't.
+              </div>
+            </div>
+
+            {/* Limited sample warning */}
+            {limited && (
+              <div style={{background:"#7f1d1d33",border:"1px solid #7f1d1d",borderRadius:6,padding:"8px 10px",marginBottom:12,fontSize:11,color:"#fca5a5"}}>
+                ⚠ <strong>Limited sample:</strong> only {mm.n_streaks} streaks observed (need ≥25 for reliable patterns). Treat all values as directional only.
+              </div>
+            )}
+
+            {/* Headline verdict */}
+            <div style={{background:"#0d1117",border:"1px solid #1f2937",borderRadius:8,padding:"10px 14px",marginBottom:14}}>
+              <div style={{fontSize:10,fontWeight:700,color:"#6b7280",letterSpacing:1,marginBottom:4}}>HEADLINE PATTERN</div>
+              <div style={{fontSize:13,color:"#e5e7eb",lineHeight:1.5}}>{profileLine}</div>
+            </div>
+
+            {/* 5 Tendency Bars */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(220px, 1fr))",gap:10,marginBottom:12}}>
+              {cards.map(c => <TendBar key={c.key} {...c}/>)}
+            </div>
+
+            {/* Sample size + sensitivity context */}
+            <div style={{background:"#0d1117",borderRadius:6,padding:"8px 12px",fontSize:10,color:"#6b7280",lineHeight:1.6}}>
+              <span style={{color:"#9ca3af",fontWeight:600}}>Sample:</span> {mm.n_streaks||0} streaks · {mm.n_actions||0} non-cooldown player-events ·{" "}
+              <span style={{color:"#9ca3af",fontWeight:600}}>Definition:</span> ≥3 adverse events in 4-action window, response measured over next 4 actions, state-based cooldown.{" "}
+              <span style={{color:"#9ca3af",fontWeight:600}}>Caveats:</span> ratios noisy at single-season scale (95% CIs are typically wide); ~88-95% of the league has CIs that include 1.0 (= no detectable effect). Trust extreme z-scores (|z|&gt;1.5) and CIs that exclude 1.0.
+            </div>
           </Sec>
         );
       })()}
