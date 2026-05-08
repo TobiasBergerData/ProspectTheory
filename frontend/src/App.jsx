@@ -4098,7 +4098,10 @@ function BodyTab({p}) {
   const hasCombine = p.comb != null;
   const htDisplay = p.ht || (p.htIn ? `${Math.floor(p.htIn/12)}'${p.htIn%12}"` : "—");
 
-  // ── Prospect scatter: alle aktuell geladenen Prospects (ht/ws/wt by position) ──
+  // ── Prospect scatter (Tobias 2026-05-06: deaktiviert) ──
+  // Globals PLAYERS / PLAYER_LIST sind auf Player-Page meist leer (nur durch Big-Board
+  // befüllt). Wir zeigen stattdessen den NBA-Combine-Scatter unten — der hat
+  // 488 Spieler aus /api/combine und ist immer voll. Class-Scatter wäre redundant.
   const ProspectScatter = () => {
     // Quelle: modulare Globals PLAYERS / PLAYER_LIST (vom Board befüllt).
     // Wir nutzen ausschließlich reale Messwerte — keine Position-Schätzungen —
@@ -4255,6 +4258,12 @@ function BodyTab({p}) {
     if (combineData === null) return <div style={{height:320,display:"flex",alignItems:"center",justifyContent:"center",color:"#4b5563",fontSize:12}}>Loading combine data…</div>;
     if (pts.length === 0) return <div style={{height:100,display:"flex",alignItems:"center",justifyContent:"center",color:"#4b5563",fontSize:12}}>No combine data available</div>;
 
+    // Tobias 2026-05-06: Position-Color-Mapping (konsistent mit Big Board / Overview).
+    const posColor = (pos) => pos === "Playmaker" ? "#3b82f6"
+      : pos === "Big" ? "#8b5cf6"
+      : pos === "Wing" ? "#f97316"
+      : "#94a3b8";  // unknown/fallback
+
     const W=580, H=320, PAD={l:46,r:20,t:16,b:38};
     const IW=W-PAD.l-PAD.r, IH=H-PAD.t-PAD.b;
 
@@ -4289,8 +4298,8 @@ function BodyTab({p}) {
             borderRadius:8,padding:"8px 12px",pointerEvents:"none",
             boxShadow:"0 4px 20px rgba(0,0,0,0.6)",minWidth:180,
           }}>
-            <div style={{fontSize:13,fontWeight:700,color:"#f97316",marginBottom:4}}>{hoverPlayer.name}</div>
-            <div style={{fontSize:11,color:"#9ca3af"}}>Draft {hoverPlayer.year} · {hoverPlayer.pos||"?"}</div>
+            <div style={{fontSize:13,fontWeight:700,color:posColor(hoverPlayer.pos),marginBottom:4}}>{hoverPlayer.name}</div>
+            <div style={{fontSize:11,color:"#9ca3af"}}>Draft {hoverPlayer.year ?? "?"} · {hoverPlayer.pos_raw || hoverPlayer.pos || "?"}</div>
             <div style={{fontSize:11,color:"#e5e7eb",marginTop:4}}>
               Ht: {Math.floor((hoverPlayer.ht||0)/12)}'{Math.round((hoverPlayer.ht||0)%12)}" ({hoverPlayer.ht?.toFixed(1)}")<br/>
               WS: {hoverPlayer.ws?.toFixed(1)}" · Δ: {((hoverPlayer.ws||0)-(hoverPlayer.ht||0)).toFixed(1)}"<br/>
@@ -4320,31 +4329,41 @@ function BodyTab({p}) {
           {/* Axis labels */}
           <text x={W/2} y={H-PAD.b+28} textAnchor="middle" fontSize={10} fill="#6b7280">Wingspan (inches)</text>
           <text x={12} y={H/2} textAnchor="middle" fontSize={10} fill="#6b7280" transform={`rotate(-90,12,${H/2})`}>Height (no shoes)</text>
-          {/* All combine players: X=ws, Y=ht */}
+          {/* All combine players: X=ws, Y=ht
+              Tobias 2026-05-06: Position-Färbung mit Transparenz.
+              Selected = volle Sättigung, andere = transparent (alpha 0.30). */}
           {pts.filter(c=>c.name!==p.name).map((c,i)=>{
             const r = rSize(c.wt);
+            const col = posColor(c.pos);
             return (
               <circle key={i} cx={xS(c.ws)} cy={yS(c.ht)} r={r}
-                fill="#374151" stroke="#4b5563" strokeWidth={0.5} opacity={0.55}
-                style={{cursor:"pointer"}}
+                fill={col} stroke={col} strokeWidth={0.3} opacity={0.30}
+                style={{cursor:"pointer", transition:"opacity 120ms"}}
                 onMouseEnter={(e)=>{setHoverPlayer(c);setHoverPos({x:e.clientX,y:e.clientY});}}
                 onMouseMove={(e)=>{if(hoverPlayer){setHoverPos({x:e.clientX,y:e.clientY});}}}
                 onMouseLeave={()=>setHoverPlayer(null)}/>
             );
           })}
-          {/* Prospect dot — statisch (kein Slider mehr) */}
-          {pHt && pWs && (
-            <g>
-              <circle cx={xS(pWs)} cy={yS(pHt)} r={rSize(pWt)+3} fill="#f97316" stroke="#fed7aa" strokeWidth={2} opacity={0.95}/>
-              <text x={xS(pWs)+12} y={yS(pHt)+4} fontSize={11} fontWeight="bold" fill="#f97316"
-                style={{textShadow:"0 0 4px #000"}}>{p.name?.split(" ").slice(-1)[0]}</text>
-            </g>
-          )}
+          {/* Prospect dot — voll-saturiert mit Highlight-Stroke */}
+          {pHt && pWs && (() => {
+            const selCol = posColor(p.pos) || "#f97316";
+            return (
+              <g>
+                <circle cx={xS(pWs)} cy={yS(pHt)} r={rSize(pWt)+3} fill={selCol} stroke="#ffffff" strokeWidth={2} opacity={1}/>
+                <text x={xS(pWs)+12} y={yS(pHt)+4} fontSize={12} fontWeight="bold" fill={selCol}
+                  style={{textShadow:"0 0 4px #000, 0 0 4px #000"}}>{p.name?.split(" ").slice(-1)[0]}</text>
+              </g>
+            );
+          })()}
         </svg>
-        <div style={{fontSize:10,color:"#6b7280",marginTop:4,display:"flex",gap:16,flexWrap:"wrap"}}>
-          <span><span style={{display:"inline-block",width:10,height:10,borderRadius:"50%",background:"#374151",marginRight:4,verticalAlign:"middle"}}/>All combine players (hover for details)</span>
-          <span><span style={{display:"inline-block",width:10,height:10,borderRadius:"50%",background:"#f97316",marginRight:4,verticalAlign:"middle"}}/>Selected player</span>
-          <span style={{color:"#4b5563"}}>Point size ∝ weight · {pts.length} combine players (2000–2024)</span>
+        <div style={{fontSize:10,color:"#6b7280",marginTop:6,display:"flex",gap:14,flexWrap:"wrap",alignItems:"center"}}>
+          {["Playmaker","Wing","Big"].map(pos => (
+            <span key={pos} style={{display:"inline-flex",alignItems:"center",gap:4}}>
+              <span style={{display:"inline-block",width:10,height:10,borderRadius:"50%",background:posColor(pos),opacity:0.6}}/>
+              <span style={{color:"#9ca3af"}}>{pos}</span>
+            </span>
+          ))}
+          <span style={{color:"#4b5563"}}>Point size ∝ weight · {pts.length} combine players (2003–2025) · selected player highlighted</span>
         </div>
       </div>
     );
@@ -4353,14 +4372,14 @@ function BodyTab({p}) {
   return (
     <div className="space-y-5">
       {/* ── PHYSICAL PROFILE ── */}
-      <Sec icon="📏" title="Physical Profile" sub={`Measurements${isWsEstimated||isWtEstimated ? " (≈ = estimated from position average)" : ""}. Wingspan Delta = Wingspan − Height. NBA average: +3" to +4". Wingspan Ratio > 1.05 = above average length.`}>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+      <Sec icon="📏" title="Physical Profile" sub={`Measurements${isWsEstimated||isWtEstimated ? " (≈ = estimated from position average)" : ""}. Wingspan Delta = Wingspan − Height. NBA average: +3" to +4".`}>
+        {/* Tobias 2026-05-06: Wingspan Ratio entfernt — redundant zu WS Delta. */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
           {[
             ["Height", htDisplay, false, null],
             ["Weight", `${estimatedWt} lbs`, isWtEstimated, wtLabelColor],
             ["Wingspan", `${estimatedWs.toFixed(1)}"`, isWsEstimated, wsLabelColor],
             ["WS Delta", `${wsDelta >= 0 ? "+" : ""}${wsDelta.toFixed(1)}"`, false, wsLabelColor],
-            ["Wingspan Ratio", apeRatio.toFixed(3), false, apeRatio >= 1.06 ? "#22c55e" : apeRatio < 1.02 ? "#ef4444" : "#6b7280"],
           ].map(([l, v, est, accent]) => (
             <div key={l} className="rounded-lg p-3 text-center" style={{background:"#0d1117", border: accent ? `1px solid ${accent}33` : "1px solid #1f2937"}}>
               <div className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>{l}{est ? " ≈" : ""}</div>
@@ -4401,15 +4420,11 @@ function BodyTab({p}) {
 
       </Sec>
 
-      {/* ── PROSPECT SCATTER (aktuelle Klasse) ── */}
-      <Sec icon="🧭" title="Draft Class Scatter: Wingspan vs. Height"
-        sub="Alle Prospects mit vollständigen Messungen (Height + Wingspan + Weight) in der aktuell geladenen Klasse. X = Wingspan, Y = Height, Punktgröße ∝ Gewicht. Farbe nach Position — ausgewählter Spieler ist hervorgehoben. Hover für Details.">
-        <ProspectScatter />
-      </Sec>
-
-      {/* ── NBA COMBINE SCATTER (Tobias 2026-05-06: Slider entfernt) ── */}
-      <Sec icon="📐" title="NBA Combine: Wingspan vs. Height"
-        sub="All draft combine attendees 2000–2024. X = wingspan, Y = height, point size = weight. Orange dot = selected player. Hover any dot for name, height, wingspan, weight.">
+      {/* ── NBA COMBINE SCATTER ──
+           Tobias 2026-05-06: einziger Scatter, Class-Scatter entfernt.
+           Quelle: /api/combine (488 Combine-Spieler 2000-2022). */}
+      <Sec icon="📐" title="Wingspan vs. Height (NBA Combine 2000-2022)"
+        sub="488 NBA Draft Combine attendees with complete measurements. X = wingspan, Y = height, point size = weight. Orange dot = selected player (positioned by his measured/estimated values). Hover any dot for name, year, height, wingspan, weight.">
         <CombineScatter />
       </Sec>
     </div>

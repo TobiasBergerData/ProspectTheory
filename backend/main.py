@@ -454,6 +454,94 @@ async def health():
     }
 
 
+# ── COMBINE DATA ENDPOINT (Tobias 2026-05-06) ──
+# Liefert NBA Draft Combine Measurements für Body-Tab Scatter.
+# Tobias 2026-05-06 v2: Quelle gewechselt zu barttorvik_with_nba_and_combine_COMPLETE.csv
+# (1.358 Spieler 2003-2025 mit ht+ws+wt) — älteres CSV (510 Spieler) hatte zu wenig
+# Coverage und keine Class-Spieler ab 2022.
+_combine_cache = None
+
+
+def _to_pos_group(combine_pos: str) -> str:
+    """Mappe Combine-Position-String zu unserem Pos-Group-Schema (Playmaker/Wing/Big).
+    Beispiele: 'PG-SG' → Playmaker, 'SF' → Wing, 'PF-C' → Big, 'C' → Big."""
+    if not combine_pos:
+        return ""
+    cp = str(combine_pos).upper().strip()
+    # Big: enthält C oder PF (rein/hybrid)
+    if cp == "C" or cp == "PF-C" or cp == "C-PF" or cp.endswith("-C"):
+        return "Big"
+    # Playmaker: PG-Hauptrolle (PG oder PG-SG)
+    if cp.startswith("PG") or cp == "PG":
+        return "Playmaker"
+    # Wing: alles andere (SG, SF, PF, SG-SF, SF-PF, PF-SF, etc.)
+    return "Wing"
+
+
+def _load_combine_data():
+    """Lazy-load + cache combine measurements als list[dict]."""
+    global _combine_cache
+    if _combine_cache is not None:
+        return _combine_cache
+    import csv as _csv
+    # Primärquelle: COMPLETE.csv mit gematchten BartTorvik+Combine-Daten (1.358 Spieler 2003-2025).
+    # Liegt in backend/data/raw/ (parallel zur ohne-combine-Version für inject_skill_curve).
+    raw_dir = DATA_DIR.parent / "raw"  # backend/data/processed → backend/data/raw
+    csv_path = raw_dir / "barttorvik_with_nba_and_combine_COMPLETE.csv"
+    if not csv_path.exists():
+        # Fallback: kleinere standalone CSV (510 Spieler) im processed-Ordner
+        csv_path = DATA_DIR / "draft_combine_measurements.csv"
+    if not csv_path.exists():
+        _combine_cache = []
+        return _combine_cache
+    # Per player_id deduplizieren — manche Spieler haben mehrere College-Saisons,
+    # jede Zeile hat dieselben Combine-Daten. Wir wollen 1 Eintrag pro Person.
+    seen_pids = set()
+    out = []
+    with open(csv_path, "r", encoding="utf-8") as f:
+        reader = _csv.DictReader(f)
+        for r in reader:
+            # Combine-Felder aus COMPLETE.csv
+            ht = r.get("combine_height_inches") or r.get("combine_hgt_no_shoes")
+            ws = r.get("combine_wingspan_inches") or r.get("combine_wngspn")
+            wt = r.get("combine_weight_lbs") or r.get("combine_wgt")
+            try:
+                ht = float(ht) if ht else 0
+                ws = float(ws) if ws else 0
+                wt = float(wt) if wt else 0
+            except (TypeError, ValueError):
+                continue
+            if ht <= 0 or ws <= 0:
+                continue
+            pid = r.get("nba_player_id") or r.get("combine_player_id") or r.get("player_name")
+            if pid in seen_pids:
+                continue
+            seen_pids.add(pid)
+            year_str = r.get("combine_year") or r.get("SEASON")
+            try:
+                year = int(float(year_str)) if year_str else None
+            except (TypeError, ValueError):
+                year = None
+            raw_pos = r.get("combine_position") or ""
+            out.append({
+                "name": r.get("player_name") or r.get("combine_player_name") or "",
+                "year": year,
+                "pos_raw": raw_pos,
+                "pos": _to_pos_group(raw_pos),  # Playmaker/Wing/Big für Frontend-Färbung
+                "ht": round(ht, 1),
+                "ws": round(ws, 1),
+                "wt": round(wt, 1) if wt > 0 else None,
+            })
+    _combine_cache = out
+    return out
+
+
+@app.get("/api/combine")
+async def get_combine_data():
+    """NBA Draft Combine measurements 2003-2025 für Body-Tab Scatter."""
+    return {"players": _load_combine_data()}
+
+
 @app.get("/api/players/search")
 async def search_players(
     q: str = Query(..., min_length=1),
