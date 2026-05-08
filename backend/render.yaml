@@ -10,13 +10,17 @@
 # Wenn Build-Command geändert wird, MUSS Dashboard mit-aktualisiert werden.
 # Source-of-Truth: Render Dashboard → prospecttheory-api → Settings.
 #
-# Aktueller Dashboard-Build-Command (Stand 2026-05-06):
+# Aktueller Dashboard-Build-Command (Stand 2026-05-08):
 #   pip install -r requirements.txt
 #   && python -u build_db.py
 #   && python -u inject_shot_creation_spectrum.py
 #   && python -u inject_leverage_efficiency.py
 #   && python -u inject_skill_curve.py
 #   && python -u inject_ogbpm.py
+#   && python -u inject_mind_metrics.py        ← NEW (Tobias 2026-05-08)
+#
+# WICHTIG: Wenn dieser Schritt ergänzt wird, muss data/processed/pbp_mind_metrics_all.csv
+# im Repo committed sein (siehe .gitignore — large CSVs sind OK <100MB hier).
 #
 # Aktueller Dashboard-Start-Command:
 #   uvicorn main:app --host 0.0.0.0 --port $PORT
@@ -33,7 +37,7 @@ services:
     # Tobias 2026-05-06: One-Liner mit && (Render-Dashboard-Feld nimmt nur Single-Line).
     # `python -u` für unbuffered Output, sonst wirken die Inject-Scripts hängend.
     # `git lfs` weggelassen — nicht installiert auf Render-Container, war Fehlerquelle.
-    buildCommand: pip install -r requirements.txt && python -u build_db.py && python -u inject_shot_creation_spectrum.py && python -u inject_leverage_efficiency.py && python -u inject_skill_curve.py && python -u inject_ogbpm.py
+    buildCommand: pip install -r requirements.txt && python -u build_db.py && python -u inject_shot_creation_spectrum.py && python -u inject_leverage_efficiency.py && python -u inject_skill_curve.py && python -u inject_ogbpm.py && python -u inject_mind_metrics.py
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /
     envVars:
