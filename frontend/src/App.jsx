@@ -4071,7 +4071,6 @@ function BodyTab({p}) {
   // Tobias 2026-05-06: bevorzuge echte NBA-Anthro-Daten wenn verfügbar.
   // /api/combine liefert 1.835 NBA-Spieler aus wingspan_all_2026 + Combine-Weight.
   // Wenn Spieler matched, nutze echte ht (mit Schuhen) / ws aus Wingspan-CSV.
-  // wt aus Combine wenn vorhanden, sonst Position-BMI-Imputation.
   const combineMatch = (combineData || []).find(c =>
     c.name && p.name && c.name.toLowerCase() === p.name.toLowerCase()
   );
@@ -4080,32 +4079,44 @@ function BodyTab({p}) {
   const realHt = combineMatch?.ht ?? p.htIn;
   const isHtVerified = !!combineMatch?.ht;
 
-  // ── Wingspan: NBA-DB > Profile > Ape-Index-Estimate ──
-  const apeIndex = p.pos==="Playmaker" ? 1.04 : p.pos==="Big" ? 1.06 : 1.05;
-  const estimatedWs = combineMatch?.ws ?? p.ws ?? Math.round((p.htIn||78) * apeIndex * 10) / 10;
+  // ── Stats-Enriched Imputation für WS und WT (Tobias 2026-05-06) ──
+  // Statt simpler Position-Regression nutzen wir Multi-Variate-Modelle die aus
+  // NBA-Combine-Spielern + ihren BartTorvik-Stats trainiert sind:
+  //
+  // WS = 21.05 + 0.762·ht + 0.30·BLK% + 0.131·STL% + 0.029·DRB% − 0.149·DBPM
+  //      + 0.205·is_Big − 0.701·is_Playmaker  (R²=0.735, CV=0.728±0.027, MAE 1.56″)
+  //
+  // WT = −19.26 + 2.82·ht + 2.25·ORB% − 0.16·DRB% − 0.55·BLK% − 0.04·BPM
+  //      + 12.49·is_Big − 5.27·is_Playmaker     (R²=0.614, CV=0.584±0.050, MAE 11.7 lbs)
+  //
+  // Plus: -8 lbs Age-Discount für age<20 (Pre-Draft sind schlanker als
+  // NBA-Combine-Durchschnitt der etablierten Prospects).
+  // Validation Cooper Flagg: WS imputed 84.0″ vs real 84.0″ ✓
+  const _imputeAnthro = () => {
+    const h = realHt || 78;
+    const blkP = p.blkP || 0, stlP = p.stlP || 0;
+    const orbP = p.orbP || 0, drbP = p.drbP || 0;
+    const bpm = p.bpm || 0, dbpm = p.dbpm || 0;
+    const isBig = p.pos === "Big" ? 1 : 0;
+    const isPM = p.pos === "Playmaker" ? 1 : 0;
+    const ws = 21.05 + 0.762*h + 0.30*blkP + 0.131*stlP + 0.029*drbP - 0.149*dbpm + 0.205*isBig - 0.701*isPM;
+    let wt = -19.26 + 2.82*h + 2.25*orbP - 0.16*drbP - 0.55*blkP - 0.04*bpm + 12.49*isBig - 5.27*isPM;
+    if (p.age != null && p.age < 20) wt -= 8;  // Age-Discount
+    return {
+      ws: Math.round(ws * 10) / 10,
+      wt: Math.max(150, Math.round(wt)),
+    };
+  };
+
+  // ── Wingspan: NBA-DB > Profile > Stats-enriched Imputation ──
+  const _imputed = _imputeAnthro();
+  const estimatedWs = combineMatch?.ws ?? p.ws ?? _imputed.ws;
   const isWsVerified = !!combineMatch?.ws;
   const isWsEstimated = !isWsVerified && !p.ws;
 
-  // ── Weight: Combine > Profile > empirische Regression ──
-  // Tobias 2026-05-06: BMI-Formel überschätzt junge Prospects systematisch
-  // (Boozer 250, Flagg 232 zu schwer). Stattdessen lineare Regression aus
-  // 528 echten Combine-Spielern (per Position):
-  //   Playmaker: wt = 3.10 × ht − 41.6
-  //   Wing:      wt = 4.38 × ht − 131.5
-  //   Big:       wt = 1.30 × ht + 137.8
-  // Plus Age-Discount: -8 lbs für Spieler <20J (Pre-Draft sind oft schlanker
-  // als der NBA-Combine-Durchschnitt der etablierten Prospects).
+  // ── Weight: Combine > Profile > Stats-enriched Imputation ──
   const isWtVerified = !!combineMatch?.wt;
-  const _imputeWt = () => {
-    const h = realHt || 78;
-    let wt;
-    if (p.pos === "Playmaker") wt = 3.10 * h - 41.6;
-    else if (p.pos === "Big")  wt = 1.30 * h + 137.8;
-    else                       wt = 4.38 * h - 131.5;  // Wing default
-    if (p.age != null && p.age < 20) wt -= 8;  // Pre-Draft-Discount für junge Spieler
-    return Math.max(150, Math.round(wt));
-  };
-  const estimatedWt = combineMatch?.wt ?? p.wt ?? _imputeWt();
+  const estimatedWt = combineMatch?.wt ?? p.wt ?? _imputed.wt;
   const isWtEstimated = !isWtVerified && !p.wt;
 
   // Tobias 2026-05-06: WS Delta gegen die echte (with-shoes) Höhe rechnen.
