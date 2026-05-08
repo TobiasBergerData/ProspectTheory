@@ -4295,9 +4295,16 @@ function BodyTab({p}) {
 
   // ── Combine scatter helpers ──
   const CombineScatter = () => {
-    const pts = (combineData || []).filter(c => c.ht && c.ws);
+    // Tobias 2026-05-06: defensive Filterung — Werte können number ODER string sein,
+    // ht=0/ws=0 müssen ausgeschlossen werden, aber 76.0 muss durchgehen.
+    const pts = (combineData || []).filter(c => {
+      const ht = Number(c.ht); const ws = Number(c.ws);
+      return !isNaN(ht) && !isNaN(ws) && ht > 0 && ws > 0;
+    });
     if (combineData === null) return <div style={{height:320,display:"flex",alignItems:"center",justifyContent:"center",color:"#4b5563",fontSize:12}}>Loading combine data…</div>;
-    if (pts.length === 0) return <div style={{height:100,display:"flex",alignItems:"center",justifyContent:"center",color:"#4b5563",fontSize:12}}>No combine data available</div>;
+    if (pts.length === 0) return <div style={{height:100,display:"flex",alignItems:"center",justifyContent:"center",color:"#4b5563",fontSize:12}}>
+      No combine data available (combineData length: {(combineData||[]).length})
+    </div>;
 
     // Tobias 2026-05-06: Position-Color-Mapping (konsistent mit Big Board / Overview).
     const posColor = (pos) => pos === "Playmaker" ? "#3b82f6"
@@ -4427,22 +4434,68 @@ function BodyTab({p}) {
         }
         return `Class 2026 prospect — no NBA combine data yet. All values (≈) estimated from height + position average. Height with shoes (+1.25″ NBA standard).`;
       })()}>
-        {/* Tobias 2026-05-06: Wingspan Ratio entfernt — redundant zu WS Delta.
-            "≈" nur wenn der Wert tatsächlich imputed ist (nicht aus NBA-DB). */}
+        {/* Tobias 2026-05-06 v2: Wingspan Ratio entfernt — redundant zu WS Delta.
+            Jede Card zeigt explizit Source: NBA-Combine-verified / Stats-imputed. */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
           {[
-            ["Height", isHtVerified
+            {
+              label: "Height",
+              value: isHtVerified
                 ? `${Math.floor(realHt/12)}'${(Math.round((realHt - Math.floor(realHt/12)*12)*10)/10)}"`
                 : htDisplay,
-              !isHtVerified && !p.htIn, null],
-            ["Weight", `${estimatedWt} lbs`, isWtEstimated, wtLabelColor],
-            ["Wingspan", `${estimatedWs.toFixed(1)}"`, isWsEstimated, wsLabelColor],
-            ["WS Delta", `${wsDelta >= 0 ? "+" : ""}${wsDelta.toFixed(1)}"`, false, wsLabelColor],
-          ].map(([l, v, est, accent]) => (
-            <div key={l} className="rounded-lg p-3 text-center" style={{background:"#0d1117", border: accent ? `1px solid ${accent}33` : "1px solid #1f2937"}}>
-              <div className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>{l}{est ? " ≈" : ""}</div>
-              <div className="font-bold text-lg mt-0.5" style={{color: accent || "#e5e7eb", fontFamily:"'Oswald',sans-serif"}}>{v}</div>
-            </div>
+              imputed: !isHtVerified && !p.htIn,
+              accent: null,
+              source: isHtVerified ? `NBA Combine ${combineMatch?.year || ""}` : (p.htIn ? "BartTorvik / RealGM" : "Position avg ≈"),
+              tooltip: isHtVerified
+                ? `Measured at NBA Draft Combine ${combineMatch?.year || ""} (no shoes + 1.25″ NBA-standard shoe lift).`
+                : (p.htIn ? "Reported height (BartTorvik/RealGM, with shoes by college convention)." : "Estimated from position-average — no measurement on file."),
+            },
+            {
+              label: "Weight",
+              value: `${estimatedWt} lbs`,
+              imputed: isWtEstimated,
+              accent: wtLabelColor,
+              source: isWtVerified ? `NBA Combine ${combineMatch?.year || ""}` : "Stats-imputed ≈",
+              tooltip: isWtVerified
+                ? `Measured at NBA Draft Combine ${combineMatch?.year || ""}.`
+                : `Imputed via multi-variate regression: WT = -19.26 + 2.82·ht + 2.25·ORB% − 0.16·DRB% − 0.55·BLK% − 0.04·BPM + 12.49·is_Big − 5.27·is_PM. Trained on 528 NBA-Combine players (R²=0.61, MAE 11.7 lbs).${p.age!=null && p.age<20 ? " Plus −8 lbs Pre-Draft age discount." : ""}`,
+            },
+            {
+              label: "Wingspan",
+              value: `${estimatedWs.toFixed(1)}"`,
+              imputed: isWsEstimated,
+              accent: wsLabelColor,
+              source: isWsVerified ? "NBA Wingspan-DB" : "Stats-imputed ≈",
+              tooltip: isWsVerified
+                ? `Measured wingspan from NBA database (1.835 verified players including Combine, G-League Camp, Adidas Eurocamp).`
+                : `Imputed via multi-variate regression: WS = 21.05 + 0.762·ht + 0.30·BLK% + 0.131·STL% + 0.029·DRB% − 0.149·DBPM + 0.205·is_Big − 0.701·is_PM. Trained on 1.266 NBA players (R²=0.74, MAE 1.56″).`,
+            },
+            {
+              label: "WS Delta",
+              value: `${wsDelta >= 0 ? "+" : ""}${wsDelta.toFixed(1)}"`,
+              imputed: false,
+              accent: wsLabelColor,
+              source: (isHtVerified && isWsVerified) ? "Computed from verified" : (isWsEstimated ? "Computed from imputed" : "Computed"),
+              tooltip: `Wingspan minus Height (with shoes). NBA average: +3″ to +4″.`,
+            },
+          ].map(({label, value, imputed, accent, source, tooltip}) => (
+            <Tip key={label} content={<div style={{maxWidth:280}}><div className="font-bold mb-1" style={{color:accent||"#f97316"}}>{label}</div><div className="text-xs" style={{color:"#cbd5e1",lineHeight:1.5}}>{tooltip}</div></div>}>
+              <div className="rounded-lg p-3 text-center cursor-help" style={{
+                background: "#0d1117",
+                border: imputed ? "1px dashed #475569" : (accent ? `1px solid ${accent}33` : "1px solid #1f2937"),
+              }}>
+                <div className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>{label}{imputed ? " ≈" : ""}</div>
+                <div className="font-bold text-lg mt-0.5" style={{
+                  color: accent || "#e5e7eb",
+                  fontFamily:"'Oswald',sans-serif",
+                  fontStyle: imputed ? "italic" : "normal",
+                }}>{value}</div>
+                <div className="text-[10px] mt-1.5 truncate" style={{
+                  color: imputed ? "#94a3b8" : "#22c55e",
+                  opacity: 0.85,
+                }}>{imputed ? "≈ " : "✓ "}{source}</div>
+              </div>
+            </Tip>
           ))}
         </div>
         <div className="flex flex-wrap gap-2 mb-5">
@@ -4499,18 +4552,21 @@ function CompsTab({p}) {
   const allComps = p.statComps || [];
   const nbaCompsOnly = allComps.filter(c => c.nba);
   // When NBA-only is active but there are no NBA comps (e.g. 2026 prospects),
-  // fall back to all comps sorted with highest-tier players first
+  // Tobias 2026-05-06: Sortierung nach similarity DESC (vorher kam manchmal
+  // schlechtester Match oben raus). NBA-Filter ist ein zweites Sieb.
+  const sortBySim = (a, b) => (b.sim ?? -1) - (a.sim ?? -1);
   const fStat = nbaOnly
     ? (nbaCompsOnly.length > 0
-        ? nbaCompsOnly
+        ? [...nbaCompsOnly].sort(sortBySim)
         : [...allComps].sort((a,b) => {
             const tr = {"All-Star":5,"Starter":4,"Role Player":3,"Replacement":2,"Negative":1};
             return (tr[b.tier]??0) - (tr[a.tier]??0);
           }))
-    : allComps;
+    : [...allComps].sort(sortBySim);
   const nbaFallback = nbaOnly && nbaCompsOnly.length === 0 && allComps.length > 0;
 
-  // Similarity values are pre-normalized in selectPlayer (0-100%)
+  // Similarity values from backend (Z-distance scaled 0-100, observed range
+  // typically 30-95 for top comps — players are unique, perfect 100% is rare).
   const normSim = (raw) => {
     if (raw == null) return null;
     const n = Number(raw);
@@ -4526,7 +4582,11 @@ function CompsTab({p}) {
     return Math.abs(compHt - playerHt) > 3;
   };
 
-  const simColor = (s) => s > 85 ? "#22c55e" : s > 70 ? "#86efac" : s > 55 ? "#3b82f6" : s > 40 ? "#fbbf24" : "#ef4444";
+  // Tobias 2026-05-06: Schwellen an die Backend-Skala angepasst.
+  // Backend nutzt Z-Distance-Range [0.635, 1.716] → 100% / 0%.
+  // Real-world Top-Comps für unique Spieler (Cooper Flagg) sind typisch 35-50%.
+  // Das ist methodisch ehrlich: niemand ist "97% identisch" — das wäre Marketing-Spin.
+  const simColor = (s) => s > 70 ? "#22c55e" : s > 55 ? "#86efac" : s > 40 ? "#3b82f6" : s > 25 ? "#fbbf24" : "#ef4444";
 
   // Tobias 2026-05-06: Shooting-Pct-Färbung wie im Shooting-Tab Court.
   // Konsistente Skalen: TS%, FT%, 3P% mit standard NBA-Schwellen.
@@ -4631,10 +4691,10 @@ function CompsTab({p}) {
           </div>
         )}
 
-        {/* Legend */}
+        {/* Legend (Tobias 2026-05-06: ehrliche Skala-Kommunikation) */}
         {fStat.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-3 text-xs" style={{color:"#475569"}}>
-            <span>Match: relative similarity within comp pool — top comp scaled to ~97%, bottom to ~65%. Not an absolute identity score.</span>
+            <span>Match: Euclidean distance in percentile space, mapped to 0–100%. <strong style={{color:"#86efac"}}>Top-tier match &gt; 70%</strong> · <strong style={{color:"#3b82f6"}}>Strong 55–70%</strong> · <strong style={{color:"#fbbf24"}}>Moderate 40–55%</strong>. Unique prospects (e.g. Cooper Flagg, Wemby) typically max out below 50% — perfect 100% means identical statistical fingerprint.</span>
             <span>⚠ = physical mismatch (&gt;3" height diff) — statistical similarity may not translate</span>
             <span>Stats from pre-draft season only · era-adjusted</span>
           </div>
@@ -6032,23 +6092,12 @@ export default function App() {
         // Use full profile if available, fall back to board profile
         const updated = profRes?.profile ? mapProfile(profRes.profile) : {...boardProfile};
         if (statsRes?.comps) {
-          // Similarity values from DB are composite Z-score distances (raw ~1.0-3.0).
-          // Higher = more similar. Need to scale to 0-100% relative to the max in the group.
-          const rawSims = statsRes.comps.map(c => Number(c.similarity ?? 0)).filter(v => v > 0);
-          const maxSim = rawSims.length > 0 ? Math.max(...rawSims) : 1;
-          const minSim = rawSims.length > 0 ? Math.min(...rawSims) : 0;
-          const simRange = maxSim - minSim || 1;
-          updated.statComps = statsRes.comps.map(c => {
-          let sim = null;
-          if (c.similarity != null) {
-            const raw = Number(c.similarity);
-            if (raw > 50) sim = Math.round(raw); // already percentage (legacy format)
-            else if (raw > 0) {
-              // Scale: top comp → ~97%, worst in list → ~65%
-              sim = Math.round(65 + (raw - minSim) / simRange * 32);
-            }
-            else sim = 0;
-          }
+          // Tobias 2026-05-06: ehrliche Match-Werte. Backend liefert similarity 0-100
+          // basierend auf Z-Distance-Range [0.635, 1.716]. Vorher wurde das auf 65-97%
+          // re-skaliert, was die Sortierung kaputtmachte und falsche Präzision suggerierte.
+          // Jetzt: Backend-Wert direkt nutzen, dann sortiert nach sim DESC.
+          updated.statComps = (statsRes.comps || []).map(c => {
+          const sim = c.similarity != null ? Math.max(0, Math.min(100, Math.round(Number(c.similarity)))) : null;
           return {
             name:c.name, pos:c.position||c.pos, sim,
             tier:c.tier||"", nba:!!c.made_nba, bpm:c.bpm, usg:c.usg, ts:c.ts,
@@ -6090,18 +6139,9 @@ export default function App() {
         mapped.slug = profRes.slug || profRes.profile.slug || mapped.slug;
         mapped.name = profRes.name || profRes.profile.name || mapped.name;
         if (statsRes?.comps) {
-          const rawSims2 = statsRes.comps.map(c => Number(c.similarity ?? 0)).filter(v => v > 0);
-          const maxSim2 = rawSims2.length > 0 ? Math.max(...rawSims2) : 1;
-          const minSim2 = rawSims2.length > 0 ? Math.min(...rawSims2) : 0;
-          const simRange2 = maxSim2 - minSim2 || 1;
-          mapped.statComps = statsRes.comps.map(c => {
-            let sim = null;
-            if (c.similarity != null) {
-              const raw = Number(c.similarity);
-              if (raw > 50) sim = Math.round(raw);
-              else if (raw > 0) sim = Math.round(65 + (raw - minSim2) / simRange2 * 32);
-              else sim = 0;
-            }
+          // Tobias 2026-05-06: Backend-similarity direkt nutzen (kein Re-Scaling).
+          mapped.statComps = (statsRes.comps || []).map(c => {
+            const sim = c.similarity != null ? Math.max(0, Math.min(100, Math.round(Number(c.similarity)))) : null;
             return {
               name:c.name, pos:c.position||c.pos, sim,
               tier:c.tier||"", nba:!!c.made_nba, bpm:c.bpm, usg:c.usg, ts:c.ts,
