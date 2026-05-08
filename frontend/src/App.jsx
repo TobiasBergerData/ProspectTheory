@@ -3390,17 +3390,6 @@ function DevTrajectoryTab({p}) {
     );
   };
 
-  // ── UPCOMING: Consensus Board Integration ─────────────────
-  const ConsensusPlaceholder = () => (
-    <div style={{borderRadius:12,padding:"20px 24px",background:"linear-gradient(135deg,#0d1117,#111827)",border:"1px dashed #374151",textAlign:"center"}}>
-      <div style={{fontSize:13,fontWeight:700,color:"#4b5563",marginBottom:6,letterSpacing:"0.05em",textTransform:"uppercase"}}>Scout Consensus Tracking — Coming Soon</div>
-      <div style={{fontSize:12,color:"#374151",maxWidth:500,margin:"0 auto",lineHeight:1.6}}>
-        Draft board movement over time — how has this prospect's consensus ranking shifted across The Athletic, ESPN, NBADraft.net, and Tankathon?
-        Rise/fall indicators, big board momentum, and consensus vs. model divergence flags.
-      </div>
-    </div>
-  );
-
   // ── FIBA NATIONAL TEAM CARD (Tobias 2026-05-05) ─────────────────────
   // Zeigt Karriere bei FIBA Nationalteam-Events (Junior + Senior).
   // Hilft NCAA-Talente UND Intl-Talente direkt vergleichen — die einzige Bühne
@@ -3488,7 +3477,6 @@ function DevTrajectoryTab({p}) {
       <SeasonTable />
       <ClassScatterAndDev p={p} />
       <FibaCard />
-      <ConsensusPlaceholder />
     </div>
   );
 }
