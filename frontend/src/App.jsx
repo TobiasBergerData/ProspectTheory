@@ -2293,8 +2293,168 @@ function ClassScatterAndDev({p}) {
         {chartMode==="class" ? <ClassScatter /> : <GameScatter />}
       </Sec>
 
-      {/* 3B: In-Season Development Trajectory — always shown */}
-      <Sec icon="📈" title="In-Season Development Trajectory"
+      {/* 3A.5: Multi-Stat In-Season Trajectory (Tobias 2026-05-09)
+            Aus p.gameLogs.games (PBP-aggregated). Zeigt mehrere Stats overlay:
+            - Ist die Rolle gewachsen? (USG)
+            - Wurde er effizienter? (eFG)
+            - Neue Skills? (3PA, AST)
+       */}
+      {p.gameLogs && p.gameLogs.games && p.gameLogs.games.length >= 8 && (() => {
+        const games = [...p.gameLogs.games].sort((a, b) => (a.d || "").localeCompare(b.d || ""));
+        // Rolling-mean window
+        const N = games.length;
+        const K = Math.min(7, Math.max(3, Math.floor(N / 5)));
+        const rollMean = (vals) => vals.map((_, i) => {
+          const win = vals.slice(Math.max(0, i - K + 1), i + 1).filter(v => v != null);
+          if (win.length === 0) return null;
+          return win.reduce((a, b) => a + b, 0) / win.length;
+        });
+
+        // Available metrics — pick 4 of the most insightful
+        const STATS = [
+          {key:"u",  label:"Usage %",       short:"USG", color:"#f97316", min:0,   max:45,  fmt:v=>v.toFixed(1)+"%",
+           hint:"Share of team possessions used. Rising = expanding role."},
+          {key:"e",  label:"eFG %",         short:"eFG", color:"#22c55e", min:25,  max:75,  fmt:v=>v.toFixed(1)+"%",
+           hint:"Effective FG % (weighted for 3pt). Rising = becoming more efficient."},
+          {key:"a",  label:"Assists",       short:"AST", color:"#a78bfa", min:0,   max:12,  fmt:v=>v.toFixed(1),
+           hint:"Per game. Rising = developing playmaking."},
+          {key:"ta", label:"3PT Attempts",  short:"3PA", color:"#60a5fa", min:0,   max:14,  fmt:v=>v.toFixed(1),
+           hint:"Per game. Rising = expanding shooting range / role."},
+        ];
+
+        const W = 720, H = 270, PAD = {l: 50, r: 50, t: 16, b: 36};
+        const IW = W - PAD.l - PAD.r, IH = H - PAD.t - PAD.b;
+        const xS = (i) => PAD.l + (N <= 1 ? IW/2 : (i / (N - 1)) * IW);
+
+        // Compute rolling means + normalize to [0,1] within each metric's domain for overlay
+        const series = STATS.map(stat => {
+          const vals = games.map(g => g[stat.key] ?? null);
+          const roll = rollMean(vals);
+          // Normalize to [0,1] for overlay; we keep separate Y-axes labelled
+          const norm = roll.map(v => v == null ? null : (v - stat.min) / (stat.max - stat.min));
+          // OLS slope on roll values (for trend hint)
+          const validIdx = roll.map((v, i) => v != null ? i : null).filter(i => i != null);
+          let slope = 0;
+          if (validIdx.length >= 3) {
+            const xs = validIdx, ys = validIdx.map(i => roll[i]);
+            const xm = xs.reduce((a,b)=>a+b,0)/xs.length;
+            const ym = ys.reduce((a,b)=>a+b,0)/ys.length;
+            const num = xs.reduce((a,x,i)=>a+(x-xm)*(ys[i]-ym),0);
+            const den = xs.reduce((a,x)=>a+(x-xm)**2,0.001);
+            slope = num/den;
+          }
+          // Slope expressed in stat-units per game
+          const slopeText = (Math.abs(slope) < 0.01) ? "flat" :
+            slope > 0 ? `↑ +${(slope*N).toFixed(1)}${stat.fmt(Math.abs(slope*N)).replace(/[\d.]/g,'').trim()} over season` :
+                       `↓ ${(slope*N).toFixed(1)}${stat.fmt(Math.abs(slope*N)).replace(/[\d.]/g,'').trim()} over season`;
+          return {stat, vals, roll, norm, slope, slopeText};
+        });
+
+        const yTicks = [0, 0.25, 0.5, 0.75, 1.0];
+
+        return (
+          <Sec icon="📈" title="In-Season Trajectory — Did The Player Develop?"
+            sub={`${N} games this season. Rolling ${K}-game mean for 4 key indicators. Use this to spot: role expansion (USG), efficiency growth (eFG), new skills (AST/3PA).`}>
+            {/* Verdict bar */}
+            <div style={{background:"#0d1117",border:"1px solid #1f2937",borderRadius:8,padding:"10px 12px",marginBottom:10}}>
+              <div style={{fontSize:10,fontWeight:700,color:"#6b7280",letterSpacing:1,marginBottom:6}}>SEASON-SCALE TRENDS</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))",gap:10}}>
+                {series.map(s => {
+                  const trendColor = s.slope > 0.005 ? "#22c55e" : s.slope < -0.005 ? "#ef4444" : "#6b7280";
+                  return (
+                    <Tip key={s.stat.key} content={<div style={{fontSize:12}}><strong style={{color:s.stat.color}}>{s.stat.label}</strong><br/>{s.stat.hint}</div>}>
+                      <div style={{cursor:"help"}}>
+                        <div style={{fontSize:11,color:"#9ca3af",marginBottom:2}}>
+                          <span style={{color:s.stat.color,fontWeight:600}}>● {s.stat.short}</span> trend
+                        </div>
+                        <div style={{fontSize:13,color:trendColor,fontWeight:600}}>{s.slopeText}</div>
+                      </div>
+                    </Tip>
+                  );
+                })}
+              </div>
+            </div>
+
+            <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{overflow:"visible"}}>
+              {/* Grid (4 horizontal lines: 0, 0.25, 0.5, 0.75, 1.0 of normalized scale) */}
+              {yTicks.map(t => (
+                <line key={t} x1={PAD.l} x2={W-PAD.r} y1={PAD.t + (1-t)*IH} y2={PAD.t + (1-t)*IH} stroke="#1f2937" strokeWidth={0.5}/>
+              ))}
+              {/* X-axis: game number */}
+              {[1, Math.floor(N*0.25), Math.floor(N*0.5), Math.floor(N*0.75), N].map((g,i,arr)=>{
+                if (g < 1) return null;
+                if (i > 0 && g === arr[i-1]) return null;
+                const dateStr = games[g-1]?.d?.slice(5) || "";
+                return (
+                  <g key={g}>
+                    <line x1={xS(g-1)} y1={PAD.t} x2={xS(g-1)} y2={H-PAD.b} stroke="#1f2937" strokeWidth={0.5}/>
+                    <text x={xS(g-1)} y={H-PAD.b+12} textAnchor="middle" fontSize={9} fill="#6b7280">G{g}</text>
+                    <text x={xS(g-1)} y={H-PAD.b+24} textAnchor="middle" fontSize={8} fill="#475569">{dateStr}</text>
+                  </g>
+                );
+              })}
+
+              {/* Each stat: smooth polyline */}
+              {series.map(s => {
+                const points = s.norm.map((v, i) => v == null ? null : `${xS(i)},${PAD.t + (1-Math.max(0,Math.min(1,v)))*IH}`).filter(Boolean).join(" ");
+                return <polyline key={s.stat.key} points={points} fill="none" stroke={s.stat.color} strokeWidth={2.2} opacity={0.85}/>;
+              })}
+
+              {/* Game dots — colored by stat (small, opaque) */}
+              {series.map(s => games.map((g, i) => {
+                const v = s.norm[i];
+                if (v == null) return null;
+                return <circle key={`${s.stat.key}-${i}`} cx={xS(i)} cy={PAD.t + (1-Math.max(0,Math.min(1,v)))*IH}
+                  r={2} fill={s.stat.color} opacity={0.5}/>;
+              }))}
+
+              {/* Y-axis labels: per-stat scale on left + right */}
+              {/* Left: USG (orange) + eFG (green) */}
+              {STATS.slice(0,2).map((stat, idx) => (
+                <g key={`axis-l-${stat.key}`} opacity={0.75}>
+                  <text x={PAD.l-8} y={PAD.t-2} textAnchor="end" fontSize={9} fill={stat.color} fontWeight={600}>
+                    {idx === 0 ? `${stat.short}` : ""}
+                  </text>
+                  {[0,0.5,1].map(t => (
+                    <text key={t} x={PAD.l-8 - (idx===0?0:30)} y={PAD.t + (1-t)*IH + 3}
+                      textAnchor="end" fontSize={8} fill={stat.color}>
+                      {stat.fmt(stat.min + t*(stat.max-stat.min))}
+                    </text>
+                  ))}
+                </g>
+              ))}
+              {/* Right: AST (purple) + 3PA (blue) */}
+              {STATS.slice(2,4).map((stat, idx) => (
+                <g key={`axis-r-${stat.key}`} opacity={0.75}>
+                  {[0,0.5,1].map(t => (
+                    <text key={t} x={W-PAD.r+8 + (idx===0?0:30)} y={PAD.t + (1-t)*IH + 3}
+                      textAnchor="start" fontSize={8} fill={stat.color}>
+                      {stat.fmt(stat.min + t*(stat.max-stat.min))}
+                    </text>
+                  ))}
+                </g>
+              ))}
+              <text x={(PAD.l+W-PAD.r)/2} y={H-4} textAnchor="middle" fontSize={11} fill="#9ca3af">Games (chronological)</text>
+            </svg>
+
+            <div style={{display:"flex",gap:14,marginTop:8,fontSize:10,color:"#6b7280",flexWrap:"wrap"}}>
+              {STATS.map(s => (
+                <span key={s.key}>
+                  <span style={{color:s.color,fontWeight:700}}>━ {s.short}</span> ({s.fmt(s.min)} … {s.fmt(s.max)} scale)
+                </span>
+              ))}
+            </div>
+            <div style={{marginTop:8,fontSize:10,color:"#475569",lineHeight:1.6,fontStyle:"italic"}}>
+              <strong style={{color:"#6b7280"}}>How to read:</strong> Each line is a {K}-game rolling mean, plotted on its own scale (left axis: USG/eFG, right axis: AST/3PA).
+              An <span style={{color:"#22c55e"}}>upward</span> trend in eFG while USG also rose = he got more efficient AT higher load (rare developmental marker).
+              Rising AST or 3PA late in the season = expanding skill set. Compare against age — younger players with mid-season improvements are the strongest signal.
+            </div>
+          </Sec>
+        );
+      })()}
+
+      {/* 3B: In-Season Development Trajectory — legacy single-stat view */}
+      <Sec icon="📈" title="Single-Stat Rolling Trend (Game-Log Source)"
         sub="Rolling per-game stats over the season. Select a metric: Points, eFG%, True Shooting, Rebounds, Assists, Steals, or Blocks. Rolling window K = max(3, min(5, N/4)) games. OLS trend line reveals improvement or regression.">
         <DevTrajectory />
       </Sec>
@@ -3627,26 +3787,14 @@ function ProjectionTab({p}) {
                     </div>
                   )}
                 </div>
-                {/* Ceiling / Floor */}
-                {(p.ceilingScore != null || p.floorScore != null) && (
-                  <div className="flex gap-3 ml-2">
-                    <div className="text-center">
-                      <div className="text-xs uppercase tracking-widest mb-1" style={{color:"#4b5563"}}>Ceiling</div>
-                      <div className="text-xl font-bold" style={{color:"#fbbf24",fontFamily:"'Oswald',sans-serif"}}>{(p.ceilingScore??0).toFixed(0)}<span className="text-xs font-normal" style={{color:"#78716c"}}>/10</span></div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-xs uppercase tracking-widest mb-1" style={{color:"#4b5563"}}>Floor</div>
-                      <div className="text-xl font-bold" style={{color:"#06b6d4",fontFamily:"'Oswald',sans-serif"}}>{(p.floorScore??0).toFixed(0)}<span className="text-xs font-normal" style={{color:"#164e63"}}>/10</span></div>
-                    </div>
-                    {p.riskTag && (
-                      <div className="text-center">
-                        <div className="text-xs uppercase tracking-widest mb-1" style={{color:"#4b5563"}}>Risk Profile</div>
-                        <div className="text-xs font-bold px-2 py-1 rounded" style={{
-                          color: p.riskTag==="Boom/Bust"?"#f59e0b":p.riskTag==="High Upside"?"#22c55e":p.riskTag==="Safe Floor"?"#06b6d4":"#3b82f6",
-                          background: p.riskTag==="Boom/Bust"?"#78350f44":p.riskTag==="High Upside"?"#14532d44":p.riskTag==="Safe Floor"?"#0c4a6e44":"#1e3a5f44",
-                        }}>{p.riskTag}</div>
-                      </div>
-                    )}
+                {/* Risk-Profile (Ceiling/Floor entfernt — Tobias 2026-05-09: zu opaque, durch Tier-Verteilung & Resilience-Indizes besser dargestellt) */}
+                {p.riskTag && (
+                  <div className="ml-2 text-center">
+                    <div className="text-xs uppercase tracking-widest mb-1" style={{color:"#4b5563"}}>Risk Profile</div>
+                    <div className="text-xs font-bold px-2 py-1 rounded" style={{
+                      color: p.riskTag==="Boom/Bust"?"#f59e0b":p.riskTag==="High Upside"?"#22c55e":p.riskTag==="Safe Floor"?"#06b6d4":"#3b82f6",
+                      background: p.riskTag==="Boom/Bust"?"#78350f44":p.riskTag==="High Upside"?"#14532d44":p.riskTag==="Safe Floor"?"#0c4a6e44":"#1e3a5f44",
+                    }}>{p.riskTag}</div>
                   </div>
                 )}
               </div>
@@ -3963,40 +4111,113 @@ function ProjectionTab({p}) {
         );
       })()}
 
-      {/* ═══ SEASON-BY-SEASON ═══ */}
-      <Sec icon="📈" title="Season-by-Season" sub="Development trajectory — ▲▼ shows year-over-year change. Green = improvement, Red = regression. For internationals, 'League' shows the competition level. Multi-season improvement is one of the strongest NBA success signals.">
-        {(p.seasonLines||[]).length > 1 ? (
-          <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr>
-            {["Year","League","GP","MIN","PTS","REB","AST","STL","BLK","BPM","TS%","USG"].map(h=><th key={h} className="px-2 py-1 text-xs uppercase text-left" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>{h}</th>)}
-          </tr></thead><tbody>
-            {(p.seasonLines||[]).map((s,i)=>{
-              const prev=i>0?(p.seasonLines||[])[i-1]:null;
-              const D=(cur,prv,inv)=>{if(!prev||cur==null||prv==null)return null;const d=Number(cur)-Number(prv);if(isNaN(d))return null;const c=inv?(d<0?"#22c55e":d>0?"#ef4444":"#6b7280"):(d>0?"#22c55e":d<0?"#ef4444":"#6b7280");return<span className="text-xs ml-1" style={{color:c}}>{d>0?"▲":"▼"}{Math.abs(d).toFixed(1)}</span>;};
-              const leagueOrCls = s.league || s.cls || "";
-              return(<tr key={i} style={{borderBottom:"1px solid #1f293744"}}>
-                <td className="px-2 py-2 font-semibold" style={{color:"#e5e7eb"}}>{s.yr}</td>
-                <td className="px-2" style={{color:"#9ca3af"}}><span className="truncate block max-w-20" title={leagueOrCls}>{leagueOrCls}</span></td>
-                <td className="px-2">{s.gp}</td><td className="px-2">{fmt(s.min)}</td>
-                <td className="px-2">{fmt(s.pts)}{D(s.pts,prev?.pts)}</td><td className="px-2">{fmt(s.reb)}{D(s.reb,prev?.reb)}</td>
-                <td className="px-2">{fmt(s.ast)}{D(s.ast,prev?.ast)}</td><td className="px-2">{fmt(s.stl)}{D(s.stl,prev?.stl)}</td>
-                <td className="px-2">{fmt(s.blk)}{D(s.blk,prev?.blk)}</td>
-                <td className="px-2 font-semibold" style={{color:valColor(s.bpm>10?85:s.bpm>5?60:30)}}>{fmt(s.bpm)}{D(s.bpm,prev?.bpm)}</td>
-                <td className="px-2" style={{color:valColor(s.ts>58?80:s.ts>53?55:30)}}>{fmt(s.ts)}{D(s.ts,prev?.ts)}</td>
-                <td className="px-2">{fmt(s.usg)}{D(s.usg,prev?.usg)}</td>
-              </tr>);
-            })}
-          </tbody></table></div>
-        ) : (p.seasonLines||[]).length === 1 ? (
-          <div className="text-center py-4" style={{color:"#6b7280"}}>
-            Single season on record ({(p.seasonLines||[])[0]?.yr} · {(p.seasonLines||[])[0]?.league || (p.seasonLines||[])[0]?.cls || ""}).
-          </div>
-        ) : (
-          <div className="text-center py-6" style={{color:"#6b7280"}}>
-            {p.seasonsPlayed > 1
-              ? "Multi-season data available but not yet linked. Pipeline re-run needed."
-              : "One-and-done — no multi-season trajectory."}
-          </div>
-        )}
+      {/* ═══ HOW THIS PROJECTION WAS MADE — Tobias 2026-05-09 ═══
+           Replaces Season-by-Season (which lives in Development tab anyway).
+           Erklärt den 2-Schritt-Pipeline-Flow: Pre-Draft Role + NBA-Projection.
+           ════════════════════════════════════════════════════════════════ */}
+      <Sec icon="🔭" title="How This Projection Was Made"
+        sub="From college / international stats → pre-draft role → NBA outcome distribution. Built to work for both NCAA and international prospects.">
+        {(() => {
+          const isIntl = p.source === "intl";
+          const pos = p.pos || "Wing";
+          // Position-spezifische realistische NBA-Outcomes
+          const POS_OUTCOMES = {
+            Playmaker: {
+              high:    "Lead Creator (24+ USG, 25%+ AST) — primary ball-handler tasked with scoring AND playmaking",
+              midHigh: "Combo Guard (20-24 USG) — scoring guard with secondary playmaking responsibility",
+              mid:     "Spacer / 3-and-D Guard — off-ball shooter who can attack closeouts",
+              low:     "Backup Distributor — bench creator with limited offensive load",
+              floor:   "Two-Way G-League Bridge",
+            },
+            Wing: {
+              high:    "Initiator Wing / Star Forward — high-usage scorer-creator (Tatum/Brunson/Booker template)",
+              midHigh: "Scoring Wing — efficient volume scorer with secondary defense",
+              mid:     "3-and-D Wing — corner shooter + multi-position defender (modern NBA's most demanded role)",
+              low:     "Movement Shooter / Connective Wing",
+              floor:   "Two-Way Wing / Specialist",
+            },
+            Big: {
+              high:    "Cornerstone Big — Rim-Protector + Spacer combo or elite shot-creator (KAT/Embiid template)",
+              midHigh: "Starting Big — Roll-and-finish or Stretch-Big with one elite skill",
+              mid:     "Paint Specialist — rim-protector OR rebounder OR rim-runner",
+              low:     "Rotation Big — situational use, foul-troubled minutes",
+              floor:   "Two-Way / Bench Center",
+            },
+          };
+          const outcomes = POS_OUTCOMES[pos] || POS_OUTCOMES.Wing;
+          const TopFlow = ({step, title, body, color}) => (
+            <div style={{flex:1,minWidth:240,background:"#0d1117",border:`1px solid ${color}33`,borderRadius:10,padding:"12px 14px"}}>
+              <div style={{display:"flex",alignItems:"baseline",gap:6,marginBottom:6}}>
+                <span style={{fontSize:10,fontWeight:700,color,letterSpacing:1.2}}>STEP {step}</span>
+                <span style={{fontSize:13,fontWeight:700,color:"#e5e7eb"}}>{title}</span>
+              </div>
+              <div style={{fontSize:11,color:"#9ca3af",lineHeight:1.55}}>{body}</div>
+            </div>
+          );
+          return (
+            <div className="space-y-4">
+              {/* Top: 3-step flow visualization */}
+              <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+                <TopFlow step={1} title={isIntl ? "International Pre-Draft Role" : "NCAA Pre-Draft Role"} color="#3b82f6"
+                  body={isIntl
+                    ? <>From {(p.seasonLines||[]).length} international season(s) we cluster the prospect into one of 19 archetypes via role-percentile thresholds (Spacer, Defender, Driver, Playmaker, etc.). FIBA pace adjusters (×1.15 for stocks, ×1.25 for assists) compensate for cross-league differences.</>
+                    : <>From the 14-Role Inference Matrix (z-scores vs NCAA peers): Spacer + Defender + Driver + Playmaker + Rim-Protector + Rebounder + 6 hybrids. The dominant 1-2 roles determine the archetype. <strong style={{color:"#e5e7eb"}}>You see this in the Roles & Archetypes tab.</strong></>
+                  }/>
+                <TopFlow step={2} title="Predicted NBA Tier" color="#f97316"
+                  body={<>LightGBM model trained on 27 seasons of NBA outcomes (2008–2024 careers, validated on Pre-Draft features only). Predicts probability across 6 tiers: <strong style={{color:"#e5e7eb"}}>Superstar (≥25 ppWA peak), All-Star (≥10), Starter (≥4), Role Player (≥1), Bench, Out</strong>. Cross-validation: r=0.461 ± 0.100 on hold-out. <strong style={{color:"#e5e7eb"}}>You see this in the Tier Distribution above.</strong></>
+                  }/>
+                <TopFlow step={3} title="Position-Specific NBA Role Mapping" color="#22c55e"
+                  body={<>The Pre-Draft Role × Predicted Tier matrix maps to one of 72 specific NBA outcomes per position. Higher tier = more demanding role; lower tier = more specialized/limited role. <strong style={{color:"#e5e7eb"}}>The "NBA Projection" pill in the header is the modal outcome.</strong></>
+                  }/>
+              </div>
+
+              {/* Position-specific outcome ladder for THIS player's position */}
+              <div style={{background:"#0d1117",borderRadius:10,padding:"14px 16px",border:"1px solid #1f2937"}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#6b7280",letterSpacing:1,marginBottom:10}}>
+                  REALISTIC NBA OUTCOMES FOR A {pos.toUpperCase()} (BY TIER)
+                </div>
+                <div className="space-y-2">
+                  {[
+                    {label:"Superstar / All-Star",  text:outcomes.high,    color:"#fbbf24", tierName:"Superstar"},
+                    {label:"Starter",               text:outcomes.midHigh, color:"#f97316", tierName:"Starter"},
+                    {label:"Role Player",           text:outcomes.mid,     color:"#22c55e", tierName:"Role"},
+                    {label:"Bench / Specialist",    text:outcomes.low,     color:"#3b82f6", tierName:"Bench"},
+                    {label:"Out of NBA",            text:outcomes.floor,   color:"#6b7280", tierName:"Out"},
+                  ].map(t => {
+                    const isProjected = (p.predTier && (
+                      (t.tierName === "Superstar" && /Superstar|All-Star/i.test(p.predTier)) ||
+                      (t.tierName === "Starter"   && /Starter/i.test(p.predTier)) ||
+                      (t.tierName === "Role"      && /Role/i.test(p.predTier)) ||
+                      (t.tierName === "Bench"     && /Bench/i.test(p.predTier)) ||
+                      (t.tierName === "Out"       && /Out|Marginal/i.test(p.predTier))
+                    ));
+                    return (
+                      <div key={t.label} className="flex items-start gap-3 px-3 py-2 rounded-lg"
+                        style={{background:isProjected?(t.color+"15"):"transparent",
+                                border:`1px solid ${isProjected?t.color+"66":"#1f293766"}`}}>
+                        <div style={{minWidth:120,fontSize:11,fontWeight:700,color:t.color,paddingTop:2}}>
+                          {t.label}
+                          {isProjected && <span style={{fontSize:9,marginLeft:6,padding:"1px 5px",background:t.color+"33",borderRadius:3,color:t.color}}>← projected</span>}
+                        </div>
+                        <div style={{flex:1,fontSize:12,color:"#9ca3af",lineHeight:1.5}}>{t.text}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{fontSize:10,color:"#475569",marginTop:10,fontStyle:"italic"}}>
+                  Outcome descriptions are typical for the position × tier combination. The actual probability distribution is shown in the Tier Distribution chart above. Use the Projection Drivers below to see which features push this player toward higher or lower tiers.
+                </div>
+              </div>
+
+              {/* International disclaimer if relevant */}
+              {isIntl && (
+                <div style={{background:"#1e3a5f22",border:"1px solid #1e3a5f",borderRadius:8,padding:"10px 12px",fontSize:11,color:"#cbd5e1",lineHeight:1.6}}>
+                  <strong style={{color:"#7dd3fc"}}>International caveat:</strong> the model uses a separate intl-trained head with FIBA-pace adjusters and league-strength weights. Sample size is smaller (~9k intl seasons vs 35k NCAA), so confidence intervals tend to be wider. Cross-source comparability requires careful interpretation — see the International Career Outlook section above for additional intl-specific projections.
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </Sec>
 
       {/* ── UPCOMING: Role Fit & Team Context ─────────────────── */}
@@ -4301,6 +4522,157 @@ function ScoutingTab({p, mode="scouting"}) {
           })}
         </div>
       </Sec>
+
+      {/* ══════════════════════════════════════════════════════════════════
+           Game-by-Game Skill Curve (Tobias 2026-05-09)
+           Per-Game USG vs Individual ORtg Scatter aus PBP-Daten.
+           Smoothed trend (LOESS-like rolling mean) zeigt Skalierung.
+         ══════════════════════════════════════════════════════════════════ */}
+      {p.gameLogs && p.gameLogs.games && p.gameLogs.games.length >= 5 && (() => {
+        const games = p.gameLogs.games.filter(g => g.u != null && g.o2 != null);
+        if (games.length < 5) return null;
+
+        // Domain ranges (clip ORtg to ±200, USG 0-50)
+        const USG_MIN = 0, USG_MAX = 50;
+        const ORTG_MIN = 50, ORTG_MAX = 200;
+        const W = 720, H = 320, PAD = {l: 50, r: 20, t: 18, b: 36};
+        const xS = (u) => PAD.l + ((u - USG_MIN) / (USG_MAX - USG_MIN)) * (W - PAD.l - PAD.r);
+        const yS = (o) => PAD.t + ((ORTG_MAX - o) / (ORTG_MAX - ORTG_MIN)) * (H - PAD.t - PAD.b);
+
+        // Sort by USG for smooth-curve calculation (LOESS-like rolling mean)
+        const sortedByUsg = [...games].sort((a, b) => a.u - b.u);
+        // For each USG-bin: rolling mean of ORtg from k=7 nearest neighbors in USG
+        const k = Math.max(5, Math.min(9, Math.floor(games.length / 4)));
+        const smoothPts = [];
+        for (let i = 0; i < sortedByUsg.length; i++) {
+          const start = Math.max(0, i - Math.floor(k / 2));
+          const end = Math.min(sortedByUsg.length, start + k);
+          const slice = sortedByUsg.slice(start, end);
+          const meanU = slice.reduce((a, g) => a + g.u, 0) / slice.length;
+          const meanO = slice.reduce((a, g) => a + g.o2, 0) / slice.length;
+          smoothPts.push({u: meanU, o: meanO});
+        }
+        // Build SVG path for smooth curve (catmull-rom-ish, just polyline since pts are sorted)
+        const curvePath = smoothPts.map((pt, i) =>
+          `${i === 0 ? "M" : "L"} ${xS(pt.u).toFixed(1)} ${yS(pt.o).toFixed(1)}`
+        ).join(" ");
+
+        // OLS line through raw points for comparison
+        const n = games.length;
+        const meanU = games.reduce((a, g) => a + g.u, 0) / n;
+        const meanO = games.reduce((a, g) => a + g.o2, 0) / n;
+        const num = games.reduce((a, g) => a + (g.u - meanU) * (g.o2 - meanO), 0);
+        const den = games.reduce((a, g) => a + (g.u - meanU) ** 2, 0);
+        const slope = den > 0 ? num / den : 0;
+        const intercept = meanO - slope * meanU;
+        const slopeColor = slope > 0.5 ? "#22c55e" : slope > -0.5 ? "#fbbf24" : "#ef4444";
+        const slopeLabel = slope > 1.0 ? "Scales strongly with usage"
+                         : slope > 0.0 ? "Holds efficiency at higher usage"
+                         : slope > -1.0 ? "Slight decay at higher usage"
+                         : "Significant efficiency drop at high usage";
+
+        // Date-color gradient (early season → late season)
+        // Sort by date for color
+        const sortedByDate = [...games].sort((a, b) => (a.d || "").localeCompare(b.d || ""));
+        const dateRank = new Map(sortedByDate.map((g, i) => [g, i]));
+
+        // Y-axis ticks
+        const yTicks = [60, 80, 100, 120, 140, 160, 180];
+        const xTicks = [10, 15, 20, 25, 30, 35, 40, 45];
+
+        const avgU = meanU;
+        const avgO = meanO;
+
+        return (
+          <Sec icon="📊" title="Game-by-Game Skill Curve"
+            sub={`${games.length} games from ${p.gameLogs.season}. Each dot = one game. Curve shows how efficiency (individual offensive rating) scales with possession-load (% of team possessions consumed). Used to spot the breakpoint where production drops at higher load.`}>
+            <div style={{background:"#0d1117",border:"1px solid #1f2937",borderRadius:8,padding:"12px 14px",marginBottom:12}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,flexWrap:"wrap",gap:8}}>
+                <div>
+                  <div style={{fontSize:11,fontWeight:700,color:"#6b7280",letterSpacing:1}}>SCALING-VERDICT</div>
+                  <div style={{fontSize:14,fontWeight:600,color:slopeColor,marginTop:2}}>{slopeLabel}</div>
+                </div>
+                <div style={{display:"flex",gap:14,fontSize:11,color:"#9ca3af"}}>
+                  <span>Avg USG: <strong style={{color:"#f97316"}}>{avgU.toFixed(1)}%</strong></span>
+                  <span>Avg ORtg: <strong style={{color:"#22c55e"}}>{avgO.toFixed(0)}</strong></span>
+                  <span>Trend slope: <strong style={{color:slopeColor}}>{slope >= 0 ? "+" : ""}{slope.toFixed(1)}</strong> ORtg per +1% USG</span>
+                </div>
+              </div>
+              <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{overflow:"visible"}}>
+                {/* Grid */}
+                {yTicks.map(v => (
+                  <g key={v}>
+                    <line x1={PAD.l} x2={W-PAD.r} y1={yS(v)} y2={yS(v)} stroke="#1f2937" strokeWidth={0.5}/>
+                    <text x={PAD.l-6} y={yS(v)+3} textAnchor="end" fontSize={9} fill="#6b7280">{v}</text>
+                  </g>
+                ))}
+                {xTicks.map(u => (
+                  <g key={u}>
+                    <line x1={xS(u)} y1={PAD.t} x2={xS(u)} y2={H-PAD.b} stroke="#1f2937" strokeWidth={0.5}/>
+                    <text x={xS(u)} y={H-PAD.b+14} textAnchor="middle" fontSize={9} fill="#6b7280">{u}%</text>
+                  </g>
+                ))}
+                {/* Mean horizontal */}
+                <line x1={PAD.l} x2={W-PAD.r} y1={yS(avgO)} y2={yS(avgO)} stroke="#22c55e44" strokeWidth={1} strokeDasharray="3,3"/>
+                <text x={W-PAD.r-2} y={yS(avgO)-3} textAnchor="end" fontSize={9} fill="#22c55e88">avg ORtg</text>
+
+                {/* OLS trend (dashed) */}
+                {Math.abs(slope) > 0.05 && (
+                  <line x1={xS(USG_MIN+5)} y1={yS(intercept + slope*(USG_MIN+5))}
+                        x2={xS(USG_MAX-5)} y2={yS(intercept + slope*(USG_MAX-5))}
+                        stroke={slopeColor} strokeWidth={1.5} strokeDasharray="6,4" opacity={0.7}/>
+                )}
+
+                {/* Smooth curve (LOESS-like rolling mean) — primary visual element */}
+                <path d={curvePath} fill="none" stroke="#f97316" strokeWidth={2.5} opacity={0.85}/>
+
+                {/* Game dots — gradient: early=blue, late=orange */}
+                {games.map((g, i) => {
+                  const rank = dateRank.get(g) ?? 0;
+                  const t = sortedByDate.length > 1 ? rank / (sortedByDate.length - 1) : 0.5;
+                  // Blue (early) → orange (late)
+                  const r = Math.round(96 + t * (249-96));
+                  const gn = Math.round(165 - t * 50);
+                  const b = Math.round(250 - t * 200);
+                  return (
+                    <Tip key={i} content={
+                      <div>
+                        <div style={{fontWeight:700,color:"#f97316"}}>{g.d} vs {g.h ? "" : "@"} {g.o}</div>
+                        <div style={{fontSize:11,color:"#cbd5e1",marginTop:3}}>
+                          {g.p} pts · {g.fm}/{g.fa} FG · {g.tm}/{g.ta} 3PT · {g.a} ast · {g.to} TO · {g.b} blk · {g.s} stl
+                        </div>
+                        <div style={{fontSize:11,color:"#94a3b8",marginTop:3}}>
+                          USG <strong style={{color:"#f97316"}}>{g.u}%</strong> · ORtg <strong style={{color:"#22c55e"}}>{g.o2}</strong> · eFG <strong style={{color:"#fbbf24"}}>{g.e}%</strong>
+                        </div>
+                      </div>
+                    }>
+                      <circle cx={xS(g.u)} cy={yS(Math.max(ORTG_MIN, Math.min(ORTG_MAX, g.o2)))}
+                        r={4} fill={`rgb(${r},${gn},${b})`}
+                        stroke="#000" strokeWidth={0.5}
+                        style={{cursor:"crosshair"}}/>
+                    </Tip>
+                  );
+                })}
+
+                {/* Axis labels */}
+                <text x={(PAD.l+W-PAD.r)/2} y={H-4} textAnchor="middle" fontSize={11} fill="#9ca3af">Usage % (per game, share of team possessions)</text>
+                <text x={12} y={H/2} textAnchor="middle" fontSize={11} fill="#9ca3af" transform={`rotate(-90,12,${H/2})`}>Individual Offensive Rating</text>
+              </svg>
+              <div style={{display:"flex",gap:14,marginTop:8,fontSize:10,color:"#6b7280",flexWrap:"wrap"}}>
+                <span>● <span style={{color:"#60a5fa"}}>early-season</span> → <span style={{color:"#f97316"}}>late-season</span> color gradient</span>
+                <span>━ orange smooth curve = rolling-mean trend</span>
+                <span style={{color:slopeColor}}>--- {slope >= 0 ? "+" : ""}{slope.toFixed(2)} OLS slope</span>
+              </div>
+              <div style={{marginTop:8,fontSize:10,color:"#475569",lineHeight:1.6,fontStyle:"italic"}}>
+                <strong style={{color:"#6b7280"}}>How to read:</strong> A flat or rising curve = he holds efficiency even as load grows.
+                A steeply falling curve at high USG = production drops when defenses focus on him.
+                Look for breakpoints — usage levels where the curve clearly bends down.
+                ORtg is individual (not team-context), USG-proxy is share-of-team-possessions (not standard NBA-USG with minutes).
+              </div>
+            </div>
+          </Sec>
+        );
+      })()}
       </>)}
 
       {mode === "roles" && (<>

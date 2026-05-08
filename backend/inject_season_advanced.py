@@ -23,6 +23,8 @@ DB = BASE / "data" / "processed" / "prospecttheory.db"
 BART_CSV = BASE / "data" / "raw" / "barttorvik_complete_final.csv"
 
 # Felder die wir aus Bart in seasonLines hinzufügen
+# Tobias 2026-05-09: Bart 'yr' Spalte ist NCAA-Klasse (Fr/So/Jr/Sr) — wir nutzen
+# 'season_year' für das Saisonjahr-Match.
 EXTRA_FIELDS = {
     "astP": "AST_per",
     "toP":  "TO_per",
@@ -32,7 +34,6 @@ EXTRA_FIELDS = {
     "drbP": "DRB_per",
     "ftr":  "ftr",            # FT rate (FTA/FGA)
     "threePAr": "TPA",        # 3-pt attempts (per game proxy — better than nothing)
-    "dunkR": "dunks_made",    # dunk rate proxy
 }
 
 SUFFIX_RX = re.compile(r"\s+(jr\.?|sr\.?|i+v?|ii+)\.?\s*$", re.IGNORECASE)
@@ -63,22 +64,23 @@ def main():
         sys.exit(f"ERROR: {BART_CSV} not found — needed for season-by-season AST%/TO%")
 
     print(f"Loading Bart-CSV: {BART_CSV}")
-    cols = ["player_name", "yr"] + [c for c in EXTRA_FIELDS.values() if c]
+    # Use 'season_year' (numeric year) instead of 'yr' (which is NCAA class Fr/So/Jr/Sr)
+    cols = ["player_name", "season_year"] + [c for c in EXTRA_FIELDS.values() if c]
     bart = pd.read_csv(BART_CSV, usecols=lambda c: c in cols, low_memory=False)
-    bart = bart.dropna(subset=["player_name", "yr"])
-    bart["yr"] = pd.to_numeric(bart["yr"], errors="coerce").astype("Int64")
-    bart = bart.dropna(subset=["yr"])
+    bart = bart.dropna(subset=["player_name", "season_year"])
+    bart["season_year"] = pd.to_numeric(bart["season_year"], errors="coerce")
+    bart = bart.dropna(subset=["season_year"])
+    bart["season_year"] = bart["season_year"].astype(int)
     bart["_nname"] = bart["player_name"].apply(norm_name)
     print(f"  {len(bart):,} player-season rows from Bart")
 
-    # Build (nname, yr) → row dict
+    # Build (nname, season_year) → row dict
     season_lookup = {}
     for _, r in bart.iterrows():
-        key = (r["_nname"], int(r["yr"]))
-        # If duplicate key (rare), keep first
+        key = (r["_nname"], int(r["season_year"]))
         if key not in season_lookup:
             season_lookup[key] = {dst: safe_num(r.get(src)) for dst, src in EXTRA_FIELDS.items()}
-    print(f"  Lookup-keys: {len(season_lookup):,} unique (name+year)")
+    print(f"  Lookup-keys: {len(season_lookup):,} unique (name+season_year)")
 
     # Iterate season_lines
     if not DB.exists():
