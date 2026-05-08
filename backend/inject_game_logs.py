@@ -68,70 +68,96 @@ def safe_round(v, d=1):
 
 
 def main():
-    # Collect all available game-log CSVs (one per season)
-    all_csvs = []
+    # Collect all available game-log CSVs — dedupe by FILENAME (basename),
+    # not full path, so we don't load the same season twice if it lives in both
+    # backend/ and data-pipeline/.
+    seen_basenames = {}
     for pattern in CSV_GLOBS:
-        all_csvs.extend(sorted(glob.glob(str(pattern))))
-    # Dedupe paths
-    all_csvs = sorted(set(all_csvs))
+        for path in sorted(glob.glob(str(pattern))):
+            basename = Path(path).name
+            if basename not in seen_basenames:
+                seen_basenames[basename] = path
+    all_csvs = sorted(seen_basenames.values())
     if not all_csvs:
         sys.exit("ERROR: No pbp_game_logs_*.csv found in any expected location")
     print(f"Loading {len(all_csvs)} game-log CSVs:")
 
+    # ── Pre-load DB profile-names FIRST → only process players we actually have ──
+    if not DB.exists():
+        sys.exit(f"ERROR: DB not found at {DB}")
+    conn = sqlite3.connect(DB)
+    name_by_pid = dict(conn.execute("SELECT player_id, name FROM profiles").fetchall())
+    db_nnames = {norm_name(n) for n in name_by_pid.values()}
+    print(f"\n  DB profile names: {len(db_nnames):,} unique normalized")
+
+    # Streaming-load + filter ON-THE-FLY — avoid loading 700k rows into RAM
+    print(f"\n  Loading + filtering CSVs against DB-names...")
     dfs = []
     for c in all_csvs:
         season = Path(c).stem.replace("pbp_game_logs_", "")
         d = pd.read_csv(c, low_memory=False)
         d["season"] = season
-        dfs.append(d)
-        print(f"  {season}: {len(d):,} rows ({Path(c).name})")
+        d["_nname"] = d["player_name"].astype(str).apply(norm_name)
+        # Pre-filter: only rows for players we have in DB
+        d = d[d["_nname"].isin(db_nnames)]
+        if len(d) > 0:
+            dfs.append(d)
+        print(f"  {season}: {len(d):>6,} rows after DB-filter")
+    if not dfs:
+        sys.exit("No matching player rows after filter")
     master = pd.concat(dfs, ignore_index=True)
-    print(f"  Master: {len(master):,} player-game rows · {master['player_name'].nunique():,} unique players")
+    print(f"  Filtered master: {len(master):,} rows · {master['_nname'].nunique():,} unique players")
 
-    # Build per-player compact game-log arrays — keep only LATEST season per player
-    # (analog to mind_metrics: latest pre-draft season).
-    master["_nname"] = master["player_name"].apply(norm_name)
-    # Sort so groupby picks latest season's rows
+    # Sort + dedupe duplicate (player, game_id) rows that occasionally appear
+    # in raw PBP (Tobias 2026-05-09 — Flagg had 2 dups in NCAA tournament games).
     master = master.sort_values(["_nname", "season", "date"])
-
+    master = master.drop_duplicates(subset=["_nname", "season", "game_id"], keep="first")
+    print(f"  After dedupe: {len(master):,} rows")
     # For each player: take rows from their latest season only
-    latest_season_per_player = master.groupby("_nname")["season"].last().to_dict()
+    latest_season = master.groupby("_nname", as_index=False)["season"].last()
+    latest_season.columns = ["_nname", "_latest_season"]
+    master = master.merge(latest_season, on="_nname")
+    master = master[master["season"] == master["_latest_season"]]
+    print(f"  After latest-season filter: {len(master):,} rows · {master['_nname'].nunique():,} players")
+
+    # Vectorized field extraction — much faster than iterrows
+    print(f"\n  Building compact records (vectorized)...")
+    # Bulk-cast numeric columns with safe defaults
+    for col, default in [("pts",0),("ast",0),("fga",0),("fgm",0),("tpa",0),("tpm",0),
+                          ("oreb",0),("dreb",0),("tov",0),("stl",0),("blk",0),("pf",0)]:
+        master[col] = pd.to_numeric(master[col], errors="coerce").fillna(default).astype(int)
+    for col in ["usg_proxy", "ortg_proxy", "efg_pct"]:
+        master[col] = pd.to_numeric(master[col], errors="coerce")
+    master["is_home"] = master["is_home"].fillna(False).astype(bool)
+    master["date"] = master["date"].astype(str)
+    master["opponent"] = master["opponent"].fillna("").astype(str)
 
     by_player = {}
-    for nname, season in latest_season_per_player.items():
-        sub = master[(master["_nname"] == nname) & (master["season"] == season)]
+    for nname, sub in master.groupby("_nname"):
+        season = sub["_latest_season"].iloc[0]
+        # Build games list via to_dict('records') — much faster than iterrows
         games = []
-        for _, r in sub.iterrows():
+        for r in sub.itertuples(index=False):
             games.append({
-                "d":  str(r.get("date", "")),
-                "o":  str(r.get("opponent", "")),
-                "h":  1 if r.get("is_home") else 0,
-                "p":  safe_int(r.get("pts")),
-                "a":  safe_int(r.get("ast")),
-                "fa": safe_int(r.get("fga")),
-                "fm": safe_int(r.get("fgm")),
-                "ta": safe_int(r.get("tpa")),
-                "tm": safe_int(r.get("tpm")),
-                "rb": safe_int(r.get("oreb", 0)) + safe_int(r.get("dreb", 0)),
-                "to": safe_int(r.get("tov")),
-                "s":  safe_int(r.get("stl")),
-                "b":  safe_int(r.get("blk")),
-                "pf": safe_int(r.get("pf")),
-                "u":  safe_round(r.get("usg_proxy"), 1),
-                "o2": safe_round(r.get("ortg_proxy"), 0),
-                "e":  safe_round(r.get("efg_pct"), 1),
+                "d":  r.date,
+                "o":  r.opponent,
+                "h":  1 if r.is_home else 0,
+                "p":  int(r.pts), "a": int(r.ast),
+                "fa": int(r.fga), "fm": int(r.fgm),
+                "ta": int(r.tpa), "tm": int(r.tpm),
+                "rb": int(r.oreb) + int(r.dreb),
+                "to": int(r.tov), "s": int(r.stl), "b": int(r.blk), "pf": int(r.pf),
+                "u":  None if pd.isna(r.usg_proxy)  else round(float(r.usg_proxy), 1),
+                "o2": None if pd.isna(r.ortg_proxy) else round(float(r.ortg_proxy), 0),
+                "e":  None if pd.isna(r.efg_pct)    else round(float(r.efg_pct), 1),
             })
         if games:
             by_player[nname] = {"season": season, "games": games}
+    print(f"  Compact records: {len(by_player):,} players")
 
-    print(f"\n  Compact per-player records: {len(by_player):,}")
-
-    # Inject into DB profiles
-    if not DB.exists():
-        sys.exit(f"ERROR: DB not found at {DB}")
-    conn = sqlite3.connect(DB)
+    # Inject into DB profiles (conn already open from earlier name-fetch)
     profiles = conn.execute("SELECT player_id, name, data FROM profiles").fetchall()
-    print(f"  DB profiles: {len(profiles):,}")
+    print(f"\n  DB profiles to scan: {len(profiles):,}")
 
     matched = 0
     update_rows = []
