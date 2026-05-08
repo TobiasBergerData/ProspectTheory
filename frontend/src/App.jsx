@@ -1524,6 +1524,12 @@ function ShootingTab({p}) {
   const touchPrior = p.projPrior ?? (hasMidData
     ? ((0.20 + 0.18 * (ft ?? 75) / 100 + 0.05 * (midForPrior) / 100) * 100)
     : ((0.22 + 0.22 * (ft ?? 75) / 100) * 100));  // FT-only prior
+  // Touch Prior Percentile (Tobias 2026-05-06): empirische Annäherung an die
+  // Class-Verteilung. Range typischerweise 30-44%, Median ≈ 36%, std ≈ 3%.
+  // Approximation via Normal-CDF ist gut genug ohne Pipeline-pctl.
+  const touchPriorPctl = touchPrior != null
+    ? Math.round(Math.max(0, Math.min(100, ((touchPrior - 30) / 14) * 100)))
+    : null;
   const projNba3p = p.projNba3p ?? (() => {
     if (ft == null) return null;
     const mu0 = hasMidData
@@ -1554,21 +1560,18 @@ function ShootingTab({p}) {
     return "#e5e7eb";
   };
 
-  // ═══ DIET BAR COMPONENT — full-width, taller ═══
-  const DietBar = ({label, color, pctOfTotal, effPct, effType, children}) => (
+  // ═══ DIET BAR COMPONENT — Tobias 2026-05-06 cleanup ═══
+  // FG%-Anzeige je Zone entfernt (Court zeigt das schon), Inline-% aus Bar entfernt.
+  // Bleibt: Label links + "X% of shots" rechts. Bar visualisiert die Distribution.
+  const DietBar = ({label, color, pctOfTotal, children}) => (
     pctOfTotal != null && pctOfTotal > 0 ? (
       <div>
         <div className="flex justify-between items-baseline mb-1">
           <span className="text-sm font-semibold" style={{color}}>{label} {children||""}</span>
-          <div className="flex items-center gap-3">
-            {effPct != null && <span className="text-xs" style={{color:sc(effPct,effType||"2pt")}}>{fmt(effPct)}%</span>}
-            <span className="text-sm font-bold" style={{color:"#e5e7eb"}}>{fmt(pctOfTotal,1)}% of shots</span>
-          </div>
+          <span className="text-sm font-bold" style={{color:"#e5e7eb"}}>{fmt(pctOfTotal,1)}% of shots</span>
         </div>
         <div className="h-10 rounded-lg overflow-hidden w-full" style={{background:"#1f2937"}}>
-          <div className="h-full rounded-lg flex items-center pl-3" style={{width:`${Math.max(3,pctOfTotal)}%`,background:`linear-gradient(90deg,${color}44,${color}cc)`}}>
-            {pctOfTotal>8&&<span className="text-xs font-bold text-white">{fmt(pctOfTotal,0)}%</span>}
-          </div>
+          <div className="h-full rounded-lg" style={{width:`${Math.max(3,pctOfTotal)}%`,background:`linear-gradient(90deg,${color}44,${color}cc)`}}/>
         </div>
       </div>
     ) : null
@@ -1615,6 +1618,12 @@ function ShootingTab({p}) {
                   <text x="290" y="390" textAnchor="middle" fill={sc(tp,"3pt")} style={{fontSize:32,fontWeight:"bold"}}>{tp!=null?`${fmt(tp)}%`:"—"}</text>
                   {threePMade!=null&&threePA!=null&&<text x="290" y="413" textAnchor="middle" fill="#9ca3af" style={{fontSize:13}}>{threePMade}-{threePA} 3PA</text>}
                 </g>
+                {/* TS% — rechte untere Ecke, Gesamteffizienz */}
+                <g opacity={ts!=null?1:0.3}>
+                  <text x="490" y="355" textAnchor="middle" fill="#a78bfa" style={{fontSize:13,fontWeight:"bold"}}>TS%</text>
+                  <text x="490" y="385" textAnchor="middle" fill={sc(ts,"ft")} style={{fontSize:24,fontWeight:"bold"}}>{ts!=null?`${fmt(ts)}%`:"—"}</text>
+                  <text x="490" y="403" textAnchor="middle" fill="#6b7280" style={{fontSize:10}}>overall</text>
+                </g>
               </svg>
             ) : (
               /* ── FULL COURT: @Rim / Dunks / Mid / FT / 3P ── */
@@ -1658,6 +1667,12 @@ function ShootingTab({p}) {
                   <text x="290" y="387" textAnchor="middle" fill={sc(tp,"3pt")} style={{fontSize:30,fontWeight:"bold"}}>{tp!=null?`${fmt(tp)}%`:"—"}</text>
                   {threeAtt!=null&&<text x="290" y="407" textAnchor="middle" fill="#9ca3af" style={{fontSize:12}}>{zoneMade(threeF,tp)||"?"}-{threeAtt} 3PA</text>}
                 </g>
+                {/* TS% — rechte untere Ecke, Gesamteffizienz neben 3PT (Tobias 2026-05-06) */}
+                <g opacity={ts!=null?1:0.3}>
+                  <text x="490" y="355" textAnchor="middle" fill="#a78bfa" style={{fontSize:13,fontWeight:"bold"}}>TS%</text>
+                  <text x="490" y="385" textAnchor="middle" fill={sc(ts,"ft")} style={{fontSize:24,fontWeight:"bold"}}>{ts!=null?`${fmt(ts)}%`:"—"}</text>
+                  <text x="490" y="403" textAnchor="middle" fill="#6b7280" style={{fontSize:10}}>overall</text>
+                </g>
               </svg>
             )}
           </div>
@@ -1670,9 +1685,9 @@ function ShootingTab({p}) {
                 {useSimplifiedCourt ? (
                   /* Simplified: 2P / 3P / FT */
                   <>
-                    <DietBar label="2-Point" color="#f97316" pctOfTotal={twoPctOfTotal} effPct={twoPct} effType="2pt"/>
-                    <DietBar label="3-Point" color="#3b82f6" pctOfTotal={threePctOfTotal} effPct={tp} effType="3pt"/>
-                    <DietBar label="Free Throws" color="#8b5cf6" pctOfTotal={ftPctOfTotal} effPct={ft} effType="ft"/>
+                    <DietBar label="2-Point" color="#f97316" pctOfTotal={twoPctOfTotal}/>
+                    <DietBar label="3-Point" color="#3b82f6" pctOfTotal={threePctOfTotal}/>
+                    <DietBar label="Free Throws" color="#8b5cf6" pctOfTotal={ftPctOfTotal}/>
                   </>
                 ) : (
                   /* Full: Rim(+dunks) / Mid / 3P / FT */
@@ -1681,24 +1696,17 @@ function ShootingTab({p}) {
                       <div>
                         <div className="flex justify-between items-baseline mb-1">
                           <span className="text-sm font-semibold" style={{color:"#f97316"}}>@Rim <span style={{color:"#ef4444",fontSize:11}}>(incl. {dunkPctOfTotal!=null?`${fmt(dunkPctOfTotal,0)}%`:""} dunks)</span></span>
-                          <div className="flex items-center gap-3">
-                            {rimPct!=null&&<span className="text-xs" style={{color:sc(rimPct,"rim")}}>{fmt(rimPct)}%</span>}
-                            <span className="text-sm font-bold" style={{color:"#e5e7eb"}}>{fmt(rimPctOfTotal,1)}% of shots</span>
-                          </div>
+                          <span className="text-sm font-bold" style={{color:"#e5e7eb"}}>{fmt(rimPctOfTotal,1)}% of shots</span>
                         </div>
                         <div className="h-10 rounded-lg overflow-hidden relative w-full" style={{background:"#1f2937"}}>
                           <div className="absolute top-0 bottom-0 rounded-l-lg" style={{left:0,width:`${rimPctOfTotal}%`,background:"linear-gradient(90deg,#f9731644,#f97316cc)"}}/>
                           {dunkPctOfTotal!=null&&<div className="absolute top-0 bottom-0 rounded-l-lg" style={{left:0,width:`${dunkPctOfTotal}%`,background:"linear-gradient(90deg,#ef444488,#ef4444cc)"}}/>}
-                          <div className="absolute inset-0 flex items-center pl-3 text-xs font-bold text-white">
-                            {dunkPctOfTotal!=null&&dunkPctOfTotal>4&&<span className="mr-1" style={{color:"#fecaca"}}>{fmt(dunkPctOfTotal,0)}🏀</span>}
-                            {rimPctOfTotal>8&&<span>{fmt(rimPctOfTotal,0)}%</span>}
-                          </div>
                         </div>
                       </div>
                     )}
-                    <DietBar label="Mid-Range" color="#fbbf24" pctOfTotal={midPctOfTotal} effPct={midPct} effType="mid"/>
-                    <DietBar label="3-Point" color="#3b82f6" pctOfTotal={threePctOfTotal} effPct={tp} effType="3pt"/>
-                    <DietBar label="Free Throws" color="#8b5cf6" pctOfTotal={ftPctOfTotal} effPct={ft} effType="ft"/>
+                    <DietBar label="Mid-Range" color="#fbbf24" pctOfTotal={midPctOfTotal}/>
+                    <DietBar label="3-Point" color="#3b82f6" pctOfTotal={threePctOfTotal}/>
+                    <DietBar label="Free Throws" color="#8b5cf6" pctOfTotal={ftPctOfTotal}/>
                   </>
                 )}
                 <div className="text-xs mt-1" style={{color:"#4b5563"}}>{estTotalShots > 0 ? `${estTotalShots} total shots` : "Shot volume unknown"}{estTotalShots > 0 && useSimplifiedCourt ? " (estimated)" : estTotalShots > 0 ? ` (${totalFga||"?"} FGA + ${totalFta||"?"} FTA)` : ""}</div>
@@ -1709,22 +1717,6 @@ function ShootingTab({p}) {
               </div>
             )}
           </div>
-        </div>
-        <div className="mt-3 flex items-center gap-6 text-sm" style={{color:"#9ca3af"}}>
-          <Tip content={<div>True Shooting % — PTS / (2 × FGA + 0.44 × FTA).</div>}>
-            <span className="cursor-help">TS%: <strong style={{color:sc(ts,"ft")}}>{ts!=null?fmt(ts):"—"}</strong></span>
-          </Tip>
-                    <Tip content={<div>{hasPbpCreation
-            ? <>Self-Creation Rate (PBP). Percentage of made shots that were unassisted — higher means more shots created off the dribble. Based on real play-by-play assisted shot tracking data (2008-2026). Elite: &gt;65%, Good: 50-65%, Average: 35-50%.</>
-            : <>Box Creation (Ben Taylor). Scoring Creation (USG×TS) + Assist Creation. Measures total offensive creation. Elite: &gt;25, Good: 18-25, Average: 12-18.</>
-          }</div>}>
-            <span className="cursor-help">{hasPbpCreation ? "Self-Creation" : "Box Creation"}: <strong style={{color: hasPbpCreation
-              ? (selfCreationRaw > 65 ? "#22c55e" : selfCreationRaw > 50 ? "#86efac" : selfCreationRaw > 35 ? "#fbbf24" : "#ef4444")
-              : (selfCreationScore > 25 ? "#22c55e" : selfCreationScore > 18 ? "#f97316" : selfCreationScore > 12 ? "#fbbf24" : "#ef4444")
-            }}>{hasPbpCreation ? fmt(selfCreationRaw) + "%" : fmt(selfCreationScore)}</strong> <span style={{color:"#4b5563"}}>({selfCreationLabel})</span>
-            {creationPctl != null && <span style={{color:"#475569"}}> · Pctl: {Math.round(creationPctl)}</span>}
-            </span>
-          </Tip>
         </div>
       </Sec>
 
@@ -1800,40 +1792,83 @@ function ShootingTab({p}) {
                 <span><span className="inline-block w-3 h-3 rounded-sm mr-1" style={{background:"#f9731633",verticalAlign:"middle"}}/> Assisted</span>
                 {scd.dunk && <span style={{color:"#475569"}}>Dunks: {scd.dunk.fga} FGA ({fmt(scd.dunk.selfPct||0)}% self)</span>}
               </div>
-              {/* Self-creation distribution: pie-like summary */}
-              {totalSelfMakes > 5 && (
-                <div className="mt-3 py-4 px-2 rounded-lg" style={{background:"#0d1117",border:"1px solid #1e293b"}}>
-                  <div className="text-sm mb-3 px-1 font-bold" style={{color:"#e5e7eb"}}>Self-Created Shot Distribution</div>
-                  {/* Full-width distribution bar — matches the Shot Creation Spectrum bars above */}
-                  <div className="flex gap-0.5 rounded-lg overflow-hidden w-full" style={{height:40}}>
-                    {zones.map(z => {
-                      const share = totalSelfMakes > 0 ? selfMakesByZone[z] / totalSelfMakes * 100 : 0;
-                      return share > 0 ? (
-                        // Flex-Item MUSS das direkte Kind des flex-Containers sein.
-                        // Tip wrappt in <span inline-block>, deshalb hier ein div drumherum.
-                        <div key={z} className="h-full" style={{flex:`${share} 1 0`, minWidth: share >= 3 ? 0 : "auto"}}>
-                          <Tip content={<div>{fmt(share,0)}% of self-created makes are {zoneLabel[z].toLowerCase()}</div>} block>
-                            <div className="h-full flex items-center justify-center text-sm font-bold cursor-help w-full" style={{
-                              background: zoneColor[z],
-                              color: "#fff",
-                            }}>
-                              {share > 6 && `${fmt(share,0)}%`}
-                            </div>
+              {/* Self-creation distribution + Verdict (Tobias 2026-05-06) */}
+              {totalSelfMakes > 5 && (() => {
+                // Total makes = sum of (fga × pct) over tracked zones
+                let totalMakes = 0;
+                zones.forEach(z => {
+                  const d = scd[z];
+                  totalMakes += Math.round(d.fga * (d.pct||0) / 100);
+                });
+                const overallSelfPct = scd.overall?.selfPct ?? (totalMakes > 0 ? totalSelfMakes / totalMakes * 100 : 0);
+                // Verdict-Logik (basierend auf overallSelfPct)
+                const verdictTier = overallSelfPct > 65 ? "Elite Creator"
+                                  : overallSelfPct > 50 ? "Good Creator"
+                                  : overallSelfPct > 35 ? "Average Creator"
+                                  : "Assisted Scorer";
+                const verdictColor = overallSelfPct > 65 ? "#22c55e"
+                                   : overallSelfPct > 50 ? "#86efac"
+                                   : overallSelfPct > 35 ? "#fbbf24"
+                                   : "#94a3b8";
+                const verdictDesc = overallSelfPct > 65
+                  ? "Generates a clear majority of his own shots — primary or secondary on-ball role at the next level."
+                  : overallSelfPct > 50
+                  ? "Mixed creator with above-average self-creation share. Capable of running secondary actions."
+                  : overallSelfPct > 35
+                  ? "Balanced creator/finisher. Creates some, but benefits from teammates setting him up."
+                  : "Predominantly assisted scorer — relies on teammates' creation to score efficiently.";
+                return (
+                  <div className="mt-3 py-4 px-3 rounded-lg" style={{background:"#0d1117",border:"1px solid #1e293b"}}>
+                    <div className="text-sm mb-3 px-1 font-bold" style={{color:"#e5e7eb"}}>Self-Created Shot Distribution</div>
+                    {/* Distribution-Bar */}
+                    <div className="flex gap-0.5 rounded-lg overflow-hidden w-full" style={{height:40}}>
+                      {zones.map(z => {
+                        const share = totalSelfMakes > 0 ? selfMakesByZone[z] / totalSelfMakes * 100 : 0;
+                        return share > 0 ? (
+                          <div key={z} className="h-full" style={{flex:`${share} 1 0`, minWidth: share >= 3 ? 0 : "auto"}}>
+                            <Tip content={<div>{fmt(share,0)}% of self-created makes are {zoneLabel[z].toLowerCase()}</div>} block>
+                              <div className="h-full flex items-center justify-center text-sm font-bold cursor-help w-full" style={{
+                                background: zoneColor[z],
+                                color: "#fff",
+                              }}>
+                                {share > 6 && `${fmt(share,0)}%`}
+                              </div>
+                            </Tip>
+                          </div>
+                        ) : null;
+                      })}
+                    </div>
+                    <div className="flex gap-4 mt-2 px-1 text-xs" style={{color:"#9ca3af"}}>
+                      {zones.map(z => {
+                        const share = totalSelfMakes > 0 ? Math.round(selfMakesByZone[z] / totalSelfMakes * 100) : 0;
+                        return share > 0 ? (
+                          <span key={z}><span style={{color:zoneColor[z],fontWeight:600}}>{zoneLabel[z]}</span>: {share}%</span>
+                        ) : null;
+                      })}
+                    </div>
+                    {/* Verdict-Block — Abschlussurteil */}
+                    <div className="mt-4 pt-4 border-t" style={{borderColor:"#1e293b"}}>
+                      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 mb-2">
+                        <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Self-Creation Verdict</span>
+                        <span className="text-xl font-bold" style={{color:verdictColor,fontFamily:"'Oswald',sans-serif"}}>{verdictTier}</span>
+                        <span className="text-sm" style={{color:"#9ca3af"}}>·</span>
+                        <span className="text-sm" style={{color:"#e5e7eb"}}>
+                          <strong style={{color:verdictColor}}>{totalSelfMakes}</strong> of <strong>{totalMakes}</strong> makes self-created
+                          <span style={{color:"#6b7280"}}> ({fmt(overallSelfPct,1)}%)</span>
+                        </span>
+                        {creationPctl != null && (
+                          <Tip content={<div>Percentile within same-year cohort. Higher = more shots created off the dribble than peers.</div>}>
+                            <span className="text-sm cursor-help" style={{color:"#9ca3af"}}>·
+                              <span style={{color:"#cbd5e1"}}> Pctl: <strong style={{color:verdictColor}}>{Math.round(creationPctl)}</strong></span>
+                            </span>
                           </Tip>
-                        </div>
-                      ) : null;
-                    })}
+                        )}
+                      </div>
+                      <div className="text-xs leading-relaxed" style={{color:"#9ca3af"}}>{verdictDesc}</div>
+                    </div>
                   </div>
-                  <div className="flex gap-4 mt-2 px-1 text-xs" style={{color:"#9ca3af"}}>
-                    {zones.map(z => {
-                      const share = totalSelfMakes > 0 ? Math.round(selfMakesByZone[z] / totalSelfMakes * 100) : 0;
-                      return share > 0 ? (
-                        <span key={z}><span style={{color:zoneColor[z],fontWeight:600}}>{zoneLabel[z]}</span>: {share}%</span>
-                      ) : null;
-                    })}
-                  </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           </Sec>
         );
@@ -1855,11 +1890,15 @@ function ShootingTab({p}) {
                 {m?.formula&&<div className="mb-1"><span style={{color:"#94a3b8"}}>Formula:</span><br/><code className="text-xs" style={{color:"#7dd3fc"}}>{m.formula}</code></div>}
                 {m?.desc&&<div style={{color:"#cbd5e1"}}>{m.desc}</div>}
                 {key==="projNba3pa"&&<div className="mt-1" style={{color:"#94a3b8"}}>Volume: {bestTier} {p.pos} → {projFGA.toFixed(1)} FGA/game median.</div>}
+                {key==="touchPrior"&&touchPriorPctl!=null&&<div className="mt-1" style={{color:"#94a3b8"}}>Pctl <strong style={{color:"#cbd5e1"}}>{touchPriorPctl}</strong> within draft-eligible cohort (empirical approximation: 30-44% Range).</div>}
                 </div>
               }>
                 <div className="rounded-lg p-4 text-center cursor-help" style={{background:"#0d1117"}}>
                   <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#6b7280"}}>{l} <span style={{color:"#475569"}}>ⓘ</span></div>
                   <div className="text-3xl font-bold" style={{color:c,fontFamily:"'Oswald',sans-serif"}}>{v!=null?fmt(v):"—"}{key==="touchPrior"?"%":""}</div>
+                  {key==="touchPrior"&&touchPriorPctl!=null&&v!=null&&(
+                    <div className="text-xs mt-1" style={{color:"#9ca3af"}}>Pctl <strong style={{color:c}}>{touchPriorPctl}</strong></div>
+                  )}
                   {v==null&&<div className="text-xs mt-1" style={{color:"#475569"}}>insufficient data</div>}
                 </div>
               </Tip>
