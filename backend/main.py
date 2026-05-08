@@ -742,7 +742,7 @@ async def get_statistical_comps(
 
 
 @app.get("/api/comps/anthro/{slug}")
-async def get_anthro_comps(
+async def route_anthro_comps(
     slug: str,
     nba_only: bool = False,
     weight_adj: float = 0,
