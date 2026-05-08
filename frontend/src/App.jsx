@@ -79,8 +79,8 @@ const METHODS = {
   },
   funcAth: {
     name: "Functional Athleticism",
-    formula: "NCAA (mit PBP-Dunk):  0.25·FTr + 0.20·Dunk% + 0.20·Stocks + 0.20·RimFreq + 0.15·DRB%\nIntl / ältere NCAA: 0.30·FTr + 0.25·ORB% + 0.20·Stocks + 0.15·DRB% + 0.10·USG%",
-    desc: "How athletic gifts manifest in-game. Source-aware: NCAA-Spieler mit PBP-Dunk-Daten bekommen Dunk% + Rim-Frequenz als Finishing-Power-Signale. Internationals + ältere NCAA-Klassen ohne PBP nutzen ORB% als Vertical-Leap-Proxy (Reboundjäger sind explosiv) plus stärkeres FTr-Gewicht (Driving+Foul-Drawing). Beide Formeln summieren auf 1.0 und sind 0-100 percentiled — direkt vergleichbar.",
+    formula: "NCAA (with PBP dunk data):  0.25·FTr + 0.20·Dunk% + 0.20·Stocks + 0.20·RimFreq + 0.15·DRB%\nIntl / older NCAA (no PBP):    0.30·FTr + 0.25·ORB% + 0.20·Stocks + 0.15·DRB% + 0.10·USG%",
+    desc: "How athletic gifts manifest in-game. Source-aware: NCAA players with play-by-play data get Dunk% and rim frequency as direct finishing-power signals. Internationals and older NCAA classes without PBP use ORB% as a vertical-leap proxy (offensive rebounders explode over opponents) plus heavier FTr weighting (driving + foul-drawing). Both formulas sum to 1.0 and are 0-100 percentiled — directly comparable across sources.",
   },
   shootScore: {
     name: "Shooting",
@@ -3741,18 +3741,20 @@ function ScoutingTab({p, mode="scouting"}) {
   ];
 
   // ── Archetype ──
-  // Tobias 2026-05-06: jeder Archetype hat valueTier:
-  //   "high"   = Offense-Creator (Scoring/Passing) ODER Defense-Anchor
-  //   "medium" = Possession-Booster ODER Spacing-Creator
-  //   "low"    = Non-Specialized (kein dominantes Skill)
-  // Wird für links→rechts Sortierung im Roles-Tab genutzt.
+  // Tobias 2026-05-08: 4-tier value system (left → right = less → more valuable):
+  //   "low"        = Non-Specialized (no dominant skill — bench depth at best)
+  //   "medium"     = Possession-Boosters / Spacers / Defensive Specialists (valuable role players)
+  //   "high-spec"  = Scoring Specialists (high-volume scorers without elite creation/anchor profile)
+  //   "high-elite" = Offense Creators (Floor General, Initiator, Point Forward, Passing Hub) +
+  //                  Defense Anchors (Rim Protector, Stretch Rim Protector) — most valuable
+  // Used for left→right sort order in the Roles-Tab archetype grid.
   const archetype = p.archetype || "Unknown";
   const ARCH_MAP = {
     // === PLAYMAKER ===
     "Scoring Playmaker": {desc:"Dual-threat point guard. Scores at high volume while maintaining playmaking.",color:"#fbbf24",
-      pos:["Playmaker"],formula:"Scorer>65 + Playmaker>55",roles:["Scorer","Playmaker","Event Creator"], valueTier:"high"},
+      pos:["Playmaker"],formula:"Scorer>65 + Playmaker>55",roles:["Scorer","Playmaker","Event Creator"], valueTier:"high-spec"},
     "Floor General":       {desc:"Lead playmaker who creates for others. Elite AST/TO and half-court orchestration.",color:"#f97316",
-      pos:["Playmaker"],formula:"Playmaker>65",roles:["Playmaker","Connector","Event Creator"], valueTier:"high"},
+      pos:["Playmaker"],formula:"Playmaker>65",roles:["Playmaker","Connector","Event Creator"], valueTier:"high-elite"},
     "Spacing Guard":      {desc:"Off-ball scoring guard. Elite spacing with catch-and-shoot gravity.",color:"#22c55e",
       pos:["Playmaker"],formula:"Spacer>65",roles:["Spacer","Scorer","Micro-Spacer"], valueTier:"medium"},
     "Defensive Guard":     {desc:"Perimeter lockdown specialist. Ball pressure and steal ability define his value.",color:"#3b82f6",
@@ -3762,11 +3764,11 @@ function ScoutingTab({p, mode="scouting"}) {
 
     // === WING ===
     "Scoring Wing":        {desc:"Pure scorer without elite creation. Efficient finisher who needs structure.",color:"#ef4444",
-      pos:["Wing"],formula:"Scorer>65",roles:["Scorer","Driver","Spacer"], valueTier:"high"},
+      pos:["Wing"],formula:"Scorer>65",roles:["Scorer","Driver","Spacer"], valueTier:"high-spec"},
     "Initiator Wing":        {desc:"Creates own offense off the dribble. Self-creation specialist with high usage.",color:"#fb923c",
-      pos:["Wing","Playmaker"],formula:"Scorer>70 + Playmaker>55 + USG>26",roles:["Scorer","Driver","Helio-Scorer"], valueTier:"high"},
+      pos:["Wing","Playmaker"],formula:"Scorer>70 + Playmaker>55 + USG>26",roles:["Scorer","Driver","Helio-Scorer"], valueTier:"high-elite"},
     "Point Forward":       {desc:"Oversized playmaker. Creates mismatches with size + passing vision.",color:"#10b981",
-      pos:["Wing","Big"],formula:"Playmaker>60",roles:["Playmaker","Connector","Driver"], valueTier:"high"},
+      pos:["Wing","Big"],formula:"Playmaker>60",roles:["Playmaker","Connector","Driver"], valueTier:"high-elite"},
     "3-and-D Wing":        {desc:"Shoot and defend. The most valuable role player archetype in modern NBA.",color:"#3b82f6",
       pos:["Wing"],formula:"Spacer>65 + Def Score>55",roles:["Spacer","On-Ball D","Micro-Spacer"], valueTier:"medium"},
     "Defensive Wing":      {desc:"Elite wing defender. Versatile stopper who guards multiple positions.",color:"#06b6d4",
@@ -3778,13 +3780,13 @@ function ScoutingTab({p, mode="scouting"}) {
 
     // === BIG ===
     "Scoring Big":         {desc:"Offense-first big. Post scoring, face-up game, or finishing at the rim.",color:"#ef4444",
-      pos:["Big"],formula:"Scorer>65",roles:["Scorer","Crasher","Driver"], valueTier:"high"},
+      pos:["Big"],formula:"Scorer>65",roles:["Scorer","Crasher","Driver"], valueTier:"high-spec"},
     "Stretch Rim Protector":{desc:"Unicorn big — protects the rim AND stretches the floor. Extreme roster flexibility.",color:"#10b981",
-      pos:["Big"],formula:"Rim Protect>75 + Spacer>65",roles:["Rim Protect","Spacer","Rebounder"], valueTier:"high"},
+      pos:["Big"],formula:"Rim Protect>75 + Spacer>65",roles:["Rim Protect","Spacer","Rebounder"], valueTier:"high-elite"},
     "Rim Protector":       {desc:"Elite shot-blocker. Deters drives and alters shots. Anchors paint defense.",color:"#3b82f6",
-      pos:["Big"],formula:"Rim Protect>75",roles:["Rim Protect","Rebounder","Switch Pot."], valueTier:"high"},
+      pos:["Big"],formula:"Rim Protect>75",roles:["Rim Protect","Rebounder","Switch Pot."], valueTier:"high-elite"},
     "Passing Hub":       {desc:"Playmaking big — Jokic/Draymond archetype. Creates from post/elbow with vision.",color:"#fbbf24",
-      pos:["Big"],formula:"Playmaker>55",roles:["Playmaker","Connector","Driver"], valueTier:"high"},
+      pos:["Big"],formula:"Playmaker>55",roles:["Playmaker","Connector","Driver"], valueTier:"high-elite"},
     "Stretch Big":         {desc:"Shooting big who spaces the floor. Gravity from the 5 position.",color:"#22c55e",
       pos:["Big"],formula:"Spacer>65",roles:["Spacer","Rim Protect","Rebounder"], valueTier:"medium"},
     "Short Roll Playmaker":{desc:"Decision-making big in the short roll. Drives and passes from the elbow/FT line area.",color:"#f59e0b",
@@ -3835,24 +3837,39 @@ function ScoutingTab({p, mode="scouting"}) {
   const npvZ = pToZ(npv);
   const npvLabel = npvZ >= 1.2 ? "Elite Floor Raiser" : npvZ >= 0.3 ? "Winning Piece" : npvZ >= -0.3 ? "Role Dependent" : "High Maintenance";
   const npvColor = npvZ >= 1.2 ? "#22c55e" : npvZ >= 0.3 ? "#86efac" : npvZ >= -0.3 ? "#fbbf24" : "#ef4444";
-  const usageRole = p.cffr?.usageRole || "Unknown";
+  // Tobias 2026-05-08: cffr_usage_role wird in der Pipeline nur für NCAA berechnet
+  // (Step 10 läuft auf BartTorvik-DataFrame, 35.632 NCAA-Zeilen). Für Internationals
+  // berechnen wir den Bucket on-the-fly aus p.usg — gleiches Schema wie Pipeline:
+  // bins = [-inf, 15, 22, 28, +inf] → LowUsage / Finisher / Secondary / Primary.
+  const _bucketUsageRole = (u) => u >= 28 ? "Primary" : u >= 22 ? "Secondary" : u >= 15 ? "Finisher" : "LowUsage";
+  const usageRole = p.cffr?.usageRole && p.cffr.usageRole !== "nan"
+    ? p.cffr.usageRole
+    : (p.usg != null ? _bucketUsageRole(p.usg) : "Unknown");
 
-  // Tobias 2026-05-06: mode="scouting" zeigt Badges+Pillars+Possession Impact.
-  // mode="roles" zeigt Role Inference + Archetype Fit (im neuen Roles-Tab).
-  // Archetype-Sortierung im Roles-Mode: pro Position, low → high valueTier (links → rechts).
-  const archetypesByPosValue = (() => {
-    const valueOrder = {low: 0, medium: 1, high: 2};
-    const posOrder = {Playmaker: 0, Wing: 1, Big: 2};
-    return [...allArchetypes].sort(([_a, ia], [_b, ib]) => {
-      const posA = (ia.pos || ["Wing"])[0];
-      const posB = (ib.pos || ["Wing"])[0];
-      const pA = posOrder[posA] ?? 99;
-      const pB = posOrder[posB] ?? 99;
-      if (pA !== pB) return pA - pB;
-      const vA = valueOrder[ia.valueTier] ?? 99;
-      const vB = valueOrder[ib.valueTier] ?? 99;
-      return vA - vB;
+  // Tobias 2026-05-08: Archetypes per position grouped + sorted by value.
+  // Sort order within each position (left → right = less → more valuable):
+  //   low → medium → high-spec → high-elite
+  // "high-elite" = creators (Floor General/Initiator/Point Forward/Passing Hub) +
+  //                anchors (Rim Protector/Stretch Rim Protector) — most valuable.
+  // Backwards compat: legacy "high" tier mapped to high-spec.
+  const VALUE_ORDER = {low: 0, medium: 1, "high-spec": 2, high: 2, "high-elite": 3};
+  const POS_META = {
+    Playmaker: {color: "#a78bfa", label: "Playmakers"},
+    Wing:      {color: "#22c55e", label: "Wings"},
+    Big:       {color: "#3b82f6", label: "Bigs"},
+  };
+  const archetypesByPos = (() => {
+    const groups = {Playmaker: [], Wing: [], Big: []};
+    allArchetypes.forEach(([name, info]) => {
+      const pos = (info.pos || ["Wing"])[0];
+      if (groups[pos]) groups[pos].push([name, info]);
     });
+    Object.keys(groups).forEach(k => {
+      groups[k].sort(([_a, ia], [_b, ib]) =>
+        (VALUE_ORDER[ia.valueTier] ?? 99) - (VALUE_ORDER[ib.valueTier] ?? 99)
+      );
+    });
+    return groups;
   })();
 
   return (
@@ -3879,7 +3896,7 @@ function ScoutingTab({p, mode="scouting"}) {
       {/* ── PILLARS ── */}
       <Sec icon="🔬" title="The 5 Pillars" sub="Prospect DNA — position-adjusted percentile scores (0-100). These are the building blocks the model uses. Hover each for formula details.">
         {p.source !== "ncaa" && <div className="mb-3 px-3 py-1.5 rounded-lg text-xs" style={{background:"#f9731611",color:"#f97316",border:"1px solid #f9731633"}}>
-          ⚠ International data: Athleticism nutzt eine Dunk-freie Formel (FTr + ORB% + BLK% + USG%) auf gleicher 0-100 Skala — direkt vergleichbar mit NCAA-Spielern, die zusätzlich Dunk% als Signal bekommen. Box Creation, Shooting & Defense haben Source-spezifische Adjuster (FIBA-Pace, AST-Inflation), Werte sind position-percentiled und cross-source vergleichbar.
+          ⚠ International data: Athleticism uses a dunk-free formula (FTr + ORB% + Stocks + DRB% + USG%) on the same 0-100 scale — directly comparable to NCAA players, who additionally get Dunk% and rim frequency as signals. Box Creation, Shooting and Defense apply source-specific adjusters (FIBA pace, assist-rate inflation); all values are position-percentiled and cross-source comparable.
         </div>}
         <div className="grid grid-cols-5 gap-3">
           {pillars.map(pl=>(
@@ -4026,73 +4043,95 @@ function ScoutingTab({p, mode="scouting"}) {
             <div className="text-xs" style={{color:"#4b5563"}}>{p.roleVersatility>75?"Swiss Army Knife":p.roleVersatility>55?"Multi-Role":p.roleVersatility>35?"Specialist":"One-Dimensional"}</div>
           </div>
         )}
-        {/* Orange-only archetype system: rank distinction via weight/opacity, not color */}
+        {/* Orange-only archetype system: rank distinction via weight/opacity, not color.
+            Tobias 2026-05-08: split flat grid into 3 position sub-grids (Playmaker/Wing/Big),
+            each sorted left→right by value (Non-Specialized → Role Player → Specialist → Creator/Anchor). */}
         {(() => {
           const O = { pri:"#f97316", sec:"#fb923c", ter:"#fdba74" };
-          return (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-            {archetypesByPosValue.map(([name, info]) => {
-              const isPrimary   = primaryArch   === name;
-              const isSecondary = secondaryArch === name;
-              const isTertiary  = tertiaryArch  === name;
-              const isRanked    = isPrimary || isSecondary || isTertiary;
-              const isTriggered = pipelineTriggered.has(name);
-              const rank = isPrimary ? "PRIMARY" : isSecondary ? "2ND" : isTertiary ? "3RD" : null;
-              const posMatch = (info.pos||[]).includes(p.pos);
-              // Card color: unified orange scale, never green/red/blue for rank distinction
-              const cardColor = isPrimary ? O.pri : isSecondary ? O.sec : isTertiary ? O.ter : O.pri;
-              const cardOpacity = isPrimary ? 1.0 : isSecondary ? 0.78 : isTertiary ? 0.58 : isTriggered ? 0.4 : 0.22;
-              const showDesc = isRanked;
-              return (
-                <Tip key={name} content={
-                  <div>
-                    {/* Tooltip keeps original archetype color for reference */}
-                    <div className="font-bold mb-1" style={{color:info.color}}>{name}</div>
-                    <div className="mb-1" style={{color:"#cbd5e1"}}>{info.desc}</div>
-                    {info.formula&&<div className="mb-1"><span style={{color:"#94a3b8"}}>Formula:</span> <code className="text-xs" style={{color:"#7dd3fc"}}>{info.formula}</code></div>}
-                    {info.roles&&<div><span style={{color:"#94a3b8"}}>Key roles:</span> <span style={{color:"#f97316"}}>{info.roles.join(", ")}</span></div>}
-                    {info.pos&&<div className="mt-1"><span style={{color:"#94a3b8"}}>Positions:</span> <span style={{color:posMatch?"#86efac":"#fca5a5"}}>{info.pos.join(", ")}{posMatch?"":" ⚠ mismatch"}</span></div>}
-                    {isTriggered && !isRanked && <div className="mt-1 text-xs" style={{color:"#fb923c"}}>✓ Triggered by pipeline thresholds</div>}
+          const renderCard = ([name, info]) => {
+            const isPrimary   = primaryArch   === name;
+            const isSecondary = secondaryArch === name;
+            const isTertiary  = tertiaryArch  === name;
+            const isRanked    = isPrimary || isSecondary || isTertiary;
+            const isTriggered = pipelineTriggered.has(name);
+            const rank = isPrimary ? "PRIMARY" : isSecondary ? "2ND" : isTertiary ? "3RD" : null;
+            const posMatch = (info.pos||[]).includes(p.pos);
+            const cardColor = isPrimary ? O.pri : isSecondary ? O.sec : isTertiary ? O.ter : O.pri;
+            const cardOpacity = isPrimary ? 1.0 : isSecondary ? 0.78 : isTertiary ? 0.58 : isTriggered ? 0.4 : 0.22;
+            const showDesc = isRanked;
+            return (
+              <Tip key={name} content={
+                <div>
+                  <div className="font-bold mb-1" style={{color:info.color}}>{name}</div>
+                  <div className="mb-1" style={{color:"#cbd5e1"}}>{info.desc}</div>
+                  {info.formula&&<div className="mb-1"><span style={{color:"#94a3b8"}}>Formula:</span> <code className="text-xs" style={{color:"#7dd3fc"}}>{info.formula}</code></div>}
+                  {info.roles&&<div><span style={{color:"#94a3b8"}}>Key roles:</span> <span style={{color:"#f97316"}}>{info.roles.join(", ")}</span></div>}
+                  {info.pos&&<div className="mt-1"><span style={{color:"#94a3b8"}}>Positions:</span> <span style={{color:posMatch?"#86efac":"#fca5a5"}}>{info.pos.join(", ")}{posMatch?"":" ⚠ mismatch"}</span></div>}
+                  {isTriggered && !isRanked && <div className="mt-1 text-xs" style={{color:"#fb923c"}}>✓ Triggered by pipeline thresholds</div>}
+                </div>
+              }>
+                <div className={`rounded-lg cursor-help transition-all ${isPrimary ? "p-4" : isRanked ? "p-4" : "p-3"}`}
+                  style={{
+                    background: isRanked
+                      ? cardColor + (isPrimary ? "30" : isSecondary ? "22" : "16")
+                      : isTriggered ? "#f9731610" : "#0d1117",
+                    border: `${isPrimary?"2":"1"}px solid ${isRanked
+                      ? cardColor + (isPrimary ? "ff" : isSecondary ? "99" : "55")
+                      : isTriggered ? "#f9731633" : "#1f293766"}`,
+                    opacity: cardOpacity,
+                    boxShadow: isPrimary ? `0 0 12px ${O.pri}33` : "none",
+                  }}>
+                  <div className="flex items-center gap-2">
+                    {rank && (
+                      <span className={`text-xs px-1.5 py-0.5 rounded font-bold ${isPrimary ? "text-sm" : ""}`}
+                        style={{ background: cardColor + "33", color: cardColor, fontWeight: isPrimary ? 800 : isSecondary ? 700 : 600 }}>
+                        {rank}
+                      </span>
+                    )}
+                    {!rank && isTriggered && <span className="text-xs px-1.5 py-0.5 rounded" style={{background:"#f9731618",color:"#fb923c"}}>✓</span>}
+                    <div className={`truncate ${isRanked ? "text-sm" : "text-xs"}`}
+                      style={{ color: isRanked ? cardColor : isTriggered ? "#fb923c88" : "#4b5563", fontWeight: isPrimary ? 700 : isSecondary ? 600 : 500 }}>
+                      {name} <span style={{color:"#475569",fontWeight:400}}>ⓘ</span>
+                    </div>
                   </div>
-                }>
-                  <div className={`rounded-lg cursor-help transition-all ${isPrimary ? "p-4" : isRanked ? "p-4" : "p-3"}`}
-                    style={{
-                      background: isRanked
-                        ? cardColor + (isPrimary ? "30" : isSecondary ? "22" : "16")
-                        : isTriggered ? "#f9731610" : "#0d1117",
-                      border: `${isPrimary?"2":"1"}px solid ${isRanked
-                        ? cardColor + (isPrimary ? "ff" : isSecondary ? "99" : "55")
-                        : isTriggered ? "#f9731633" : "#1f293766"}`,
-                      opacity: cardOpacity,
-                      boxShadow: isPrimary ? `0 0 12px ${O.pri}33` : "none",
-                    }}>
-                    <div className="flex items-center gap-2">
-                      {rank && (
-                        <span className={`text-xs px-1.5 py-0.5 rounded font-bold ${isPrimary ? "text-sm" : ""}`}
-                          style={{
-                            background: cardColor + "33",
-                            color: cardColor,
-                            fontWeight: isPrimary ? 800 : isSecondary ? 700 : 600,
-                          }}>
-                          {rank}
-                        </span>
-                      )}
-                      {!rank && isTriggered && <span className="text-xs px-1.5 py-0.5 rounded" style={{background:"#f9731618",color:"#fb923c"}}>✓</span>}
-                      <div className={`truncate ${isRanked ? "text-sm" : "text-xs"}`}
-                        style={{
-                          color: isRanked ? cardColor : isTriggered ? "#fb923c88" : "#4b5563",
-                          fontWeight: isPrimary ? 700 : isSecondary ? 600 : 500,
-                        }}>
-                        {name} <span style={{color:"#475569",fontWeight:400}}>ⓘ</span>
+                  {showDesc && <div className="mt-1.5 text-xs leading-relaxed" style={{color: cardColor + "aa", fontWeight: isPrimary ? 500 : 400}}>{info.desc.split(".")[0]}.</div>}
+                  {showDesc && info.formula && <div className="mt-1 text-xs" style={{color:"#4b5563"}}>Trigger: {info.formula}</div>}
+                </div>
+              </Tip>
+            );
+          };
+          return (
+            <div className="space-y-5">
+              {["Playmaker", "Wing", "Big"].map(pos => {
+                const meta = POS_META[pos];
+                const isPlayerPos = p.pos === pos;
+                const archs = archetypesByPos[pos] || [];
+                return (
+                  <div key={pos}>
+                    {/* Position header with player-position highlight */}
+                    <div className="flex items-center justify-between mb-2 pb-1.5" style={{borderBottom:`1px solid ${meta.color}33`}}>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold uppercase tracking-widest" style={{color: meta.color}}>{meta.label}</span>
+                        {isPlayerPos && (
+                          <span className="text-xs px-2 py-0.5 rounded" style={{background: meta.color + "22", color: meta.color, border: `1px solid ${meta.color}55`}}>
+                            ← Player position
+                          </span>
+                        )}
+                        <span className="text-xs" style={{color:"#475569"}}>({archs.length})</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider" style={{color:"#4b5563"}}>
+                        <span>← less valuable</span>
+                        <span style={{color:"#1f2937"}}>·</span>
+                        <span>more valuable →</span>
                       </div>
                     </div>
-                    {showDesc && <div className="mt-1.5 text-xs leading-relaxed" style={{color: cardColor + "aa", fontWeight: isPrimary ? 500 : 400}}>{info.desc.split(".")[0]}.</div>}
-                    {showDesc && info.formula && <div className="mt-1 text-xs" style={{color:"#4b5563"}}>Trigger: {info.formula}</div>}
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                      {archs.map(renderCard)}
+                    </div>
                   </div>
-                </Tip>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
           );
         })()}
       </Sec>
@@ -5865,7 +5904,7 @@ const TABS = [
   {id:"body",label:"Body",icon:"📏"},
   {id:"mind",label:"Mind",icon:"🧠"},
   {id:"scouting",label:"Scouting",icon:"⭐"},
-  {id:"roles",label:"Roles & Archetypes",icon:"🎭"},
+  {id:"roles",label:"Roles & Archetypes",icon:"🧬"},
   {id:"comps",label:"Comps",icon:"⇄"},
   {id:"devtrajectory",label:"Development",icon:"📈"},
   {id:"projection",label:"Projection",icon:"◆"},
