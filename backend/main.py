@@ -454,91 +454,111 @@ async def health():
     }
 
 
-# ── COMBINE DATA ENDPOINT (Tobias 2026-05-06) ──
-# Liefert NBA Draft Combine Measurements für Body-Tab Scatter.
-# Tobias 2026-05-06 v2: Quelle gewechselt zu barttorvik_with_nba_and_combine_COMPLETE.csv
-# (1.358 Spieler 2003-2025 mit ht+ws+wt) — älteres CSV (510 Spieler) hatte zu wenig
-# Coverage und keine Class-Spieler ab 2022.
+# ── ANTHRO DATA ENDPOINT (Tobias 2026-05-06) ──
+# Liefert NBA-Anthropometrik für Body-Tab Scatter.
+# Drei Quellen gemerged:
+#   1. wingspan_all_2026-03-13.csv (1.835 NBA-Spieler) — primär für ht+ws (alle vollständig)
+#   2. barttorvik_with_nba_and_combine_COMPLETE.csv — für weight via Name-Match
+#   3. fallback: keine Combine-Daten → wt None (Frontend imputiert via Position-BMI)
+#
+# WICHTIG (Tobias 2026-05-06): Höhe IMMER mit Schuhen. Wingspan-CSV ist no-shoes,
+# wir addieren +1.0″ Standard-Schuh-Lift damit Display konsistent ist.
 _combine_cache = None
+SHOE_LIFT_INCHES = 1.25  # Tobias 2026-05-06: NBA-Standard-Schuh-Lift
 
 
-def _to_pos_group(combine_pos: str) -> str:
-    """Mappe Combine-Position-String zu unserem Pos-Group-Schema (Playmaker/Wing/Big).
-    Beispiele: 'PG-SG' → Playmaker, 'SF' → Wing, 'PF-C' → Big, 'C' → Big."""
-    if not combine_pos:
+def _to_pos_group(pos_str: str) -> str:
+    """Mappe Position-String → Playmaker/Wing/Big.
+    PG → Playmaker · C/PF-C → Big · alles andere (SG/SF/PF/F) → Wing."""
+    if not pos_str:
         return ""
-    cp = str(combine_pos).upper().strip()
-    # Big: enthält C oder PF (rein/hybrid)
-    if cp == "C" or cp == "PF-C" or cp == "C-PF" or cp.endswith("-C"):
+    cp = str(pos_str).upper().strip()
+    if cp == "C" or cp.endswith("-C") or cp == "PF-C" or cp == "C-PF":
         return "Big"
-    # Playmaker: PG-Hauptrolle (PG oder PG-SG)
-    if cp.startswith("PG") or cp == "PG":
+    if cp == "PG" or cp.startswith("PG"):
         return "Playmaker"
-    # Wing: alles andere (SG, SF, PF, SG-SF, SF-PF, PF-SF, etc.)
     return "Wing"
 
 
+def _to_inches(val) -> float:
+    try:
+        v = float(val) if val not in (None, "") else 0.0
+        return v
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _load_combine_data():
-    """Lazy-load + cache combine measurements als list[dict]."""
+    """Lazy-load + cache anthro measurements als list[dict].
+    Output pro Spieler: name, pos (group), pos_raw, ht (with shoes), ws, wt, ht_imputed, wt_imputed."""
     global _combine_cache
     if _combine_cache is not None:
         return _combine_cache
     import csv as _csv
-    # Primärquelle: COMPLETE.csv mit gematchten BartTorvik+Combine-Daten (1.358 Spieler 2003-2025).
-    # Liegt in backend/data/raw/ (parallel zur ohne-combine-Version für inject_skill_curve).
-    raw_dir = DATA_DIR.parent / "raw"  # backend/data/processed → backend/data/raw
-    csv_path = raw_dir / "barttorvik_with_nba_and_combine_COMPLETE.csv"
-    if not csv_path.exists():
-        # Fallback: kleinere standalone CSV (510 Spieler) im processed-Ordner
-        csv_path = DATA_DIR / "draft_combine_measurements.csv"
-    if not csv_path.exists():
+
+    raw_dir = DATA_DIR.parent / "raw"
+    wingspan_path = raw_dir / "wingspan_all_2026-03-13.csv"
+    combine_path = raw_dir / "barttorvik_with_nba_and_combine_COMPLETE.csv"
+
+    # Step 1: Build weight-lookup from Combine (per name_lower)
+    wt_lookup = {}
+    year_lookup = {}
+    if combine_path.exists():
+        with open(combine_path, "r", encoding="utf-8") as f:
+            for r in _csv.DictReader(f):
+                name = (r.get("player_name") or r.get("combine_player_name") or "").strip().lower()
+                if not name:
+                    continue
+                wt = _to_inches(r.get("combine_weight_lbs") or r.get("combine_wgt"))
+                if wt > 0 and name not in wt_lookup:
+                    wt_lookup[name] = round(wt, 1)
+                yr_str = r.get("combine_year") or r.get("SEASON")
+                try:
+                    if yr_str and name not in year_lookup:
+                        year_lookup[name] = int(float(yr_str))
+                except (TypeError, ValueError):
+                    pass
+
+    # Step 2: Wingspan CSV ist Primärquelle (1.835 Spieler mit ht+ws)
+    out = []
+    if not wingspan_path.exists():
         _combine_cache = []
         return _combine_cache
-    # Per player_id deduplizieren — manche Spieler haben mehrere College-Saisons,
-    # jede Zeile hat dieselben Combine-Daten. Wir wollen 1 Eintrag pro Person.
-    seen_pids = set()
-    out = []
-    with open(csv_path, "r", encoding="utf-8") as f:
-        reader = _csv.DictReader(f)
-        for r in reader:
-            # Combine-Felder aus COMPLETE.csv
-            ht = r.get("combine_height_inches") or r.get("combine_hgt_no_shoes")
-            ws = r.get("combine_wingspan_inches") or r.get("combine_wngspn")
-            wt = r.get("combine_weight_lbs") or r.get("combine_wgt")
-            try:
-                ht = float(ht) if ht else 0
-                ws = float(ws) if ws else 0
-                wt = float(wt) if wt else 0
-            except (TypeError, ValueError):
+
+    with open(wingspan_path, "r", encoding="utf-8") as f:
+        for r in _csv.DictReader(f):
+            ht_no_shoes = _to_inches(r.get("height_wo_shoes_in"))
+            ws = _to_inches(r.get("wingspan_in"))
+            if ht_no_shoes <= 0 or ws <= 0:
                 continue
-            if ht <= 0 or ws <= 0:
-                continue
-            pid = r.get("nba_player_id") or r.get("combine_player_id") or r.get("player_name")
-            if pid in seen_pids:
-                continue
-            seen_pids.add(pid)
-            year_str = r.get("combine_year") or r.get("SEASON")
-            try:
-                year = int(float(year_str)) if year_str else None
-            except (TypeError, ValueError):
-                year = None
-            raw_pos = r.get("combine_position") or ""
+            # Höhe mit Schuhen: +1.0″ Standard-Lift
+            ht_with_shoes = ht_no_shoes + SHOE_LIFT_INCHES
+            name = (r.get("player") or "").strip()
+            name_lower = name.lower()
+            wt = wt_lookup.get(name_lower)
+            year = year_lookup.get(name_lower)
+            raw_pos = r.get("primary_pos") or r.get("pos2") or ""
             out.append({
-                "name": r.get("player_name") or r.get("combine_player_name") or "",
+                "name": name,
                 "year": year,
                 "pos_raw": raw_pos,
-                "pos": _to_pos_group(raw_pos),  # Playmaker/Wing/Big für Frontend-Färbung
-                "ht": round(ht, 1),
+                "pos": _to_pos_group(raw_pos),
+                "ht": round(ht_with_shoes, 1),  # WITH shoes (NBA convention)
                 "ws": round(ws, 1),
-                "wt": round(wt, 1) if wt > 0 else None,
+                "wt": wt,  # None wenn nicht in Combine
+                "ht_source": "measured_with_shoe_lift",
+                "wt_source": "combine" if wt is not None else "imputed",
             })
+
     _combine_cache = out
     return out
 
 
 @app.get("/api/combine")
 async def get_combine_data():
-    """NBA Draft Combine measurements 2003-2025 für Body-Tab Scatter."""
+    """NBA Anthropometrik (Wingspan-DB 1.835 Spieler + Combine-Weights).
+    Höhe IMMER mit Schuhen (Wingspan-CSV no-shoes + 1.0″ Standard-Lift).
+    Weight-Daten aus Combine wenn vorhanden, sonst null (Frontend imputiert)."""
     return {"players": _load_combine_data()}
 
 

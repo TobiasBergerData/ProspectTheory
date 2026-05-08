@@ -4068,19 +4068,49 @@ function BodyTab({p}) {
       .catch(() => setCombineData([]));
   }, []);
 
-  // ── Wingspan estimate (Ape Index by position when not measured) ──
+  // Tobias 2026-05-06: bevorzuge echte NBA-Anthro-Daten wenn verfügbar.
+  // /api/combine liefert 1.835 NBA-Spieler aus wingspan_all_2026 + Combine-Weight.
+  // Wenn Spieler matched, nutze echte ht (mit Schuhen) / ws aus Wingspan-CSV.
+  // wt aus Combine wenn vorhanden, sonst Position-BMI-Imputation.
+  const combineMatch = (combineData || []).find(c =>
+    c.name && p.name && c.name.toLowerCase() === p.name.toLowerCase()
+  );
+
+  // ── Height (immer mit Schuhen): NBA-DB > Profile ──
+  const realHt = combineMatch?.ht ?? p.htIn;
+  const isHtVerified = !!combineMatch?.ht;
+
+  // ── Wingspan: NBA-DB > Profile > Ape-Index-Estimate ──
   const apeIndex = p.pos==="Playmaker" ? 1.04 : p.pos==="Big" ? 1.06 : 1.05;
-  const estimatedWs = p.ws || Math.round((p.htIn||78) * apeIndex * 10) / 10;
-  const isWsEstimated = !p.ws;
+  const estimatedWs = combineMatch?.ws ?? p.ws ?? Math.round((p.htIn||78) * apeIndex * 10) / 10;
+  const isWsVerified = !!combineMatch?.ws;
+  const isWsEstimated = !isWsVerified && !p.ws;
 
-  // ── Weight estimate (BMI by position when not measured) ──
-  const htM = (p.htIn||78) * 0.0254;
-  const posBmi = p.pos==="Playmaker" ? 23.5 : p.pos==="Big" ? 26.5 : 24.8;
-  const estimatedWt = p.wt || Math.round(posBmi * htM * htM * 2.205);
-  const isWtEstimated = !p.wt;
+  // ── Weight: Combine > Profile > empirische Regression ──
+  // Tobias 2026-05-06: BMI-Formel überschätzt junge Prospects systematisch
+  // (Boozer 250, Flagg 232 zu schwer). Stattdessen lineare Regression aus
+  // 528 echten Combine-Spielern (per Position):
+  //   Playmaker: wt = 3.10 × ht − 41.6
+  //   Wing:      wt = 4.38 × ht − 131.5
+  //   Big:       wt = 1.30 × ht + 137.8
+  // Plus Age-Discount: -8 lbs für Spieler <20J (Pre-Draft sind oft schlanker
+  // als der NBA-Combine-Durchschnitt der etablierten Prospects).
+  const isWtVerified = !!combineMatch?.wt;
+  const _imputeWt = () => {
+    const h = realHt || 78;
+    let wt;
+    if (p.pos === "Playmaker") wt = 3.10 * h - 41.6;
+    else if (p.pos === "Big")  wt = 1.30 * h + 137.8;
+    else                       wt = 4.38 * h - 131.5;  // Wing default
+    if (p.age != null && p.age < 20) wt -= 8;  // Pre-Draft-Discount für junge Spieler
+    return Math.max(150, Math.round(wt));
+  };
+  const estimatedWt = combineMatch?.wt ?? p.wt ?? _imputeWt();
+  const isWtEstimated = !isWtVerified && !p.wt;
 
-  const wsDelta = estimatedWs - (p.htIn||78);
-  const apeRatio = estimatedWs / (p.htIn||78);
+  // Tobias 2026-05-06: WS Delta gegen die echte (with-shoes) Höhe rechnen.
+  const wsDelta = estimatedWs - (realHt || 78);
+  const apeRatio = estimatedWs / (realHt || 78);
 
   // ── Frame labels ──
   const wsLabel = wsDelta > 6 ? "Elite Length / Disruptor Frame"
@@ -4372,11 +4402,28 @@ function BodyTab({p}) {
   return (
     <div className="space-y-5">
       {/* ── PHYSICAL PROFILE ── */}
-      <Sec icon="📏" title="Physical Profile" sub={`Measurements${isWsEstimated||isWtEstimated ? " (≈ = estimated from position average)" : ""}. Wingspan Delta = Wingspan − Height. NBA average: +3" to +4".`}>
-        {/* Tobias 2026-05-06: Wingspan Ratio entfernt — redundant zu WS Delta. */}
+      <Sec icon="📏" title="Physical Profile" sub={(() => {
+        // Tobias 2026-05-06: Höhe IMMER mit Schuhen (+1.25″ NBA-Standard).
+        // Sub-Title differenziert nach Datenquelle: NBA-verified vs. position-imputed.
+        const hasVerified = isHtVerified || isWsVerified || isWtVerified;
+        const allVerified = isHtVerified && isWsVerified && isWtVerified;
+        if (allVerified) return `All measurements verified from NBA database. Height with shoes (+1.25″ NBA standard). Wingspan Delta = Wingspan − Height. NBA average: +3″ to +4″.`;
+        if (hasVerified) {
+          const verified = [
+            isHtVerified && "height", isWsVerified && "wingspan", isWtVerified && "weight",
+          ].filter(Boolean).join(" / ");
+          return `${verified.charAt(0).toUpperCase() + verified.slice(1)} verified from NBA database. Other values (≈) imputed from position average. Height with shoes (+1.25″ NBA standard).`;
+        }
+        return `Class 2026 prospect — no NBA combine data yet. All values (≈) estimated from height + position average. Height with shoes (+1.25″ NBA standard).`;
+      })()}>
+        {/* Tobias 2026-05-06: Wingspan Ratio entfernt — redundant zu WS Delta.
+            "≈" nur wenn der Wert tatsächlich imputed ist (nicht aus NBA-DB). */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
           {[
-            ["Height", htDisplay, false, null],
+            ["Height", isHtVerified
+                ? `${Math.floor(realHt/12)}'${(Math.round((realHt - Math.floor(realHt/12)*12)*10)/10)}"`
+                : htDisplay,
+              !isHtVerified && !p.htIn, null],
             ["Weight", `${estimatedWt} lbs`, isWtEstimated, wtLabelColor],
             ["Wingspan", `${estimatedWs.toFixed(1)}"`, isWsEstimated, wsLabelColor],
             ["WS Delta", `${wsDelta >= 0 ? "+" : ""}${wsDelta.toFixed(1)}"`, false, wsLabelColor],
