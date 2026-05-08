@@ -4055,8 +4055,7 @@ function ScoutingTab({p}) {
   );
 }
 function BodyTab({p}) {
-  const [wsFilter, setWsFilter] = useState(0);   // wingspan filter: ±inches to highlight range
-  const [wtFilter, setWtFilter] = useState(0);   // weight filter: ±lbs
+  // Tobias 2026-05-06: Slider entfernt — Scatter ist statisch, Spieler-Position fix.
   const [combineData, setCombineData] = useState(null);
   const [hoverPlayer, setHoverPlayer] = useState(null);
   const [hoverPos, setHoverPos] = useState({x:0,y:0});
@@ -4268,18 +4267,8 @@ function BodyTab({p}) {
     const yS=(ht)=>PAD.t+IH-(ht-minHt)/(maxHt-minHt)*IH;  // Y = height
 
     const pHt = p.htIn || (hasCombine ? p.comb?.height_ns : null);
-    const pWsBase = p.ws || (hasCombine ? p.comb?.wingspan : null) || estimatedWs;
+    const pWs = p.ws || (hasCombine ? p.comb?.wingspan : null) || estimatedWs;
     const pWt = p.wt || (hasCombine ? p.comb?.weight : null) || estimatedWt;
-
-    // Wingspan slider dynamically MOVES the player dot on the X axis
-    // wsFilter > 0: simulates "what if wingspan were ±N inches different"
-    const pWs = pWsBase + wsFilter;  // dynamic adjustment!
-
-    // Highlight combine players near the simulated wingspan
-    const inRange = (c) => {
-      if (wsFilter === 0) return true;
-      return Math.abs((c.ws||0) - pWs) <= 2;  // within 2" of simulated position
-    };
 
     const rSize = (wt) => {
       if (!wt) return 4;
@@ -4333,30 +4322,27 @@ function BodyTab({p}) {
           <text x={12} y={H/2} textAnchor="middle" fontSize={10} fill="#6b7280" transform={`rotate(-90,12,${H/2})`}>Height (no shoes)</text>
           {/* All combine players: X=ws, Y=ht */}
           {pts.filter(c=>c.name!==p.name).map((c,i)=>{
-            const hilit = inRange(c) && wsFilter > 0;
             const r = rSize(c.wt);
-            const baseColor = hilit ? "#60a5fa" : "#374151";
-            const stroke = hilit ? "#93c5fd" : "#4b5563";
             return (
               <circle key={i} cx={xS(c.ws)} cy={yS(c.ht)} r={r}
-                fill={baseColor} stroke={stroke} strokeWidth={0.5} opacity={hilit?0.85:0.55}
+                fill="#374151" stroke="#4b5563" strokeWidth={0.5} opacity={0.55}
                 style={{cursor:"pointer"}}
                 onMouseEnter={(e)=>{setHoverPlayer(c);setHoverPos({x:e.clientX,y:e.clientY});}}
+                onMouseMove={(e)=>{if(hoverPlayer){setHoverPos({x:e.clientX,y:e.clientY});}}}
                 onMouseLeave={()=>setHoverPlayer(null)}/>
             );
           })}
-          {/* Prospect dot — moves with wsFilter! */}
+          {/* Prospect dot — statisch (kein Slider mehr) */}
           {pHt && pWs && (
             <g>
               <circle cx={xS(pWs)} cy={yS(pHt)} r={rSize(pWt)+3} fill="#f97316" stroke="#fed7aa" strokeWidth={2} opacity={0.95}/>
               <text x={xS(pWs)+12} y={yS(pHt)+4} fontSize={11} fontWeight="bold" fill="#f97316"
-                style={{textShadow:"0 0 4px #000"}}>{p.name?.split(" ").slice(-1)[0]}{wsFilter!==0?` (${wsFilter>0?"+":""}${wsFilter}")`:""}</text>
+                style={{textShadow:"0 0 4px #000"}}>{p.name?.split(" ").slice(-1)[0]}</text>
             </g>
           )}
         </svg>
         <div style={{fontSize:10,color:"#6b7280",marginTop:4,display:"flex",gap:16,flexWrap:"wrap"}}>
           <span><span style={{display:"inline-block",width:10,height:10,borderRadius:"50%",background:"#374151",marginRight:4,verticalAlign:"middle"}}/>All combine players (hover for details)</span>
-          {(wsFilter>0||wtFilter>0)&&<span style={{color:"#60a5fa"}}><span style={{display:"inline-block",width:10,height:10,borderRadius:"50%",background:"#60a5fa",marginRight:4,verticalAlign:"middle"}}/>Within filter range</span>}
           <span><span style={{display:"inline-block",width:10,height:10,borderRadius:"50%",background:"#f97316",marginRight:4,verticalAlign:"middle"}}/>Selected player</span>
           <span style={{color:"#4b5563"}}>Point size ∝ weight · {pts.length} combine players (2000–2024)</span>
         </div>
@@ -4421,29 +4407,9 @@ function BodyTab({p}) {
         <ProspectScatter />
       </Sec>
 
-      {/* ── NBA COMBINE SCATTER ── */}
+      {/* ── NBA COMBINE SCATTER (Tobias 2026-05-06: Slider entfernt) ── */}
       <Sec icon="📐" title="NBA Combine: Wingspan vs. Height"
-        sub="All draft combine attendees 2000–2024. X = wingspan, Y = height, point size = weight. Orange dot = selected player (moves with slider). Drag the wingspan slider to simulate different wingspans and see where the player would land.">
-        {/* Wingspan simulator slider */}
-        <div className="mb-4 p-4 rounded-xl" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
-          <div className="flex justify-between mb-1.5">
-            <span className="text-sm font-semibold" style={{color:"#e5e7eb"}}>Wingspan Simulator</span>
-            <span className="text-sm font-bold" style={{color:wsFilter!==0?"#f97316":"#6b7280"}}>
-              {wsFilter===0 ? `Actual: ${(p.ws||estimatedWs).toFixed(1)}"` : `Simulated: ${((p.ws||estimatedWs)+wsFilter).toFixed(1)}" (${wsFilter>0?"+":""}${wsFilter}")`}
-            </span>
-          </div>
-          <input type="range" min={-4} max={6} step={0.5} value={wsFilter}
-            onChange={e=>setWsFilter(+e.target.value)} className="w-full" style={{accentColor:"#f97316"}}/>
-          <div className="flex justify-between text-xs mt-1" style={{color:"#374151"}}>
-            <span>−4" shorter</span><span>Actual wingspan</span><span>+6" longer</span>
-          </div>
-          {wsFilter!==0&&(
-            <div className="mt-2 flex justify-end">
-              <button onClick={()=>setWsFilter(0)}
-                className="text-xs px-3 py-1 rounded" style={{background:"#1f2937",color:"#9ca3af"}}>Reset to actual</button>
-            </div>
-          )}
-        </div>
+        sub="All draft combine attendees 2000–2024. X = wingspan, Y = height, point size = weight. Orange dot = selected player. Hover any dot for name, height, wingspan, weight.">
         <CombineScatter />
       </Sec>
     </div>
@@ -4489,6 +4455,12 @@ function CompsTab({p}) {
 
   const simColor = (s) => s > 85 ? "#22c55e" : s > 70 ? "#86efac" : s > 55 ? "#3b82f6" : s > 40 ? "#fbbf24" : "#ef4444";
 
+  // Tobias 2026-05-06: Shooting-Pct-Färbung wie im Shooting-Tab Court.
+  // Konsistente Skalen: TS%, FT%, 3P% mit standard NBA-Schwellen.
+  const tsColor = (v) => v == null ? "#9ca3af" : v >= 60 ? "#22c55e" : v >= 55 ? "#86efac" : v >= 50 ? "#fbbf24" : "#ef4444";
+  const ftColor = (v) => v == null ? "#9ca3af" : v >= 80 ? "#22c55e" : v >= 72 ? "#86efac" : v >= 65 ? "#fbbf24" : "#ef4444";
+  const tpColor = (v) => v == null ? "#9ca3af" : v >= 38 ? "#22c55e" : v >= 34 ? "#86efac" : v >= 30 ? "#fbbf24" : "#ef4444";
+
   return (
     <div className="space-y-5">
       {/* Header + controls */}
@@ -4528,12 +4500,12 @@ function CompsTab({p}) {
                 <td className="px-2" style={{color:"#f97316"}}>—</td>
                 <td className="px-2 font-semibold" style={{color:valColor(p.pctl?.bpm)}}>{fmt(p.bpm)}</td>
                 <td className="px-2">{fmt(p.usg)}</td>
-                <td className="px-2">{fmt(p.ts)}</td>
+                <td className="px-2 font-semibold" style={{color:tsColor(p.ts)}}>{fmt(p.ts)}</td>
                 <td className="px-2">{fmt(p.astP)}</td>
                 <td className="px-2">{fmt(p.stlP)}</td>
                 <td className="px-2">{fmt(p.blkP)}</td>
-                <td className="px-2">{fmt(p.tp)}</td>
-                <td className="px-2">{fmt(p.ft)}</td>
+                <td className="px-2 font-semibold" style={{color:tpColor(p.tp)}}>{fmt(p.tp)}</td>
+                <td className="px-2 font-semibold" style={{color:ftColor(p.ft)}}>{fmt(p.ft)}</td>
                 <td className="px-2">{p.actual ? <TierBadge tier={p.actual}/> : "—"}</td>
               </tr>
 
@@ -4565,12 +4537,12 @@ function CompsTab({p}) {
                     </td>
                     <td className="px-2" style={{color:valColor(c.bpm>10?90:c.bpm>5?65:35)}}>{fmt(c.bpm)}</td>
                     <td className="px-2">{fmt(c.usg)}</td>
-                    <td className="px-2">{fmt(c.ts)}</td>
+                    <td className="px-2" style={{color:tsColor(c.ts)}}>{fmt(c.ts)}</td>
                     <td className="px-2">{fmt(c.astP)}</td>
                     <td className="px-2">{fmt(c.stlP)}</td>
                     <td className="px-2">{fmt(c.blkP)}</td>
-                    <td className="px-2">{fmt(c.tp)}</td>
-                    <td className="px-2">{fmt(c.ft)}</td>
+                    <td className="px-2" style={{color:tpColor(c.tp)}}>{fmt(c.tp)}</td>
+                    <td className="px-2" style={{color:ftColor(c.ft)}}>{fmt(c.ft)}</td>
                     <td className="px-2"><TierBadge tier={c.tier}/></td>
                   </tr>
                 );
