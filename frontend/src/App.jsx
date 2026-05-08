@@ -3741,60 +3741,60 @@ function ScoutingTab({p, mode="scouting"}) {
   ];
 
   // ── Archetype ──
-  // Tobias 2026-05-08: 4-tier value system (left → right = less → more valuable):
-  //   "low"        = Non-Specialized (no dominant skill — bench depth at best)
-  //   "medium"     = Possession-Boosters / Spacers / Defensive Specialists (valuable role players)
-  //   "high-spec"  = Scoring Specialists (high-volume scorers without elite creation/anchor profile)
-  //   "high-elite" = Offense Creators (Floor General, Initiator, Point Forward, Passing Hub) +
-  //                  Defense Anchors (Rim Protector, Stretch Rim Protector) — most valuable
-  // Used for left→right sort order in the Roles-Tab archetype grid.
+  // Tobias 2026-05-08: Empirical frequency-based ordering instead of normative value tier.
+  // freqPct = how often each archetype is the PRIMARY assignment within its position group,
+  // computed from 46,253 player-seasons (NCAA + Intl, 2008-2026).
+  // Sort order in Roles-Tab grid: most common (left) → rarest (right).
+  // Reasoning: rarity = how strict are the position-specific role thresholds. Rare archetypes
+  // are objectively harder to find — that's a useful scouting signal without making
+  // normative claims about which archetype is "more valuable".
   const archetype = p.archetype || "Unknown";
   const ARCH_MAP = {
-    // === PLAYMAKER ===
-    "Scoring Playmaker": {desc:"Dual-threat point guard. Scores at high volume while maintaining playmaking.",color:"#fbbf24",
-      pos:["Playmaker"],formula:"Scorer>65 + Playmaker>55",roles:["Scorer","Playmaker","Event Creator"], valueTier:"high-spec"},
-    "Floor General":       {desc:"Lead playmaker who creates for others. Elite AST/TO and half-court orchestration.",color:"#f97316",
-      pos:["Playmaker"],formula:"Playmaker>65",roles:["Playmaker","Connector","Event Creator"], valueTier:"high-elite"},
-    "Spacing Guard":      {desc:"Off-ball scoring guard. Elite spacing with catch-and-shoot gravity.",color:"#22c55e",
-      pos:["Playmaker"],formula:"Spacer>65",roles:["Spacer","Scorer","Micro-Spacer"], valueTier:"medium"},
-    "Defensive Guard":     {desc:"Perimeter lockdown specialist. Ball pressure and steal ability define his value.",color:"#3b82f6",
-      pos:["Playmaker"],formula:"Def Score>60",roles:["On-Ball D","Connector","Zone Pressure"], valueTier:"medium"},
+    // === PLAYMAKER (n=12,089) ===
     "Non-Specialized Playmaker": {desc:"Versatile guard without a dominant skill. Jack-of-all-trades backcourt piece.",color:"#8b5cf6",
-      pos:["Playmaker"],formula:"Default (no role >65)",roles:["Scorer","Playmaker","Spacer"], valueTier:"low"},
+      pos:["Playmaker"],formula:"Default (no role >70)",roles:["Scorer","Playmaker","Spacer"], freqPct:52.8},
+    "Scoring Playmaker": {desc:"Dual-threat point guard. Scores at high volume while maintaining playmaking.",color:"#fbbf24",
+      pos:["Playmaker"],formula:"Scorer>70 + Playmaker>55",roles:["Scorer","Playmaker","Event Creator"], freqPct:19.5},
+    "Spacing Guard":      {desc:"Off-ball scoring guard. Elite spacing with catch-and-shoot gravity.",color:"#22c55e",
+      pos:["Playmaker"],formula:"Spacer>70",roles:["Spacer","Scorer","Micro-Spacer"], freqPct:15.5},
+    "Defensive Guard":     {desc:"Perimeter lockdown specialist. Ball pressure and steal ability define his value.",color:"#3b82f6",
+      pos:["Playmaker"],formula:"Defender>70",roles:["On-Ball D","Connector","Zone Pressure"], freqPct:7.9},
+    "Floor General":       {desc:"Lead playmaker who creates for others. Elite AST/TO and half-court orchestration.",color:"#f97316",
+      pos:["Playmaker"],formula:"Playmaker>75",roles:["Playmaker","Connector","Event Creator"], freqPct:4.3},
 
-    // === WING ===
-    "Scoring Wing":        {desc:"Pure scorer without elite creation. Efficient finisher who needs structure.",color:"#ef4444",
-      pos:["Wing"],formula:"Scorer>65",roles:["Scorer","Driver","Spacer"], valueTier:"high-spec"},
-    "Initiator Wing":        {desc:"Creates own offense off the dribble. Self-creation specialist with high usage.",color:"#fb923c",
-      pos:["Wing","Playmaker"],formula:"Scorer>70 + Playmaker>55 + USG>26",roles:["Scorer","Driver","Helio-Scorer"], valueTier:"high-elite"},
-    "Point Forward":       {desc:"Oversized playmaker. Creates mismatches with size + passing vision.",color:"#10b981",
-      pos:["Wing","Big"],formula:"Playmaker>60",roles:["Playmaker","Connector","Driver"], valueTier:"high-elite"},
-    "3-and-D Wing":        {desc:"Shoot and defend. The most valuable role player archetype in modern NBA.",color:"#3b82f6",
-      pos:["Wing"],formula:"Spacer>65 + Def Score>55",roles:["Spacer","On-Ball D","Micro-Spacer"], valueTier:"medium"},
-    "Defensive Wing":      {desc:"Elite wing defender. Versatile stopper who guards multiple positions.",color:"#06b6d4",
-      pos:["Wing"],formula:"Def Score>65",roles:["On-Ball D","Switch Pot.","Zone Pressure"], valueTier:"medium"},
-    "Slashing Wing":       {desc:"Attacks the rim with explosiveness. Transition weapon and paint-pressure.",color:"#f43f5e",
-      pos:["Wing"],formula:"Driver>65",roles:["Driver","Crasher","On-Ball D"], valueTier:"medium"},
+    // === WING (n=26,838) ===
     "Non-Specialized Wing":      {desc:"Multi-tool forward without a dominant skill. Fits many lineups.",color:"#a78bfa",
-      pos:["Wing"],formula:"Default (no role >65)",roles:["Connector","Switch Pot.","Spacer"], valueTier:"low"},
+      pos:["Wing"],formula:"Default (no role >65)",roles:["Connector","Switch Pot.","Spacer"], freqPct:44.2},
+    "Scoring Wing":        {desc:"Pure scorer without elite creation. Efficient finisher who needs structure.",color:"#ef4444",
+      pos:["Wing"],formula:"Scorer>75",roles:["Scorer","Driver","Spacer"], freqPct:21.1},
+    "Defensive Wing":      {desc:"Elite wing defender. Versatile stopper who guards multiple positions.",color:"#06b6d4",
+      pos:["Wing"],formula:"Defender>65",roles:["On-Ball D","Switch Pot.","Zone Pressure"], freqPct:11.1},
+    "Point Forward":       {desc:"Oversized playmaker. Creates mismatches with size + passing vision.",color:"#10b981",
+      pos:["Wing","Big"],formula:"Playmaker>65",roles:["Playmaker","Connector","Driver"], freqPct:11.1},
+    "Slashing Wing":       {desc:"Attacks the rim with explosiveness. Transition weapon and paint-pressure.",color:"#f43f5e",
+      pos:["Wing"],formula:"Driver>70",roles:["Driver","Crasher","On-Ball D"], freqPct:5.9},
+    "Initiator Wing":        {desc:"Creates own offense off the dribble. Self-creation specialist with high usage.",color:"#fb923c",
+      pos:["Wing","Playmaker"],formula:"Scorer>70 + Playmaker>55 + USG>26",roles:["Scorer","Driver","Helio-Scorer"], freqPct:4.0},
+    "3-and-D Wing":        {desc:"Shoot and defend — the modern NBA's most coveted role-player template.",color:"#3b82f6",
+      pos:["Wing"],formula:"Spacer>65 + Defender>65",roles:["Spacer","On-Ball D","Micro-Spacer"], freqPct:2.6},
 
-    // === BIG ===
-    "Scoring Big":         {desc:"Offense-first big. Post scoring, face-up game, or finishing at the rim.",color:"#ef4444",
-      pos:["Big"],formula:"Scorer>65",roles:["Scorer","Crasher","Driver"], valueTier:"high-spec"},
-    "Stretch Rim Protector":{desc:"Unicorn big — protects the rim AND stretches the floor. Extreme roster flexibility.",color:"#10b981",
-      pos:["Big"],formula:"Rim Protect>75 + Spacer>65",roles:["Rim Protect","Spacer","Rebounder"], valueTier:"high-elite"},
-    "Rim Protector":       {desc:"Elite shot-blocker. Deters drives and alters shots. Anchors paint defense.",color:"#3b82f6",
-      pos:["Big"],formula:"Rim Protect>75",roles:["Rim Protect","Rebounder","Switch Pot."], valueTier:"high-elite"},
-    "Passing Hub":       {desc:"Playmaking big — Jokic/Draymond archetype. Creates from post/elbow with vision.",color:"#fbbf24",
-      pos:["Big"],formula:"Playmaker>55",roles:["Playmaker","Connector","Driver"], valueTier:"high-elite"},
-    "Stretch Big":         {desc:"Shooting big who spaces the floor. Gravity from the 5 position.",color:"#22c55e",
-      pos:["Big"],formula:"Spacer>65",roles:["Spacer","Rim Protect","Rebounder"], valueTier:"medium"},
-    "Short Roll Playmaker":{desc:"Decision-making big in the short roll. Drives and passes from the elbow/FT line area.",color:"#f59e0b",
-      pos:["Big"],formula:"Driver>55 + Playmaker>55",roles:["Driver","Playmaker","Connector"], valueTier:"medium"},
-    "Glass Cleaner":       {desc:"Dominant rebounder. Controls both boards and creates second chances.",color:"#f97316",
-      pos:["Big"],formula:"Rebounder>65",roles:["Rebounder","Crasher","Rim Protect"], valueTier:"medium"},
+    // === BIG (n=5,866) ===
     "Non-Specialized Big":          {desc:"Well-rounded center without a standout skill. Does a bit of everything.",color:"#60a5fa",
-      pos:["Big"],formula:"Default (no role >65)",roles:["Rim Protect","Rebounder","Switch Pot."], valueTier:"low"},
+      pos:["Big"],formula:"Default (no role >65)",roles:["Rim Protect","Rebounder","Switch Pot."], freqPct:31.5},
+    "Stretch Big":         {desc:"Shooting big who spaces the floor. Gravity from the 5 position.",color:"#22c55e",
+      pos:["Big"],formula:"Spacer>65",roles:["Spacer","Rim Protect","Rebounder"], freqPct:21.3},
+    "Rim Protector":       {desc:"Elite shot-blocker. Deters drives and alters shots. Anchors paint defense.",color:"#3b82f6",
+      pos:["Big"],formula:"Rim Protect>75",roles:["Rim Protect","Rebounder","Switch Pot."], freqPct:13.1},
+    "Short Roll Playmaker":{desc:"Decision-making big in the short roll. Drives and passes from the elbow/FT line area.",color:"#f59e0b",
+      pos:["Big"],formula:"Driver>55 + Playmaker>55",roles:["Driver","Playmaker","Connector"], freqPct:10.2},
+    "Passing Hub":       {desc:"Playmaking big — Jokic/Draymond archetype. Creates from post/elbow with vision.",color:"#fbbf24",
+      pos:["Big"],formula:"Playmaker>55",roles:["Playmaker","Connector","Driver"], freqPct:9.1},
+    "Glass Cleaner":       {desc:"Dominant rebounder. Controls both boards and creates second chances.",color:"#f97316",
+      pos:["Big"],formula:"Rebounder>65",roles:["Rebounder","Crasher","Rim Protect"], freqPct:8.3},
+    "Stretch Rim Protector":{desc:"Unicorn big — protects the rim AND stretches the floor. Extreme roster flexibility.",color:"#10b981",
+      pos:["Big"],formula:"Rim Protect>75 + Spacer>65",roles:["Rim Protect","Spacer","Rebounder"], freqPct:3.4},
+    "Scoring Big":         {desc:"Offense-first big. Post scoring, face-up game, or finishing at the rim.",color:"#ef4444",
+      pos:["Big"],formula:"Scorer>65",roles:["Scorer","Crasher","Driver"], freqPct:3.2},
   };
   const allArchetypes = Object.entries(ARCH_MAP);
   // Pipeline-triggered archetypes (from 10c assign_archetypes_multi)
@@ -3846,28 +3846,27 @@ function ScoutingTab({p, mode="scouting"}) {
     ? p.cffr.usageRole
     : (p.usg != null ? _bucketUsageRole(p.usg) : "Unknown");
 
-  // Tobias 2026-05-08: Archetypes per position grouped + sorted by value.
-  // Sort order within each position (left → right = less → more valuable):
-  //   low → medium → high-spec → high-elite
-  // "high-elite" = creators (Floor General/Initiator/Point Forward/Passing Hub) +
-  //                anchors (Rim Protector/Stretch Rim Protector) — most valuable.
-  // Backwards compat: legacy "high" tier mapped to high-spec.
-  const VALUE_ORDER = {low: 0, medium: 1, "high-spec": 2, high: 2, "high-elite": 3};
+  // Tobias 2026-05-08: Sort archetypes by empirical frequency within position.
+  // Most common (left) → rarest (right). Frequency = % of position-peers (n=46k profiles)
+  // who triggered this archetype as their PRIMARY assignment in the pipeline.
+  // Reasoning: rarity is a useful objective scouting signal — strict thresholds = rarer
+  // archetype = harder to find on draft day. No normative claim about value attached.
   const POS_META = {
     Playmaker: {color: "#a78bfa", label: "Playmakers"},
     Wing:      {color: "#22c55e", label: "Wings"},
     Big:       {color: "#3b82f6", label: "Bigs"},
   };
+  const freqLabel = (pct) => pct >= 20 ? "common" : pct >= 8 ? "uncommon" : pct >= 4 ? "rare" : "very rare";
+  const freqColor = (pct) => pct >= 20 ? "#9ca3af" : pct >= 8 ? "#fbbf24" : pct >= 4 ? "#fb923c" : "#ef4444";
   const archetypesByPos = (() => {
     const groups = {Playmaker: [], Wing: [], Big: []};
     allArchetypes.forEach(([name, info]) => {
       const pos = (info.pos || ["Wing"])[0];
       if (groups[pos]) groups[pos].push([name, info]);
     });
+    // Sort: highest freqPct first (= most common left). Default to 50 if missing.
     Object.keys(groups).forEach(k => {
-      groups[k].sort(([_a, ia], [_b, ib]) =>
-        (VALUE_ORDER[ia.valueTier] ?? 99) - (VALUE_ORDER[ib.valueTier] ?? 99)
-      );
+      groups[k].sort(([_a, ia], [_b, ib]) => (ib.freqPct ?? 50) - (ia.freqPct ?? 50));
     });
     return groups;
   })();
@@ -4027,7 +4026,7 @@ function ScoutingTab({p, mode="scouting"}) {
       </Sec>
 
       {/* ── ARCHETYPE — formulas + secondary/tertiary + versatility ── */}
-      <Sec icon="🏷" title="NBA Archetype Fit" sub="What NBA role does this prospect project into? PRIMARY = pipeline-assigned from dominant role scores. 2ND/3RD = best alternative fits within the same position group. Colored = triggered by pipeline thresholds. Greyed = not triggered.">
+      <Sec icon="🏷" title="NBA Archetype Fit" sub="What NBA role does this prospect project into? PRIMARY = pipeline-assigned from dominant role scores. 2ND/3RD = best alternative fits within the same position group. Cards are sorted within each position by empirical frequency (most common ← → rarest), measured across 46k player-seasons. Colored = triggered by pipeline thresholds. Greyed = not triggered.">
         {/* Role Versatility — prominent */}
         {p.roleVersatility != null && (
           <div className="flex items-center gap-4 mb-4 p-3 rounded-lg" style={{background:"#0d111788",border:"1px solid #1f2937"}}>
@@ -4065,6 +4064,7 @@ function ScoutingTab({p, mode="scouting"}) {
                   <div className="font-bold mb-1" style={{color:info.color}}>{name}</div>
                   <div className="mb-1" style={{color:"#cbd5e1"}}>{info.desc}</div>
                   {info.formula&&<div className="mb-1"><span style={{color:"#94a3b8"}}>Formula:</span> <code className="text-xs" style={{color:"#7dd3fc"}}>{info.formula}</code></div>}
+                  {info.freqPct != null && <div className="mb-1"><span style={{color:"#94a3b8"}}>Frequency:</span> <span style={{color: freqColor(info.freqPct)}}>{info.freqPct}% of {(info.pos||["Wing"])[0]}s</span> <span style={{color:"#475569"}}>({freqLabel(info.freqPct)})</span></div>}
                   {info.roles&&<div><span style={{color:"#94a3b8"}}>Key roles:</span> <span style={{color:"#f97316"}}>{info.roles.join(", ")}</span></div>}
                   {info.pos&&<div className="mt-1"><span style={{color:"#94a3b8"}}>Positions:</span> <span style={{color:posMatch?"#86efac":"#fca5a5"}}>{info.pos.join(", ")}{posMatch?"":" ⚠ mismatch"}</span></div>}
                   {isTriggered && !isRanked && <div className="mt-1 text-xs" style={{color:"#fb923c"}}>✓ Triggered by pipeline thresholds</div>}
@@ -4096,6 +4096,13 @@ function ScoutingTab({p, mode="scouting"}) {
                   </div>
                   {showDesc && <div className="mt-1.5 text-xs leading-relaxed" style={{color: cardColor + "aa", fontWeight: isPrimary ? 500 : 400}}>{info.desc.split(".")[0]}.</div>}
                   {showDesc && info.formula && <div className="mt-1 text-xs" style={{color:"#4b5563"}}>Trigger: {info.formula}</div>}
+                  {info.freqPct != null && (
+                    <div className="mt-1 text-[10px] flex items-center gap-1" style={{color: isRanked ? cardColor + "88" : "#475569"}}>
+                      <span>{info.freqPct}%</span>
+                      <span style={{color: isRanked ? cardColor + "55" : "#374151"}}>·</span>
+                      <span>{freqLabel(info.freqPct)}</span>
+                    </div>
+                  )}
                 </div>
               </Tip>
             );
@@ -4120,9 +4127,9 @@ function ScoutingTab({p, mode="scouting"}) {
                         <span className="text-xs" style={{color:"#475569"}}>({archs.length})</span>
                       </div>
                       <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider" style={{color:"#4b5563"}}>
-                        <span>← less valuable</span>
+                        <span>← common</span>
                         <span style={{color:"#1f2937"}}>·</span>
-                        <span>more valuable →</span>
+                        <span>rare →</span>
                       </div>
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
