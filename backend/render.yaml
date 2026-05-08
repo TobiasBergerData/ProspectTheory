@@ -1,25 +1,41 @@
+# ⚠ ACHTUNG: Diese Datei wird derzeit von Render IGNORIERT.
+# Render nutzt das Build-Command aus dem Dashboard (Settings → Build & Deploy),
+# NICHT diese render.yaml. Das hat 2026-05-06 zu mehreren Verwirrungen geführt
+# (Build-Command-Updates hier hatten keine Wirkung).
+#
+# Diese Datei wird als REFERENZ behalten:
+# - Welche Build-Schritte aktuell aktiv sind (für Code-Reviewer + neue Dev)
+# - Spec für künftiges Migrations-Ziel: Render-Service via render.yaml managen
+#
+# Wenn Build-Command geändert wird, MUSS Dashboard mit-aktualisiert werden.
+# Source-of-Truth: Render Dashboard → prospecttheory-api → Settings.
+#
+# Aktueller Dashboard-Build-Command (Stand 2026-05-06):
+#   pip install -r requirements.txt
+#   && python -u build_db.py
+#   && python -u inject_shot_creation_spectrum.py
+#   && python -u inject_leverage_efficiency.py
+#   && python -u inject_skill_curve.py
+#   && python -u inject_ogbpm.py
+#
+# Aktueller Dashboard-Start-Command:
+#   uvicorn main:app --host 0.0.0.0 --port $PORT
+#
+# Aktueller Dashboard-Health-Check-Path: /
+#
+# Siehe ARCHITECTURE.md (Sektion 7: Render-Quirks) für Hintergrund.
+
 services:
   - type: web
     name: prospecttheory-api
     runtime: python
     plan: free
-    # Tobias 2026-05-05: Build-on-Deploy.
-    # Source-JSONs (alle <90 MB → kein LFS noetig) sind im Repo.
-    # build_db.py mergt sie zu prospecttheory.db auf Render-Disk (~30-60s).
-    # Vorteile: kein LFS-Bandwidth-Limit, verlustfreie volle DB.
-    # Falls LFS noch fuer andere Files genutzt: Pull bleibt drin als Fallback.
-    buildCommand: |
-      git lfs install --local || true
-      git lfs pull || true
-      pip install -r requirements.txt
-      python build_db.py
-      # Tobias 2026-05-05: Mind-Tab + Skill-Curve + OGBPM benötigen post-DB-Inject.
-      # Reihenfolge wichtig: shotCreation muss VOR leverageEff laufen (Voraussetzung).
-      python inject_shot_creation_spectrum.py
-      python inject_leverage_efficiency.py
-      python inject_skill_curve.py
-      python inject_ogbpm.py
+    # Tobias 2026-05-06: One-Liner mit && (Render-Dashboard-Feld nimmt nur Single-Line).
+    # `python -u` für unbuffered Output, sonst wirken die Inject-Scripts hängend.
+    # `git lfs` weggelassen — nicht installiert auf Render-Container, war Fehlerquelle.
+    buildCommand: pip install -r requirements.txt && python -u build_db.py && python -u inject_shot_creation_spectrum.py && python -u inject_leverage_efficiency.py && python -u inject_skill_curve.py && python -u inject_ogbpm.py
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /
     envVars:
       - key: DATA_DIR
         value: ./data/processed

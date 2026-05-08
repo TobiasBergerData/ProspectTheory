@@ -79,8 +79,8 @@ const METHODS = {
   },
   funcAth: {
     name: "Functional Athleticism",
-    formula: "pctl(FTr) × 0.40 + pctl(Dunk%) × 0.30 + pctl(OREB%) × 0.30",
-    desc: "How athletic gifts manifest in-game. Driving to the rim, dunking, offensive glass work. Not raw combine athleticism — functional NBA translation.",
+    formula: "NCAA (mit PBP-Dunk):  0.25·FTr + 0.20·Dunk% + 0.20·Stocks + 0.20·RimFreq + 0.15·DRB%\nIntl / ältere NCAA: 0.30·FTr + 0.25·ORB% + 0.20·Stocks + 0.15·DRB% + 0.10·USG%",
+    desc: "How athletic gifts manifest in-game. Source-aware: NCAA-Spieler mit PBP-Dunk-Daten bekommen Dunk% + Rim-Frequenz als Finishing-Power-Signale. Internationals + ältere NCAA-Klassen ohne PBP nutzen ORB% als Vertical-Leap-Proxy (Reboundjäger sind explosiv) plus stärkeres FTr-Gewicht (Driving+Foul-Drawing). Beide Formeln summieren auf 1.0 und sind 0-100 percentiled — direkt vergleichbar.",
   },
   shootScore: {
     name: "Shooting",
@@ -1554,7 +1554,8 @@ function ShootingTab({p}) {
   const sc = (pct, type) => {
     if (pct == null) return "#6b7280";
     if (type==="3pt") return pct>38?"#22c55e":pct>34?"#86efac":pct>30?"#fbbf24":"#ef4444";
-    if (type==="ft") return pct>80?"#22c55e":pct>72?"#86efac":pct>65?"#fbbf24":"#ef4444";
+    if (type==="ft")  return pct>80?"#22c55e":pct>72?"#86efac":pct>65?"#fbbf24":"#ef4444";
+    if (type==="ts")  return pct>60?"#22c55e":pct>55?"#86efac":pct>50?"#fbbf24":"#ef4444";  // Tobias 2026-05-06: TS% eigene Schwellen
     if (type==="mid"||type==="2pt") return pct>50?"#22c55e":pct>45?"#86efac":pct>40?"#fbbf24":"#ef4444";
     if (type==="rim") return pct>65?"#22c55e":pct>58?"#86efac":pct>50?"#fbbf24":"#ef4444";
     return "#e5e7eb";
@@ -1621,7 +1622,7 @@ function ShootingTab({p}) {
                 {/* TS% — rechte untere Ecke, Gesamteffizienz */}
                 <g opacity={ts!=null?1:0.3}>
                   <text x="490" y="355" textAnchor="middle" fill="#a78bfa" style={{fontSize:13,fontWeight:"bold"}}>TS%</text>
-                  <text x="490" y="385" textAnchor="middle" fill={sc(ts,"ft")} style={{fontSize:24,fontWeight:"bold"}}>{ts!=null?`${fmt(ts)}%`:"—"}</text>
+                  <text x="490" y="385" textAnchor="middle" fill={sc(ts,"ts")} style={{fontSize:24,fontWeight:"bold"}}>{ts!=null?`${fmt(ts)}%`:"—"}</text>
                   <text x="490" y="403" textAnchor="middle" fill="#6b7280" style={{fontSize:10}}>overall</text>
                 </g>
               </svg>
@@ -1670,7 +1671,7 @@ function ShootingTab({p}) {
                 {/* TS% — rechte untere Ecke, Gesamteffizienz neben 3PT (Tobias 2026-05-06) */}
                 <g opacity={ts!=null?1:0.3}>
                   <text x="490" y="355" textAnchor="middle" fill="#a78bfa" style={{fontSize:13,fontWeight:"bold"}}>TS%</text>
-                  <text x="490" y="385" textAnchor="middle" fill={sc(ts,"ft")} style={{fontSize:24,fontWeight:"bold"}}>{ts!=null?`${fmt(ts)}%`:"—"}</text>
+                  <text x="490" y="385" textAnchor="middle" fill={sc(ts,"ts")} style={{fontSize:24,fontWeight:"bold"}}>{ts!=null?`${fmt(ts)}%`:"—"}</text>
                   <text x="490" y="403" textAnchor="middle" fill="#6b7280" style={{fontSize:10}}>overall</text>
                 </g>
               </svg>
@@ -3699,7 +3700,10 @@ function ProjectionTab({p}) {
     </div>
   );
 }
-function ScoutingTab({p}) {
+function ScoutingTab({p, mode="scouting"}) {
+  // Tobias 2026-05-06: mode="scouting" (default) zeigt Badges + Pillars + Possession Impact.
+  // mode="roles" zeigt nur Role Inference Matrix + NBA Archetype Fit.
+  // Beide nutzen die gleiche Berechnung damit kein Duplikat-Code entsteht.
   const badges = { green: p.badges || [], yellow: p.yellowBadges || [], red: p.redFlags || [] };
   const allBadges = [...badges.green, ...badges.yellow, ...badges.red];
 
@@ -3737,48 +3741,58 @@ function ScoutingTab({p}) {
   ];
 
   // ── Archetype ──
+  // Tobias 2026-05-06: jeder Archetype hat valueTier:
+  //   "high"   = Offense-Creator (Scoring/Passing) ODER Defense-Anchor
+  //   "medium" = Possession-Booster ODER Spacing-Creator
+  //   "low"    = Non-Specialized (kein dominantes Skill)
+  // Wird für links→rechts Sortierung im Roles-Tab genutzt.
   const archetype = p.archetype || "Unknown";
   const ARCH_MAP = {
+    // === PLAYMAKER ===
     "Scoring Playmaker": {desc:"Dual-threat point guard. Scores at high volume while maintaining playmaking.",color:"#fbbf24",
-      pos:["Playmaker"],formula:"Scorer>65 + Playmaker>55",roles:["Scorer","Playmaker","Event Creator"]},
+      pos:["Playmaker"],formula:"Scorer>65 + Playmaker>55",roles:["Scorer","Playmaker","Event Creator"], valueTier:"high"},
     "Floor General":       {desc:"Lead playmaker who creates for others. Elite AST/TO and half-court orchestration.",color:"#f97316",
-      pos:["Playmaker"],formula:"Playmaker>65",roles:["Playmaker","Connector","Event Creator"]},
+      pos:["Playmaker"],formula:"Playmaker>65",roles:["Playmaker","Connector","Event Creator"], valueTier:"high"},
     "Spacing Guard":      {desc:"Off-ball scoring guard. Elite spacing with catch-and-shoot gravity.",color:"#22c55e",
-      pos:["Playmaker"],formula:"Spacer>65",roles:["Spacer","Scorer","Micro-Spacer"]},
+      pos:["Playmaker"],formula:"Spacer>65",roles:["Spacer","Scorer","Micro-Spacer"], valueTier:"medium"},
     "Defensive Guard":     {desc:"Perimeter lockdown specialist. Ball pressure and steal ability define his value.",color:"#3b82f6",
-      pos:["Playmaker"],formula:"Def Score>60",roles:["On-Ball D","Connector","Zone Pressure"]},
-    "Non-Specialized Playmaker":         {desc:"Versatile guard without a dominant skill. Jack-of-all-trades backcourt piece.",color:"#8b5cf6",
-      pos:["Playmaker"],formula:"Default (no role >65)",roles:["Scorer","Playmaker","Spacer"]},
+      pos:["Playmaker"],formula:"Def Score>60",roles:["On-Ball D","Connector","Zone Pressure"], valueTier:"medium"},
+    "Non-Specialized Playmaker": {desc:"Versatile guard without a dominant skill. Jack-of-all-trades backcourt piece.",color:"#8b5cf6",
+      pos:["Playmaker"],formula:"Default (no role >65)",roles:["Scorer","Playmaker","Spacer"], valueTier:"low"},
+
+    // === WING ===
     "Scoring Wing":        {desc:"Pure scorer without elite creation. Efficient finisher who needs structure.",color:"#ef4444",
-      pos:["Wing"],formula:"Scorer>65",roles:["Scorer","Driver","Spacer"]},
-    "3-and-D Wing":        {desc:"Shoot and defend. The most valuable role player archetype in modern NBA.",color:"#3b82f6",
-      pos:["Wing"],formula:"Spacer>65 + Def Score>55",roles:["Spacer","On-Ball D","Micro-Spacer"]},
-    "Defensive Wing":      {desc:"Elite wing defender. Versatile stopper who guards multiple positions.",color:"#06b6d4",
-      pos:["Wing"],formula:"Def Score>65",roles:["On-Ball D","Switch Pot.","Zone Pressure"]},
-    "Slashing Wing":       {desc:"Attacks the rim with explosiveness. Transition weapon and paint-pressure.",color:"#f43f5e",
-      pos:["Wing"],formula:"Driver>65",roles:["Driver","Crasher","On-Ball D"]},
-    "Non-Specialized Wing":      {desc:"Multi-tool forward without a dominant skill. Fits many lineups.",color:"#a78bfa",
-      pos:["Wing"],formula:"Default (no role >65)",roles:["Connector","Switch Pot.","Spacer"]},
-    "Point Forward":       {desc:"Oversized playmaker. Creates mismatches with size + passing vision.",color:"#10b981",
-      pos:["Wing","Big"],formula:"Playmaker>60",roles:["Playmaker","Connector","Driver"]},
-    "Stretch Big":         {desc:"Shooting big who spaces the floor. Gravity from the 5 position.",color:"#22c55e",
-      pos:["Big"],formula:"Spacer>65",roles:["Spacer","Rim Protect","Rebounder"]},
-    "Stretch Rim Protector":{desc:"Unicorn big — protects the rim AND stretches the floor. Extreme roster flexibility.",color:"#10b981",
-      pos:["Big"],formula:"Rim Protect>75 + Spacer>65",roles:["Rim Protect","Spacer","Rebounder"]},
-    "Rim Protector":       {desc:"Elite shot-blocker. Deters drives and alters shots. Anchors paint defense.",color:"#3b82f6",
-      pos:["Big"],formula:"Rim Protect>75",roles:["Rim Protect","Rebounder","Switch Pot."]},
-    "Passing Hub":       {desc:"Playmaking big — Jokic/Draymond archetype. Creates from post/elbow with vision.",color:"#fbbf24",
-      pos:["Big"],formula:"Playmaker>55",roles:["Playmaker","Connector","Driver"]},
-    "Short Roll Playmaker":{desc:"Decision-making big in the short roll. Drives and passes from the elbow/FT line area.",color:"#f59e0b",
-      pos:["Big"],formula:"Driver>55 + Playmaker>55",roles:["Driver","Playmaker","Connector"]},
-    "Glass Cleaner":       {desc:"Dominant rebounder. Controls both boards and creates second chances.",color:"#f97316",
-      pos:["Big"],formula:"Rebounder>65",roles:["Rebounder","Crasher","Rim Protect"]},
-    "Scoring Big":         {desc:"Offense-first big. Post scoring, face-up game, or finishing at the rim.",color:"#ef4444",
-      pos:["Big"],formula:"Scorer>65",roles:["Scorer","Crasher","Driver"]},
-    "Non-Specialized Big":          {desc:"Well-rounded center without a standout skill. Does a bit of everything.",color:"#60a5fa",
-      pos:["Big"],formula:"Default (no role >65)",roles:["Rim Protect","Rebounder","Switch Pot."]},
+      pos:["Wing"],formula:"Scorer>65",roles:["Scorer","Driver","Spacer"], valueTier:"high"},
     "Initiator Wing":        {desc:"Creates own offense off the dribble. Self-creation specialist with high usage.",color:"#fb923c",
-      pos:["Wing","Playmaker"],formula:"Scorer>70 + Playmaker>55 + USG>26",roles:["Scorer","Driver","Helio-Scorer"]},
+      pos:["Wing","Playmaker"],formula:"Scorer>70 + Playmaker>55 + USG>26",roles:["Scorer","Driver","Helio-Scorer"], valueTier:"high"},
+    "Point Forward":       {desc:"Oversized playmaker. Creates mismatches with size + passing vision.",color:"#10b981",
+      pos:["Wing","Big"],formula:"Playmaker>60",roles:["Playmaker","Connector","Driver"], valueTier:"high"},
+    "3-and-D Wing":        {desc:"Shoot and defend. The most valuable role player archetype in modern NBA.",color:"#3b82f6",
+      pos:["Wing"],formula:"Spacer>65 + Def Score>55",roles:["Spacer","On-Ball D","Micro-Spacer"], valueTier:"medium"},
+    "Defensive Wing":      {desc:"Elite wing defender. Versatile stopper who guards multiple positions.",color:"#06b6d4",
+      pos:["Wing"],formula:"Def Score>65",roles:["On-Ball D","Switch Pot.","Zone Pressure"], valueTier:"medium"},
+    "Slashing Wing":       {desc:"Attacks the rim with explosiveness. Transition weapon and paint-pressure.",color:"#f43f5e",
+      pos:["Wing"],formula:"Driver>65",roles:["Driver","Crasher","On-Ball D"], valueTier:"medium"},
+    "Non-Specialized Wing":      {desc:"Multi-tool forward without a dominant skill. Fits many lineups.",color:"#a78bfa",
+      pos:["Wing"],formula:"Default (no role >65)",roles:["Connector","Switch Pot.","Spacer"], valueTier:"low"},
+
+    // === BIG ===
+    "Scoring Big":         {desc:"Offense-first big. Post scoring, face-up game, or finishing at the rim.",color:"#ef4444",
+      pos:["Big"],formula:"Scorer>65",roles:["Scorer","Crasher","Driver"], valueTier:"high"},
+    "Stretch Rim Protector":{desc:"Unicorn big — protects the rim AND stretches the floor. Extreme roster flexibility.",color:"#10b981",
+      pos:["Big"],formula:"Rim Protect>75 + Spacer>65",roles:["Rim Protect","Spacer","Rebounder"], valueTier:"high"},
+    "Rim Protector":       {desc:"Elite shot-blocker. Deters drives and alters shots. Anchors paint defense.",color:"#3b82f6",
+      pos:["Big"],formula:"Rim Protect>75",roles:["Rim Protect","Rebounder","Switch Pot."], valueTier:"high"},
+    "Passing Hub":       {desc:"Playmaking big — Jokic/Draymond archetype. Creates from post/elbow with vision.",color:"#fbbf24",
+      pos:["Big"],formula:"Playmaker>55",roles:["Playmaker","Connector","Driver"], valueTier:"high"},
+    "Stretch Big":         {desc:"Shooting big who spaces the floor. Gravity from the 5 position.",color:"#22c55e",
+      pos:["Big"],formula:"Spacer>65",roles:["Spacer","Rim Protect","Rebounder"], valueTier:"medium"},
+    "Short Roll Playmaker":{desc:"Decision-making big in the short roll. Drives and passes from the elbow/FT line area.",color:"#f59e0b",
+      pos:["Big"],formula:"Driver>55 + Playmaker>55",roles:["Driver","Playmaker","Connector"], valueTier:"medium"},
+    "Glass Cleaner":       {desc:"Dominant rebounder. Controls both boards and creates second chances.",color:"#f97316",
+      pos:["Big"],formula:"Rebounder>65",roles:["Rebounder","Crasher","Rim Protect"], valueTier:"medium"},
+    "Non-Specialized Big":          {desc:"Well-rounded center without a standout skill. Does a bit of everything.",color:"#60a5fa",
+      pos:["Big"],formula:"Default (no role >65)",roles:["Rim Protect","Rebounder","Switch Pot."], valueTier:"low"},
   };
   const allArchetypes = Object.entries(ARCH_MAP);
   // Pipeline-triggered archetypes (from 10c assign_archetypes_multi)
@@ -3823,8 +3837,27 @@ function ScoutingTab({p}) {
   const npvColor = npvZ >= 1.2 ? "#22c55e" : npvZ >= 0.3 ? "#86efac" : npvZ >= -0.3 ? "#fbbf24" : "#ef4444";
   const usageRole = p.cffr?.usageRole || "Unknown";
 
+  // Tobias 2026-05-06: mode="scouting" zeigt Badges+Pillars+Possession Impact.
+  // mode="roles" zeigt Role Inference + Archetype Fit (im neuen Roles-Tab).
+  // Archetype-Sortierung im Roles-Mode: pro Position, low → high valueTier (links → rechts).
+  const archetypesByPosValue = (() => {
+    const valueOrder = {low: 0, medium: 1, high: 2};
+    const posOrder = {Playmaker: 0, Wing: 1, Big: 2};
+    return [...allArchetypes].sort(([_a, ia], [_b, ib]) => {
+      const posA = (ia.pos || ["Wing"])[0];
+      const posB = (ib.pos || ["Wing"])[0];
+      const pA = posOrder[posA] ?? 99;
+      const pB = posOrder[posB] ?? 99;
+      if (pA !== pB) return pA - pB;
+      const vA = valueOrder[ia.valueTier] ?? 99;
+      const vB = valueOrder[ib.valueTier] ?? 99;
+      return vA - vB;
+    });
+  })();
+
   return (
     <div className="space-y-5">
+      {mode === "scouting" && (<>
       {/* ── BADGES ── */}
       <Sec icon="🏅" title="Skill Badges" sub="Position-filtered skill signals. Green = elite NBA-translatable skills. Yellow = development potential. Red = bust warning signals. Hover each badge for the statistical trigger and scouting context.">
         {p.source !== "ncaa" && <div className="mb-3 px-3 py-1.5 rounded-lg inline-block text-xs" style={{background:"#3b82f622",color:"#60a5fa",border:"1px solid #3b82f644"}}>International Adjuster Active</div>}
@@ -3846,7 +3879,7 @@ function ScoutingTab({p}) {
       {/* ── PILLARS ── */}
       <Sec icon="🔬" title="The 5 Pillars" sub="Prospect DNA — position-adjusted percentile scores (0-100). These are the building blocks the model uses. Hover each for formula details.">
         {p.source !== "ncaa" && <div className="mb-3 px-3 py-1.5 rounded-lg text-xs" style={{background:"#f9731611",color:"#f97316",border:"1px solid #f9731633"}}>
-          ⚠ International data gaps: Athleticism uses Dunk Rate which is unavailable for most intl players — score may undervalue athletic intl prospects. Box Creation uses USG%, TS%, AST% — same formula for NCAA and international players. No shot zone data needed.
+          ⚠ International data: Athleticism nutzt eine Dunk-freie Formel (FTr + ORB% + BLK% + USG%) auf gleicher 0-100 Skala — direkt vergleichbar mit NCAA-Spielern, die zusätzlich Dunk% als Signal bekommen. Box Creation, Shooting & Defense haben Source-spezifische Adjuster (FIBA-Pace, AST-Inflation), Werte sind position-percentiled und cross-source vergleichbar.
         </div>}
         <div className="grid grid-cols-5 gap-3">
           {pillars.map(pl=>(
@@ -3884,12 +3917,22 @@ function ScoutingTab({p}) {
               <div className="px-4 py-2 rounded-lg text-sm font-bold" style={{background:npvColor+"22",color:npvColor,border:`1px solid ${npvColor}44`}}>{npvLabel}</div>
             </div>
           </div>
-          {/* NPV scale bar */}
-          <div className="relative h-6 rounded-full overflow-hidden mb-2" style={{background:"linear-gradient(90deg,#ef4444,#fbbf24,#86efac,#22c55e)"}}>
+          {/* NPV scale bar — Tobias 2026-05-06: Segments aligned mit Tier-Schwellen
+              45 / 55 / 70 (vorher linear gradient → Marker bei 50 zeigte "Role Dependent"
+              im optisch hellgrünen Bereich). Jetzt 4 diskrete Segmente passend zur Logik. */}
+          <div className="relative h-6 rounded-full overflow-hidden mb-2 flex" style={{background:"#1f2937"}}>
+            <div style={{width:"45%", background:"#ef4444"}}/>
+            <div style={{width:"10%", background:"#fbbf24"}}/>
+            <div style={{width:"15%", background:"#86efac"}}/>
+            <div style={{width:"30%", background:"#22c55e"}}/>
             <div className="absolute top-0 bottom-0 w-1.5 rounded" style={{left:`${Math.max(2,Math.min(98,npv))}%`,background:"#fff",boxShadow:"0 0 6px #fff"}}/>
           </div>
-          <div className="flex justify-between text-xs" style={{color:"#4b5563"}}>
-            <span>High Maintenance</span><span>Role Dependent</span><span>Winning Piece</span><span>Elite Floor Raiser</span>
+          <div className="relative h-4 text-xs" style={{color:"#4b5563"}}>
+            <span style={{position:"absolute",left:"0%"}}>High Maintenance</span>
+            <span style={{position:"absolute",left:"45%",transform:"translateX(-50%)"}}>45</span>
+            <span style={{position:"absolute",left:"55%",transform:"translateX(-50%)"}}>55</span>
+            <span style={{position:"absolute",left:"70%",transform:"translateX(-50%)"}}>70</span>
+            <span style={{position:"absolute",right:"0%"}}>Elite Floor Raiser</span>
           </div>
         </div>
         {/* Usage Role — prominent */}
@@ -3933,7 +3976,9 @@ function ScoutingTab({p}) {
           })}
         </div>
       </Sec>
+      </>)}
 
+      {mode === "roles" && (<>
       {/* ── ROLE INFERENCE MATRIX — hoverable with inputs ── */}
       <Sec icon="📊" title="Role Inference Matrix" sub="14 NBA roles scored as z-scores vs position peers. ≥+2.0σ = Elite (top 2%), ≥+1.0σ = Impact, ≤-1.0σ = Liability. Hover each role for the statistical inputs that drive it.">
         {roleGroups.map(grp=>(
@@ -3986,7 +4031,7 @@ function ScoutingTab({p}) {
           const O = { pri:"#f97316", sec:"#fb923c", ter:"#fdba74" };
           return (
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-            {allArchetypes.map(([name, info]) => {
+            {archetypesByPosValue.map(([name, info]) => {
               const isPrimary   = primaryArch   === name;
               const isSecondary = secondaryArch === name;
               const isTertiary  = tertiaryArch  === name;
@@ -4051,6 +4096,7 @@ function ScoutingTab({p}) {
           );
         })()}
       </Sec>
+      </>)}
     </div>
   );
 }
@@ -5819,6 +5865,7 @@ const TABS = [
   {id:"body",label:"Body",icon:"📏"},
   {id:"mind",label:"Mind",icon:"🧠"},
   {id:"scouting",label:"Scouting",icon:"⭐"},
+  {id:"roles",label:"Roles & Archetypes",icon:"🎭"},
   {id:"comps",label:"Comps",icon:"⇄"},
   {id:"devtrajectory",label:"Development",icon:"📈"},
   {id:"projection",label:"Projection",icon:"◆"},
@@ -6404,7 +6451,8 @@ export default function App() {
             {tab==="shooting"&&<ShootingTab p={p}/>}
             {tab==="body"&&<BodyTab p={p}/>}
             {tab==="mind"&&<MindTab p={p}/>}
-            {tab==="scouting"&&<ScoutingTab p={p}/>}
+            {tab==="scouting"&&<ScoutingTab p={p} mode="scouting"/>}
+            {tab==="roles"&&<ScoutingTab p={p} mode="roles"/>}
             {tab==="comps"&&<CompsTab p={p}/>}
             {tab==="devtrajectory"&&<DevTrajectoryTab p={p}/>}
             {tab==="projection"&&<ProjectionTab p={p}/>}
