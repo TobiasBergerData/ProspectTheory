@@ -193,11 +193,12 @@ def main():
     # Map from DB profile name → skill curve
     skill_curves: dict[str, dict] = {}
 
+    # Tobias 2026-05-06 IDENTITY-FIX: SELECT player_id (PK!) statt name.
     conn = sqlite3.connect(DB)
-    profiles = conn.execute("SELECT name, data FROM profiles").fetchall()
+    profiles = conn.execute("SELECT player_id, name, data FROM profiles").fetchall()
     conn.close()
 
-    for name_key, blob in profiles:
+    for player_id, name_key, blob in profiles:
         try:
             p = json.loads(zlib.decompress(blob))
             p_name = p.get("name", "").strip()
@@ -209,7 +210,7 @@ def main():
         if not seasons_bt:
             # Try fuzzy: maybe slight name variation
             n_no_bt += 1
-            skill_curves[name_key] = None
+            skill_curves[player_id] = None
             continue
 
         # Only use seasons for the current player's relevant year(s)
@@ -221,15 +222,15 @@ def main():
 
         if not seasons_use:
             n_no_bt += 1
-            skill_curves[name_key] = None
+            skill_curves[player_id] = None
             continue
 
         sc = build_skill_curve(seasons_use)
-        skill_curves[name_key] = sc
+        skill_curves[player_id] = sc
 
         # Collect for percentile ranking
         all_residuals.append({
-            "key":      name_key,
+            "key":      player_id,
             "yr":       seasons_use[-1]["yr"],
             "residual": sc["peerResidual"],
             "slope":    sc.get("slope"),
@@ -293,8 +294,8 @@ def main():
     patched = 0
     skipped = 0
 
-    for i, (name_key, blob) in enumerate(profiles, 1):
-        sc = skill_curves.get(name_key)
+    for i, (player_id, name_key, blob) in enumerate(profiles, 1):
+        sc = skill_curves.get(player_id)
         if sc is None:
             skipped += 1
             if i % 5000 == 0:
@@ -302,7 +303,7 @@ def main():
             continue
 
         # Merge percentiles
-        pctl = pctl_map.get(name_key, {})
+        pctl = pctl_map.get(player_id, {})
         sc["peerPctl"]    = pctl.get("peerPctl")
         sc["scalePctl"]   = pctl.get("scalePctl")
         sc["astSlopePctl"]= pctl.get("astSlopePctl")
@@ -315,7 +316,7 @@ def main():
 
         p["skillCurve"] = sc
         new_blob = zlib.compress(json.dumps(p, separators=(',', ':')).encode())
-        conn.execute("UPDATE profiles SET data=? WHERE name=?", (new_blob, name_key))
+        conn.execute("UPDATE profiles SET data=? WHERE player_id=?", (new_blob, player_id))
         patched += 1
         if i % 5000 == 0:
             print(f"  ... {i:,} / {len(profiles):,} processed (patched={patched:,})")

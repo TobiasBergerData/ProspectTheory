@@ -137,14 +137,15 @@ def compute_lwe(sc: dict) -> dict | None:
     }
 
 
-def load_all_profiles(conn: sqlite3.Connection) -> list[tuple[str, dict]]:
-    """Load all profiles from DB. Returns list of (name_key, profile_dict)."""
-    rows = conn.execute("SELECT name, data FROM profiles").fetchall()
+def load_all_profiles(conn: sqlite3.Connection) -> list[tuple[str, str, dict]]:
+    """Load all profiles from DB. Returns list of (player_id, name_key, profile_dict).
+    Tobias 2026-05-06 IDENTITY-FIX: player_id ist PK, name kann duplicates haben."""
+    rows = conn.execute("SELECT player_id, name, data FROM profiles").fetchall()
     result = []
-    for name_key, blob in rows:
+    for player_id, name_key, blob in rows:
         try:
             p = json.loads(zlib.decompress(blob))
-            result.append((name_key, p))
+            result.append((player_id, name_key, p))
         except Exception:
             pass
     return result
@@ -216,7 +217,8 @@ def main():
     n_insufficient = 0
     n_computed = 0
 
-    for name_key, p in profiles:
+    # Tobias 2026-05-06 IDENTITY-FIX: key = player_id (PK), nicht name (kann duplicates).
+    for player_id, name_key, p in profiles:
         yr  = p.get("yr")
         usg = p.get("usg")
         ts  = p.get("ts")
@@ -224,17 +226,17 @@ def main():
 
         if not sc:
             n_no_sc += 1
-            records.append({"key": name_key, "yr": yr, "usg": usg, "ts": ts, "lwe": None})
+            records.append({"key": player_id, "yr": yr, "usg": usg, "ts": ts, "lwe": None})
             continue
 
         lwe = compute_lwe(sc)
         if lwe is None:
             n_insufficient += 1
-            records.append({"key": name_key, "yr": yr, "usg": usg, "ts": ts, "lwe": None})
+            records.append({"key": player_id, "yr": yr, "usg": usg, "ts": ts, "lwe": None})
             continue
 
         n_computed += 1
-        records.append({"key": name_key, "yr": yr, "usg": usg, "ts": ts, "lwe": lwe})
+        records.append({"key": player_id, "yr": yr, "usg": usg, "ts": ts, "lwe": lwe})
 
     print(f"\nComputation results:")
     print(f"  Computed:     {n_computed:,}")
@@ -258,8 +260,8 @@ def main():
     patched = 0
     skipped = 0
 
-    for i, (name_key, p) in enumerate(profiles, 1):
-        rec = rec_map.get(name_key)
+    for i, (player_id, name_key, p) in enumerate(profiles, 1):
+        rec = rec_map.get(player_id)
         if not rec or rec["lwe"] is None:
             skipped += 1
             if i % 5000 == 0:
@@ -269,7 +271,7 @@ def main():
         lwe_data = dict(rec["lwe"])  # copy
 
         # Merge percentiles
-        pctl = pctls.get(name_key)
+        pctl = pctls.get(player_id)
         if pctl:
             lwe_data["score"]    = pctl["score"]
             lwe_data["premPctl"] = pctl["premPctl"]
@@ -285,9 +287,9 @@ def main():
 
         p["leverageEff"] = lwe_data
 
-        # Re-compress and write
+        # Re-compress and write — UPDATE per player_id (PK), nicht name
         blob = zlib.compress(json.dumps(p, separators=(',', ':')).encode())
-        conn.execute("UPDATE profiles SET data=? WHERE name=?", (blob, name_key))
+        conn.execute("UPDATE profiles SET data=? WHERE player_id=?", (blob, player_id))
         patched += 1
         if i % 5000 == 0:
             print(f"  ... {i:,} / {len(profiles):,} processed (patched={patched:,})")

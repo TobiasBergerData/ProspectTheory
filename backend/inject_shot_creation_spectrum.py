@@ -169,14 +169,17 @@ def main():
     conn = sqlite3.connect(str(DB))
     cursor = conn.cursor()
     cursor.execute("PRAGMA synchronous=OFF")
-    rows = cursor.execute("SELECT name, data FROM profiles").fetchall()
+    # Tobias 2026-05-06 IDENTITY-FIX: SELECT player_id (PK!) statt name.
+    # Vorher: WHERE name = ? hat Profile mit gleichem Namen alle gleich-gepatcht
+    # (Tre Johnson Texas + Montana St. wurden überschrieben).
+    rows = cursor.execute("SELECT player_id, name, data FROM profiles").fetchall()
     cursor.execute("BEGIN TRANSACTION")
 
     patched = 0
     skipped_no_pbp = 0
     skipped_small = 0
 
-    for i, (db_name, blob) in enumerate(rows, 1):
+    for i, (player_id, db_name, blob) in enumerate(rows, 1):
         profile = decompress(blob)
         yr = profile.get("yr") or profile.get("draft_year") or profile.get("year") or 0
         name_lower = db_name.strip().lower()
@@ -199,8 +202,8 @@ def main():
 
         profile["shotCreation"] = sc
         cursor.execute(
-            "UPDATE profiles SET data = ? WHERE name = ?",
-            (compress(profile), db_name),
+            "UPDATE profiles SET data = ? WHERE player_id = ?",
+            (compress(profile), player_id),
         )
         patched += 1
         if i % 5000 == 0:
