@@ -596,6 +596,64 @@ function resolvePosition(d) {
 
 const API_BASE = "https://api.prospecttheory.io/api";
 
+// Tobias 2026-05-06: Intl-Liga → 4-Tier-Klassifikation basierend auf empirischen
+// League-Weights (NCAA Power = 1.0 Anker, siehe data/processed/empirical_league_weights.json).
+// Premier ≥1.8 | Strong 1.6-1.8 | Mid 1.4-1.6 | Low <1.4
+const INTL_LEAGUE_TIER = {
+  // Premier (Top-3)
+  "Euroleague":              {tier:"Premier", weight:2.50},
+  "Spanish ACB":             {tier:"Premier", weight:2.19},
+  "Spanish-ACB":             {tier:"Premier", weight:2.19},
+  "Eurocup":                 {tier:"Premier", weight:1.82},
+  // Strong (1.6-1.8)
+  "Italian Serie A":         {tier:"Strong",  weight:1.70},
+  "Italian-Lega-Basket-Serie-A": {tier:"Strong", weight:1.70},
+  "Turkish BSL":             {tier:"Strong",  weight:1.69},
+  "Turkish-BSL":             {tier:"Strong",  weight:1.69},
+  "French LNB":              {tier:"Strong",  weight:1.68},
+  "France-LNB":              {tier:"Strong",  weight:1.68},
+  "Champions League":        {tier:"Strong",  weight:1.67},
+  "Champions-League":        {tier:"Strong",  weight:1.67},
+  "VTB United League":       {tier:"Strong",  weight:1.67},
+  "VTB-United-League":       {tier:"Strong",  weight:1.67},
+  "Adriatic ABA":            {tier:"Strong",  weight:1.64},
+  "Adriatic-League-Liga-ABA":{tier:"Strong",  weight:1.64},
+  "Greek HEBA A1":           {tier:"Strong",  weight:1.60},
+  "Greek-HEBA-A1":           {tier:"Strong",  weight:1.60},
+  // Mid (1.4-1.6)
+  "Israeli BSL":             {tier:"Mid",     weight:1.59},
+  "Israeli-BSL":             {tier:"Mid",     weight:1.59},
+  "German BBL":              {tier:"Mid",     weight:1.52},
+  "Germany-BBL":             {tier:"Mid",     weight:1.52},
+  "Australian NBL":          {tier:"Mid",     weight:1.48},
+  "Australia-NBL":           {tier:"Mid",     weight:1.48},
+  "Lithuanian LKL":          {tier:"Mid",     weight:1.42},
+  "Lithuanian-LKL":          {tier:"Mid",     weight:1.42},
+  // Low (<1.4)
+  "Chinese CBA":             {tier:"Low",     weight:1.15},
+  "China-CBA":               {tier:"Low",     weight:1.15},
+};
+
+const TIER_COLOR = {
+  "Power":   "#10b981",
+  "Premier": "#10b981",
+  "Strong":  "#22c55e",
+  "Mid":     "#fbbf24",
+  "Mid-Major":"#fbbf24",
+  "Low":     "#f97316",
+  "Low-Major":"#f97316",
+};
+
+function classifyConfTier(p) {
+  // NCAA: confTier kommt aus Pipeline (Power/Mid-Major/Low-Major)
+  if (p.source !== "intl") return p.confTier || "—";
+  // Intl: aus Liga-Mapping
+  const lg = p.conf;
+  if (!lg) return "—";
+  const m = INTL_LEAGUE_TIER[lg] || INTL_LEAGUE_TIER[lg.replace(/\s+/g,"-")];
+  return m ? m.tier : "Mid";  // unbekannte Liga → conservative Mid
+}
+
 function mapProfile(d) {
   if(!d) return null;
   // Normalize percentiles: pipeline sends 0-1, UI expects 0-100
@@ -856,6 +914,9 @@ function mapProfile(d) {
     confTier: d.conf_tier ?? d.confTier ?? "", cls: d.cls ?? d.class ?? "",
     yr: d.yr ?? d.season_year ?? d.draft_year ?? 2026,
     age: d.age ?? d.age_on_draft_day,
+    // Tobias 2026-05-06: Intl-spezifisch — Years of Pro statt College-Class
+    firstProSeason: d.intl_first_pro_season ?? d.first_pro_season ?? null,
+    firstProLeague: d.intl_first_pro_league ?? d.first_pro_league ?? null,
     htIn: d.ht ?? d.height_in ?? d.college_height_inches ?? 78,
     ht: d.ht_display ?? (d.ht ? `${Math.floor(d.ht/12)}'${d.ht%12}"` : "—"),
     wt: d.wt ?? d.weight, ws: d.ws ?? d.wingspan,
@@ -1209,12 +1270,31 @@ function OverviewTab({p, compTier, setCompTier}) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-        {[["Conference",p.conf,p.confTier==="Power"?"#10b981":"#f97316"],["Class",p.cls,"#e5e7eb"],
-          ["Age",p.age!=null?Number(p.age).toFixed(1):"—","#e5e7eb"],
-          ["Recruit",p.recRank?`#${p.recRank}`:"Unranked","#e5e7eb"],
-          ["Source",p.source?.toUpperCase()||"NCAA",p.source==="ncaa"?"#3b82f6":"#f97316"],
-          ["Conf Tier",p.confTier||"—",p.confTier==="Power"?"#10b981":"#f97316"]
-        ].map(([l,v,c])=>(
+        {(() => {
+          // Tobias 2026-05-06: Intl-spezifische Header-Felder.
+          // - Class → Years Pro (aus intl_first_pro_season).
+          // - Conf Tier → 4-Tier-Klassifikation (Premier/Strong/Mid/Low) aus League-Weights.
+          // - Age → "Age on Draft Day" (immer der Reference-Point der Pipeline).
+          const isIntl = p.source === "intl";
+          const yearsPro = (isIntl && p.firstProSeason && p.yr)
+            ? Math.max(1, Math.round(Number(p.yr) - Number(p.firstProSeason) + 1))
+            : null;
+          const classOrYearsPro = isIntl
+            ? (yearsPro != null ? `${yearsPro} yr${yearsPro === 1 ? "" : "s"} Pro` : "—")
+            : (p.cls || "—");
+          const classLabel = isIntl ? "Years Pro" : "Class";
+          const computedTier = classifyConfTier(p);
+          const tierColor = TIER_COLOR[computedTier] || "#9ca3af";
+          const confColor = isIntl ? tierColor : (p.confTier === "Power" ? "#10b981" : "#f97316");
+          return [
+            ["Conference",  p.conf, confColor],
+            [classLabel,    classOrYearsPro, "#e5e7eb"],
+            ["Age on Draft Day", p.age != null ? Number(p.age).toFixed(1) : "—", "#e5e7eb"],
+            ["Recruit",     p.recRank ? `#${p.recRank}` : "Unranked", "#e5e7eb"],
+            ["Source",      p.source?.toUpperCase() || "NCAA", p.source === "ncaa" ? "#3b82f6" : "#f97316"],
+            ["Conf Tier",   computedTier, tierColor],
+          ];
+        })().map(([l,v,c])=>(
           <div key={l} className="rounded-lg p-3" style={{background:"#111827"}}>
             <div className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>{l}</div>
             <div className="font-semibold mt-0.5" style={{color:c,fontFamily:"'Oswald',sans-serif"}}>{v||"—"}</div>
