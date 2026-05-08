@@ -4061,11 +4061,15 @@ function BodyTab({p}) {
   const [hoverPos, setHoverPos] = useState({x:0,y:0});
 
   // ── Fetch combine data on mount ──
+  // Tobias 2026-05-06 BUG-FIX: API_BASE.replace("/api","") matchte das
+  // ERSTE "/api" (= ":/api" nach https:) → kaputte URL "https:/.prospecttheory.io/api/combine"
+  // → Promise rejected → catch() → setCombineData([]) → Plot leer.
+  // Fix: direkt API_BASE nutzen (Endpoint ist /combine ohne /api-Präfix).
   useEffect(() => {
-    fetch(`${API_BASE.replace("/api","")}/api/combine`)
-      .then(r => r.json())
+    fetch(`${API_BASE}/combine`)
+      .then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`))
       .then(d => setCombineData(d.players || []))
-      .catch(() => setCombineData([]));
+      .catch(err => { console.warn("Combine fetch failed:", err); setCombineData([]); });
   }, []);
 
   // Tobias 2026-05-06: bevorzuge echte NBA-Anthro-Daten wenn verfügbar.
@@ -4661,12 +4665,20 @@ function CompsTab({p}) {
                     </td>
                     <td className="px-2" style={{color:"#6b7280"}}>{c.pos}</td>
                     <td className="px-2">
-                      <div className="flex items-center gap-1">
-                        <div className="w-12 h-2 rounded-full overflow-hidden" style={{background:"#1f2937"}}>
-                          <div className="h-full rounded-full" style={{width:`${sim||0}%`, background:simColor(sim||0)}}/>
+                      <Tip content={
+                        <div style={{maxWidth:240}}>
+                          <div className="font-bold mb-1" style={{color:simColor(sim||0)}}>Match: {sim}%</div>
+                          {c.rawSim != null && <div className="text-xs" style={{color:"#94a3b8"}}>Absolute similarity (z-distance scale): <strong style={{color:"#cbd5e1"}}>{c.rawSim}%</strong></div>}
+                          <div className="text-xs mt-1" style={{color:"#9ca3af"}}>The displayed % is rescaled within this comp pool (top → 95%, bottom → 50%) for differentiation. Absolute scale rarely exceeds ~50% for unique prospects.</div>
                         </div>
-                        <span className="font-bold text-xs" style={{color:simColor(sim||0)}}>{sim != null ? `${sim}%` : "—"}</span>
-                      </div>
+                      }>
+                        <div className="flex items-center gap-1 cursor-help">
+                          <div className="w-12 h-2 rounded-full overflow-hidden" style={{background:"#1f2937"}}>
+                            <div className="h-full rounded-full" style={{width:`${sim||0}%`, background:simColor(sim||0)}}/>
+                          </div>
+                          <span className="font-bold text-xs" style={{color:simColor(sim||0)}}>{sim != null ? `${sim}%` : "—"}</span>
+                        </div>
+                      </Tip>
                     </td>
                     <td className="px-2" style={{color:valColor(c.bpm>10?90:c.bpm>5?65:35)}}>{fmt(c.bpm)}</td>
                     <td className="px-2">{fmt(c.usg)}</td>
@@ -4691,29 +4703,17 @@ function CompsTab({p}) {
           </div>
         )}
 
-        {/* Legend (Tobias 2026-05-06: ehrliche Skala-Kommunikation) */}
+        {/* Legend (Tobias 2026-05-06 v2: relative re-scaling im Pool) */}
         {fStat.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-3 text-xs" style={{color:"#475569"}}>
-            <span>Match: Euclidean distance in percentile space, mapped to 0–100%. <strong style={{color:"#86efac"}}>Top-tier match &gt; 70%</strong> · <strong style={{color:"#3b82f6"}}>Strong 55–70%</strong> · <strong style={{color:"#fbbf24"}}>Moderate 40–55%</strong>. Unique prospects (e.g. Cooper Flagg, Wemby) typically max out below 50% — perfect 100% means identical statistical fingerprint.</span>
+            <span>Match: <strong style={{color:"#cbd5e1"}}>relative</strong> similarity within shown comp pool (top match → 95%, bottom → 50%). Hover any value to see the absolute Z-distance score. Sorted by best match first.</span>
             <span>⚠ = physical mismatch (&gt;3" height diff) — statistical similarity may not translate</span>
             <span>Stats from pre-draft season only · era-adjusted</span>
           </div>
         )}
       </Sec>
 
-      {/* ── PHYSICAL COMPS — COMING SOON ── */}
-      <div style={{borderRadius:12,padding:"20px 24px",background:"linear-gradient(135deg,#0d1117,#111827)",border:"1px dashed #374151",textAlign:"center"}}>
-        <div style={{fontSize:13,fontWeight:700,color:"#4b5563",marginBottom:6,letterSpacing:"0.05em",textTransform:"uppercase"}}>Physical Comps — Coming Soon</div>
-        <div style={{fontSize:12,color:"#374151",maxWidth:480,margin:"0 auto",lineHeight:1.6}}>
-          Nearest-neighbor matching on draft combine measurements: height, wingspan, weight, standing reach, hand size, and athleticism scores.
-          Finds players with identical physical profiles who reached the NBA — revealing what the ceiling looks like for this body type.
-        </div>
-        {p.hasCombine && (
-          <div style={{marginTop:10,fontSize:11,color:"#3b82f655",background:"#3b82f611",borderRadius:6,padding:"4px 10px",display:"inline-block"}}>
-            ✓ Combine data on file for this player — will be first to populate
-          </div>
-        )}
-      </div>
+      {/* Tobias 2026-05-06: Physical Comps Coming Soon-Box entfernt. */}
     </div>
   );
 }
@@ -6092,14 +6092,25 @@ export default function App() {
         // Use full profile if available, fall back to board profile
         const updated = profRes?.profile ? mapProfile(profRes.profile) : {...boardProfile};
         if (statsRes?.comps) {
-          // Tobias 2026-05-06: ehrliche Match-Werte. Backend liefert similarity 0-100
-          // basierend auf Z-Distance-Range [0.635, 1.716]. Vorher wurde das auf 65-97%
-          // re-skaliert, was die Sortierung kaputtmachte und falsche Präzision suggerierte.
-          // Jetzt: Backend-Wert direkt nutzen, dann sortiert nach sim DESC.
+          // Tobias 2026-05-06 v2: Re-Skalierung INNERHALB der gezeigten Top-N Comps.
+          // Backend liefert globale 0-100 similarity (Z-Distance-Skala). Für unique
+          // Spieler (Cooper Flagg, Darryn Peterson) liegen die Top-10 alle bei ~38%
+          // → optisch ununterscheidbar.
+          // Lösung: skaliere die gezeigte Liste auf 50-95% relativ — Top-Comp = 95%,
+          // Worst-Comp der Liste = 50%. Das ist ehrlich, weil:
+          //  (a) Sortierung bleibt korrekt (höchster Match oben)
+          //  (b) Differenzierung sichtbar (Spannweite 45 Pp innerhalb Top-10)
+          //  (c) absolute Skala bleibt im Tooltip einsehbar
+          const rawSims = (statsRes.comps || []).map(c => Number(c.similarity ?? 0)).filter(v => v > 0);
+          const maxRaw = rawSims.length ? Math.max(...rawSims) : 1;
+          const minRaw = rawSims.length ? Math.min(...rawSims) : 0;
+          const range = maxRaw - minRaw || 1;
           updated.statComps = (statsRes.comps || []).map(c => {
-          const sim = c.similarity != null ? Math.max(0, Math.min(100, Math.round(Number(c.similarity)))) : null;
+            const rawSim = c.similarity != null ? Math.round(Number(c.similarity)) : null;
+            // Relative score innerhalb der angezeigten Liste: 50-95
+            const sim = rawSim != null ? Math.round(50 + (rawSim - minRaw) / range * 45) : null;
           return {
-            name:c.name, pos:c.position||c.pos, sim,
+            name:c.name, pos:c.position||c.pos, sim, rawSim,
             tier:c.tier||"", nba:!!c.made_nba, bpm:c.bpm, usg:c.usg, ts:c.ts,
             astP:c.ast_p, toP:c.to_p, orbP:c.orb_p, drbP:c.drb_p,
             stlP:c.stl_p, blkP:c.blk_p, ftr:c.ftr,
@@ -6139,11 +6150,16 @@ export default function App() {
         mapped.slug = profRes.slug || profRes.profile.slug || mapped.slug;
         mapped.name = profRes.name || profRes.profile.name || mapped.name;
         if (statsRes?.comps) {
-          // Tobias 2026-05-06: Backend-similarity direkt nutzen (kein Re-Scaling).
+          // Tobias 2026-05-06 v2: Re-Skalierung 50-95 innerhalb der gezeigten Top-N Comps.
+          const rawSims2 = (statsRes.comps || []).map(c => Number(c.similarity ?? 0)).filter(v => v > 0);
+          const maxRaw2 = rawSims2.length ? Math.max(...rawSims2) : 1;
+          const minRaw2 = rawSims2.length ? Math.min(...rawSims2) : 0;
+          const range2 = maxRaw2 - minRaw2 || 1;
           mapped.statComps = (statsRes.comps || []).map(c => {
-            const sim = c.similarity != null ? Math.max(0, Math.min(100, Math.round(Number(c.similarity)))) : null;
+            const rawSim = c.similarity != null ? Math.round(Number(c.similarity)) : null;
+            const sim = rawSim != null ? Math.round(50 + (rawSim - minRaw2) / range2 * 45) : null;
             return {
-              name:c.name, pos:c.position||c.pos, sim,
+              name:c.name, pos:c.position||c.pos, sim, rawSim,
               tier:c.tier||"", nba:!!c.made_nba, bpm:c.bpm, usg:c.usg, ts:c.ts,
               astP:c.ast_p, toP:c.to_p, orbP:c.orb_p, drbP:c.drb_p,
               stlP:c.stl_p, blkP:c.blk_p, ftr:c.ftr,
