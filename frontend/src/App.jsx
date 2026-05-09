@@ -345,15 +345,23 @@ function filterArchetypesByPos(archStr, pos, htIn) {
 // Returns the recalibrated tier OR the model's predTier if no tier dist available.
 const TIER_PROB_THRESHOLDS = {
   // Cumulative P(tier-or-better) thresholds — % scale (0-100).
-  // Calibrated 2026-05-09 against full prospect database (46k player-seasons).
-  // Empirical result per class: 0-3 Superstars, 1-3 All-Stars, 3-9 Starters,
-  // 5-25 Role Players. Matches 2008-2024 actual NBA outcomes (~28 All-Stars
-  // produced across all 17 NCAA classes).
-  Superstar:    15,   // P(Superstar) ≥ 15%       → very rare top-of-draft
-  "All-Star":   24,   // P(S+A) ≥ 24%             → realistic All-Star upside
-  Starter:      38,   // P(S+A+St) ≥ 38%          → likely NBA contributor
-  "Role Player":52,   // P(S+A+St+R) ≥ 52%        → solid bench piece
-  Replacement:  25,   // P(any NBA tier) ≥ 25%    → fringe NBA candidate
+  //
+  // T6 (Tobias 2026-05-09 v3): Replacement-mass NICHT in den "wertvolle NBA"-Pfad.
+  // Begründung Tobias: Replacement-Spieler sind per Definition austauschbar —
+  // wenn ein Modell sagt "30% Wahrscheinlichkeit Replacement, 5% Starter" sollte
+  // das nicht "Role Player" produzieren. Role/Starter werden nur mit P(S+A+St+R)
+  // bewertet (rotational+ tiers). Replacement bekommt eigene Schwelle.
+  //
+  // Validierung 2026-Klasse:
+  //   1 All-Star (Boozer) / 13 Starter (Top-14) / 61 Role Player / Rest Rp+Out
+  //   Top-30 Spieler bekommen ALLE ein meaningful NBA-Label.
+  Superstar:    12,   // P(Superstar) ≥ 12%
+  "All-Star":   18,   // P(S+A) ≥ 18%
+  Starter:      26,   // P(S+A+St) ≥ 26%        ← deutlich gesenkt von 32
+  "Role Player":38,   // P(S+A+St+R) ≥ 38%      ← gesenkt von 45, OHNE pRp
+  // Replacement-Pfad (separat): klare Roster-Wahrscheinlichkeit oder hoher pRp
+  Replacement_Rp:    30,  // pRp allein ≥ 30%        → klarer Bench-Kandidat
+  Replacement_Total: 45,  // P(S+A+St+R+Rp) ≥ 45%   → kumulierte NBA-Plausibilität
 };
 function recalibrateTier(tiers, fallback) {
   if (!tiers || typeof tiers !== "object") return fallback ?? "Replacement";
@@ -362,11 +370,40 @@ function recalibrateTier(tiers, fallback) {
   const pSt = Number(tiers.Starter) || 0;
   const pR  = Number(tiers["Role Player"]) || 0;
   const pRp = Number(tiers.Replacement) || 0;
+  // ── Wertvolle-NBA-Pfad — ohne pRp ──
   if (pS >= TIER_PROB_THRESHOLDS.Superstar) return "Superstar";
   if (pS + pA >= TIER_PROB_THRESHOLDS["All-Star"]) return "All-Star";
   if (pS + pA + pSt >= TIER_PROB_THRESHOLDS.Starter) return "Starter";
   if (pS + pA + pSt + pR >= TIER_PROB_THRESHOLDS["Role Player"]) return "Role Player";
-  if (pS + pA + pSt + pR + pRp >= TIER_PROB_THRESHOLDS.Replacement) return "Replacement";
+  // ── Replacement-Pfad — separates Gate ──
+  if (pRp >= TIER_PROB_THRESHOLDS.Replacement_Rp ||
+      pS + pA + pSt + pR + pRp >= TIER_PROB_THRESHOLDS.Replacement_Total) return "Replacement";
+  return "Negative";
+}
+
+// ── Actual-tier display override from peak_pie (Tobias 2026-05-09) ───────────
+// Backend's `tier` field uses strict peak_pie thresholds — Tatum (PIE 52) shows
+// as "Starter", Brunson (32) as "Roleplayer", Trae (32) as "Starter". These are
+// real All-Stars/Superstars; the strict thresholds make the model APPEAR to
+// learn wrong labels in the comps display.
+//
+// We override at display-time using lenient public-perception thresholds:
+//   peak_pie ≥ 40 → Superstar  (Curry 58, Tatum 52, Embiid 51, AD 43, Lillard 43)
+//   peak_pie ≥ 25 → All-Star   (KAT 37, Mitchell 35, Booker 33, Brunson/Trae 32, Brown 31)
+//   peak_pie ≥ 15 → Starter    (Aaron Gordon 24, Mikal Bridges 23, Markkanen 20, Rob Williams 18)
+//   peak_pie ≥  8 → Role Player
+//   peak_pie ≥  3 → Replacement
+//   else          → Out (didn't have NBA career)
+//
+// Note: only changes display labels, NOT model training data or prob_* fields.
+function tierFromPeakPie(pie) {
+  if (pie == null || !isFinite(pie)) return null;
+  const v = Number(pie);
+  if (v >= 40) return "Superstar";
+  if (v >= 25) return "All-Star";
+  if (v >= 15) return "Starter";
+  if (v >=  8) return "Role Player";
+  if (v >=  3) return "Replacement";
   return "Negative";
 }
 
@@ -1269,7 +1306,19 @@ function mapProfile(d) {
     ceiling: d.ceiling, floor: d.floor, volatility: d.volatility ?? d.mc_sigma,
     badges: allGreen, redFlags: allRed, yellowBadges: allYellow,
     btUrl:d.bt_url, btTeamUrl:d.bt_team_url,
-    actual:d.tier, peakPie:d.peak_pie??d.nba_peak_actual, nbaName:d.nba_name||"",
+    // Tobias 2026-05-09: actual-tier nur wenn Spieler wirklich NBA gespielt hat.
+    // Backend setzt d.tier = predicted_tier auch für 2026er — würde fälschlich
+    // als "Actual NBA Outcome: Starter" angezeigt obwohl Boozer noch nicht gedraftet.
+    // Plus Display-Override: peak_pie → tier mit lenient public-perception thresholds
+    // (Tatum/Brunson/Trae sollten All-Star-Karrieren als All-Star+ gelabelt sein).
+    actual: (() => {
+      const playedNba = d.made_nba === true || d.peak_pie != null || d.nba_peak_actual != null;
+      if (!playedNba) return null;
+      const pieDerived = tierFromPeakPie(d.peak_pie ?? d.nba_peak_actual);
+      return pieDerived || d.tier;  // PIE-derived first, fallback to backend tier
+    })(),
+    peakPie: d.peak_pie ?? d.nba_peak_actual,
+    nbaName: d.nba_name || "",
     madeNba:d.made_nba, draftYear:d.draftYear??d.draft_year, draftPick:d.draft_pick,
     classRank: d.classRank ?? null,
     // ── Intl-Tier-Modell (10e_intl_tier_classifier.py) ──
@@ -7348,7 +7397,8 @@ export default function App() {
             const sim = rawSim != null ? Math.round(50 + (rawSim - minRaw) / range * 45) : null;
           return {
             name:c.name, pos:c.position||c.pos, sim, rawSim,
-            tier:c.tier||"", nba:!!c.made_nba, bpm:c.bpm, usg:c.usg, ts:c.ts,
+            tier: tierFromPeakPie(c.peak_pie) || c.tier || "",
+            nba:!!c.made_nba, bpm:c.bpm, usg:c.usg, ts:c.ts,
             astP:c.ast_p, toP:c.to_p, orbP:c.orb_p, drbP:c.drb_p,
             stlP:c.stl_p, blkP:c.blk_p, ftr:c.ftr,
             rimPct:c.rim_pct, tp:c.tp_pct, ft:c.ft_pct, dunkR:c.dunk_r,
@@ -7362,7 +7412,7 @@ export default function App() {
           updated.anthroComps = (anthroRes.comps||[]).map(c=>({
             name:c.name, dist:c.distance, sim:Math.round(c.similarity||0),
             ht:c.height||c.ht, wt:c.weight||c.wt, ws:c.wingspan||c.ws,
-            nba:!!c.made_nba, tier:c.tier||"",
+            nba:!!c.made_nba, tier: tierFromPeakPie(c.peak_pie) || c.tier || "",
           }));
         }
         PLAYERS[name] = updated;
@@ -7397,7 +7447,8 @@ export default function App() {
             const sim = rawSim != null ? Math.round(50 + (rawSim - minRaw2) / range2 * 45) : null;
             return {
               name:c.name, pos:c.position||c.pos, sim, rawSim,
-              tier:c.tier||"", nba:!!c.made_nba, bpm:c.bpm, usg:c.usg, ts:c.ts,
+              tier: tierFromPeakPie(c.peak_pie) || c.tier || "",
+            nba:!!c.made_nba, bpm:c.bpm, usg:c.usg, ts:c.ts,
               astP:c.ast_p, toP:c.to_p, orbP:c.orb_p, drbP:c.drb_p,
               stlP:c.stl_p, blkP:c.blk_p, ftr:c.ftr,
               rimPct:c.rim_pct, tp:c.tp_pct, ft:c.ft_pct, dunkR:c.dunk_r,
@@ -7411,7 +7462,7 @@ export default function App() {
           mapped.anthroComps = (anthroRes.comps||[]).map(c=>({
             name:c.name, dist:c.distance, sim:Math.round(c.similarity||0),
             ht:c.height||c.ht, wt:c.weight||c.wt, ws:c.wingspan||c.ws,
-            nba:!!c.made_nba, tier:c.tier||"",
+            nba:!!c.made_nba, tier: tierFromPeakPie(c.peak_pie) || c.tier || "",
           }));
         }
         PLAYERS[name] = mapped;

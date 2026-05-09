@@ -715,6 +715,9 @@ async def get_statistical_comps(
             "similarity": similarity,
             "made_nba": c.get("nba", False) or bool(cp.get("made_nba")),
             "tier": cp.get("v2Tier") or c.get("tier") or cp.get("tier") or "",
+            # Tobias 2026-05-09: peak_pie added for frontend lenient tier-display.
+            # Backend tier label is too strict (Tatum=Starter, Brunson=Roleplayer).
+            "peak_pie": cp.get("peak_pie") or cp.get("nba_peak_actual"),
             # Key stats from profile for comparison table
             "bpm": cp.get("bpm"),
             "usg": cp.get("usg"),
