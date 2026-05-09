@@ -137,6 +137,13 @@ def build_mind_block(row) -> dict:
         # Bounceback hat das _efg-Suffix (Carryover from spike-script naming)
         "bounceback":     idx_ci_z("adverse_bounceback_efg", "adverse_bounceback_lo", "adverse_bounceback_hi", "adverse_bounceback_efg_z"),
 
+        # Match-Phase Stamina (Tobias 2026-05-09)
+        "stamina_idx":    round_or_none(row.get("stamina_idx"), 2),
+        "h1_actions":     int(safe_num(row.get("h1_actions")) or 0),
+        "h2_actions":     int(safe_num(row.get("h2_actions")) or 0),
+        "h1_adverse_rate": round_or_none(row.get("h1_adverse_rate"), 3),
+        "h2_adverse_rate": round_or_none(row.get("h2_adverse_rate"), 3),
+
         "clutch_time": {
             "fga":         int(safe_num(row.get("clutch_fga")) or 0),
             "efg":         round_or_none(row.get("clutch_efg"), 1),
@@ -168,6 +175,19 @@ def build_mind_block(row) -> dict:
             "clutch_delta": round_or_none(row.get("clutch_ft_delta"), 1),
         })
     block["ft"] = ft_block
+
+    # Match-Phase-Drift (Tobias 2026-05-09): Mental Stamina H1 vs H2
+    h1_streaks = int(safe_num(row.get("h1_streaks")) or 0)
+    h2_streaks = int(safe_num(row.get("h2_streaks")) or 0)
+    if h1_streaks + h2_streaks > 0:
+        block["h1_actions"] = int(safe_num(row.get("h1_actions")) or 0)
+        block["h2_actions"] = int(safe_num(row.get("h2_actions")) or 0)
+        block["h1_streaks"] = h1_streaks
+        block["h2_streaks"] = h2_streaks
+        for k in ["stamina_idx", "overdriver_drift", "hothead_drift"]:
+            v = round_or_none(row.get(k), 2)
+            if v is not None:
+                block[k] = v
 
     # Sensitivity sample (only the wider/looser default-comparable values)
     sens = {}

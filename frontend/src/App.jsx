@@ -15,6 +15,46 @@ const ARCH_COLORS = {
 };
 const valColor = (pctl) => { if(pctl==null)return"#6b7280";if(pctl>=90)return"#22c55e";if(pctl>=75)return"#86efac";if(pctl>=60)return"#a3e635";if(pctl>=40)return"#fbbf24";if(pctl>=25)return"#f97316";return"#ef4444"; };
 const valBg = (pctl) => valColor(pctl)+"18";
+
+// ── Position-spezifische Empirical-Percentile (BartTorvik 2008-2026) ──
+// Tobias 2026-05-09: Frontend-Fallback wenn API kein pctl_ast / pctl_to liefert.
+// AST% Verteilung pro Position (D1 NCAA, ≥10 GP):
+//   Playmaker: p10=12, p25=18, p50=24, p75=31, p90=38
+//   Wing:      p10= 5, p25= 8, p50=12, p75=17, p90=24
+//   Big:       p10= 4, p25= 6, p50= 9, p75=13, p90=18
+function estPctlAstWithinPos(ast, pos) {
+  if (ast == null) return null;
+  const breaks = pos === "Playmaker" ? [12, 18, 24, 31, 38]
+               : pos === "Big"       ? [4, 6, 9, 13, 18]
+               :                        [5, 8, 12, 17, 24];  // Wing default
+  const pcts = [10, 25, 50, 75, 90];
+  if (ast <= breaks[0]) return Math.max(2, Math.round(ast / breaks[0] * 10));
+  if (ast >= breaks[4]) return Math.min(99, Math.round(90 + (ast - breaks[4]) / 2));
+  for (let i = 1; i < breaks.length; i++) {
+    if (ast <= breaks[i]) {
+      const t = (ast - breaks[i-1]) / (breaks[i] - breaks[i-1]);
+      return Math.round(pcts[i-1] + t * (pcts[i] - pcts[i-1]));
+    }
+  }
+  return null;
+}
+// TO% Distribution (lower = better, position-agnostic):
+//   p10=8.5, p25=11, p50=14, p75=17.5, p90=22
+// Returns inverted percentile (low TO% → high pctl).
+function estPctlToInverted(to) {
+  if (to == null) return null;
+  const breaks = [8.5, 11, 14, 17.5, 22];
+  const pctsInv = [90, 75, 50, 25, 10];   // INVERTED: less TO% = higher pctl
+  if (to <= breaks[0]) return Math.min(99, Math.round(90 + (breaks[0] - to) * 4));
+  if (to >= breaks[4]) return Math.max(2, Math.round(10 - (to - breaks[4]) * 1.5));
+  for (let i = 1; i < breaks.length; i++) {
+    if (to <= breaks[i]) {
+      const t = (to - breaks[i-1]) / (breaks[i] - breaks[i-1]);
+      return Math.round(pctsInv[i-1] + t * (pctsInv[i] - pctsInv[i-1]));
+    }
+  }
+  return null;
+}
 const fmt = (v,d=1) => v!=null?Number(v).toFixed(d):"—";
 const pct = (v) => v!=null?(v*100).toFixed(1)+"%":"—";
 
@@ -1307,9 +1347,26 @@ function OverviewTab({p, compTier, setCompTier}) {
       </div>
       <Sec icon="▦" title="Box Score" sub={p.gp ? `${p.gp} GP · ${fmt(p.min)} MIN/G — Traditional counting stats. Look for per-minute efficiency, not raw totals.` : (p.yr && p.yr <= 2009 ? "Per-game counting stats unavailable for 2008-2009 BartTorvik data. Advanced stats shown below." : "Game data unavailable for this player.")}>
         <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
-          {[["PTS",p.pts,p.pctl?.pts36],["REB",p.reb,p.pctl?.reb36],["AST",p.ast,p.pctl?.ast36],
-            ["STL",p.stl,p.pctl?.stl],["BLK",p.blk,p.pctl?.blk],["A/TO",p.astTov,p.pctl?.astTo],["FTR",p.ftr,p.pctl?.ftr],["TO%",p.toP,p.pctl?.to]
-          ].map(([l,v,pc])=><StatCell key={l} label={l} val={v} pctl={pc}/>)}
+          {(() => {
+            // Tobias 2026-05-09: AST/TO percentile fallback wenn pctl_ast_to fehlt.
+            // Step-function von typischen NCAA-Verteilung: median ~1.5, p90 ~2.5.
+            const astTo = p.astTov;
+            const astToPctl = p.pctl?.astTo ?? (
+              astTo == null    ? null :
+              astTo >= 3.0     ? 95 :
+              astTo >= 2.5     ? 85 :
+              astTo >= 2.0     ? 70 :
+              astTo >= 1.6     ? 55 :
+              astTo >= 1.3     ? 40 :
+              astTo >= 1.0     ? 25 :
+              astTo >= 0.7     ? 12 :
+                                 5
+            );
+            return [["PTS",p.pts,p.pctl?.pts36],["REB",p.reb,p.pctl?.reb36],["AST",p.ast,p.pctl?.ast36],
+              ["STL",p.stl,p.pctl?.stl],["BLK",p.blk,p.pctl?.blk],["A/TO",astTo,astToPctl],["FTR",p.ftr,p.pctl?.ftr],
+              ["TO%",p.toP,p.pctl?.to ?? estPctlToInverted(p.toP)]
+            ].map(([l,v,pc])=><StatCell key={l} label={l} val={v} pctl={pc}/>);
+          })()}
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs" style={{color:"#6b7280"}}>
           <span>Efficiency:</span>
@@ -1329,7 +1386,10 @@ function OverviewTab({p, compTier, setCompTier}) {
                : p.ogbpm >= -1 ? 39 : p.ogbpm >= -3 ? 22 : p.ogbpm >= -5 ? 10 : 4)
             ]] : []),
             ["DBPM",p.dbpm,p.pctl?.dbpm],["ORtg",p.ortg,p.pctl?.ortg],
-            ["USG%",p.usg,p.pctl?.usg],["TS%",p.ts,p.pctl?.ts],["AST%",p.astP,p.pctl?.ast],["TO%",p.toP,p.pctl?.to],
+            ["USG%",p.usg,p.pctl?.usg],["TS%",p.ts,p.pctl?.ts],
+            // Tobias 2026-05-09: Fallback-Percentile für AST/TO via Position (BartTorvik 2008-2026 dist).
+            ["AST%",p.astP,p.pctl?.ast ?? estPctlAstWithinPos(p.astP, p.pos)],
+            ["TO%", p.toP, p.pctl?.to  ?? estPctlToInverted(p.toP)],
             ["ORB%",p.orbP,p.pctl?.orb],["DRB%",p.drbP,p.pctl?.drb],["STL%",p.stlP,p.pctl?.stl],["BLK%",p.blkP,p.pctl?.blk]
           ].map(([l,v,pc])=><StatCell key={l} label={l} val={v} pctl={pc} tooltip={l==="O-GBPM"?"Offensive Game-Adjusted BPM (BartTorvik) — opponent-adjusted offensive impact. Percentile vs. all D1 players.":undefined}/>)}
         </div>
@@ -3257,6 +3317,14 @@ function MindTab({p}) {
           );
         };
 
+        // Tobias 2026-05-09: Stamina als Pseudo-m-Object aus h2/h1 adverse-rate-ratio.
+        // Verwendet "adverse" type → niedrig ist gut (weniger adverse events in H2 = stamina-stark)
+        const staminaM = mm.stamina_idx != null ? {
+          idx: mm.stamina_idx,
+          // No CI from spike-script (would need bootstrap), so leave lo/hi null
+          z: null,  // No z-score for stamina (population-mean ~1.0, raw idx is interpretable)
+        } : null;
+
         // Profile-Headline based on z-scores (only "auffällig" if |z| > 1.5 OR CI excludes 1.0)
         const auffaellig = [];
         const cards = [
@@ -3265,6 +3333,7 @@ function MindTab({p}) {
           {key:"passive",    m:mm.passive,    type:"neutral",  label:"Engagement",      sub:"actions taken under stress",    hint:"After multi-event slumps: how many actions does he take in the next 4 plays vs. expected? Low = withdraws / checks out."},
           {key:"aggressor",  m:mm.aggressor,  type:"neutral",  label:"Shot-Seeking",    sub:"more shots under stress",       hint:"After multi-event slumps: does FGA-Rate spike (force shots) or fall (fade away)? Both extremes can be tells."},
           {key:"bounceback", m:mm.bounceback, type:"positive", label:"Bounceback eFG",  sub:"shooting recovers under stress",hint:"After multi-event slumps: does eFG% on subsequent shots recover? High = clutch shot-making mentality."},
+          {key:"stamina",    m:staminaM,      type:"adverse",  label:"Match Stamina",   sub:"adverse rate H2 vs H1",         hint:"Half-2 vs Half-1 adverse-event rate. >1 = wird in 2nd half schlechter (Conditioning/Mental-Fatigue). <1 = bleibt stabil oder verbessert sich."},
         ];
         for (const c of cards) {
           if (!c.m || c.m.idx == null) continue;
@@ -3338,6 +3407,82 @@ function MindTab({p}) {
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(220px, 1fr))",gap:10,marginBottom:12}}>
               {cards.map(c => <TendBar key={c.key} {...c}/>)}
             </div>
+
+            {/* Match-Phase-Drift (Tobias 2026-05-09): zeigt ob Mental-Stamina nachlässt
+                in der 2. Hälfte. Nur sichtbar wenn beide Hälften ausreichend Streaks haben. */}
+            {mm.h1_streaks >= 5 && mm.h2_streaks >= 5 && (mm.overdriver_drift != null || mm.hothead_drift != null || mm.stamina_idx != null) && (
+              <div style={{background:"#1a1f2e",border:"1px solid #1e3a5f",borderRadius:8,padding:"10px 14px",marginBottom:12}}>
+                <div style={{fontSize:10,fontWeight:700,color:"#7dd3fc",letterSpacing:1.2,marginBottom:8}}>
+                  ⏱ MATCH-PHASE DRIFT — does mental load deteriorate in 2nd half?
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(180px, 1fr))",gap:10}}>
+                  {mm.stamina_idx != null && (() => {
+                    const s = mm.stamina_idx;
+                    const c = s > 1.15 ? "#ef4444" : s > 1.05 ? "#fb923c" : s > 0.95 ? "#fbbf24" : "#22c55e";
+                    const label = s > 1.15 ? "noticeable adverse-event spike late"
+                                : s > 1.05 ? "slight late-game increase"
+                                : s > 0.95 ? "stable across halves"
+                                : "actually improves late";
+                    return (
+                      <Tip wide content={<div style={{fontSize:11}}>
+                        <strong>Adverse-Rate-Drift</strong>: ratio of (h2 adverse-events / h2 actions) ÷ (h1 adverse-events / h1 actions).
+                        Sample: H1={mm.h1_actions} actions, H2={mm.h2_actions} actions.
+                        <br/>&gt;1.0 = MORE adverse events per action in 2nd half (mental fatigue tell).
+                      </div>}>
+                        <div style={{background:"#0d1117",border:`1px solid ${c}33`,borderRadius:6,padding:"8px 10px",cursor:"help"}}>
+                          <div style={{fontSize:9,color:"#9ca3af",marginBottom:3}}>Adverse Rate Drift</div>
+                          <div style={{fontSize:18,fontWeight:700,color:c,fontFamily:"Oswald,sans-serif"}}>{s.toFixed(2)}×</div>
+                          <div style={{fontSize:10,color:c,marginTop:2}}>{label}</div>
+                        </div>
+                      </Tip>
+                    );
+                  })()}
+                  {mm.overdriver_drift != null && (() => {
+                    const d = mm.overdriver_drift;
+                    const c = d > 1.3 ? "#ef4444" : d > 1.05 ? "#fb923c" : d < 0.85 ? "#22c55e" : "#fbbf24";
+                    const label = d > 1.3 ? "TO-spike under late-game pressure"
+                                : d > 1.05 ? "slight late-game TO increase"
+                                : d < 0.85 ? "TO-discipline improves late"
+                                : "stable TO-control";
+                    return (
+                      <Tip wide content={<div style={{fontSize:11}}>
+                        <strong>Overdriver Drift</strong>: H2-Overdriver-Index ÷ H1-Overdriver-Index.
+                        H1 streaks: {mm.h1_streaks||0}, H2 streaks: {mm.h2_streaks||0}.
+                        <br/>&gt;1.0 = bigger TO-spike in 2nd half streaks vs 1st half streaks.
+                      </div>}>
+                        <div style={{background:"#0d1117",border:`1px solid ${c}33`,borderRadius:6,padding:"8px 10px",cursor:"help"}}>
+                          <div style={{fontSize:9,color:"#9ca3af",marginBottom:3}}>Overdriver Drift (H2/H1)</div>
+                          <div style={{fontSize:18,fontWeight:700,color:c,fontFamily:"Oswald,sans-serif"}}>{d.toFixed(2)}×</div>
+                          <div style={{fontSize:10,color:c,marginTop:2}}>{label}</div>
+                        </div>
+                      </Tip>
+                    );
+                  })()}
+                  {mm.hothead_drift != null && (() => {
+                    const d = mm.hothead_drift;
+                    const c = d > 1.3 ? "#ef4444" : d > 1.05 ? "#fb923c" : d < 0.85 ? "#22c55e" : "#fbbf24";
+                    const label = d > 1.3 ? "foul-spike when frustrated late"
+                                : d > 1.05 ? "slight late-game foul increase"
+                                : d < 0.85 ? "foul-discipline improves late"
+                                : "stable foul-control";
+                    return (
+                      <Tip wide content={<div style={{fontSize:11}}>
+                        <strong>Hothead Drift</strong>: H2-Hothead-Index ÷ H1-Hothead-Index. Big drift = late-game frustration tells.
+                      </div>}>
+                        <div style={{background:"#0d1117",border:`1px solid ${c}33`,borderRadius:6,padding:"8px 10px",cursor:"help"}}>
+                          <div style={{fontSize:9,color:"#9ca3af",marginBottom:3}}>Hothead Drift (H2/H1)</div>
+                          <div style={{fontSize:18,fontWeight:700,color:c,fontFamily:"Oswald,sans-serif"}}>{d.toFixed(2)}×</div>
+                          <div style={{fontSize:10,color:c,marginTop:2}}>{label}</div>
+                        </div>
+                      </Tip>
+                    );
+                  })()}
+                </div>
+                <div style={{fontSize:9,color:"#475569",marginTop:8,fontStyle:"italic"}}>
+                  Match-Phase-Drift compares mental signals between 1st half and 2nd half. Helpful for spotting conditioning or focus drop-off — but interpret cautiously: per-half streak samples are smaller.
+                </div>
+              </div>
+            )}
 
             {/* Sample size + sensitivity context */}
             <div style={{background:"#0d1117",borderRadius:6,padding:"8px 12px",fontSize:10,color:"#6b7280",lineHeight:1.6}}>
@@ -5484,7 +5629,7 @@ function MethodologyTab() {
   const [methodView, setMethodView] = useState("quick"); // "quick" | "deep"
 
   const sections = [
-    {cat:"ppWA Projection Model (v2)",items:["monteCarlo","posClassification"],desc:"Core engine: position-stratified HistGradientBoosting (sklearn) + calibrated Elite Detector (logistic), trained on 1,784 NCAA and international prospects (draft classes 2010–2016, N=1,784) with verified NBA outcomes. Target variable: Peak Wins Added — best 3-consecutive-season window in first 8 NBA years (min 200 minutes/season). Features: 8–12 theoretically grounded variables per position group (Playmaker / Wing / Big), including age, BPM percentile, BPM trajectory, conference strength, free-throw rate, athleticism score, and position-specific shooting/playmaking signals. Output: ppWA = Projected Peak Wins Added (a single, interpretable number: 'this player projects to add X wins above replacement at his peak'). Validated on holdout classes 2017–2019: Spearman ρ = 0.460 (craftednba.com published benchmark: 0.373) — this is rank-order correlation on out-of-sample data, not a training-set metric. Cross-validated r = 0.462 (5-fold CV on training set). MAR = 12.0 per class. Note: model was trained exclusively on prospects who were scouted and drafted — undrafted players are extrapolations beyond the training distribution."},
+    {cat:"ppWA Projection Model",items:["monteCarlo","posClassification"],desc:"The core engine: a position-stratified gradient-boosting model combined with a calibrated Elite Detector. Trained on 1,784 NCAA and international prospects (draft classes 2010–2016) with verified NBA outcomes. Target variable: Peak Wins Added — best 3-consecutive-season window in first 8 NBA years (min 200 minutes/season). Features: 8–12 theoretically grounded variables per position group (Playmaker / Wing / Big), including age, BPM percentile, BPM trajectory, conference strength, free-throw rate, athleticism score, and position-specific shooting/playmaking signals. Output: ppWA = Projected Peak Wins Added — a single, interpretable number: 'this player projects to add X wins above replacement at his peak'. Validated on holdout classes 2017–2019 with Spearman rank correlation ρ = 0.460 (out-of-sample). Cross-validated r = 0.462 (5-fold CV). Note: the model was trained on prospects who were scouted and drafted — projections for undrafted players are extrapolations beyond the training distribution."},
     {cat:"International Adjustments",items:[],desc:"International players receive three adjustments: (1) League Strength via empirical bridge-player ratios (2,655 players who played both intl and NBA). Euroleague=1.40, ACB=1.39, BBL=1.18 (NCAA Power=1.0 anchor). (2) Liga-BPM-Scaler: Raw BPM proxy (PER+eDiff) is multiplied by a league-specific scaler (Euroleague ×2.1, ACB ×1.9, NBL ×1.65, etc.) to translate to NCAA-equivalent BPM before feature engineering. (3) Conf-adj post-hoc with translatable-USG-aware caps for strong leagues."},
     {cat:"The 5 Pillars (DNA Scores)",items:["feel","shootScore","defScore","funcAth","selfCreation","overall"],desc:"Position-adjusted percentile scores (0–100) capturing the fundamental dimensions of prospect evaluation. Each pillar uses era-adjusted percentiles computed against ~34k college + ~9k international players since 2008. Box Creation (Ben Taylor method) measures total offensive creation: Scoring Creation (USG×TS) + Assist Creation (AST%×teammate possessions). Works identically for NCAA and international players."},
     {cat:"Shooting Projection",items:["projNba3p","projNba3pa","projNba3par","touchPrior"],desc:"Bayesian Beta-Binomial model for NBA 3P shooting translation. Prior: FT%-based 'motor touch' (strongest single predictor of NBA shooting per Berger 2022). κ=200 pseudo-attempts means low-volume college shooters regress heavily toward their FT% prior. For players without midrange data (internationals, pre-2010), a simplified FT%-only prior is used with higher FT% weighting."},
