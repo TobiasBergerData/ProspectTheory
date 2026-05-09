@@ -760,11 +760,14 @@ function resolvePosition(d) {
   const orbP = d.orb_p ?? d.orbP ?? 0;
 
   // Ball-handler override: high AST% = Playmaker, WITH height guard
-  // Guards (< 79"): AST% > 25 + USG% > 22 (Curry, Harden, Smart)
-  // Taller: need AST% > 32 (true point-forwards only)
-  if (ht != null && ht < 79 && astP > 25 && usg > 22) return "Playmaker";
-  if (ht != null && ht < 79 && astP > 30) return "Playmaker";
-  if (astP > 32) return "Playmaker"; // Any height — true point-big
+  // Tobias 2026-05-09 (relaxed): combo guards rated by usg+astP combo, not just astP cutoff.
+  // Old thresholds (astP>25) missed Wagler 23.2, Cade Cunningham 20.2, Jrue Holiday 23.8.
+  // Guards (<79"): astP>22 + usg≥22 (Curry, Harden, Westbrook, Wagler, Holiday)
+  // Taller (<81"): astP≥20 + usg≥26 (Cade, Magic-style point forwards)
+  if (ht != null && ht < 79 && astP > 22 && usg >= 22) return "Playmaker";
+  if (ht != null && ht < 79 && astP > 28) return "Playmaker";
+  if (ht != null && ht < 81 && astP >= 20 && usg >= 26) return "Playmaker";
+  if (astP > 30) return "Playmaker"; // Any height — true point-big
 
   // Tobias 2026-05-09: Big-override for tall non-shooters with rim-protection profile.
   // Catches Tarris Reed (82", 3PAr=1.2%, BLK%=8.4) which the pipeline mis-tags as Wing.
@@ -773,6 +776,12 @@ function resolvePosition(d) {
 
   // Stretch/shooting forward override: 6'7"-6'10" with shooting = Wing, not Big
   if (ht != null && ht >= 79 && ht <= 82 && (tp > 30 || tpFreq > 25)) return "Wing";
+
+  // Tobias 2026-05-09: Height-floor override BEFORE existing-pos check.
+  // Backend pipeline mislabels short players as Wing (e.g. Westbrook 6'3" → Wing,
+  // should be Playmaker). Anyone ≤75" who isn't a stat-Playmaker is at minimum
+  // a combo-guard, not a wing.
+  if (ht != null && ht <= 75) return "Playmaker";
 
   // Priority 2: BartTorvik functional_pos
   const funcPos = (d.functional_pos ?? d.func_pos ?? "").toLowerCase().trim();
@@ -932,21 +941,68 @@ function mapProfile(d) {
   const _toP_raw  = d.to_p  ?? d.toP;
   const _astTov_raw = (d.ast_to ?? d.astTov ?? d.ast_tov) ??
     ((_astP_raw != null && _toP_raw != null && _toP_raw > 0) ? _astP_raw / _toP_raw : null);
+  // Tobias 2026-05-09: Box-score derivation for ts/efg/twoPct when missing.
+  // Pre-2017 NCAA pipeline + intl pipeline don't store these. Without derivation,
+  // Westbrook/Sabonis/Doncic get 0 badges that depend on ts/efg.
+  const _ftDerive  = normShootPct(d.ft_pct ?? d.ft);
+  const _tpDerive  = normShootPct(d.tp_pct ?? d.tp);
+  const _fgDerive  = normShootPct(d.fg_pct ?? d.fg);
+  const _3fRaw     = d.three_f ?? d.three_freq ?? d.threeF;
+  const _3f01      = (_3fRaw == null) ? null : (_3fRaw > 1 ? _3fRaw / 100 : _3fRaw);
+  const _ftrRaw    = d.ftr ?? d.ft_rate;
+  const _ftr01     = (_ftrRaw == null) ? null : (_ftrRaw > 2 ? _ftrRaw / 100 : _ftrRaw);
+  const _efgDerived = (() => {
+    const direct = normShootPct(d.efg_pct ?? d.efg);
+    if (direct != null) return direct;
+    if (_fgDerive != null && _tpDerive != null && _3f01 != null) {
+      return Math.round((_fgDerive + 0.5 * _tpDerive * _3f01) * 10) / 10;
+    }
+    return null;
+  })();
+  const _tsDerived = (() => {
+    const direct = normShootPct(d.ts_pct ?? d.ts);
+    if (direct != null) return direct;
+    if (_efgDerived != null && _ftDerive != null && _ftr01 != null) {
+      return Math.round((2 * _efgDerived + _ftDerive * _ftr01) / (2 * (1 + 0.44 * _ftr01)) * 10) / 10;
+    }
+    return null;
+  })();
+  const _twoPctDerived = (() => {
+    const direct = normShootPct(d.two_pct ?? d.two_p_pct ?? d.twoP_per);
+    if (direct != null) return direct;
+    if (_fgDerive != null && _tpDerive != null && _3f01 != null && _3f01 < 0.95) {
+      const two = (_fgDerive - _tpDerive * _3f01) / (1 - _3f01);
+      return (two >= 0 && two <= 100) ? Math.round(two * 10) / 10 : null;
+    }
+    return null;
+  })();
+
   const tmpP = {
     pos: resolvedPos,
     // All shooting % fields run through normShootPct — 2026 profiles store decimals (0.39),
     // pre-2026 store percentages (38.5). Without normalization, every 2026 prospect fails
     // thresholds like `tp > 40` for Elite Shooting etc.
-    ft: normShootPct(d.ft_pct ?? d.ft),
-    tp: normShootPct(d.tp_pct ?? d.tp),
-    ts: normShootPct(d.ts_pct ?? d.ts),
-    efg: normShootPct(d.efg_pct ?? d.efg),
+    ft: _ftDerive,
+    tp: _tpDerive,
+    ts: _tsDerived,
+    efg: _efgDerived,
     rimPct: normShootPct(d.rim_pct ?? d.rimPct),
     twoPct: normShootPct(d.two_pct ?? d.two_p_pct ?? d.twoP_per),
     threeF: d.three_f ?? d.three_freq ?? d.threeF,
     astP: _astP_raw, astTov: _astTov_raw, stlP: d.stl_p ?? d.stlP,
     blkP: d.blk_p ?? d.blkP, usg: d.usg ?? d.usg_p, toP: _toP_raw,
-    ftr: d.ftr ?? d.ft_rate, rimF: d.rim_f ?? d.rim_freq ?? d.rimF,
+    // Tobias 2026-05-09: ftr scale normalization. Intl pipeline stores 0-1 ratio
+    // (Doncic 0.56 = 56%), NCAA stores 0-100 percentage (38.6 = 38.6%). Without
+    // normalization, badge filter sees 0.56 < 20 → Passive Driver false positive
+    // for elite intl FT-drawers (Wemby, Luka, Sengun all flagged incorrectly).
+    ftr: (() => {
+      const v = d.ftr ?? d.ft_rate;
+      if (v == null) return null;
+      const n = Number(v);
+      if (isNaN(n)) return null;
+      return (n > 0 && n < 2) ? n * 100 : n;
+    })(),
+    rimF: d.rim_f ?? d.rim_freq ?? d.rimF,
     dbpm: d.dbpm, obpm: d.obpm, bpm: d.bpm,
     feel: d.feel ?? 0, funcAth: d.func_ath ?? 0,
     htIn: d.ht ?? d.height_in ?? d.college_height_inches,
@@ -7104,15 +7160,11 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
                     <td className="px-3 py-2.5 text-xs" style={{color:"#9ca3af"}}>{p.team||p.conf}</td>
                     <td className="px-3 py-2.5 text-xs" style={{color: p.age != null && p.age < 20 ? "#86efac" : "#9ca3af"}}>{p.age != null ? ageOnDraftDay(p.age).toFixed(1) : "—"}</td>
                     <td className="px-3 py-2.5 font-bold" style={{color: (() => {
+                      // Tobias 2026-05-09: ppWA-Farbe synced mit recalibrateTier-Label.
+                      // Vorher: War-Schwellen (≥47 Superstar, ≥33 AllStar...) — passten nicht
+                      // zum kumulativen Tier-Label (Boozer war=25 → blau, aber Tier=All-Star/orange).
                       if (p.war == null) return "#374151";
-                      const w = p.war;
-                      // Synced mit Backend tier thresholds (Superstar>=47, All-Star>=33, Starter>=17, Role>=8, Repl>=0)
-                      if (w >= 47) return "#fbbf24";       // Superstar gold
-                      if (w >= 33) return "#f97316";       // All-Star orange
-                      if (w >= 17) return "#3b82f6";       // Starter blue
-                      if (w >=  8) return "#06b6d4";       // Roleplayer cyan
-                      if (w >=  0) return "#8b5cf6";       // Replacement purple
-                      return "#6b7280";                     // Out gray (negative ppWA)
+                      return TC[p.predTier] || "#6b7280";
                     })(), fontFamily:"'Oswald',sans-serif"}}>{p.war != null ? (p.war >= 10 ? fmt(p.war, 0) : fmt(p.war, 1)) : "—"}</td>
                     <td className="px-3 py-2.5 text-xs font-semibold" style={{color: p.bpm != null ? (p.bpm > 8 ? "#22c55e" : p.bpm > 4 ? "#86efac" : "#9ca3af") : "#374151"}}>{p.bpm != null ? fmt(p.bpm, 1) : "—"}</td>
                     {/* NBA Tier */}
