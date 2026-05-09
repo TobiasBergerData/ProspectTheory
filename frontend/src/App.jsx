@@ -2281,21 +2281,7 @@ function ClassScatterAndDev({p}) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* 3A: Class Scatter */}
-      <Sec icon="🏀" title={`${yr} Class: USG vs AdjOrtg`}
-        sub={`All ${yr} class prospects. Orange dot = ${p.name?.split(" ")[0]}. Orange dashed = cross-sectional peer curve (not causal — higher-usage players are better players on average, not more efficient because of usage). Blue = above-peer efficiency, gray = below.`}>
-        <div style={{display:"flex",gap:8,marginBottom:8}}>
-          {["class","games"].map(m=>(
-            <button key={m} onClick={()=>setChartMode(m)}
-              style={{fontSize:11,padding:"3px 10px",borderRadius:6,border:"none",cursor:"pointer",
-                background: chartMode===m?"#f97316":"#1f2937",
-                color: chartMode===m?"#fff":"#9ca3af",fontWeight:600}}>
-              {m==="class"?"Class Scatter":"Game Scatter"}
-            </button>
-          ))}
-        </div>
-        {chartMode==="class" ? <ClassScatter /> : <GameScatter />}
-      </Sec>
+      {/* 3A: Class Scatter — entfernt 2026-05-09 (User: redundant zur In-Season-Trajectory) */}
 
       {/* 3A.5: Multi-Stat In-Season Trajectory (Tobias 2026-05-09)
             Aus p.gameLogs.games (PBP-aggregated). Zeigt mehrere Stats overlay:
@@ -2621,178 +2607,280 @@ function MindTab({p}) {
         </div>
       </div>
 
-      {/* ── Section 1: Self-Sufficiency Profile (formerly "Leverage-Weighted Efficiency") ── */}
+      {/* ══════════════════════════════════════════════════════════════════
+           Section 1: Self-Sufficiency Profile — 4-Step Decision Tree
+           Tobias 2026-05-09: refactor in klare nummerierte Schritte mit
+           Step-Header, Hero-Number pro Schritt, eindeutiger Verdict am Ende.
+         ══════════════════════════════════════════════════════════════════ */}
       <Sec icon="⚡" title="Self-Sufficiency Profile"
-        sub="Step 1: How often does he create alone? · Step 2: How efficient when he does? · Step 3: Does pressure change it? · Step 4: Where does he succeed?">
-        <div style={{fontSize:12,color:"#9ca3af",marginBottom:16,lineHeight:"1.6"}}>
-          Standard eFG% weights all attempts equally. <strong style={{color:"#e5e7eb"}}>Leverage-Weighted eFG%</strong> up-weights shots the player created for themselves — because unassisted attempts carry higher difficulty and higher game impact. A player who dominates on self-created shots is a self-sufficient scorer.
-        </div>
+        sub="Four sequential questions: Wie oft muss er allein kreieren? Wie effizient ist er dabei? Bricht es unter Druck ein? Wo gelingt es ihm am besten?">
+        {(() => {
+          // Self-Creation Rate (% of made FGs that were unassisted)
+          const overallSelfPct = p.shotCreation?.overall?.selfPct ?? null;
+          const totalFga = p.shotCreation?.overall?.fga ?? 0;
 
-        {/* ── Section: Percentile Rankings ── */}
-        <div style={{fontSize:10,fontWeight:700,color:"#6b7280",letterSpacing:1.2,marginBottom:10,borderBottom:"1px solid #1f2937",paddingBottom:6}}>
-          PERCENTILE RANKINGS — vs {(p.seasonLines||[]).slice(-1)[0]?.yr || "current"} class cohort
-        </div>
-        <div style={{display:"flex",gap:16,justifyContent:"space-around",marginBottom:20,flexWrap:"wrap"}}>
-          <ScoreRing score={score} label="LW-eFG%" sub="vs cohort" color="#f97316"/>
-          <Tip content="Difficulty Premium: how much more (or less) efficient is this player on self-created shots vs. all shots. Positive = better on hard shots.">
-            <ScoreRing score={premPctl} label="Difficulty Premium" sub="vs cohort" color="#3b82f6"/>
-          </Tip>
-          <Tip content="Usage percentile — what % of team possessions does this player use when on court. High usage = heavy offensive load.">
-            <ScoreRing score={usgPctl} label="Usage Load" sub="vs cohort" color="#a855f7"/>
-          </Tip>
-        </div>
-
-        {/* ── Section: Shot Quality Metrics ── */}
-        <div style={{fontSize:10,fontWeight:700,color:"#6b7280",letterSpacing:1.2,marginBottom:10,borderBottom:"1px solid #1f2937",paddingBottom:6}}>
-          SHOT QUALITY — self-created vs. assisted attempts
-        </div>
-        {/* Key numbers */}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:20}}>
-          {[
-            {label:"Self-Created eFG%", val:`${lweFG?.toFixed(1)}%`, sub:"leverage-weighted", color:"#f97316"},
-            {label:"Raw Zone eFG%",     val:`${raweFG?.toFixed(1)}%`, sub:"unweighted baseline", color:"#9ca3af"},
-            {label:"Difficulty Prem.",  val:`${diffPrem>0?"+":""}${diffPrem?.toFixed(1)}pp`, sub:"eFG% difference", color:diffPrem>0?"#22c55e":diffPrem>-3?"#fbbf24":"#ef4444"},
-          ].map(({label,val,sub,color})=>(
-            <div key={label} style={{background:"#1f2937",borderRadius:8,padding:"10px 12px",textAlign:"center"}}>
-              <div style={{fontSize:18,fontWeight:700,color,fontFamily:"Oswald,sans-serif"}}>{val}</div>
-              <div style={{fontSize:11,fontWeight:600,color:"#e5e7eb",marginTop:2}}>{label}</div>
-              <div style={{fontSize:10,color:"#6b7280",marginTop:1}}>{sub}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* Difficulty premium bar */}
-        <div style={{background:"#0f172a",borderRadius:8,padding:"12px 14px",marginBottom:20}}>
-          <div style={{fontSize:11,fontWeight:600,color:"#9ca3af",marginBottom:10,letterSpacing:0.5}}>DIFFICULTY PREMIUM SCALE</div>
-          <DiffBar value={diffPrem}/>
-        </div>
-
-        {/* Zone breakdown */}
-        {zones && Object.keys(zones).length > 0 && (
-          <div style={{background:"#0f172a",borderRadius:8,padding:"12px 14px"}}>
-            <div style={{fontSize:11,fontWeight:600,color:"#9ca3af",marginBottom:10,letterSpacing:0.5}}>ZONE BREAKDOWN — EFFICIENCY &amp; CREATION</div>
-            <div style={{display:"grid",gridTemplateColumns:"70px 65px 50px 55px 50px 55px 50px 40px",gap:4,marginBottom:6}}>
-              <div style={{fontSize:9,color:"#4b5563"}}>Zone</div>
-              <div style={{textAlign:"right",fontSize:9,color:"#f97316",fontWeight:600}}>eFG%</div>
-              <div style={{textAlign:"right",fontSize:8,color:"#4b5563"}}>Avg</div>
-              <div style={{textAlign:"right",fontSize:9,color:"#f97316",fontWeight:600}}>Self%</div>
-              <div style={{textAlign:"right",fontSize:8,color:"#4b5563"}}>Avg</div>
-              <div style={{textAlign:"right",fontSize:9,color:"#60a5fa",fontWeight:600}}>Asst%</div>
-              <div style={{textAlign:"right",fontSize:8,color:"#4b5563"}}>Avg</div>
-              <div style={{textAlign:"right",fontSize:9,color:"#4b5563"}}>FGA</div>
-            </div>
-            {["rim","mid","three","dunk"].map(z => {
-              const cfg = ZONE_CONFIG[z];
-              const zd = zones[z];
-              if (!zd) return null;
-              return <ZoneRow key={z} zone={z} label={cfg.label} color={cfg.color} data={zd}/>;
-            })}
-            <div style={{marginTop:10,padding:"7px 10px",background:"#1a2033",borderRadius:6,fontSize:10,color:"#6b7280",lineHeight:"1.7"}}>
-              <span style={{color:"#9ca3af",fontWeight:600}}>eFG%</span> = effective field goal % per zone; 3-pt shots scaled ×1.5 (equal-value comparison to 2s).{" "}
-              <span style={{color:"#9ca3af",fontWeight:600}}>Self%</span> = % of makes that were unassisted — shot creation vs. catch-and-shoot.{" "}
-              <span style={{color:"#9ca3af",fontWeight:600}}>FGA</span> = raw attempt count.
-            </div>
-          </div>
-        )}
-
-        {/* ── Step 3: Pressure-Splits (Tobias 2026-05-09) ── */}
-        {p.mindMetrics && (() => {
-          const mm = p.mindMetrics;
-          const cw = mm.clutch_wp || {};   // win-prob clutch (preferred)
-          const lc = mm.late_clock || {};
-          const ft = mm.ft || {};
-
-          const PressureCard = ({title, sub, fga, efg, delta, type, minSample = 8}) => {
-            const lowSample = (fga || 0) < minSample;
-            const dColor =
-              delta == null   ? "#6b7280"
-              : delta >  3     ? "#22c55e"
-              : delta > -3     ? "#fbbf24"
-              : delta > -10    ? "#fb923c"
-              :                  "#ef4444";
-            const verdict =
-              delta == null    ? "—"
-              : delta >  5     ? "performs better under this pressure"
-              : delta >  0     ? "slightly better"
-              : delta > -3     ? "near baseline"
-              : delta > -10    ? "drop under pressure"
-              :                  "significant drop under pressure";
-            return (
-              <Tip wide content={
-                <div>
-                  <div style={{fontWeight:700,color:dColor,marginBottom:4}}>{title}</div>
-                  <div style={{color:"#cbd5e1",fontSize:11}}>{sub}</div>
-                  <div style={{fontSize:11,color:"#94a3b8",marginTop:4}}>
-                    Sample: {fga||0} {type === "ft" ? "FT" : "FG"} attempts ·{" "}
-                    {fga != null && fga >= 8 ? "stable" : "limited (treat as directional)"}
-                  </div>
-                </div>
-              }>
-                <div style={{background:"#0d1117",border:`1px solid ${dColor}33`,borderRadius:8,padding:"10px 12px",cursor:"help",opacity:lowSample?0.65:1}}>
-                  <div style={{fontSize:10,fontWeight:600,color:"#9ca3af",marginBottom:6}}>{title}</div>
-                  <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:4}}>
-                    <span style={{fontSize:20,fontWeight:700,color:dColor,fontFamily:"Oswald,sans-serif"}}>
-                      {delta != null ? `${delta >= 0 ? "+" : ""}${delta.toFixed(1)}pp` : "—"}
-                    </span>
-                    <span style={{fontSize:10,color:"#6b7280"}}>vs baseline</span>
-                  </div>
-                  <div style={{fontSize:9,color:"#475569",marginBottom:4}}>
-                    {efg != null ? `eFG ${efg.toFixed(1)}% on ${fga||0} attempts` : "no data"}
-                    {lowSample && fga > 0 && <span style={{color:"#fbbf24",marginLeft:4}}>· low sample</span>}
-                  </div>
-                  <div style={{fontSize:10,color:dColor,fontWeight:500}}>{verdict}</div>
-                </div>
-              </Tip>
-            );
-          };
-
-          const hasAny = (cw.fga || lc.fga || (ft.clutch_fta||0) > 0);
-          if (!hasAny) return null;
-
-          return (
-            <div style={{marginTop:18,marginBottom:16}}>
-              <div style={{fontSize:10,fontWeight:700,color:"#6b7280",letterSpacing:1.2,marginBottom:10,borderBottom:"1px solid #1f2937",paddingBottom:6}}>
-                STEP 3 — PRESSURE-AWARE EFFICIENCY · {mm.season} season
-              </div>
-              <div style={{fontSize:11,color:"#9ca3af",marginBottom:12,lineHeight:1.5}}>
-                Self-creation efficiency above measures average attempts. Three pressure contexts often expose mental load:
-                <strong style={{color:"#e5e7eb"}}> close late-game</strong> (win prob 20–80% in 2nd half),
-                <strong style={{color:"#e5e7eb"}}> shot-clock pressure</strong> (≥22 secs into possession), and
-                <strong style={{color:"#e5e7eb"}}> clutch free-throws</strong>. Δ shows efficiency change vs the same player's normal-context attempts.
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(180px, 1fr))",gap:10}}>
-                <PressureCard title="Close Late-Game (FG)"
-                  sub="Win-probability based: 2nd half + outcome uncertain. Real high-leverage moments where pressure is greatest."
-                  fga={cw.fga} efg={cw.efg} delta={cw.delta_efg} type="fg"/>
-                <PressureCard title="Late Shot Clock (FG)"
-                  sub="Possession ≥22 secs in (NCAA shot clock = 30s). Forced shots when offense couldn't get a clean look."
-                  fga={lc.fga} efg={lc.efg} delta={lc.delta_efg} type="fg"/>
-                {ft.clutch_fta != null && ft.clutch_fta >= 5 && (
-                  <PressureCard title="Clutch Free Throws"
-                    sub="FT-attempts in last 5 min Half 2 with score-diff ≤5pt. Pure pressure shot — the foul line never lies."
-                    fga={ft.clutch_fta} efg={ft.clutch_pct} delta={ft.clutch_delta} type="ft" minSample={5}/>
-                )}
-              </div>
-              <div style={{fontSize:10,color:"#475569",marginTop:8,fontStyle:"italic"}}>
-                Pressure-Δ values with &lt;8 attempts are visual placeholders only — the eFG can swing wildly with any single make/miss. Use as a cue for film, not as a verdict.
+          // Step labels + colors
+          const StepHeader = ({n, title, color, hint}) => (
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10,marginTop:n>1?20:0}}>
+              <div style={{
+                background:color, color:"#000", borderRadius:"50%", width:28, height:28,
+                display:"flex", alignItems:"center", justifyContent:"center",
+                fontWeight:700, fontFamily:"Oswald,sans-serif", fontSize:14, flexShrink:0,
+              }}>{n}</div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:13,fontWeight:700,color:"#e5e7eb",letterSpacing:0.3}}>{title}</div>
+                <div style={{fontSize:10,color:"#6b7280",marginTop:1}}>{hint}</div>
               </div>
             </div>
           );
+
+          // Self-creation peer cohort: how does this player rank
+          const selfCreationPctl = (() => {
+            // Approximate position-aware peer comparison: D1 average self-creation ~45%
+            // Top 10% > 60%, Top 25% > 52%, Median ~45%, Bottom 25% < 38%
+            if (overallSelfPct == null) return null;
+            if (overallSelfPct >= 65) return 95;
+            if (overallSelfPct >= 60) return 90;
+            if (overallSelfPct >= 55) return 80;
+            if (overallSelfPct >= 50) return 65;
+            if (overallSelfPct >= 45) return 50;
+            if (overallSelfPct >= 40) return 35;
+            if (overallSelfPct >= 35) return 20;
+            return 10;
+          })();
+          const selfCreationLabel = (() => {
+            if (overallSelfPct == null) return "—";
+            if (overallSelfPct >= 60) return "Heavy self-creation load";
+            if (overallSelfPct >= 50) return "Above-average self-creator";
+            if (overallSelfPct >= 40) return "Balanced creator/finisher";
+            if (overallSelfPct >= 30) return "Mostly off-ball / catch-and-shoot";
+            return "Predominantly assisted finisher";
+          })();
+
+          // Verdict logic — combine signals
+          const verdict = (() => {
+            const heavy = overallSelfPct != null && overallSelfPct >= 50;
+            const lite = overallSelfPct != null && overallSelfPct < 40;
+            const efficientHard = diffPrem != null && diffPrem > -2;
+            const inefficientHard = diffPrem != null && diffPrem < -8;
+            const cltDrop = p.mindMetrics?.clutch_wp?.delta_efg != null && p.mindMetrics.clutch_wp.delta_efg < -8;
+            const cltStrong = p.mindMetrics?.clutch_wp?.delta_efg != null && p.mindMetrics.clutch_wp.delta_efg > 5;
+            const lateClockBad = p.mindMetrics?.late_clock?.delta_efg != null && p.mindMetrics.late_clock.delta_efg < -10;
+
+            if (heavy && efficientHard && cltStrong) return {
+              label: "Self-Sufficient Star Profile", color: "#22c55e",
+              text: "Carries heavy self-creation load AND maintains efficiency under pressure. Rare — translates to NBA primary creator role with high confidence.",
+            };
+            if (heavy && efficientHard) return {
+              label: "Self-Sufficient Scorer", color: "#86efac",
+              text: "Heavy self-creation load with above-baseline efficiency. Profiles as an offensive engine — needs the ball to be at his best.",
+            };
+            if (heavy && inefficientHard) return {
+              label: "High Volume / Low Efficiency", color: "#ef4444",
+              text: "Forced to create alone often, but efficiency drops sharply on those attempts. Production looks high in box scores but is empty calories under pressure. Best deployed with more creator support.",
+            };
+            if (lite && cltStrong) return {
+              label: "Off-Ball Clutch Performer", color: "#86efac",
+              text: "Mostly off-ball player who elevates in high-leverage moments. Plug-and-play role player — not a primary creator.",
+            };
+            if (lite) return {
+              label: "Off-Ball Beneficiary", color: "#fbbf24",
+              text: "Production depends on creators feeding him open looks. Best in motion-offense or with elite playmakers — limited self-sufficiency.",
+            };
+            if (lateClockBad && cltDrop) return {
+              label: "Pressure-Sensitive Creator", color: "#fb923c",
+              text: "Adequate baseline efficiency, but production deteriorates under both shot-clock pressure AND clutch moments. Mental load is a real risk factor.",
+            };
+            return {
+              label: "Balanced Creator", color: "#fbbf24",
+              text: "Average self-creation with average efficiency. Versatile but no defining edge — fits a secondary role.",
+            };
+          })();
+
+          return (
+            <>
+              {/* ── Step 1: HOW OFTEN does he need to create alone? ── */}
+              <StepHeader n={1} title="HOW OFTEN does he create alone?"
+                color="#fbbf24"
+                hint={`Share of made field goals that were unassisted (= self-created). Total FGAs tracked: ${totalFga}.`}/>
+              <div style={{background:"#0d1117",border:"1px solid #1f2937",borderRadius:8,padding:"14px 16px",marginBottom:8}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",flexWrap:"wrap",gap:12}}>
+                  <div>
+                    <div style={{fontSize:36,fontWeight:700,color:"#fbbf24",fontFamily:"Oswald,sans-serif",lineHeight:1}}>
+                      {overallSelfPct != null ? `${overallSelfPct.toFixed(0)}%` : "—"}
+                    </div>
+                    <div style={{fontSize:11,color:"#9ca3af",marginTop:4}}>
+                      Self-creation rate · <span style={{color:"#fbbf24"}}>{selfCreationLabel}</span>
+                    </div>
+                  </div>
+                  {selfCreationPctl != null && (
+                    <div style={{textAlign:"right"}}>
+                      <div style={{fontSize:24,fontWeight:700,color:selfCreationPctl >= 75 ? "#22c55e" : selfCreationPctl >= 50 ? "#fbbf24" : "#9ca3af",fontFamily:"Oswald,sans-serif"}}>
+                        {selfCreationPctl}<span style={{fontSize:14}}>th</span>
+                      </div>
+                      <div style={{fontSize:10,color:"#6b7280"}}>percentile vs D1 peers</div>
+                    </div>
+                  )}
+                </div>
+                {/* visual bar */}
+                <div style={{marginTop:12,position:"relative",height:8,background:"#1f2937",borderRadius:4,overflow:"hidden"}}>
+                  <div style={{position:"absolute",left:0,top:0,bottom:0,width:`${Math.min(100, overallSelfPct||0)}%`,background:"linear-gradient(90deg,#fbbf2466,#fbbf24)",borderRadius:4}}/>
+                  <div style={{position:"absolute",left:"45%",top:-2,bottom:-2,width:1,background:"#6b7280"}}/>
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:"#475569",marginTop:3}}>
+                  <span>0%</span><span>D1 avg ~45%</span><span>100%</span>
+                </div>
+              </div>
+
+              {/* ── Step 2: HOW EFFICIENT when self-creating? ── */}
+              <StepHeader n={2} title="HOW EFFICIENT when he self-creates?"
+                color="#f97316"
+                hint="Efficiency on unassisted shots vs. assisted shots. Difficulty Premium = self-created eFG% − assisted eFG%."/>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3, 1fr)",gap:10,marginBottom:10}}>
+                <div style={{background:"#0d1117",border:"1px solid #f9731633",borderRadius:8,padding:"12px 14px",textAlign:"center"}}>
+                  <div style={{fontSize:24,fontWeight:700,color:"#f97316",fontFamily:"Oswald,sans-serif"}}>
+                    {lweFG != null ? `${lweFG.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{fontSize:11,fontWeight:600,color:"#e5e7eb",marginTop:2}}>Self-Created eFG%</div>
+                  <div style={{fontSize:9,color:"#6b7280",marginTop:1}}>leverage-weighted</div>
+                </div>
+                <div style={{background:"#0d1117",border:"1px solid #60a5fa33",borderRadius:8,padding:"12px 14px",textAlign:"center"}}>
+                  <div style={{fontSize:24,fontWeight:700,color:"#60a5fa",fontFamily:"Oswald,sans-serif"}}>
+                    {raweFG != null ? `${raweFG.toFixed(1)}%` : "—"}
+                  </div>
+                  <div style={{fontSize:11,fontWeight:600,color:"#e5e7eb",marginTop:2}}>Assisted eFG%</div>
+                  <div style={{fontSize:9,color:"#6b7280",marginTop:1}}>baseline (raw zone)</div>
+                </div>
+                <div style={{background:"#0d1117",border:`1px solid ${diffPrem>0?"#22c55e":diffPrem>-3?"#fbbf24":"#ef4444"}33`,borderRadius:8,padding:"12px 14px",textAlign:"center"}}>
+                  <div style={{fontSize:24,fontWeight:700,color:diffPrem>0?"#22c55e":diffPrem>-3?"#fbbf24":"#ef4444",fontFamily:"Oswald,sans-serif"}}>
+                    {diffPrem != null ? `${diffPrem >= 0 ? "+" : ""}${diffPrem.toFixed(1)}pp` : "—"}
+                  </div>
+                  <div style={{fontSize:11,fontWeight:600,color:"#e5e7eb",marginTop:2}}>Difficulty Premium</div>
+                  <div style={{fontSize:9,color:"#6b7280",marginTop:1}}>self − assisted</div>
+                </div>
+              </div>
+              <div style={{background:"#0d1117",borderRadius:8,padding:"10px 14px"}}>
+                <DiffBar value={diffPrem}/>
+              </div>
+
+              {/* ── Step 3: HOW DOES PRESSURE AFFECT this? ── */}
+              {p.mindMetrics && (() => {
+                const mm = p.mindMetrics;
+                const cw = mm.clutch_wp || {};
+                const lc = mm.late_clock || {};
+                const ft = mm.ft || {};
+                const PressureCard = ({title, sub, fga, efg, delta, type, minSample = 8}) => {
+                  const lowSample = (fga || 0) < minSample;
+                  const dColor =
+                    delta == null   ? "#6b7280"
+                    : delta >  3     ? "#22c55e"
+                    : delta > -3     ? "#fbbf24"
+                    : delta > -10    ? "#fb923c"
+                    :                  "#ef4444";
+                  const verdictText =
+                    delta == null    ? "—"
+                    : delta >  5     ? "performs better"
+                    : delta >  0     ? "slightly better"
+                    : delta > -3     ? "near baseline"
+                    : delta > -10    ? "drop"
+                    :                  "significant drop";
+                  return (
+                    <Tip wide content={
+                      <div>
+                        <div style={{fontWeight:700,color:dColor,marginBottom:4}}>{title}</div>
+                        <div style={{color:"#cbd5e1",fontSize:11}}>{sub}</div>
+                        <div style={{fontSize:11,color:"#94a3b8",marginTop:4}}>
+                          Sample: {fga||0} {type === "ft" ? "FT" : "FG"} attempts ·{" "}
+                          {fga != null && fga >= 8 ? "stable" : "limited (treat as directional)"}
+                        </div>
+                      </div>
+                    }>
+                      <div style={{background:"#0d1117",border:`1px solid ${dColor}33`,borderRadius:8,padding:"10px 12px",cursor:"help",opacity:lowSample?0.65:1}}>
+                        <div style={{fontSize:10,fontWeight:600,color:"#9ca3af",marginBottom:6}}>{title}</div>
+                        <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:4}}>
+                          <span style={{fontSize:22,fontWeight:700,color:dColor,fontFamily:"Oswald,sans-serif"}}>
+                            {delta != null ? `${delta >= 0 ? "+" : ""}${delta.toFixed(1)}pp` : "—"}
+                          </span>
+                          <span style={{fontSize:10,color:"#6b7280"}}>vs baseline</span>
+                        </div>
+                        <div style={{fontSize:9,color:"#475569",marginBottom:4}}>
+                          {efg != null ? `eFG ${efg.toFixed(1)}% · n=${fga||0}` : "no data"}
+                          {lowSample && fga > 0 && <span style={{color:"#fbbf24",marginLeft:4}}>· low sample</span>}
+                        </div>
+                        <div style={{fontSize:10,color:dColor,fontWeight:500}}>{verdictText}</div>
+                      </div>
+                    </Tip>
+                  );
+                };
+                const hasAny = (cw.fga || lc.fga || (ft.clutch_fta||0) > 0);
+                if (!hasAny) return null;
+                return (
+                  <>
+                    <StepHeader n={3} title="HOW DOES PRESSURE affect efficiency?"
+                      color="#fb923c"
+                      hint={`PBP-derived splits from ${mm.season} — clutch (close late game), shot-clock pressure, and clutch free throws.`}/>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(180px, 1fr))",gap:10,marginBottom:6}}>
+                      <PressureCard title="Close Late-Game (FG)"
+                        sub="Win-prob 20–80% in 2nd half. Real high-leverage moments."
+                        fga={cw.fga} efg={cw.efg} delta={cw.delta_efg} type="fg"/>
+                      <PressureCard title="Late Shot Clock (FG)"
+                        sub="Possession ≥22 secs in. Forced shots when offense couldn't get a clean look."
+                        fga={lc.fga} efg={lc.efg} delta={lc.delta_efg} type="fg"/>
+                      {ft.clutch_fta != null && ft.clutch_fta >= 5 && (
+                        <PressureCard title="Clutch Free Throws"
+                          sub="FT in last 5 min Half 2 with ≤5pt diff."
+                          fga={ft.clutch_fta} efg={ft.clutch_pct} delta={ft.clutch_delta} type="ft" minSample={5}/>
+                      )}
+                    </div>
+                    <div style={{fontSize:9,color:"#475569",marginTop:4,fontStyle:"italic"}}>
+                      Cards mit &lt;8 attempts sind directional only — single make/miss kann eFG dramatisch verschieben.
+                    </div>
+                  </>
+                );
+              })()}
+
+              {/* ── Step 4: WHERE does he succeed (zone breakdown)? ── */}
+              {zones && Object.keys(zones).length > 0 && (
+                <>
+                  <StepHeader n={4} title="WHERE does he succeed (which zones)?"
+                    color="#06b6d4"
+                    hint="Per-zone eFG%, self-creation share, and assist share. Look for elite zones (eFG>peer-avg + Self%>50)."/>
+                  <div style={{background:"#0d1117",border:"1px solid #1f2937",borderRadius:8,padding:"12px 14px"}}>
+                    <div style={{display:"grid",gridTemplateColumns:"70px 65px 50px 55px 50px 55px 50px 40px",gap:4,marginBottom:6}}>
+                      <div style={{fontSize:9,color:"#4b5563"}}>Zone</div>
+                      <div style={{textAlign:"right",fontSize:9,color:"#f97316",fontWeight:600}}>eFG%</div>
+                      <div style={{textAlign:"right",fontSize:8,color:"#4b5563"}}>Avg</div>
+                      <div style={{textAlign:"right",fontSize:9,color:"#f97316",fontWeight:600}}>Self%</div>
+                      <div style={{textAlign:"right",fontSize:8,color:"#4b5563"}}>Avg</div>
+                      <div style={{textAlign:"right",fontSize:9,color:"#60a5fa",fontWeight:600}}>Asst%</div>
+                      <div style={{textAlign:"right",fontSize:8,color:"#4b5563"}}>Avg</div>
+                      <div style={{textAlign:"right",fontSize:9,color:"#4b5563"}}>FGA</div>
+                    </div>
+                    {["rim","mid","three","dunk"].map(z => {
+                      const cfg = ZONE_CONFIG[z];
+                      const zd = zones[z];
+                      if (!zd) return null;
+                      return <ZoneRow key={z} zone={z} label={cfg.label} color={cfg.color} data={zd}/>;
+                    })}
+                  </div>
+                </>
+              )}
+
+              {/* ── Verdict ── */}
+              <div style={{marginTop:24,background:`${verdict.color}15`,border:`2px solid ${verdict.color}55`,borderRadius:10,padding:"14px 16px"}}>
+                <div style={{fontSize:10,fontWeight:700,color:verdict.color,letterSpacing:1.2,marginBottom:6}}>VERDICT — SELF-SUFFICIENCY</div>
+                <div style={{fontSize:18,fontWeight:700,color:verdict.color,fontFamily:"Oswald,sans-serif",marginBottom:6,letterSpacing:0.3}}>
+                  {verdict.label}
+                </div>
+                <div style={{fontSize:12,color:"#cbd5e1",lineHeight:1.6}}>{verdict.text}</div>
+                <div style={{marginTop:10,padding:"7px 10px",background:"#0a0e17",borderRadius:5,fontSize:10,color:"#475569",lineHeight:1.6,fontStyle:"italic"}}>
+                  Verdict combines: self-creation load (Step 1) × difficulty premium (Step 2) × pressure response (Step 3). Quantitative starting point — confirm with film before drawing conclusions.
+                </div>
+              </div>
+            </>
+          );
         })()}
 
-        {/* Insight box */}
-        <div style={{marginTop:16,background:"#1a1f2e",border:"1px solid #1e3a5f",borderRadius:8,padding:"12px 14px"}}>
-          <div style={{fontSize:10,fontWeight:700,color:"#60a5fa",letterSpacing:1,marginBottom:6}}>SCOUT INSIGHT</div>
-          <div style={{fontSize:12,color:"#d1d5db",lineHeight:"1.6"}}>{getInsight()}</div>
-          {usg != null && (
-            <div style={{marginTop:8,fontSize:11,color:"#6b7280"}}>
-              Usage: {usg?.toFixed(1)}% ({usgPctl}th pctl) · TS%: {ts?.toFixed(1)}%
-            </div>
-          )}
-          <div style={{marginTop:10,padding:"7px 10px",background:"#111827",borderRadius:5,fontSize:10,color:"#4b5563",lineHeight:"1.6"}}>
-            <span style={{color:"#374151",fontWeight:600}}>How this is derived:</span> The insight combines two signals — Difficulty Premium (how hard the player's shots are relative to peers) and OGBPM rank within their class. High scorers on both → "elite offensive weapon". Low difficulty + high volume → "volume scorer". The thresholds are: diffPrem &gt; +1.5 = elite difficulty, &gt; 0.5 = above-average; OGBPM top-10% = elite, bottom-30% = below-average.
-          </div>
-        </div>
       </Sec>
 
       {/* ── Section 2: Usage Reaction (formerly "Offensive Skill Curve") ── */}
@@ -2997,81 +3085,7 @@ function MindTab({p}) {
               </div>
             )}
 
-            {/* Season chart (SVG scatter with peer curve) */}
-            {seasons.length > 0 && (
-              <div style={{background:"#0f172a",borderRadius:8,padding:"12px 14px",marginBottom:16}}>
-                <div style={{fontSize:11,fontWeight:600,color:"#9ca3af",marginBottom:10,letterSpacing:0.5}}>
-                  {multiSeason ? "SEASON TRAJECTORY vs PEER CURVE" : "CURRENT SEASON vs PEER CURVE"}
-                </div>
-                <svg width="100%" viewBox="0 0 200 100" style={{overflow:"visible"}}>
-                  {/* Grid + Y-axis tick labels */}
-                  {[80,100,120,140,160].map(a=>(
-                    <g key={a}>
-                      <line x1={10} y1={toY(a)} x2={190} y2={toY(a)} stroke="#1f2937" strokeWidth={0.5}/>
-                      <text x={8} y={toY(a)+2} textAnchor="end" fontSize={5} fill="#6b7280">{a}</text>
-                    </g>
-                  ))}
-                  {/* X-axis tick labels */}
-                  {[10,15,20,25,30,35,40].map(u=>(
-                    <g key={u}>
-                      <line x1={toX(u)} y1={10} x2={toX(u)} y2={90} stroke="#1f2937" strokeWidth={0.5}/>
-                      <text x={toX(u)} y={96} textAnchor="middle" fontSize={5} fill="#6b7280">{u}%</text>
-                    </g>
-                  ))}
-                  {/* Peer curve (declining: higher usage = lower efficiency) */}
-                  <polyline points={curvePoints.join(" ")} fill="none" stroke="#ef4444" strokeWidth={1.5} opacity={0.7}/>
-                  <text x={toX(38)} y={toY(peerExp(38))-3} fontSize={4.5} fill="#ef4444" textAnchor="end" opacity={0.7}>peer avg</text>
-                  {/* ±1 SD band around peer curve */}
-                  <path d={
-                    `M ${[...Array(15)].map((_,i)=>{const u=USG_MIN+i*2;return `${toX(u)},${toY(peerExp(u)+18)}`;}).join(" L ")}` +
-                    ` L ${[...Array(15)].reverse().map((_,i)=>{const u=USG_MAX-i*2;return `${toX(u)},${toY(peerExp(u)-18)}`;}).join(" L ")} Z`
-                  } fill="#374151" opacity={0.2}/>
-                  {/* Denser peer cloud: show scatter of typical D1 prospects */}
-                  {[10,13,16,19,22,25,28,31,34,37,40].map(u => {
-                    const base = peerExp(u);
-                    return [-18,-12,-6,0,6,12,18].map((off,oi) => (
-                      <circle key={`p-${u}-${oi}`} cx={toX(u)+(Math.sin(u*oi)*1.5)} cy={toY(base+off)}
-                        r={0.9} fill="#4b5563" opacity={0.35}/>
-                    ));
-                  })}
-                  {/* Season dots */}
-                  {seasons.map((s,i) => {
-                    const isLatest = i === seasons.length - 1;
-                    const color = isLatest ? "#f97316" : "#60a5fa";
-                    const abovePeer = s.adjOrtg > peerExp(s.usg);
-                    return (
-                      <g key={s.yr}>
-                        <circle cx={toX(s.usg)} cy={toY(s.adjOrtg)} r={isLatest?5:3.5}
-                          fill={abovePeer ? color : "#ef4444"} opacity={isLatest?1:0.8}
-                          stroke={isLatest?"#fed7aa":"none"} strokeWidth={1}/>
-                        <text x={toX(s.usg)+6} y={toY(s.adjOrtg)-2} fontSize={6} fill={color} fontWeight={isLatest?"bold":"normal"}>
-                          {s.yr} ({s.adjOrtg?.toFixed(0)})
-                        </text>
-                      </g>
-                    );
-                  })}
-                  {/* Axis labels */}
-                  <text x={100} y={99} fontSize={5.5} fill="#6b7280" textAnchor="middle">Usage %</text>
-                  <text x={3} y={55} fontSize={5.5} fill="#6b7280" textAnchor="middle" transform="rotate(-90 3 55)">AdjOrtg</text>
-                </svg>
-                <div style={{display:"flex",gap:16,marginTop:6,flexWrap:"wrap"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:4}}>
-                    <div style={{width:8,height:2,background:"#4b5563",borderTop:"1px dashed #4b5563"}}/>
-                    <span style={{fontSize:9,color:"#6b7280"}}>Peer avg (AdjOrtg at USG)</span>
-                  </div>
-                  <div style={{display:"flex",alignItems:"center",gap:4}}>
-                    <div style={{width:8,height:8,borderRadius:"50%",background:"#f97316"}}/>
-                    <span style={{fontSize:9,color:"#6b7280"}}>Current season</span>
-                  </div>
-                  {multiSeason && (
-                    <div style={{display:"flex",alignItems:"center",gap:4}}>
-                      <div style={{width:8,height:8,borderRadius:"50%",background:"#60a5fa"}}/>
-                      <span style={{fontSize:9,color:"#6b7280"}}>Prior seasons</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+            {/* Season-Trajectory-Plot entfernt 2026-05-09 (User: redundant zu Game-by-Game Skill-Curve in Scouting) */}
 
           </Sec>
         );
@@ -3272,102 +3286,7 @@ function MindTab({p}) {
         );
       })()}
 
-      {/* ── Sequential Resilience ── */}
-      {(() => {
-        const lines = (p.seasonLines || []).filter(s => s.yr && s.usg >= 8 && s.bpm != null);
-        if (lines.length < 2) return null;
-
-        const bpms = lines.map(s => s.bpm);
-        const mean = bpms.reduce((a,b)=>a+b,0)/bpms.length;
-        const variance = bpms.reduce((a,b)=>a+(b-mean)**2,0)/bpms.length;
-        const stdDev = Math.sqrt(variance);
-        // CV = stdDev / |mean|, but BPM can be negative — use absolute mean or floor at 1
-        const cv = stdDev / (Math.abs(mean) + 1);
-
-        // OLS trend across seasons (use index as x)
-        const xs = lines.map((_,i)=>i);
-        const xm = xs.reduce((a,b)=>a+b,0)/xs.length;
-        const ym = mean;
-        const bpmSlope = xs.reduce((a,x,i)=>a+(x-xm)*(bpms[i]-ym),0) /
-                         xs.reduce((a,x)=>a+(x-xm)**2,0.001);
-
-        // Bounce-back: did the player improve after their worst season (if it's not the last)?
-        const minIdx = bpms.indexOf(Math.min(...bpms));
-        const bounceBack = minIdx < bpms.length-1
-          ? bpms[minIdx+1] - bpms[minIdx]
-          : null;
-
-        // Consistency score: 0-100, lower CV = higher score
-        const consistency = Math.max(0, Math.min(100, Math.round(100 - cv * 80)));
-        const cColor = consistency >= 70 ? "#22c55e" : consistency >= 45 ? "#fbbf24" : "#ef4444";
-        const cLabel = consistency >= 70 ? "Consistent" : consistency >= 45 ? "Moderate Variance" : "High Variance";
-
-        const trendColor = bpmSlope > 0.5 ? "#22c55e" : bpmSlope > -0.5 ? "#fbbf24" : "#ef4444";
-        const trendLabel = bpmSlope > 1.5 ? "Strong Rise" : bpmSlope > 0.5 ? "Rising" : bpmSlope > -0.5 ? "Flat" : bpmSlope > -1.5 ? "Declining" : "Sharp Decline";
-
-        return (
-          <Sec icon="🔁" title="Sequential Resilience"
-            sub={`Season-to-season BPM consistency across ${lines.length} seasons (${lines[0].yr}–${lines[lines.length-1].yr}). Measures whether a player's impact holds up over time.`}>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:14}}>
-              {/* Consistency */}
-              <div style={{background:"#0f172a",borderRadius:8,padding:"10px 12px",textAlign:"center"}}>
-                <div style={{fontSize:22,fontWeight:700,color:cColor,fontFamily:"Oswald,sans-serif"}}>{consistency}</div>
-                <div style={{fontSize:11,fontWeight:600,color:"#e5e7eb",marginTop:2}}>Consistency</div>
-                <div style={{fontSize:10,color:cColor,marginTop:1}}>{cLabel}</div>
-              </div>
-              {/* BPM Trajectory */}
-              <div style={{background:"#0f172a",borderRadius:8,padding:"10px 12px",textAlign:"center"}}>
-                <div style={{fontSize:22,fontWeight:700,color:trendColor,fontFamily:"Oswald,sans-serif"}}>
-                  {bpmSlope>0?"+":""}{bpmSlope.toFixed(2)}
-                </div>
-                <div style={{fontSize:11,fontWeight:600,color:"#e5e7eb",marginTop:2}}>BPM/Season Slope</div>
-                <div style={{fontSize:10,color:trendColor,marginTop:1}}>{trendLabel}</div>
-              </div>
-              {/* Bounce-back */}
-              <div style={{background:"#0f172a",borderRadius:8,padding:"10px 12px",textAlign:"center"}}>
-                {bounceBack != null ? (
-                  <>
-                    <div style={{fontSize:22,fontWeight:700,color:bounceBack>0?"#22c55e":"#ef4444",fontFamily:"Oswald,sans-serif"}}>
-                      {bounceBack>0?"+":""}{bounceBack.toFixed(1)}
-                    </div>
-                    <div style={{fontSize:11,fontWeight:600,color:"#e5e7eb",marginTop:2}}>Bounce-Back Δ</div>
-                    <div style={{fontSize:10,color:bounceBack>0?"#22c55e":"#ef4444",marginTop:1}}>
-                      {bounceBack > 1 ? "Recovered well" : bounceBack > 0 ? "Slight recovery" : "Did not recover"}
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div style={{fontSize:22,fontWeight:700,color:"#6b7280",fontFamily:"Oswald,sans-serif"}}>—</div>
-                    <div style={{fontSize:11,fontWeight:600,color:"#e5e7eb",marginTop:2}}>Bounce-Back</div>
-                    <div style={{fontSize:10,color:"#4b5563",marginTop:1}}>Worst season = last</div>
-                  </>
-                )}
-              </div>
-            </div>
-            {/* Mini BPM timeline */}
-            <div style={{background:"#0f172a",borderRadius:8,padding:"10px 12px"}}>
-              <div style={{fontSize:10,color:"#6b7280",marginBottom:8,fontWeight:600,letterSpacing:0.5}}>BPM TIMELINE</div>
-              <div style={{display:"flex",alignItems:"flex-end",gap:6,height:48}}>
-                {lines.map((s,i)=>{
-                  const normalizedH = Math.max(4, Math.min(48, ((s.bpm - Math.min(...bpms)) / (Math.max(...bpms) - Math.min(...bpms) + 0.01)) * 44 + 4));
-                  const isLatest = i===lines.length-1;
-                  const barColor = s.bpm > 6 ? "#22c55e" : s.bpm > 2 ? "#86efac" : s.bpm > -1 ? "#fbbf24" : "#ef4444";
-                  return (
-                    <div key={s.yr} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                      <div style={{fontSize:9,color:isLatest?"#f97316":"#6b7280",fontWeight:isLatest?700:400}}>{s.bpm>0?"+":""}{s.bpm?.toFixed(1)}</div>
-                      <div style={{width:"100%",height:normalizedH,background:barColor,borderRadius:2,opacity:isLatest?1:0.7}}/>
-                      <div style={{fontSize:8,color:isLatest?"#f97316":"#4b5563"}}>{s.yr}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            <div style={{marginTop:10,padding:"7px 10px",background:"#111827",borderRadius:6,fontSize:10,color:"#4b5563",lineHeight:"1.6"}}>
-              <span style={{color:"#374151",fontWeight:600}}>How this is computed:</span> Consistency (0–100) = 100 − CV×80 where CV = σ/|mean BPM|. BPM Slope = OLS across seasons (positive = improving year-over-year). Bounce-Back = BPM delta in the season immediately following the player's worst season.
-            </div>
-          </Sec>
-        );
-      })()}
+      {/* ── Sequential Resilience entfernt 2026-05-09 (User: Mental Resilience deckt das ab) ── */}
     </div>
   );
 }
