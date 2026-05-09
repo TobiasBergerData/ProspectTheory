@@ -4196,28 +4196,73 @@ function ProjectionTab({p}) {
               )}
             </div>
           </Tip>
-          <div className="flex justify-center gap-6 mt-4">
-            <div className="text-center">
-              <div className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Predicted Tier</div>
-              <div className="text-lg font-bold mt-0.5" style={{color:TC[predTier]||"#6b7280"}}>{predTier}</div>
-            </div>
-            {p.potentialTier && p.potentialTier !== "Marginal/Out" && (
-              <div className="text-center" title={`Highest tier where cumulative probability ≥30%. Doncic: P(Superstar)=45% → Superstar Potential. Anders als Predicted Tier (Modal-Wert) macht Potential Tier das Pre-Draft-Potenzial sichtbar.`}>
-                <div className="text-xs uppercase tracking-wider cursor-help" style={{color:"#6b7280"}}>Potential ★</div>
-                <div className="text-lg font-bold mt-0.5" style={{color: p.potentialTier.includes("Superstar") ? "#fbbf24" : p.potentialTier.includes("All-Star") ? "#f97316" : p.potentialTier.includes("Starter") ? "#3b82f6" : "#06b6d4"}}>
-                  {p.potentialTier.replace(" Potential", "")}
+          {(() => {
+            // Tobias 2026-05-09: cumulative P(Tier+) — explains why a player whose
+            // modal-bin is "Starter" (51%) gets labelled "All-Star" (P(S+A) = 24% ≥ 18% threshold).
+            const _t = tiers || {};
+            const _pS  = Number(_t.Superstar) || 0;
+            const _pA  = Number(_t["All-Star"]) || 0;
+            const _pSt = Number(_t.Starter) || 0;
+            const _pR  = Number(_t["Role Player"]) || 0;
+            const cumByTier = {
+              "Superstar":   _pS,
+              "All-Star":    _pS + _pA,
+              "Starter":     _pS + _pA + _pSt,
+              "Role Player": _pS + _pA + _pSt + _pR,
+            };
+            const cumPct = cumByTier[predTier];
+            const tierTooltip = (
+              <div>
+                <div className="font-bold mb-1" style={{color:TC[predTier]||"#f97316"}}>How is "{predTier}" assigned?</div>
+                <div style={{color:"#cbd5e1"}}>
+                  Cumulative-threshold tier: highest tier where <b>P(this tier or better)</b> clears its calibrated cutoff.
+                  This shows <b>aspirational potential</b>, not the most likely single outcome.
+                </div>
+                <div className="mt-2 text-xs" style={{color:"#94a3b8"}}>
+                  P(Superstar) = <b>{_pS.toFixed(0)}%</b> (cutoff 12%)<br/>
+                  P(All-Star+) = <b>{(_pS+_pA).toFixed(0)}%</b> (cutoff 18%)<br/>
+                  P(Starter+) = <b>{(_pS+_pA+_pSt).toFixed(0)}%</b> (cutoff 26%)<br/>
+                  P(Role Player+) = <b>{(_pS+_pA+_pSt+_pR).toFixed(0)}%</b> (cutoff 38%)
+                </div>
+                {predTier !== "Superstar" && predTier !== "Negative" && (
+                  <div className="mt-2 text-xs" style={{color:"#fbbf24"}}>
+                    Modal (most likely single tier): see bar chart below.
+                  </div>
+                )}
+              </div>
+            );
+            return (
+              <div className="flex justify-center gap-6 mt-4">
+                <Tip content={tierTooltip}>
+                  <div className="text-center cursor-help">
+                    <div className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Predicted Tier</div>
+                    <div className="text-lg font-bold mt-0.5" style={{color:TC[predTier]||"#6b7280"}}>{predTier}</div>
+                    {cumPct != null && cumPct > 0 && (
+                      <div className="text-xs mt-0.5" style={{color:"#9ca3af"}}>
+                        P({predTier}+) = <span style={{color:TC[predTier]||"#9ca3af",fontWeight:600}}>{cumPct.toFixed(0)}%</span>
+                      </div>
+                    )}
+                  </div>
+                </Tip>
+                {p.potentialTier && p.potentialTier !== "Marginal/Out" && (
+                  <div className="text-center" title={`Highest tier where cumulative probability ≥30%. Doncic: P(Superstar)=45% → Superstar Potential. Anders als Predicted Tier (Modal-Wert) macht Potential Tier das Pre-Draft-Potenzial sichtbar.`}>
+                    <div className="text-xs uppercase tracking-wider cursor-help" style={{color:"#6b7280"}}>Potential ★</div>
+                    <div className="text-lg font-bold mt-0.5" style={{color: p.potentialTier.includes("Superstar") ? "#fbbf24" : p.potentialTier.includes("All-Star") ? "#f97316" : p.potentialTier.includes("Starter") ? "#3b82f6" : "#06b6d4"}}>
+                      {p.potentialTier.replace(" Potential", "")}
+                    </div>
+                  </div>
+                )}
+                <div className="text-center">
+                  <div className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Career Path</div>
+                  <div className="text-lg font-bold mt-0.5" style={{color:"#22c55e"}}>{p.careerPath || "NBA"}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Confidence</div>
+                  <div className="text-lg font-bold mt-0.5" style={{color:confColor}}>{confLabel}</div>
                 </div>
               </div>
-            )}
-            <div className="text-center">
-              <div className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Career Path</div>
-              <div className="text-lg font-bold mt-0.5" style={{color:"#22c55e"}}>{p.careerPath || "NBA"}</div>
-            </div>
-            <div className="text-center">
-              <div className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Confidence</div>
-              <div className="text-lg font-bold mt-0.5" style={{color:confColor}}>{confLabel}</div>
-            </div>
-          </div>
+            );
+          })()}
           {/* ── Archetype Pipeline ── */}
           {(p.ncaaArchetype || p.nbaProjection) && (
             <div className="mt-4 rounded-xl px-4 py-3" style={{background:"#0a0e17",border:"1px solid #1f2937"}}>
@@ -4290,9 +4335,28 @@ function ProjectionTab({p}) {
                 );
               }}
             />
-            <Bar dataKey="pct" radius={[6,6,0,0]}>{tierData.map((e,i)=><Cell key={i} fill={e.fill}/>)}</Bar>
+            <Bar dataKey="pct" radius={[6,6,0,0]}>
+              {tierData.map((e,i) => {
+                // Tobias 2026-05-09: highlight the bin matching the assigned predicted tier
+                // (e.g. Boozer's "All-Star" label → highlight the All-Star bar even though
+                // Starter is the modal/highest bin).
+                const eName = e.name === "Role" ? "Role Player" : e.name;
+                const isSelected = eName === predTier;
+                return (
+                  <Cell key={i} fill={e.fill}
+                    stroke={isSelected ? "#fff" : "transparent"}
+                    strokeWidth={isSelected ? 2 : 0}
+                    strokeDasharray={isSelected ? "0" : "0"}
+                  />
+                );
+              })}
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
+        <div className="mt-2 text-xs text-center" style={{color:"#6b7280"}}>
+          <span style={{color:"#9ca3af"}}>White outline</span> = assigned tier (cumulative-threshold).
+          Highest bar = modal outcome (most likely single tier).
+        </div>
         {/* Actual NBA outcome (if available) */}
         {(p.actual || p.peakPie != null) && (
           <div className="mt-3 flex items-center gap-3 p-3 rounded-lg" style={{background:"#0c1222",border:"1px solid #1e3a5f"}}>
