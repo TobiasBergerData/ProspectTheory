@@ -958,9 +958,7 @@ function mapProfile(d) {
   };
   // ── Archetype pipeline (uses same tmpP stats as badges) ──
   const _ncaaArch = computeNcaaArchetype(tmpP);
-  const _predTierForArch = d.v2Tier ?? d.pred_tier ?? d.predicted_tier ?? d.tier ?? "Replacement";
-  const _nbaProjection = projectNbaArchetype(_ncaaArch, _predTierForArch);
-  // Pre-compute tiers for ceiling/floor (same logic as tiers field below)
+  // Pre-compute tiers for recalibrate + ceiling/floor (same logic as tiers field below)
   const _tiersForCF = d.v2TierProbs ? d.v2TierProbs : {
     Superstar:     (d.prob_super??d.prob_superstar??d.probs?.superstar??0)*100,
     "All-Star":    (d.prob_allstar??d.probs?.allstar??0)*100,
@@ -970,6 +968,13 @@ function mapProfile(d) {
     Negative:      (d.prob_out??d.prob_neg??d.prob_negative??d.prob_never??d.probs?.out??0)*100,
   };
   const { ceiling: _ceilingScore, floor: _floorScore, riskTag: _riskTag } = computeCeilingFloor(_tiersForCF);
+
+  // Tobias 2026-05-09: NBA-Projection nutzt recalibrated Tier (kumulative Schwellen),
+  // nicht das rohe Backend modal-tier. Sonst inkonsistent: Steinbach predTier=Starter
+  // aber nbaProjection="Camp Invite" (basiert auf Backend-Replacement-Modal).
+  const _backendTier = d.v2Tier ?? d.pred_tier ?? d.predicted_tier ?? d.tier ?? "Replacement";
+  const _recalTier = recalibrateTier(_tiersForCF, _backendTier);
+  const _nbaProjection = projectNbaArchetype(_ncaaArch, _recalTier);
 
   // Only compute client badges when sufficient stats are available
   // Board API only sends bpm/usg/ts/ast_p/blk_p/stl_p — NOT tp/ft/drbP/dbpm etc.
