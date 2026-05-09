@@ -972,6 +972,10 @@ function mapProfile(d) {
     leverageEff: d.leverageEff ?? null,
     // Offensive Skill Curve (usage scalability + peer curve position)
     skillCurve: d.skillCurve ?? null,
+    // Mind-Tab Mental-Resilience metrics (Tobias 2026-05-09)
+    mindMetrics: d.mindMetrics ?? null,
+    // Per-Game-Stats für Scouting Skill-Curve + Development In-Season-Trajectory
+    gameLogs: d.gameLogs ?? null,
     modernShotProfile: d.modern_shot_profile ?? null,
     sosPctl: d.sos_pctl ?? null,
     teamQuality: d.team_quality_pctl ?? null,
