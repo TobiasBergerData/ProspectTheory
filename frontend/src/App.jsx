@@ -1375,7 +1375,7 @@ function OverviewTab({p, compTier, setCompTier}) {
           ))}
         </div>
       </Sec>
-      <Sec icon="⚡" title="Advanced" sub="Rate stats that capture efficiency and impact independent of role. BPM and ORtg are the strongest NBA translation signals.">
+      <Sec icon="⚡" title="Advanced" sub="Rate stats that capture efficiency and impact independent of how big a player's role is. BPM (overall impact) and ORtg (offensive efficiency) are the strongest NBA-translation signals on this row.">
         <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
           {[["BPM",p.bpm,p.pctl?.bpm],["OBPM",p.obpm,p.pctl?.obpm],
             ...(p.ogbpm != null ? [["O-GBPM", p.ogbpm,
@@ -1391,12 +1391,12 @@ function OverviewTab({p, compTier, setCompTier}) {
             ["AST%",p.astP,p.pctl?.ast ?? estPctlAstWithinPos(p.astP, p.pos)],
             ["TO%", p.toP, p.pctl?.to  ?? estPctlToInverted(p.toP)],
             ["ORB%",p.orbP,p.pctl?.orb],["DRB%",p.drbP,p.pctl?.drb],["STL%",p.stlP,p.pctl?.stl],["BLK%",p.blkP,p.pctl?.blk]
-          ].map(([l,v,pc])=><StatCell key={l} label={l} val={v} pctl={pc} tooltip={l==="O-GBPM"?"Offensive Game-Adjusted BPM (BartTorvik) — opponent-adjusted offensive impact. Percentile vs. all D1 players.":undefined}/>)}
+          ].map(([l,v,pc])=><StatCell key={l} label={l} val={v} pctl={pc} tooltip={l==="O-GBPM"?"O-GBPM = Offensive Game-Adjusted Box Plus/Minus (BartTorvik). Estimates a player's offensive impact per 100 possessions, adjusted for opponent strength. Higher = more offensive value relative to an average D1 player. Percentile shown is vs. all D1 players for the season.":undefined}/>)}
         </div>
       </Sec>
 
       {/* ═══ TIER FEASIBILITY — Each metric on its own row ═══ */}
-      <Sec icon="📊" title={`vs. NBA ${compTier} (${p.pos})`} sub="How does this prospect's college production compare against approximate NBA tier benchmarks? Thresholds are position-specific estimates based on NBA player analysis — not exact statistical percentiles. Shadow bars show the typical range. Green = within range, Yellow = compensated by elite core skill, Red = critical gap. Note: college stats are not directly comparable to NBA stats; use as directional signal only.">
+      <Sec icon="📊" title={`vs. NBA ${compTier} (${p.pos})`} sub="Does this prospect's college production line up with what NBA players at the chosen tier typically deliver? Bars show the typical range for that NBA tier and position. Green = inside the range. Yellow = below range but compensated by an elite core skill. Red = critical gap. College stats don't translate 1:1 to the NBA — read as directional, not literal.">
         <div className="flex items-center gap-3 mb-4">
           <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Compare:</span>
           <div className="flex gap-1">
@@ -1940,7 +1940,7 @@ function ShootingTab({p}) {
       })()}
 
       {/* ═══ NBA SHOOTING PROJECTION ═══ */}
-      <Sec icon="🔮" title="NBA Shooting Projection" sub={isIntl||useSimplifiedCourt?"Bayesian priors using FT% as primary shooting touch signal (no midrange data available)":"Bayesian Beta-Binomial model (Berger 2022) — FT% + midrange touch predict NBA 3P translation"}>
+      <Sec icon="🔮" title="NBA Shooting Projection" sub={isIntl||useSimplifiedCourt?"How well does he project to shoot in the NBA? FT% is the strongest single predictor of NBA shooting (a 'motor touch' baseline). Low-volume college shooters get pulled toward this baseline because small samples are unreliable.":"How well does he project to shoot in the NBA? FT% is the strongest single predictor of NBA shooting (a 'motor touch' baseline) — refined by midrange touch and 3PA volume. Low-volume college shooters get pulled toward the FT-based baseline because small samples are unreliable."}>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
           {[
             ["projNba3p","Proj. 3P%", projNba3p, projNba3p!=null?(projNba3p>36?"#22c55e":projNba3p>32?"#fbbf24":"#ef4444"):"#6b7280"],
@@ -4035,8 +4035,8 @@ function ProjectionTab({p}) {
         if (!hasDrvData) {
           // Fallback: old hardcoded drivers
           return (
-            <Sec icon="🔬" title="Key Model Drivers" sub="What's pushing this player's projection up or down? Green = above average for tier, Red = below. These are the features LightGBM weights most heavily.">
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <Sec icon="🔬" title="Key Model Drivers" sub="What's pushing this player's projection up or down? Green features are pulling the projection higher; red features are pulling it lower. These are the inputs the projection model weighs most heavily for this player.">
+  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {drivers.map(d => (
                   <Tip key={d.label} content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>{d.label}</div><div style={{color:"#cbd5e1"}}>{d.desc}</div></div>}>
                     <div className="rounded-lg p-4 cursor-help" style={{background:"#0d1117",border:`1px solid ${d.color}22`}}>
@@ -4051,7 +4051,7 @@ function ProjectionTab({p}) {
         }
 
         return (
-          <Sec icon="🔬" title="Projection Drivers" sub="Which features push this projection up or down? Our model decomposes each prediction into per-feature contributions. The top 5 boosters (green) lift the projected career value; the top 5 limiters (red) pull it down. Strength: +++ = very strong influence, ++ = strong, + = moderate.">
+          <Sec icon="🔬" title="Projection Drivers" sub="What's lifting or limiting this projection? We decompose each prediction into per-feature contributions. Top 5 boosters (green) push the projection higher; top 5 limiters (red) pull it lower. Strength: +++ = very strong influence, ++ = strong, + = moderate.">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* ── BOOSTERS (green) ── */}
               <div>
@@ -4536,7 +4536,7 @@ function ScoutingTab({p, mode="scouting"}) {
     <div className="space-y-5">
       {mode === "scouting" && (<>
       {/* ── BADGES ── */}
-      <Sec icon="🏅" title="Skill Badges" sub="Position-filtered skill signals. Green = elite NBA-translatable skills. Yellow = development potential. Red = bust warning signals. Hover each badge for the statistical trigger and scouting context.">
+      <Sec icon="🏅" title="Skill Badges" sub="Position-aware skill flags from the stat profile. Green = elite NBA-translatable strengths. Yellow = swing skills with development potential. Red = warning signals that historically predict NBA struggles. Hover any badge to see the exact statistical trigger and scouting context.">
         {p.source !== "ncaa" && <div className="mb-3 px-3 py-1.5 rounded-lg inline-block text-xs" style={{background:"#3b82f622",color:"#60a5fa",border:"1px solid #3b82f644"}}>International Adjuster Active</div>}
         {badges.green.length > 0 && <>
           <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#22c55e"}}>✓ Green Flags ({badges.green.length})</div>
@@ -4554,7 +4554,7 @@ function ScoutingTab({p, mode="scouting"}) {
       </Sec>
 
       {/* ── PILLARS ── */}
-      <Sec icon="🔬" title="The 5 Pillars" sub="Prospect DNA — position-adjusted percentile scores (0-100). These are the building blocks the model uses. Hover each for formula details.">
+      <Sec icon="🔬" title="The 5 Pillars" sub="A prospect's DNA in 5 numbers, each on a 0–100 scale. Each score is position-adjusted (a guard's defensive number is rated against guards, a big's against bigs). These are the building blocks the projection model uses. Hover any pillar for the exact formula.">
         {p.source !== "ncaa" && <div className="mb-3 px-3 py-1.5 rounded-lg text-xs" style={{background:"#f9731611",color:"#f97316",border:"1px solid #f9731633"}}>
           ⚠ International data: Athleticism uses a dunk-free formula (FTr + ORB% + Stocks + DRB% + USG%) on the same 0-100 scale — directly comparable to NCAA players, who additionally get Dunk% and rim frequency as signals. Box Creation, Shooting and Defense apply source-specific adjusters (FIBA pace, assist-rate inflation); all values are position-percentiled and cross-source comparable.
         </div>}
@@ -4579,7 +4579,7 @@ function ScoutingTab({p, mode="scouting"}) {
       </Sec>
 
       {/* ── POSSESSION IMPACT (CFFR) — wider bars, usage role prominent ── */}
-      <Sec icon="↗" title="Possession Impact (Four Factors)" sub="How efficiently does this player use possessions, given his offensive role? Based on Dean Oliver's Four Factors framework, percentiled within usage bucket (Primary/Secondary/Finisher/Low-Usage) to ensure fair peer comparison.">
+      <Sec icon="↗" title="Possession Impact (Four Factors)" sub="How efficiently does this player use possessions, given his offensive role? We compare him only to other players with similar usage (Primary/Secondary/Finisher/Low-Usage) — so a primary scorer is rated against fellow primaries, not against low-usage finishers. Built on the four classic offensive efficiency drivers: shooting (eFG%), ball security (TO%), offensive rebounding, and free-throw generation.">
         <Tip wide content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>{METHODS.fourFactors?.name||"Four Factors"}</div>{METHODS.fourFactors?.formula&&<div className="mb-1"><code className="text-xs" style={{color:"#7dd3fc"}}>{METHODS.fourFactors.formula}</code></div>}<div style={{color:"#cbd5e1"}}>{METHODS.fourFactors?.desc||"Dean Oliver's Four Factors adjusted for usage role. Measures net possession quality relative to role-peers."}</div></div>}>
           <div className="text-xs mb-4 cursor-help" style={{color:"#6b7280"}}>Efficiency index: how much value this player creates per possession, relative to his usage role. <span style={{color:"#475569"}}>ⓘ</span></div>
         </Tip>
@@ -4808,7 +4808,7 @@ function ScoutingTab({p, mode="scouting"}) {
 
       {mode === "roles" && (<>
       {/* ── ROLE INFERENCE MATRIX — hoverable with inputs ── */}
-      <Sec icon="📊" title="Role Inference Matrix" sub="14 NBA roles scored as z-scores vs position peers. ≥+2.0σ = Elite (top 2%), ≥+1.0σ = Impact, ≤-1.0σ = Liability. Hover each role for the statistical inputs that drive it.">
+      <Sec icon="📊" title="Role Inference Matrix" sub="14 NBA roles, each scored against position peers. The z-score tells you how far this prospect stands above or below the average peer in that role. +2.0σ = Elite (top ~2%), +1.0σ = Impact, −1.0σ or lower = Liability. Hover any role to see the statistical inputs feeding it.">
         {roleGroups.map(grp=>(
           <div key={grp.label} className="mb-5">
             <div className="text-xs uppercase tracking-widest font-bold mb-2" style={{color:grp.color}}>{grp.label}</div>
@@ -4838,7 +4838,7 @@ function ScoutingTab({p, mode="scouting"}) {
       </Sec>
 
       {/* ── ARCHETYPE — formulas + secondary/tertiary + versatility ── */}
-      <Sec icon="🏷" title="NBA Archetype Fit" sub="What NBA role does this prospect project into? PRIMARY = pipeline-assigned from dominant role scores. 2ND/3RD = best alternative fits within the same position group. Cards are sorted within each position by empirical frequency (most common ← → rarest), measured across 46k player-seasons. Colored = triggered by pipeline thresholds. Greyed = not triggered.">
+      <Sec icon="🏷" title="NBA Archetype Fit" sub="What NBA role does this prospect project into? PRIMARY is his best-fit archetype (assigned from his dominant role scores). 2ND/3RD are alternative fits within his position. Within each position, cards are sorted left → right by how OFTEN that archetype actually appears in real basketball (common → rare). Rarity is measured across 46k player-seasons — so you can see if a prospect projects into a common role-player template or an unusually scarce profile.">
         {/* Role Versatility — prominent */}
         {p.roleVersatility != null && (
           <div className="flex items-center gap-4 mb-4 p-3 rounded-lg" style={{background:"#0d111788",border:"1px solid #1f2937"}}>
@@ -5522,7 +5522,7 @@ function CompsTab({p}) {
       )}
 
       {/* ── STATISTICAL COMPS TABLE ── */}
-      <Sec icon="📊" title="Statistical Comps" sub="Nearest-neighbor matching on era-adjusted percentile vectors (BPM, USG%, TS%, AST%, STL%, BLK%, 3P%, FT%). Pre-draft seasons only — comparing what these players looked like before the NBA. 'Reached Tier' = verified NBA outcome or v2 model projection for current prospects.">
+      <Sec icon="📊" title="Statistical Comps" sub="Nearest-neighbor matches based on what THIS prospect looked like before the NBA — measured across 8 dimensions (BPM, USG%, TS%, AST%, STL%, BLK%, 3P%, FT%) using era-adjusted percentiles. 'Reached Tier' = the comp's verified NBA outcome (or our model's projection for current prospects).">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -5637,12 +5637,20 @@ function MethodologyTab() {
     {cat:"Role Inference Matrix",items:[],desc:"14 NBA roles scored as z-scores relative to position peers. Offensive: Scorer, Playmaker, Spacer, Driver, Crasher. Defensive: On-Ball, Switch Potential, Rim Protect, Rebounder. Hybrid: Connector, Helio-Scorer, Event Creator, Zone Pressure, Micro-Spacer. Each role combines 2-4 statistical inputs weighted by NBA translation research. Z≥+2.0 = Elite, ≥+1.0 = Impact, <-1.0 = Liability."},
     {cat:"Archetype Classification",items:[],desc:"18 NBA archetypes assigned by position + dominant role scores. Playmaker archetypes: Scoring Playmaker, Floor General, Spacing Guard, Defensive Guard, Non-Specialized Playmaker. Wing: Initiator Wing, Scoring Wing, 3-and-D, Defensive Wing, Point Forward, Slashing Wing, Non-Specialized Wing. Big: Stretch Big, Stretch Rim Protector, Rim Protector, Short Roll Playmaker, Passing Hub, Glass Cleaner, Scoring Big, Non-Specialized Big. Primary archetype from pipeline, secondary/tertiary from role-score matching within position."},
     {cat:"Tier Feasibility (vs NBA)",items:[],desc:"Position-specific comparison against NBA tier benchmarks (p25-p75 corridors). For each tier (Replacement through All-Star), core metrics are checked: Wings = TS%+3P%, Playmakers = AST%+TO%, Bigs = BLK%+ORB%. If a core metric exceeds p75 of the target tier, deficiencies in secondary metrics are marked 'Compensated' (yellow) instead of 'Critical Gap' (red)."},
-    {cat:"Data Sources & Coverage",items:[],desc:"NCAA: BartTorvik (34k+ player-seasons 2008-2026, per-game + advanced + shooting zones). International: RealGM (9k+ player-seasons across 12 European leagues). NBA Outcomes: NBA API Advanced stats (27 seasons, PIE + minutes for peak computation). Anthropometrics: NBA Draft Combine measurements + Databallr wingspan data. Scouting: Scout consensus rankings (2008-2026) for humble/draft-stock adjustment."},
-    {cat:"OGBPM (Mind Tab — Skill Curve)",items:[],desc:"OGBPM = BartTorvik Offensive Game-adjusted Box Plus/Minus. It is a box-score-derived estimate of a player's offensive contribution relative to an average D1 player, expressed in points per 100 possessions. Unlike true xRAPM (which requires ridge regression on possession-level lineup data), OGBPM is computable from box-score stats and is the best available proxy for NCAA offensive impact. Important: OGBPM is collinear with Usage% and AdjOrtg — it is not an independent 'third signal' but a condensed summary of the same offensive production. In the Skill Curve, OGBPM rank within the draft class places the player in the talent distribution of their cohort."},
-    {cat:"Zone Breakdown (Shooting → Mind)",items:[],desc:"Each shooting zone (Rim, Mid-Range, 3-Pointer, Dunk) is evaluated on three dimensions: (1) LW Weight = FGA × Self-Creation Rate — the volume of shots a player generates under their own initiative in that zone. High volume with low self-creation (catch-and-shoot) is weighted less than equivalent self-created volume. (2) eFG% = effective field goal percentage per zone; 3-point attempts are scaled ×1.5 to compare them fairly to 2-point shots. (3) Self% = share of makes that were unassisted — a proxy for shot-creation vs. catch-and-shoot proficiency. The Difficulty Premium is the average shot difficulty relative to position peers (negative = easier shots, positive = harder)."},
-    {cat:"Development Trajectory (Development Tab)",items:[],desc:"For players with game-log data, a rolling-average curve is plotted for the selected metric. Rolling window K = max(3, min(5, N/4)) games, balancing noise reduction with responsiveness. Available metrics: Points, eFG% (effective field goal %), True Shooting% (eFG adjusted for free throws), Rebounds, Assists, Steals, Blocks. An OLS trend line (linear regression) is fitted across the rolling values; positive slope = developmental improvement, negative = regression. Shown only when game-log data is available. The Season Progression chart shows the same stat across multiple seasons for multi-year players."},
-    {cat:"NBA Combine Body Scatter (Body Tab)",items:[],desc:"Scatter plot of 510 NBA Draft Combine participants (2000–2024). X-axis = Height without shoes (inches), Y-axis = Wingspan (inches), Point size = Weight (lbs). Selected prospect is highlighted in orange; all other Combine players are shown as gray dots. Hover over any point to see name, draft year, position, height, wingspan, wingspan delta (wingspan − height), and weight. The filter sliders constrain the visible Combine dots to players in a similar wingspan range and weight bucket — useful for identifying physical comps within a realistic body-type band."},
-    {cat:"Passer / Scorer Profile (Mind Tab)",items:[],desc:"For all players (single- and multi-season): a Passer/Scorer snapshot is shown based on current AST% and USG%. Thresholds: AST% ≥30% = Primary Playmaker, ≥20% = Dual-Role Creator, ≥12% = Secondary Facilitator, <12% = Scorer/Off-Ball. For multi-season players with at least 2 seasons, a slope-based card also appears showing how AST%/USG% evolves as responsibility increases — positive slope = playmaking expands at volume, negative = isolation tendency. The AST/TO ratio supplements the profile as a decision-quality proxy."},
+    {cat:"Mind Tab — Self-Sufficiency Profile",items:[],desc:"Four sequential questions answered with a final verdict: (1) HOW OFTEN does he create his own shot? — share of made FGs that were unassisted, with position-peer percentile. (2) HOW EFFICIENT when self-creating? — Self-Created eFG% vs. Assisted eFG%, with a Difficulty Premium indicator (positive = better on hard shots). (3) HOW DOES PRESSURE affect efficiency? — three pressure contexts from PBP data: Close Late-Game (win prob 20–80% in 2nd half), Late Shot Clock (≥22 secs into possession), and Clutch Free Throws (last 5 min Half 2 with score-diff ≤5). (4) WHERE does he succeed? — per-zone eFG%/self%/asst% breakdown (Rim/Mid/3pt/Dunk). Verdict combines all four into one of seven profile labels: Self-Sufficient Star, Self-Sufficient Scorer, High Volume / Low Efficiency, Off-Ball Clutch Performer, Off-Ball Beneficiary, Pressure-Sensitive Creator, or Balanced Creator."},
+    {cat:"Mind Tab — Mental Resilience (NEW)",items:[],desc:"Quantifies behavioral tendencies after adverse-event streaks from raw play-by-play data. We define an adverse-event streak as ≥3 negative events (missed FG, turnover, foul, missed FT trip) in a player's last 4 actions; we then track how he behaves in his next 4 actions. Five tendency indices, each shown as point-estimate + 95% confidence interval + within-position z-score: (a) Hothead = post-streak foul-rate / baseline; (b) Overdriver = TO-rate change; (c) Engagement (Passive) = action volume change; (d) Shot-Seeking (Aggressor) = FGA-rate change; (e) Bounceback eFG = made/FGA change. Plus a Match-Phase-Drift block: stamina_idx + overdriver_drift + hothead_drift compare 1st-half streaks vs 2nd-half streaks (mental fatigue signal). Bayesian-Shrinkage applied: posterior = (n × raw + 30 × 1.0) / (n + 30) — small samples shrink toward the population mean. CRITICAL CAVEAT: these are quantitative tendencies observed in PBP data, not deterministic claims. ~88-95% of the league has CIs that include 1.0 (= no detectable effect). Trust extreme z-scores (|z|>1.5) and CIs that exclude 1.0. Always verify with film."},
+    {cat:"Scouting Tab — Game-by-Game Skill Curve (NEW)",items:[],desc:"Per-game scatter plot of every game in the season: x-axis = Usage% per game (share of team possessions consumed), y-axis = Individual Offensive Rating per game (= (PTS + 0.5×AST) / Possessions × 100). A LOESS-like rolling-mean curve is fitted through the points to reveal scaling behavior — does efficiency hold up at higher usage, or break down at a clear threshold? Color gradient blue→orange shows chronological order (early-season → late-season). Each dot is interactive (hover for date, opponent, full stat-line). USG-proxy is approximate (% of team possessions, not the standard NBA-USG with minutes adjustment) since per-game minutes data is unavailable from the play-by-play source."},
+    {cat:"Development Tab — In-Season Trajectory (NEW)",items:[],desc:"Multi-stat overlay plot for ANY game-log player: 6 indicators on rolling K-game means (K = max(3, min(7, N/5))) over the season. Stats: Usage% (role expansion), eFG% (efficiency growth), Assists (developing playmaking), 3PT Attempts (expanding shooting range), Stocks = STL+BLK (defensive growth), and Personal Fouls (discipline — falling = good, inverted color). OLS slopes per stat shown as season-scale trends. The single-stat 'Rolling Trend' below uses an alternate game-log source for multi-season players when available."},
+    {cat:"Development Tab — Season-by-Season Breakdown",items:[],desc:"Per-season table of all seasons with meaningful playing time (≥8% USG). Columns: Year, USG%, AdjOrtg (BartTorvik opponent-adjusted offensive rating), vs. Peer (delta from cross-sectional peer curve), TS%, AST%, TO%, BPM. Δ markers show year-over-year change. Multi-season improvement is one of the strongest NBA success signals."},
+    {cat:"Roles & Archetypes Tab",items:[],desc:"Two-stage role inference. Stage 1 — Role Inference Matrix: 14 NBA roles scored as z-scores relative to position peers. Offensive: Scorer, Playmaker, Spacer, Driver, Crasher. Defensive: On-Ball, Switch Potential, Rim Protect, Rebounder. Hybrid: Connector, Helio-Scorer, Event Creator, Zone Pressure, Micro-Spacer. Each role combines 2-4 statistical inputs weighted by NBA translation research. Z≥+2.0 = Elite, ≥+1.0 = Impact, <-1.0 = Liability. Stage 2 — NBA Archetype Fit: 19 NBA archetypes per position, sorted left→right by empirical rarity (most common to rarest, computed from the actual frequency in 46k player-seasons). The pipeline assigns a primary, secondary, and tertiary archetype based on dominant role scores. Rarity = how strict are the position-specific role thresholds — rare archetypes are objectively harder to find on draft day."},
+    {cat:"Body Tab — Anthropometrics + Wingspan/Height Scatter",items:[],desc:"Height (with shoes, +1.25\"-NBA-standard), Weight, Wingspan, and Wingspan Delta (wingspan − height). For Combine-tested players (1.835 NBA players in our database), measurements are sourced directly. For others, we use stats-enriched imputation: a multivariate Ridge regression trained on 1.266 NBA players for Wingspan (R²=0.735, MAE 1.56\") and 528 for Weight (R²=0.614, MAE 11.7 lbs), using player height + position group + box-score stats (BLK%, STL%, ORB%, DRB%, BPM components). Imputed values are flagged with badges. The scatter plot shows 1.835 NBA Combine participants as gray dots colored by position; the selected prospect is overlaid in orange. Use it to find physical comps within a realistic body-type band."},
+    {cat:"Shooting Tab — Bayesian NBA-3P Projection",items:[],desc:"For each prospect, a posterior NBA 3-point shooting projection is computed using a Bayesian Beta-Binomial model. Prior: FT% serves as 'motor touch' baseline (the strongest single predictor of NBA shooting per Berger 2022). κ=200 pseudo-attempts means low-volume college shooters regress heavily toward their FT% prior. For players with PBP data, midrange touch percentages refine the prior. Output: posterior 3P%, projected NBA 3PA per game, and projected NBA 3-point attempt rate. Internationals get a simplified FT%-only prior (no midrange data available)."},
+    {cat:"Possession Impact (CFFR)",items:["fourFactors"],desc:"Context-Free Four Factor Rating measuring possession efficiency per Dean Oliver's Four Factors framework. Usage-role adjusted: Primary (USG≥28%), Secondary (≥22%), Finisher (≥15%), Low-Usage (<15%). Each factor (eFG% 40%, TO% 25%, ORB% 20%, FTr 15%) is percentiled WITHIN the player's usage bucket — so a primary scorer with 52% eFG rates against fellow primaries, not against low-usage finishers. Composite: Net Possession Value (0–100). Verdict tiers: Elite Floor Raiser (≥70), Winning Piece (55–70), Role Dependent (45–55), High Maintenance (<45)."},
+    {cat:"Comps Tab",items:[],desc:"Two distinct nearest-neighbor comparison engines. Statistical Comps: era-adjusted percentile vectors over 8 dimensions (BPM, USG%, TS%, AST%, STL%, BLK%, 3P%, FT%). Pre-draft seasons only — comparing what these players looked like before the NBA. Similarity rescaled 50–95 within shown pool to differentiate. 'Reached Tier' shows the comp's verified NBA outcome (or v2 model projection for current prospects). Anthropometric Comps: Euclidean distance in inch-space over height/weight/wingspan. Optional sliders allow exploration of how comp matches change with adjusted body measurements (e.g. 'how would this prospect's comps look at +10 lbs?')."},
+    {cat:"Position Reclassification",items:[],desc:"Stats-driven position groups (Playmaker / Wing / Big) used throughout the site. Rules (Tobias 2026-05-09 v3): Big = Height ≥84\" unconditional, OR Height ≥82\" with non-wing usage profile (USG<25 AND AST%<15), OR Height ≥80\" with elite shot-blocking (BLK%≥5 AND non-wing usage). Playmaker = AST%≥25 AND Height ≤6'5\", OR AST%≥30 AND Height ≤6'7\". Wing = everything else. Designed to keep tall wings (Bailey-style 6'10\" forwards) classified as Wings rather than misclassified to Big purely by height."},
+    {cat:"International Adjustments",items:[],desc:"International players receive three adjustments: (1) League Strength via empirical bridge-player ratios from 2,655 players who played both intl and NBA. Euroleague=1.40, ACB=1.39, BBL=1.18 (NCAA Power=1.0 anchor). (2) League-BPM-Scaler: raw BPM proxy is multiplied by a league-specific scaler (Euroleague ×2.1, ACB ×1.9, NBL ×1.65, etc.) to translate to NCAA-equivalent BPM before feature engineering. (3) Conference-adjusted post-hoc with translatable-USG-aware caps for strong leagues. For Athleticism, an FT-Rate + ORB%-based formula is used in place of dunk rate (which is unavailable for most international players)."},
+    {cat:"Tier Feasibility (vs NBA)",items:[],desc:"Position-specific comparison against NBA tier benchmarks (p25-p75 corridors). For each tier (Replacement through All-Star), core metrics are checked: Wings = TS% + 3P%, Playmakers = AST% + TO%, Bigs = BLK% + ORB%. If a core metric exceeds p75 of the target tier, deficiencies in secondary metrics are marked 'Compensated' (yellow) instead of 'Critical Gap' (red)."},
+    {cat:"Data Sources & Coverage",items:[],desc:"NCAA Box Stats: BartTorvik (34k+ player-seasons 2008–2026, per-game + advanced + shooting zones — barttorvik.com). NCAA Play-by-Play: ESPN Play-by-Play (event-level data 2017-18 through 2025-26, ~700k player-game-events tracked). International Box Stats: RealGM (9k+ player-seasons across 12 European leagues — realgm.com). NBA Outcomes: NBA Stats API Advanced stats (27 seasons, PIE + minutes for peak computation). Anthropometrics: NBA Draft Combine measurements (NBA.com) + Databallr wingspan dataset. National Team / FIBA: FIBA event statistics for international youth and senior tournaments. All data is processed through our own pipeline — no external services are queried at runtime."},
   ];
   /* ── Pipeline Flow Diagram ── */
   const PipelineDiagram = () => {
@@ -5748,15 +5756,61 @@ function MethodologyTab() {
 
       {/* ── QUICK VIEW ── */}
       {methodView === "quick" && (
-        <Sec icon="🎯" title="How It Works — Plain Language" sub="Explaining ProspectTheory to a casual basketball fan.">
+        <>
+        <Sec icon="🎯" title="What This Is" sub="ProspectTheory in 60 seconds.">
           <div style={{fontSize:13,color:"#d1d5db",lineHeight:"1.8"}}>
-            <p style={{marginBottom:12}}>ProspectTheory evaluates NBA draft prospects by asking one question: <strong style={{color:"#f97316"}}>How many wins will this player add to an NBA team at their peak?</strong> That number is called <strong style={{color:"#e5e7eb"}}>ppWA (Projected Peak Wins Added)</strong>.</p>
-            <p style={{marginBottom:12}}>We trained a machine learning model on every college/international prospect drafted from 2010–2016 whose NBA career we can now evaluate with full hindsight. The model learned which college stats, body measurements, and scouting signals actually predict NBA success — and which ones are just noise.</p>
-            <p style={{marginBottom:12}}>For each prospect, we compute 5 core "DNA pillars": <span style={{color:"#f97316"}}>Feel</span> (basketball IQ proxy), <span style={{color:"#f97316"}}>Shooting</span> (projected NBA 3P ability), <span style={{color:"#f97316"}}>Defense</span>, <span style={{color:"#f97316"}}>Athleticism</span>, and <span style={{color:"#f97316"}}>Self-Creation</span> (can they create their own shot?). These 5 scores, along with age, position, and conference strength, feed into the projection model.</p>
-            <p style={{marginBottom:12}}>The model outputs tier probabilities (how likely is this player to become a Superstar? All-Star? Starter? Role Player?), a best-fit NBA archetype, and a ranked comparison to historical prospects who looked statistically similar at the same age.</p>
-            <p style={{color:"#6b7280"}}>Validated on 3 holdout draft classes (2017–19) with a Spearman rank correlation of ρ = 0.46, beating the industry benchmark (0.37). Not perfect — but better than the alternative of gut feeling alone.</p>
+            <p style={{marginBottom:12}}>ProspectTheory is an NBA-Draft analytics tool that answers one question for every prospect: <strong style={{color:"#f97316"}}>What kind of NBA player will this become?</strong></p>
+            <p style={{marginBottom:12}}>We blend three layers of information:</p>
+            <ul style={{marginBottom:12,paddingLeft:20,listStyle:"disc"}}>
+              <li style={{marginBottom:6}}><strong style={{color:"#fbbf24"}}>Production stats</strong> — what we measure in box scores and advanced metrics: BPM, Usage, eFG%, AST%, BLK%, etc.</li>
+              <li style={{marginBottom:6}}><strong style={{color:"#fbbf24"}}>Body measurements</strong> — height, weight, wingspan, ape index. These translate to NBA-level athleticism.</li>
+              <li style={{marginBottom:6}}><strong style={{color:"#fbbf24"}}>Behavior under pressure</strong> — derived from raw play-by-play data: how does this player respond when things go wrong? Does he force shots? Foul more? Withdraw? This is the part most public tools don't quantify.</li>
+            </ul>
+            <p style={{marginBottom:12}}>A trained projection model combines these into a single number — <strong style={{color:"#e5e7eb"}}>ppWA (Projected Peak Wins Added)</strong> — plus tier probabilities (Superstar / All-Star / Starter / Role Player / Bench / Out). On top of that we layer position-specific role-fit, archetype matching, and historical comparisons.</p>
           </div>
         </Sec>
+
+        <Sec icon="🧬" title="The Five Pillars" sub="What we measure for every prospect.">
+          <div style={{fontSize:13,color:"#d1d5db",lineHeight:"1.8"}}>
+            <p style={{marginBottom:10}}>Every player gets five core scores (0–100, position-adjusted):</p>
+            <ul style={{paddingLeft:20,listStyle:"disc"}}>
+              <li style={{marginBottom:6}}><strong style={{color:"#fbbf24"}}>Feel</strong> — basketball IQ proxy. AST/TO ratio + decision quality + ball security.</li>
+              <li style={{marginBottom:6}}><strong style={{color:"#22c55e"}}>Shooting</strong> — projected NBA 3-point ability. FT% serves as the touch baseline (best single predictor); 3PA volume + 3P% and midrange touch refine it through a Bayesian model.</li>
+              <li style={{marginBottom:6}}><strong style={{color:"#3b82f6"}}>Defense</strong> — STL%, BLK%, DBPM. Position-weighted: bigs need rim protection, guards need ball pressure.</li>
+              <li style={{marginBottom:6}}><strong style={{color:"#f97316"}}>Athleticism</strong> — functional, not measured. NCAA: dunk rate + FT-rate + offensive rebound rate + steals/blocks. Internationals: dunk-free formula since dunk data is unavailable, with FT-rate weighted heavier.</li>
+              <li style={{marginBottom:6}}><strong style={{color:"#06b6d4"}}>Self-Creation</strong> — can this player create his own shot? Box Creation Index (Ben Taylor method): efficient volume scoring + assist creation.</li>
+            </ul>
+          </div>
+        </Sec>
+
+        <Sec icon="🧠" title="Mind Tab — What Makes This Different" sub="Behavior under pressure, quantified from raw PBP data.">
+          <div style={{fontSize:13,color:"#d1d5db",lineHeight:"1.8"}}>
+            <p style={{marginBottom:12}}>The Mind Tab is the part that takes the most data work — and it's the part that's hardest to find anywhere else. We process raw event-level play-by-play (every made/missed shot, every turnover, every foul, every free throw) for 9 NCAA seasons (2017-18 through 2025-26 — ~700k player-game-events).</p>
+            <p style={{marginBottom:12}}>Three things come out of it:</p>
+            <ol style={{marginBottom:12,paddingLeft:20,listStyle:"decimal"}}>
+              <li style={{marginBottom:6}}><strong style={{color:"#f97316"}}>Self-Sufficiency Profile</strong> — a 4-step decision tree: How often does he create alone? How efficient is he when he does? How does pressure affect this (clutch, late shot-clock, clutch FT)? Where does he succeed (zone breakdown)? A final verdict combines all four signals.</li>
+              <li style={{marginBottom:6}}><strong style={{color:"#a78bfa"}}>Usage Reaction</strong> — when usage rises, does he become more of a scorer or more of a passer? Computed from AST%/USG% slope across seasons.</li>
+              <li style={{marginBottom:6}}><strong style={{color:"#22c55e"}}>Mental Resilience</strong> — quantifies how a player behaves AFTER bad sequences. We define a "streak" as 3+ adverse events (missed FG, turnover, foul, missed FT) in a player's last 4 actions, then track his next 4 actions. Five behavioral indices result: Hothead (more fouls?), Overdriver (more turnovers?), Engagement (does he withdraw?), Shot-Seeking (more shots?), Bounceback eFG (does shooting recover?). Plus a Match-Phase-Drift block comparing 1st-half vs 2nd-half streak responses.</li>
+            </ol>
+            <p style={{marginBottom:12,padding:"10px 12px",background:"#1a1f2e",borderRadius:8,border:"1px solid #1e3a5f"}}>
+              <strong style={{color:"#fbbf24"}}>Important caveat:</strong> Mental Resilience values are <strong>quantitative tendencies, not deterministic claims</strong>. About 88-95% of the league has confidence intervals that include "no detectable effect". Trust extreme z-scores (|z|&gt;1.5) and CIs that exclude 1.0. Always verify with film. We surface this as a starting point for tape review, not as a verdict.
+            </p>
+          </div>
+        </Sec>
+
+        <Sec icon="🛠" title="What's Honest About This" sub="Limitations the Plain-Language version doesn't hide.">
+          <div style={{fontSize:13,color:"#d1d5db",lineHeight:"1.8"}}>
+            <ul style={{paddingLeft:20,listStyle:"disc"}}>
+              <li style={{marginBottom:6}}>Trained only on prospects who were drafted (1,784 from 2010-2016). Undrafted players are extrapolations.</li>
+              <li style={{marginBottom:6}}>Holdout validation (2017-2019) shows Spearman ρ = 0.46 — meaning the model gets directionally right ~46% of the rank-order of NBA outcomes. That's far from perfect but better than guessing.</li>
+              <li style={{marginBottom:6}}>For prospects in pre-2017 NCAA seasons, we cannot compute Mind-Tab metrics (PBP data lacks player attribution before 2017).</li>
+              <li style={{marginBottom:6}}>For internationals, Mental Resilience is unavailable (we don't have FIBA-level event PBP). Internationals get reduced Body-Tab signal too (no Combine measurements).</li>
+              <li style={{marginBottom:6}}>Game-by-Game Skill-Curve uses an approximate Usage-proxy (% of team possessions consumed) rather than the standard NBA-USG (which requires per-game minutes data we don't have).</li>
+              <li style={{marginBottom:6}}>All projections are pre-team-context. Same prospect on different rosters can have wildly different NBA outcomes — a Stretch Big is gold for a Jokic-system, less useful for a slow-paced offense.</li>
+            </ul>
+          </div>
+        </Sec>
+        </>
       )}
 
       {/* ── DEEP DIVE ── */}
@@ -5768,14 +5822,14 @@ function MethodologyTab() {
 
       <Sec icon="📖" title="Methodology & Model Documentation" sub="Complete documentation of all computed metrics, formulas, and their statistical foundations.">
         <div className="text-sm mb-3" style={{color:"#9ca3af"}}>
-          ProspectTheory v2 uses <strong style={{color:"#e5e7eb"}}>ppWA (Projected Peak Wins Added)</strong> — a single, interpretable metric built from a two-component mixture model: position-stratified HistGradientBoosting regression combined with a calibrated Elite Detector (logistic). Trained on N=1,784 prospects (draft classes 2010–2016) with verified NBA outcomes. Target: best 3-consecutive-season peak in first 8 NBA years. All scores are position-aware (Playmaker / Wing / Big) and era-adjusted. Holdout validation (2017–2019): Spearman ρ = 0.460.
+          ProspectTheory uses <strong style={{color:"#e5e7eb"}}>ppWA (Projected Peak Wins Added)</strong> — a single, interpretable metric built from a two-component mixture model: position-stratified gradient-boosting regression combined with a calibrated Elite Detector. Trained on N=1,784 prospects (draft classes 2010–2016) with verified NBA outcomes. Target: best 3-consecutive-season peak in first 8 NBA years. All scores are position-aware (Playmaker / Wing / Big) and era-adjusted. Holdout validation (2017–2019): Spearman ρ = 0.460.
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
           {[
             ["ρ = 0.46","Spearman (holdout 2017–19)"],
-            ["0.373","craftednba.com baseline"],
-            ["8–12","Features per position group"],
             ["1,784","Training prospects (2010–16)"],
+            ["8–12","Features per position group"],
+            ["~700k","PBP events for Mind-Tab"],
           ].map(([val,label])=>(
             <div key={label} className="p-3 rounded-lg text-center" style={{background:"#0d1117"}}>
               <div className="text-lg font-bold" style={{color:"#f97316",fontFamily:"'Oswald',sans-serif"}}>{val}</div>
