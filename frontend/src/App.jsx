@@ -269,6 +269,126 @@ function getBadgePos(p) {
   return "W";
 }
 
+// ── Archetype × Position allowlist (Tobias 2026-05-09) ─────────────────────
+// Pipeline emits up to 7 archetype matches per player but does not filter by
+// position group. Result: Caleb Wilson (Wing) gets "Stretch Big | Passing Hub",
+// Allen Graves (Big) gets "Scoring Wing | 3-and-D Wing". Filter at display time.
+const ARCH_POS_ALLOW = {
+  // Playmaker-only
+  "Non-Specialized Playmaker": ["Playmaker"],
+  "Scoring Playmaker":         ["Playmaker"],
+  "Spacing Guard":             ["Playmaker"],
+  "Defensive Guard":           ["Playmaker"],
+  "Floor General":             ["Playmaker"],
+  // Wing-only
+  "Non-Specialized Wing":      ["Wing"],
+  "Scoring Wing":              ["Wing"],
+  "Defensive Wing":            ["Wing"],
+  "Slashing Wing":             ["Wing"],
+  "3-and-D Wing":              ["Wing"],
+  // Hybrid (cross-position)
+  "Point Forward":             ["Wing", "Big"],
+  "Initiator Wing":            ["Wing", "Playmaker"],
+  // Big-only
+  "Non-Specialized Big":       ["Big"],
+  "Stretch Big":               ["Big"],
+  "Rim Protector":             ["Big"],
+  "Short Roll Playmaker":      ["Big"],
+  "Passing Hub":               ["Big"],
+  "Glass Cleaner":             ["Big"],
+  "Stretch Rim Protector":     ["Big"],
+  "Scoring Big":               ["Big"],
+};
+// Tall-Wing exception: 6'9"+ Wings can plausibly be Stretch-4 / glass-cleaning forwards.
+// We allow Big-archetypes that describe forward-roles (not pure-5 archetypes like Rim
+// Protector) for Wings ≥81". This matches NBA reality (Tatum, Markkanen: nominally
+// wings, but archetypally Stretch Big or Scoring Big in many lineups).
+const TALL_WING_BIG_OK = new Set(["Stretch Big", "Scoring Big", "Glass Cleaner", "Short Roll Playmaker"]);
+function filterArchetypesByPos(archStr, pos, htIn) {
+  if (!archStr || !pos) return archStr || "";
+  const list = archStr.split("|").filter(Boolean);
+  const isTallWing = pos === "Wing" && htIn != null && htIn >= 81;
+  const filtered = list.filter(a => {
+    const allow = ARCH_POS_ALLOW[a];
+    if (!allow) return true; // unknown archetype — pass through
+    if (allow.includes(pos)) return true;
+    if (isTallWing && TALL_WING_BIG_OK.has(a)) return true;
+    return false;
+  });
+  if (filtered.length > 0) return filtered.join("|");
+  // Fallback: pipeline emitted only cross-pos archetypes for this player —
+  // emit pos-consistent default rather than a wrong label.
+  const POS_DEFAULT = {
+    "Playmaker": "Non-Specialized Playmaker",
+    "Wing":      "Non-Specialized Wing",
+    "Big":       "Non-Specialized Big",
+  };
+  return POS_DEFAULT[pos] || (list[0] || "");
+}
+
+// ── Tier label re-calibration (Tobias 2026-05-09) ────────────────────────────
+// Issue: backend's predicted_tier = modal tier (single highest probability bin).
+// For pre-draft prospects this is statistically dominant "Replacement" because
+// most NBA prospects don't pan out. The board ends up looking too pessimistic
+// — only 3 Starters, zero All-Stars in the 2026 class.
+//
+// Solution: cumulative-threshold tier. Pick the highest tier T where the
+// cumulative probability P(T or better) clears a calibrated threshold. This
+// surfaces upside without retraining the model.
+//
+// Thresholds calibrated against historical NBA base rates:
+//   - ~28 All-Stars across 17 NCAA classes (2008-2024) → ~1.6 All-Stars/year
+//   - ~10-20 Starters/year produced from each class
+//   - Goal: 2026 class shows 1-3 All-Star labels and 5-15 Starter labels,
+//           consistent with what a sharp scout would label a class on June 25.
+//
+// Returns the recalibrated tier OR the model's predTier if no tier dist available.
+const TIER_PROB_THRESHOLDS = {
+  // Cumulative P(tier-or-better) thresholds — % scale (0-100).
+  // Calibrated 2026-05-09 against full prospect database (46k player-seasons).
+  // Empirical result per class: 0-3 Superstars, 1-3 All-Stars, 3-9 Starters,
+  // 5-25 Role Players. Matches 2008-2024 actual NBA outcomes (~28 All-Stars
+  // produced across all 17 NCAA classes).
+  Superstar:    15,   // P(Superstar) ≥ 15%       → very rare top-of-draft
+  "All-Star":   24,   // P(S+A) ≥ 24%             → realistic All-Star upside
+  Starter:      38,   // P(S+A+St) ≥ 38%          → likely NBA contributor
+  "Role Player":52,   // P(S+A+St+R) ≥ 52%        → solid bench piece
+  Replacement:  25,   // P(any NBA tier) ≥ 25%    → fringe NBA candidate
+};
+function recalibrateTier(tiers, fallback) {
+  if (!tiers || typeof tiers !== "object") return fallback ?? "Replacement";
+  const pS  = Number(tiers.Superstar) || 0;
+  const pA  = Number(tiers["All-Star"]) || 0;
+  const pSt = Number(tiers.Starter) || 0;
+  const pR  = Number(tiers["Role Player"]) || 0;
+  const pRp = Number(tiers.Replacement) || 0;
+  if (pS >= TIER_PROB_THRESHOLDS.Superstar) return "Superstar";
+  if (pS + pA >= TIER_PROB_THRESHOLDS["All-Star"]) return "All-Star";
+  if (pS + pA + pSt >= TIER_PROB_THRESHOLDS.Starter) return "Starter";
+  if (pS + pA + pSt + pR >= TIER_PROB_THRESHOLDS["Role Player"]) return "Role Player";
+  if (pS + pA + pSt + pR + pRp >= TIER_PROB_THRESHOLDS.Replacement) return "Replacement";
+  return "Negative";
+}
+
+// ── Draft-day-age display helper (Tobias 2026-05-09) ─────────────────────────
+// Pipeline (10c_ml_calibration.compute_age) uses ref_date = Feb 1 of season_year
+// as the universal age reference. The actual NBA Draft is held in late June
+// (~June 25). The 144-day gap means our stored `age` is systematically ~0.40
+// years younger than "age on draft day" — Boozer reads 18.5 instead of his
+// true 18.9 on draft night.
+//
+// Until the pipeline switches its ref_date to draft day, we add the constant
+// offset HERE for *display only* (header / Key Facts / board table). Internal
+// model logic continues to use raw `p.age` — the calibrated v2 model was
+// trained on Feb-1-age, so changing the input feature would break tier probs.
+//
+// Constant 0.39 = 144 days / 365.25 (Feb 1 → June 25).
+const DRAFT_DAY_AGE_OFFSET = 0.39;
+function ageOnDraftDay(age) {
+  if (age == null || !isFinite(age)) return null;
+  return Number(age) + DRAFT_DAY_AGE_OFFSET;
+}
+
 // ── Client-side badge computation (with International Adjuster + Fallbacks) ──
 function computeBadges(p) {
   const pos = getBadgePos(p);
@@ -592,8 +712,15 @@ function resolvePosition(d) {
   const ht = d.ht ?? d.height_in ?? d.college_height_inches;
   const astP = d.ast_p ?? d.astP ?? 0;
   const usg = d.usg ?? d.usg_p ?? 0;
-  const tpFreq = d.three_f ?? d.three_freq ?? d.threeF ?? d.tp_per ?? 0;
+  const tpFreq_raw = d.three_f ?? d.three_freq ?? d.threeF ?? d.tp_per ?? 0;
+  // Tobias 2026-05-09: three_f scale split: NCAA stores 0-100 (e.g. 26.4), intl
+  // stores 0-1 ratio (e.g. 0.34). Disambiguate by source — naive 0-1 detection
+  // would mis-classify true low-volume bigs (Bidunga 3PAr=0.6%) as 60% shooters.
+  const _isIntlForPos = !!(d.source && d.source !== "ncaa");
+  const tpFreq = (_isIntlForPos && tpFreq_raw > 0 && tpFreq_raw < 1) ? tpFreq_raw * 100 : tpFreq_raw;
   const tp = d.tp_pct ?? d.tp ?? 0;
+  const blkP = d.blk_p ?? d.blkP ?? 0;
+  const orbP = d.orb_p ?? d.orbP ?? 0;
 
   // Ball-handler override: high AST% = Playmaker, WITH height guard
   // Guards (< 79"): AST% > 25 + USG% > 22 (Curry, Harden, Smart)
@@ -601,6 +728,11 @@ function resolvePosition(d) {
   if (ht != null && ht < 79 && astP > 25 && usg > 22) return "Playmaker";
   if (ht != null && ht < 79 && astP > 30) return "Playmaker";
   if (astP > 32) return "Playmaker"; // Any height — true point-big
+
+  // Tobias 2026-05-09: Big-override for tall non-shooters with rim-protection profile.
+  // Catches Tarris Reed (82", 3PAr=1.2%, BLK%=8.4) which the pipeline mis-tags as Wing.
+  // Trigger: ≥81" AND (3PAr < 8% OR no shooting attempts) AND (BLK% > 4 OR ORB% > 11).
+  if (ht != null && ht >= 81 && tpFreq < 8 && (blkP > 4 || orbP > 11)) return "Big";
 
   // Stretch/shooting forward override: 6'7"-6'10" with shooting = Wing, not Big
   if (ht != null && ht >= 79 && ht <= 82 && (tp > 30 || tpFreq > 25)) return "Wing";
@@ -873,8 +1005,13 @@ function mapProfile(d) {
     const _selfCreation = d.self_creation_raw ?? d.self_creation ?? d.self_creation_idx ?? d.self_creation_pct ?? null;
 
     // ── Passer badges (astTov-sensitive) ──
-    if (badge === "Passing Hub"    && !(isB && _astP > 18 && (_astTov == null || _astTov > 1.2))) return false;
-    if (badge === "Floor General"  && !((isG || isW) && _astP > 25 && (_astTov == null || _astTov > 1.8))) return false;
+    // Tobias 2026-05-09: removed null-astTov bypass — when AST/TO is missing,
+    // we should NOT auto-pass passer-badges (false positives like Boozer getting
+    // Floor General with astTov=1.74 from ast_p/to_p but server-side tov=null).
+    // Now require astTov data explicitly. astTov fallback in mapProfile uses
+    // ast_p/to_p as last resort, so missing data really means "no info".
+    if (badge === "Passing Hub"    && !(isB && _astP > 18 && _astTov != null && _astTov > 1.2)) return false;
+    if (badge === "Floor General"  && !((isG || isW) && _astP > 25 && _astTov != null && _astTov > 2.0)) return false;
     if (badge === "Self-Creator"   && !(_selfCreation != null && _selfCreation > 70)) return false;
     if (badge === "Tunnel Vision"  && !(_astTov != null && _astTov < 0.8 && _usg > 22)) return false;
 
@@ -981,9 +1118,49 @@ function mapProfile(d) {
     bpm: d.bpm, obpm: d.obpm, dbpm: d.dbpm, ogbpm: d.ogbpm ?? null, btPid: d.pid ?? null,
     ortg: d.ortg ?? d.ORtg ?? d.offensive_rating,
     usg: normRate(d.usg ?? d.usg_p),
-    ts: normShootPct(d.ts_pct ?? d.ts),
+    // Tobias 2026-05-09: Derive twoPct, eFG%, TS% when missing (international pipeline gap).
+    // RealGM exposes FG%, 3P%, 3PA-rate (three_f) but not 2P%/eFG%/TS%. These are
+    // mathematically derivable from box-score identities — no model assumption.
+    //   2P% = (FG% − 3P%·r) / (1 − r)        with r = 3PA/FGA
+    //   eFG% = FG% + 0.5·3P%·r
+    //   TS% = (2·eFG% + FT%·ftr) / (2·(1 + 0.44·ftr))   with ftr = FTA/FGA
+    ts: (() => {
+      const direct = normShootPct(d.ts_pct ?? d.ts);
+      if (direct != null) return direct;
+      const fg  = normShootPct(d.fg_pct ?? d.fg);
+      const tp  = normShootPct(d.tp_pct ?? d.tp);
+      const ft  = normShootPct(d.ft_pct ?? d.ft);
+      const r_raw = d.three_f ?? d.three_freq ?? d.threeF;
+      const r = (r_raw == null) ? null : (r_raw > 1 ? r_raw / 100 : r_raw);
+      const ftr_raw = d.ftr ?? d.ft_rate;
+      const ftr = (ftr_raw == null) ? null : (ftr_raw > 2 ? ftr_raw / 100 : ftr_raw);
+      if (fg == null || tp == null || ft == null || r == null || ftr == null) return null;
+      const efg = fg + 0.5 * tp * r;
+      const ts_calc = (2 * efg + ft * ftr) / (2 * (1 + 0.44 * ftr));
+      return Math.round(ts_calc * 10) / 10;
+    })(),
     fg: normShootPct(d.fg_pct ?? d.fg),
-    efg: normShootPct(d.efg_pct ?? d.efg),
+    efg: (() => {
+      const direct = normShootPct(d.efg_pct ?? d.efg);
+      if (direct != null) return direct;
+      const fg = normShootPct(d.fg_pct ?? d.fg);
+      const tp = normShootPct(d.tp_pct ?? d.tp);
+      const r_raw = d.three_f ?? d.three_freq ?? d.threeF;
+      const r = (r_raw == null) ? null : (r_raw > 1 ? r_raw / 100 : r_raw);
+      if (fg == null || tp == null || r == null) return null;
+      return Math.round((fg + 0.5 * tp * r) * 10) / 10;
+    })(),
+    twoPct: (() => {
+      const direct = normShootPct(d.two_pct ?? d.two_p_pct ?? d.twoP_per);
+      if (direct != null) return direct;
+      const fg = normShootPct(d.fg_pct ?? d.fg);
+      const tp = normShootPct(d.tp_pct ?? d.tp);
+      const r_raw = d.three_f ?? d.three_freq ?? d.threeF;
+      const r = (r_raw == null) ? null : (r_raw > 1 ? r_raw / 100 : r_raw);
+      if (fg == null || tp == null || r == null || r >= 0.95) return null;
+      const two = (fg - tp * r) / (1 - r);
+      return (two >= 0 && two <= 100) ? Math.round(two * 10) / 10 : null;
+    })(),
     astP: normRate(d.ast_p ?? d.astP),
     toP: normRate(d.to_p ?? d.toP),
     orbP: normRate(d.orb_p ?? d.orbP),
@@ -1030,14 +1207,33 @@ function mapProfile(d) {
       connector:d.role_connector,helio:d.role_helio,event:d.role_event,
       zone:d.role_zone,microSpacer:d.role_micro_spacer},
     roleVersatility:d.role_versatility,
-    archetype:d.archetype||"",
-    archetypesAll:d.archetypes_all||d.archetype||"",
+    // Tobias 2026-05-09: Filter pipeline archetypes by player's position group.
+    // Pipeline can emit cross-pos matches (Wing getting "Stretch Big" etc.) — drop those.
+    // Tall wings (≥81") get Stretch-4 / Glass Cleaner pass-through (Tatum/Markkanen pattern).
+    archetype: filterArchetypesByPos(d.archetype || "", resolvedPos, d.ht ?? d.height_in ?? d.college_height_inches).split("|")[0] || "",
+    archetypesAll: filterArchetypesByPos(d.archetypes_all || d.archetype || "", resolvedPos, d.ht ?? d.height_in ?? d.college_height_inches),
     feas:{repl:d.feas_repl,rot:d.feas_rot,start:d.feas_start,allstar:d.feas_allstar,
       cleared:d.feas_cleared||"",blocker:d.feas_blocker||""},
     mu:d.pred_mu??d.mu??d.projected_pie??d.pred_mu_pie??d.aspm_adj??d.aspm,
     sigma:d.pred_sigma??d.sigma??d.mc_sigma??d.volatility,
     pNba:d.pred_p_nba??d.pNba??d.pn,
-    predTier: d.v2Tier ?? d.pred_tier ?? d.predicted_tier ?? d.tier,
+    // Tobias 2026-05-09: predTier is now threshold-recalibrated (see recalibrateTier).
+    // Original modal tier is preserved as `predTierRaw` for debugging / methodology.
+    predTier: (() => {
+      const fallback = d.v2Tier ?? d.pred_tier ?? d.predicted_tier ?? d.tier;
+      const probs = d.v2TierProbs;
+      if (probs) return recalibrateTier(probs, fallback);
+      // Legacy probs from prob_* fields (×100 already in tiers field above)
+      const legacy = {
+        Superstar:((d.prob_super??d.prob_superstar??d.probs?.superstar??0)*100),
+        "All-Star":((d.prob_allstar??d.probs?.allstar??0)*100),
+        Starter:((d.prob_starter??d.probs?.starter??0)*100),
+        "Role Player":((d.prob_role??d.prob_roleplayer??d.probs?.roleplayer??0)*100),
+        Replacement:((d.prob_repl??d.prob_replacement??d.probs?.replacement??0)*100),
+      };
+      return recalibrateTier(legacy, fallback);
+    })(),
+    predTierRaw: d.v2Tier ?? d.pred_tier ?? d.predicted_tier ?? d.tier,
     // Tobias 2026-05-05: potential_tier zeigt P(A+)≥30%-basierten Tier (statt nur Modal).
     // Doncic mit S=45% A=51.5% bekommt "Superstar Potential" (45%≥30%), waehrend
     // predicted_tier "All-Star" bleibt. Macht Pre-Draft-Potenzial sichtbar.
@@ -1088,7 +1284,7 @@ function mapProfile(d) {
         "EuroLeague Impact": {leagues:"Euroleague", desc:"Top intl. Impact-Spieler. Stamm in der staerksten Liga."},
         "EuroLeague":        {leagues:"Euroleague / Eurocup",     desc:"Solider Euroleague-Stamm oder Top-Eurocup."},
         "Top European Liga": {leagues:"ACB / Italian-A / Adriatic", desc:"Stamm in einer der starken Top-Ligen Europas."},
-        "Pro Basketball":    {leagues:"German-BBL / Lithuanian-LKL", desc:"Roster-Spieler in einer Pro-Liga unterhalb Top-Tier."},
+        "Pro Basketball":    {leagues:"German-BBL / Lithuanian-LKL", desc:"Roster player in a pro league below top European tier."},
         "Fringe Pro":        {leagues:"Lower Pro / Domestic-only",   desc:"Marginaler Pro-Status, kurze oder lokale Karriere."},
       };
       const order = ["EuroLeague Impact","EuroLeague","Top European Liga","Pro Basketball","Fringe Pro"];
@@ -1177,6 +1373,7 @@ function installPlayers(players) {
     counts[k] = (counts[k] || 0) + 1;
   });
   // Second pass: install with disambiguated keys on collisions
+  const installedKeys = [];
   players.forEach(pl => {
     const mapped = mapProfile(pl) || {};
     mapped.player_id = pl.player_id || mapped.player_id;
@@ -1190,6 +1387,42 @@ function installPlayers(players) {
     }
     PLAYERS[finalKey] = mapped;
     PLAYER_LIST.push(finalKey);
+    installedKeys.push(finalKey);
+  });
+
+  // Tobias 2026-05-09: Compute classRank dynamically per draft-year cohort.
+  // Backend currently emits classRank=null for all players (pipeline-side TODO).
+  // We rank by predicted-peak-wins-added (ppwa) within each draftYear, descending.
+  // Ties broken by ups (overall composite). Assigns 1-based rank only if player
+  // has ppwa OR ups (otherwise leaves classRank=null to avoid ranking phantoms).
+  const byYear = {};
+  installedKeys.forEach(k => {
+    const p = PLAYERS[k];
+    if (!p) return;
+    const yr = p.draftYear ?? p.yr;
+    if (yr == null) return;
+    if (!byYear[yr]) byYear[yr] = [];
+    byYear[yr].push(k);
+  });
+  Object.keys(byYear).forEach(yr => {
+    const keys = byYear[yr]
+      .filter(k => {
+        const p = PLAYERS[k];
+        return p && (p.ppwa != null || p.war != null || p.ups != null);
+      })
+      .sort((a, b) => {
+        const pa = PLAYERS[a], pb = PLAYERS[b];
+        const va = pa.ppwa ?? pa.war ?? -999;
+        const vb = pb.ppwa ?? pb.war ?? -999;
+        if (vb !== va) return vb - va;
+        return (pb.ups ?? -999) - (pa.ups ?? -999);
+      });
+    keys.forEach((k, i) => {
+      // Only set if backend hasn't already provided a classRank
+      if (PLAYERS[k].classRank == null) {
+        PLAYERS[k].classRank = i + 1;
+      }
+    });
   });
 }
 
@@ -1333,7 +1566,7 @@ function OverviewTab({p, compTier, setCompTier}) {
           return [
             ["Conference",  p.conf, confColor],
             [classLabel,    classOrYearsPro, "#e5e7eb"],
-            ["Age on Draft Day", p.age != null ? Number(p.age).toFixed(1) : "—", "#e5e7eb"],
+            ["Age on Draft Day", p.age != null ? ageOnDraftDay(p.age).toFixed(1) : "—", "#e5e7eb"],
             ["Recruit",     p.recRank ? `#${p.recRank}` : "Unranked", "#e5e7eb"],
             ["Source",      p.source?.toUpperCase() || "NCAA", p.source === "ncaa" ? "#3b82f6" : "#f97316"],
             ["Conf Tier",   computedTier, tierColor],
@@ -1562,7 +1795,15 @@ function ShootingTab({p}) {
   const ftMade = dietFta != null && ft != null ? Math.round(dietFta * ft / 100) : null;
 
   // ── Shot diet percentages ──
-  const estTotalShots = totalShots > 0 ? totalShots : ((twoPA||0) + (threePA||0) + (dietFta||0));
+  // Tobias 2026-05-09: Bug fix — for intl-like players (no raw FGA), totalShots
+  // contained ONLY FTA, so 2PA/3PA estimates were divided by FTA-only base
+  // → values >100%. Now we always rebuild estTotalShots from the actual
+  // 2PA + 3PA + FTA components when ANY of them is missing from the FGA-side.
+  const fgaSideShots = (totalFga || 0);
+  const componentShots = (twoPA || 0) + (threePA || 0) + (dietFta || 0);
+  const estTotalShots = (fgaSideShots > 0 && totalShots >= componentShots * 0.9)
+    ? totalShots
+    : Math.max(componentShots, totalShots);
   const rimPctOfTotal = estTotalShots > 0 && rimAtt != null ? Math.round(rimAtt / estTotalShots * 1000) / 10 : null;
   const dunkPctOfTotal = estTotalShots > 0 && dunkAttAuthoritative != null ? Math.round(dunkAttAuthoritative / estTotalShots * 1000) / 10 : null;
   const midPctOfTotal = estTotalShots > 0 && midAtt != null ? Math.round(midAtt / estTotalShots * 1000) / 10 : null;
@@ -2516,11 +2757,7 @@ function ClassScatterAndDev({p}) {
         );
       })()}
 
-      {/* 3B: In-Season Development Trajectory — legacy single-stat view */}
-      <Sec icon="📈" title="Single-Stat Rolling Trend (Game-Log Source)"
-        sub="Rolling per-game stats over the season. Select a metric: Points, eFG%, True Shooting, Rebounds, Assists, Steals, or Blocks. Rolling window K = max(3, min(5, N/4)) games. OLS trend line reveals improvement or regression.">
-        <DevTrajectory />
-      </Sec>
+      {/* Single-Stat Rolling Trend removed 2026-05-09 — redundant with In-Season Trajectory above */}
     </div>
   );
 }
@@ -2686,7 +2923,7 @@ function MindTab({p}) {
            Step-Header, Hero-Number pro Schritt, eindeutiger Verdict am Ende.
          ══════════════════════════════════════════════════════════════════ */}
       <Sec icon="⚡" title="Self-Sufficiency Profile"
-        sub="Four sequential questions: Wie oft muss er allein kreieren? Wie effizient ist er dabei? Bricht es unter Druck ein? Wo gelingt es ihm am besten?">
+        sub="Four sequential questions: How often does he have to create alone? How efficient is he when he does? Does it break down under pressure? And where on the floor does he succeed?">
         {(() => {
           // Self-Creation Rate (% of made FGs that were unassisted)
           const overallSelfPct = p.shotCreation?.overall?.selfPct ?? null;
@@ -2917,23 +3154,69 @@ function MindTab({p}) {
                 <>
                   <StepHeader n={4} title="WHERE does he succeed (which zones)?"
                     color="#06b6d4"
-                    hint="Per-zone eFG%, self-creation share, and assist share. Look for elite zones (eFG>peer-avg + Self%>50)."/>
-                  <div style={{background:"#0d1117",border:"1px solid #1f2937",borderRadius:8,padding:"12px 14px"}}>
-                    <div style={{display:"grid",gridTemplateColumns:"70px 65px 50px 55px 50px 55px 50px 40px",gap:4,marginBottom:6}}>
-                      <div style={{fontSize:9,color:"#4b5563"}}>Zone</div>
-                      <div style={{textAlign:"right",fontSize:9,color:"#f97316",fontWeight:600}}>eFG%</div>
-                      <div style={{textAlign:"right",fontSize:8,color:"#4b5563"}}>Avg</div>
-                      <div style={{textAlign:"right",fontSize:9,color:"#f97316",fontWeight:600}}>Self%</div>
-                      <div style={{textAlign:"right",fontSize:8,color:"#4b5563"}}>Avg</div>
-                      <div style={{textAlign:"right",fontSize:9,color:"#60a5fa",fontWeight:600}}>Asst%</div>
-                      <div style={{textAlign:"right",fontSize:8,color:"#4b5563"}}>Avg</div>
-                      <div style={{textAlign:"right",fontSize:9,color:"#4b5563"}}>FGA</div>
-                    </div>
+                    hint="Per-zone shooting profile: how efficient he is, how often he creates the look himself, and how often a teammate sets him up. Elite zones combine high eFG with high Self%."/>
+                  {/* Tobias 2026-05-09: bigger + cleaner zone-breakdown layout (2-row card per zone) */}
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(220px, 1fr))",gap:10}}>
                     {["rim","mid","three","dunk"].map(z => {
                       const cfg = ZONE_CONFIG[z];
                       const zd = zones[z];
                       if (!zd) return null;
-                      return <ZoneRow key={z} zone={z} label={cfg.label} color={cfg.color} data={zd}/>;
+                      const ZONE_AVG_LOCAL = {
+                        rim:   {eFG: 62.5, selfPct: 42},
+                        mid:   {eFG: 40.2, selfPct: 58},
+                        three: {eFG: 51.8, selfPct: 38},
+                        dunk:  {eFG: 76.0, selfPct: 22},
+                      };
+                      const avg = ZONE_AVG_LOCAL[z] || {};
+                      const efgDelta = avg.eFG ? zd.eFG - avg.eFG : null;
+                      const efgColor = zd.eFG >= 65 ? "#22c55e" : zd.eFG >= 55 ? "#86efac" : zd.eFG >= 45 ? "#fbbf24" : "#ef4444";
+                      const selfPct = zd.selfPct ?? 0;
+                      const asstPct = 100 - selfPct;
+                      const elite = (zd.eFG > (avg.eFG||50) && selfPct > 50);
+                      return (
+                        <div key={z} style={{background:"#0d1117",border:`1px solid ${cfg.color}33`,borderRadius:8,padding:"12px 14px"}}>
+                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                            <div style={{display:"flex",alignItems:"center",gap:8}}>
+                              <div style={{width:10,height:10,borderRadius:"50%",background:cfg.color}}/>
+                              <span style={{fontSize:14,fontWeight:700,color:"#e5e7eb",fontFamily:"Oswald,sans-serif"}}>{cfg.label}</span>
+                            </div>
+                            <span style={{fontSize:11,color:"#6b7280"}}>{zd.fga} FGA</span>
+                          </div>
+                          {/* eFG% — big number + delta vs D1 avg */}
+                          <div style={{display:"flex",alignItems:"baseline",gap:6,marginBottom:4}}>
+                            <span style={{fontSize:24,fontWeight:700,color:efgColor,fontFamily:"Oswald,sans-serif"}}>
+                              {zd.eFG?.toFixed(1)}%
+                            </span>
+                            <span style={{fontSize:11,color:"#6b7280"}}>eFG%</span>
+                            {efgDelta != null && (
+                              <span style={{fontSize:11,marginLeft:"auto",color:efgDelta > 0 ? "#22c55e" : "#ef4444"}}>
+                                {efgDelta > 0 ? "+" : ""}{efgDelta.toFixed(1)} vs D1 avg
+                              </span>
+                            )}
+                          </div>
+                          {/* Self vs Assisted bars */}
+                          <div style={{marginTop:8}}>
+                            <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"#9ca3af",marginBottom:3}}>
+                              <span style={{color:"#f97316"}}>Self-Created</span>
+                              <span style={{color:"#60a5fa"}}>Assisted</span>
+                            </div>
+                            <div style={{position:"relative",height:8,background:"#1f2937",borderRadius:4,overflow:"hidden"}}>
+                              <div style={{position:"absolute",left:0,top:0,bottom:0,width:`${selfPct}%`,background:"#f97316cc"}}/>
+                              <div style={{position:"absolute",right:0,top:0,bottom:0,width:`${asstPct}%`,background:"#60a5facc"}}/>
+                            </div>
+                            <div style={{display:"flex",justifyContent:"space-between",fontSize:10,fontWeight:600,marginTop:3}}>
+                              <span style={{color:"#f97316"}}>{selfPct?.toFixed(0)}%</span>
+                              <span style={{color:"#6b7280",fontSize:9}}>D1 avg: {avg.selfPct}% / {100 - (avg.selfPct||0)}%</span>
+                              <span style={{color:"#60a5fa"}}>{asstPct?.toFixed(0)}%</span>
+                            </div>
+                          </div>
+                          {elite && (
+                            <div style={{marginTop:8,padding:"4px 8px",background:"#22c55e15",border:"1px solid #22c55e44",borderRadius:4,fontSize:10,color:"#22c55e",fontWeight:600,textAlign:"center"}}>
+                              ✦ Elite zone — above-avg eFG with high self-creation
+                            </div>
+                          )}
+                        </div>
+                      );
                     })}
                   </div>
                 </>
@@ -4351,13 +4634,7 @@ function ProjectionTab({p}) {
         })()}
       </Sec>
 
-      {/* ── UPCOMING: Role Fit & Team Context ─────────────────── */}
-      <div style={{borderRadius:12,padding:"20px 24px",background:"linear-gradient(135deg,#0d1117,#111827)",border:"1px dashed #374151",textAlign:"center"}}>
-        <div style={{fontSize:13,fontWeight:700,color:"#4b5563",marginBottom:6,letterSpacing:"0.05em",textTransform:"uppercase"}}>Role Fit & Team Context — Upcoming</div>
-        <div style={{fontSize:12,color:"#374151",maxWidth:540,margin:"0 auto",lineHeight:1.6}}>
-          ppWA is a team-agnostic projection. Coming next: scheme-dependent fit scores for each of the 30 NBA rosters — how a prospect's archetype interacts with the team's existing shot profile, defensive scheme, and minutes allocation. Same player, different value depending on where he lands.
-        </div>
-      </div>
+      {/* Role Fit & Team Context placeholder removed 2026-05-09 (User: feature is on backlog, no need to advertise it) */}
     </div>
   );
 }
@@ -6476,9 +6753,10 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
 
   const fetchBoard = (year) => {
     setLoading(true);
+    // Tobias 2026-05-09: n=500 ensures classRank computation has full per-year cohort
     const url = year && year!=="All"
-      ? `${API_BASE}/board?n=200&year=${year}`
-      : `${API_BASE}/board?n=200`;
+      ? `${API_BASE}/board?n=500&year=${year}`
+      : `${API_BASE}/board?n=500`;
     fetch(url)
       .then(r=>r.json())
       .then(d=>{
@@ -6706,7 +6984,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
                     </td>
                     <td className="px-3 py-2.5"><span className="px-2 py-0.5 rounded text-xs font-semibold" style={{background:(posColors[p.pos]||"#6b7280")+"22",color:posColors[p.pos]||"#6b7280"}}>{p.pos}</span></td>
                     <td className="px-3 py-2.5 text-xs" style={{color:"#9ca3af"}}>{p.team||p.conf}</td>
-                    <td className="px-3 py-2.5 text-xs" style={{color: p.age != null && p.age < 20 ? "#86efac" : "#9ca3af"}}>{p.age != null ? Number(p.age).toFixed(1) : "—"}</td>
+                    <td className="px-3 py-2.5 text-xs" style={{color: p.age != null && p.age < 20 ? "#86efac" : "#9ca3af"}}>{p.age != null ? ageOnDraftDay(p.age).toFixed(1) : "—"}</td>
                     <td className="px-3 py-2.5 font-bold" style={{color: (() => {
                       if (p.war == null) return "#374151";
                       const w = p.war;
@@ -7311,7 +7589,7 @@ export default function App() {
                           );
                         });
                       })()}
-                      <span>{p.team}</span><span>·</span><span>{p.ht}</span><span>·</span><span>Age {p.age!=null?Number(p.age).toFixed(1):"—"}</span>
+                      <span>{p.team}</span><span>·</span><span>{p.ht}</span><span>·</span><span>Age {p.age!=null?ageOnDraftDay(p.age).toFixed(1):"—"}</span>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
