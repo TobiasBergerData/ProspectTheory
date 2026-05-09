@@ -341,8 +341,11 @@ def main():
     ]
 
     for name in check:
+        # Tobias 2026-05-09: dot-stripped lookup to match V.J./VJ etc.
+        clean = name.replace(".", "")
         row = conn.execute(
-            "SELECT data FROM profiles WHERE name LIKE ?", (f"%{name}%",)
+            "SELECT data FROM profiles WHERE REPLACE(LOWER(name), '.', '') LIKE LOWER(?)",
+            (f"%{clean.lower()}%",)
         ).fetchone()
         if not row:
             print(f"  {name}: NOT FOUND"); continue

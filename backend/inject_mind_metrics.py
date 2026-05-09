@@ -126,6 +126,8 @@ def build_mind_block(row) -> dict:
         "n_streaks":      n_streaks,
         "n_actions":      n_actions,
         "limited_sample": n_streaks < MIN_STREAKS_FOR_RELIABLE,
+        # Tobias 2026-05-09: pos_group wird unten aus aktuellem Profile überschrieben
+        # falls vorhanden (Bailey/Flagg-Bug-Fix: mind-CSV könnte alte position haben).
         "pos_group":      row.get("pos_group") if pd.notna(row.get("pos_group")) else None,
 
         "aggressor":      idx_ci_z("adverse_aggressor_idx",  "adverse_aggressor_lo",  "adverse_aggressor_hi",  "adverse_aggressor_z"),
@@ -238,7 +240,13 @@ def main():
             obj = json.loads(zlib.decompress(blob).decode("utf-8"))
         except Exception:
             continue
-        obj["mindMetrics"] = build_mind_block(row)
+        mind_block = build_mind_block(row)
+        # Tobias 2026-05-09: override pos_group with current profile-pos_group (Bailey-bug-fix).
+        # Profile-pos_group = aus 10_composite Pipeline. Mind-CSV könnte stale position haben.
+        cur_pos = obj.get("pos") or obj.get("pos_group")
+        if cur_pos in ("Playmaker", "Wing", "Big"):
+            mind_block["pos_group"] = cur_pos
+        obj["mindMetrics"] = mind_block
         new_blob = zlib.compress(json.dumps(obj, separators=(",", ":")).encode("utf-8"), level=9)
         update_rows.append((new_blob, player_id))
         written += 1

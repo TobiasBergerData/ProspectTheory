@@ -314,8 +314,12 @@ def main():
     ]
 
     for name in check_players:
+        # Tobias 2026-05-09: dot-stripped LIKE-search to match "V.J. Edgecombe" / "VJ Edgecombe"
+        # both. Strip dots from search term + use REPLACE in SQL.
+        clean = name.replace(".", "")
         row = conn.execute(
-            "SELECT data FROM profiles WHERE name LIKE ?", (f"%{name}%",)
+            "SELECT data FROM profiles WHERE REPLACE(LOWER(name), '.', '') LIKE LOWER(?)",
+            (f"%{clean.lower()}%",)
         ).fetchone()
         if not row:
             print(f"  {name}: NOT FOUND")

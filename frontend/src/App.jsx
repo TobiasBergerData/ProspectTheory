@@ -2301,6 +2301,8 @@ function ClassScatterAndDev({p}) {
         });
 
         // Available metrics — pick 4 of the most insightful
+        // Tobias 2026-05-09: 6 stats — 4 offensive + 2 defensive/discipline.
+        // Computed-on-the-fly: stocks = STL+BLK pro Game (Defense-Trend).
         const STATS = [
           {key:"u",  label:"Usage %",       short:"USG", color:"#f97316", min:0,   max:45,  fmt:v=>v.toFixed(1)+"%",
            hint:"Share of team possessions used. Rising = expanding role."},
@@ -2310,6 +2312,12 @@ function ClassScatterAndDev({p}) {
            hint:"Per game. Rising = developing playmaking."},
           {key:"ta", label:"3PT Attempts",  short:"3PA", color:"#60a5fa", min:0,   max:14,  fmt:v=>v.toFixed(1),
            hint:"Per game. Rising = expanding shooting range / role."},
+          {key:"_stocks", label:"Stocks (Defense)", short:"D",  color:"#06b6d4", min:0, max:8, fmt:v=>v.toFixed(1),
+           hint:"STL + BLK per game. Rising = growing defensive disruption — a key NBA-translation signal.",
+           getter: g => (g.s||0) + (g.b||0)},
+          {key:"pf", label:"Foul Discipline", short:"PF", color:"#ef4444", min:0, max:6, fmt:v=>v.toFixed(1),
+           hint:"Personal fouls per game. FALLING is good — discipline grows. Rising fouls + falling production = warning sign.",
+           inverted:true},
         ];
 
         const W = 720, H = 270, PAD = {l: 50, r: 50, t: 16, b: 36};
@@ -2318,7 +2326,8 @@ function ClassScatterAndDev({p}) {
 
         // Compute rolling means + normalize to [0,1] within each metric's domain for overlay
         const series = STATS.map(stat => {
-          const vals = games.map(g => g[stat.key] ?? null);
+          // Custom getter (e.g. stocks = stl+blk) or simple key-lookup
+          const vals = games.map(g => stat.getter ? stat.getter(g) : (g[stat.key] ?? null));
           const roll = rollMean(vals);
           // Normalize to [0,1] for overlay; we keep separate Y-axes labelled
           const norm = roll.map(v => v == null ? null : (v - stat.min) / (stat.max - stat.min));
@@ -2344,13 +2353,17 @@ function ClassScatterAndDev({p}) {
 
         return (
           <Sec icon="📈" title="In-Season Trajectory — Did The Player Develop?"
-            sub={`${N} games this season. Rolling ${K}-game mean for 4 key indicators. Use this to spot: role expansion (USG), efficiency growth (eFG), new skills (AST/3PA).`}>
+            sub={`${N} games this season. Rolling ${K}-game mean for 6 indicators (4 offense + 2 defense/discipline). Use this to spot: role expansion (USG), efficiency growth (eFG), new skills (AST/3PA), defensive growth (Stocks), discipline (PF).`}>
             {/* Verdict bar */}
             <div style={{background:"#0d1117",border:"1px solid #1f2937",borderRadius:8,padding:"10px 12px",marginBottom:10}}>
               <div style={{fontSize:10,fontWeight:700,color:"#6b7280",letterSpacing:1,marginBottom:6}}>SEASON-SCALE TRENDS</div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))",gap:10}}>
                 {series.map(s => {
-                  const trendColor = s.slope > 0.005 ? "#22c55e" : s.slope < -0.005 ? "#ef4444" : "#6b7280";
+                  // Inverted stats (e.g. PF): falling = good, rising = bad
+                  const inv = s.stat.inverted;
+                  const trendColor = inv
+                    ? (s.slope < -0.005 ? "#22c55e" : s.slope > 0.005 ? "#ef4444" : "#6b7280")
+                    : (s.slope > 0.005 ? "#22c55e" : s.slope < -0.005 ? "#ef4444" : "#6b7280");
                   return (
                     <Tip key={s.stat.key} content={<div style={{fontSize:12}}><strong style={{color:s.stat.color}}>{s.stat.label}</strong><br/>{s.stat.hint}</div>}>
                       <div style={{cursor:"help"}}>
@@ -3101,8 +3114,30 @@ function MindTab({p}) {
       {p.mindMetrics && (() => {
         const mm = p.mindMetrics;
         const limited = mm.limited_sample;
+        const nStreaks = mm.n_streaks || 0;
 
-        // Tendency-Bar mit Z-Score-Visualisierung + CI-Spannweite
+        // Tobias 2026-05-09: Bayesian-Shrinkage zur Position-Population.
+        // Bei kleinen Sample-Sizes (n_streaks niedrig) wird der raw-Index zur
+        // Population-Mean (=1.0) geshrunken — verhindert overinterpretation
+        // von Punkt-Schätzern bei niedriger Konfidenz.
+        //
+        // posterior = (n × raw + n_prior × pop_mean) / (n + n_prior)
+        // Mit pop_mean = 1.0 und n_prior = 30 (entspricht "30 typical streaks worth of prior")
+        // Bei n=15 → raw bekommt 33% Gewicht, prior 67%
+        // Bei n=60 → raw bekommt 67%, prior 33%
+        const N_PRIOR = 30;
+        const POP_MEAN = 1.0;
+        const shrink = (raw) => {
+          if (raw == null) return null;
+          return (nStreaks * raw + N_PRIOR * POP_MEAN) / (nStreaks + N_PRIOR);
+        };
+        // Z-Scores werden ähnlich geshrunken (zur 0)
+        const shrinkZ = (rawZ) => {
+          if (rawZ == null) return null;
+          return (nStreaks * rawZ) / (nStreaks + N_PRIOR);
+        };
+
+        // Tendency-Bar mit Z-Score-Visualisierung + CI-Spannweite + Bayesian-Shrinkage
         // type: "neutral" → high oder low können beide Bedeutung haben
         // type: "adverse" → high = bad (mehr TOs/Fouls)
         // type: "positive" → high = good (Bounceback eFG)
@@ -3113,8 +3148,11 @@ function MindTab({p}) {
               <div style={{fontSize:10,color:"#4b5563",marginTop:4}}>insufficient data</div>
             </div>
           );
-          const z = m.z;
-          const idx = m.idx;
+          // Use shrunken values for display, raw for tooltip
+          const idx_raw = m.idx;
+          const z_raw = m.z;
+          const idx = shrink(idx_raw);    // Bayesian-shrunken display value
+          const z = shrinkZ(z_raw);
           const lo = m.lo, hi = m.hi;
           // CI excludes 1.0 = statistically significant deviation from baseline
           const sigDev = (lo != null && hi != null && (lo > 1.0 || hi < 1.0));
@@ -3167,9 +3205,16 @@ function MindTab({p}) {
                   Index = post-streak rate ÷ baseline rate. <span style={{color:barColor,fontWeight:600}}>1.0 = no change</span>.
                 </div>
                 <div style={{fontSize:11,color:"#94a3b8",marginTop:4}}>
-                  Raw index: <code style={{color:"#7dd3fc"}}>{idx?.toFixed(2)}</code>
-                  {(lo != null && hi != null) && <> · 95% CI [<code style={{color:"#7dd3fc"}}>{lo?.toFixed(2)}, {hi?.toFixed(2)}</code>]</>}
-                  {z != null && <> · z = <code style={{color:"#7dd3fc"}}>{z>=0?"+":""}{z.toFixed(2)}σ</code> (vs {mm.pos_group||"position"} peers)</>}
+                  Shrunken (display): <code style={{color:"#7dd3fc"}}>{idx?.toFixed(2)}</code>
+                  {z != null && <> · z = <code style={{color:"#7dd3fc"}}>{z>=0?"+":""}{z.toFixed(2)}σ</code></>} <span style={{color:"#475569"}}>(vs {mm.pos_group||"position"} peers)</span>
+                </div>
+                <div style={{fontSize:11,color:"#475569",marginTop:2}}>
+                  Raw point estimate: <code style={{color:"#94a3b8"}}>{idx_raw?.toFixed(2)}</code>
+                  {z_raw != null && <> · raw z = <code style={{color:"#94a3b8"}}>{z_raw>=0?"+":""}{z_raw.toFixed(2)}σ</code></>}
+                  {(lo != null && hi != null) && <> · 95% CI [<code style={{color:"#94a3b8"}}>{lo?.toFixed(2)}, {hi?.toFixed(2)}</code>]</>}
+                </div>
+                <div style={{fontSize:10,color:"#475569",marginTop:4,fontStyle:"italic"}}>
+                  Bayesian-Shrinkage: posterior = (n × raw + 30 × 1.0) / (n + 30) with n={nStreaks} streaks. Display shrinks to population mean when sample is small.
                 </div>
                 {sigDev && <div style={{fontSize:11,color:"#fbbf24",marginTop:4}}>⚠ CI excludes 1.0 — statistically significant deviation from baseline.</div>}
               </div>
@@ -3249,14 +3294,32 @@ function MindTab({p}) {
         return (
           <Sec icon="🧠" title="Mental Resilience"
             sub={`Behavioral tendencies after adverse-event streaks (n=${mm.n_streaks||0} streaks observed in ${mm.season} season). Within-position z-scores vs ${mm.pos_group||"peers"}.`}>
-            {/* Disclaimer banner — ALWAYS visible */}
-            <div style={{background:"#1e3a5f22",border:"1px solid #1e3a5f",borderRadius:8,padding:"10px 12px",marginBottom:14}}>
-              <div style={{fontSize:11,color:"#7dd3fc",fontWeight:600,marginBottom:4}}>📋 How to read this section</div>
-              <div style={{fontSize:11,color:"#cbd5e1",lineHeight:1.6}}>
-                These are <strong>behavioral tendencies observed in play-by-play data</strong>, not deterministic claims. A "streak" is defined as ≥3 adverse events (missed FG, turnover, foul, missed FT) in a player's last 4 actions; we then track how he behaves in his next 4 actions.
-                Patterns shown here are <strong style={{color:"#fbbf24"}}>quantitative starting points for film review</strong> — confirm with tape before drawing conclusions. Causal interpretation requires controlling for game-state, coach-reactions, and matchup — which we don't.
+            {/* Disclaimer banner — ALWAYS visible — with detailed methodology tooltip */}
+            <Tip wide content={
+              <div style={{maxWidth:480,fontSize:11,lineHeight:1.6}}>
+                <div style={{fontWeight:700,color:"#7dd3fc",marginBottom:6}}>STREAK DETECTION DETAIL</div>
+                <div style={{color:"#cbd5e1",marginBottom:6}}>
+                  Adverse events: <strong>missed FG, turnover, personal foul committed, missed FT (trip).</strong> Free-throw trips are aggregated — a 1/2 FT counts as one missed-FT event, not two.
+                </div>
+                <div style={{color:"#cbd5e1",marginBottom:6}}>
+                  Trigger: <strong>≥3 adverse events in last 4 player-actions.</strong> Once triggered, the next 4 player-actions are the "response window". State-based cooldown ends when player has 2 consecutive non-adverse events.
+                </div>
+                <div style={{color:"#cbd5e1",marginBottom:6}}>
+                  Per-game scope: streaks are detected within games (mental reset between games).
+                </div>
+                <div style={{color:"#cbd5e1"}}>
+                  <strong style={{color:"#fbbf24"}}>Bayesian-Shrinkage:</strong> raw indices are shrunken to position-mean (1.0) when sample is small. Formula: <code>posterior = (n × raw + 30 × 1.0) / (n + 30)</code>. Display values are shrunken; raw values shown in tooltips.
+                </div>
               </div>
-            </div>
+            }>
+              <div style={{background:"#1e3a5f22",border:"1px solid #1e3a5f",borderRadius:8,padding:"10px 12px",marginBottom:14,cursor:"help"}}>
+                <div style={{fontSize:11,color:"#7dd3fc",fontWeight:600,marginBottom:4}}>📋 How to read this section <span style={{color:"#475569",fontWeight:400}}>(hover for streak-detection details)</span></div>
+                <div style={{fontSize:11,color:"#cbd5e1",lineHeight:1.6}}>
+                  These are <strong>behavioral tendencies observed in play-by-play data</strong>, not deterministic claims. A "streak" is defined as ≥3 adverse events (missed FG, turnover, foul, missed FT) in a player's last 4 actions; we then track how he behaves in his next 4 actions.
+                  Patterns shown here are <strong style={{color:"#fbbf24"}}>quantitative starting points for film review</strong> — confirm with tape before drawing conclusions. Causal interpretation requires controlling for game-state, coach-reactions, and matchup — which we don't.
+                </div>
+              </div>
+            </Tip>
 
             {/* Limited sample warning */}
             {limited && (
