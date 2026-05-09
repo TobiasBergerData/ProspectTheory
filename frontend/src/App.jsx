@@ -304,7 +304,29 @@ const ARCH_POS_ALLOW = {
 // Protector) for Wings ≥81". This matches NBA reality (Tatum, Markkanen: nominally
 // wings, but archetypally Stretch Big or Scoring Big in many lineups).
 const TALL_WING_BIG_OK = new Set(["Stretch Big", "Scoring Big", "Glass Cleaner", "Short Roll Playmaker"]);
-function filterArchetypesByPos(archStr, pos, htIn) {
+
+// Tobias 2026-05-09 v2: Smart fallback when frontend pos-override flips a player
+// from Wing→Playmaker (Westbrook, Wagler, Haggerty etc.). Backend pipeline emitted
+// only Wing-archetypes for them, but Frontend now classifies as Playmaker.
+// Without this, all six players would just show "Non-Specialized Playmaker" —
+// which is uninformative. Use the live-computed NCAA-archetype to pick the
+// closest matching Pipeline-Archetype.
+const NCAA_TO_PIPELINE_ARCH = {
+  "Combo Guard":            "Scoring Playmaker",   // Westbrook, Wagler-style combo guards
+  "Playmaker":              "Floor General",       // Pure point guards
+  "Ball Dominant Scorer":   "Scoring Playmaker",   // High-usage scoring lead-handlers (Cade, Haggerty)
+  "Two-Way Wing":           "3-and-D Wing",        // Already wing
+  "Shot Creator Wing":      "Scoring Wing",
+  "Secondary Wing":         "Non-Specialized Wing",
+  "Defensive Specialist":   "Defensive Guard",     // Maps to G/W default
+  "Versatile Role Player":  "Non-Specialized Playmaker",
+  "Rim Anchor":             "Rim Protector",
+  "Stretch Big":            "Stretch Big",
+  "Passing Big":            "Passing Hub",
+  "Paint Presence":         "Scoring Big",
+};
+
+function filterArchetypesByPos(archStr, pos, htIn, ncaaArch) {
   if (!archStr || !pos) return archStr || "";
   const list = archStr.split("|").filter(Boolean);
   const isTallWing = pos === "Wing" && htIn != null && htIn >= 81;
@@ -316,8 +338,12 @@ function filterArchetypesByPos(archStr, pos, htIn) {
     return false;
   });
   if (filtered.length > 0) return filtered.join("|");
-  // Fallback: pipeline emitted only cross-pos archetypes for this player —
-  // emit pos-consistent default rather than a wrong label.
+  // Smart fallback: use ncaaArch-derived archetype if available, else pos-default
+  if (ncaaArch && NCAA_TO_PIPELINE_ARCH[ncaaArch]) {
+    const candidate = NCAA_TO_PIPELINE_ARCH[ncaaArch];
+    const allow = ARCH_POS_ALLOW[candidate];
+    if (!allow || allow.includes(pos)) return candidate;
+  }
   const POS_DEFAULT = {
     "Playmaker": "Non-Specialized Playmaker",
     "Wing":      "Non-Specialized Wing",
@@ -600,7 +626,10 @@ function computeNcaaArchetype(p) {
   if (usg >= 27 && sc >= 60)              return "Ball Dominant Scorer";
   if (astP >= 28 && astTov >= 1.8)        return "Playmaker";
   if (pos === "W" && dbpm >= 1.5 && tp >= 32 && threeF >= 25) return "Two-Way Wing";
-  if (pos === "G" && usg >= 22 && astP >= 20) return "Combo Guard";
+  // Tobias 2026-05-09: usg-Schwelle gesenkt von 22→18. Defensive Combo-Guards (Jrue Holiday usg=20.5
+  // im UCLA-System) wurden vorher als "Versatile Role Player" klassifiziert. astP≥20 garantiert dass
+  // es echte Ball-Handler sind, nicht no-creation Wings die zufällig als G klassifiziert wurden.
+  if (pos === "G" && usg >= 18 && astP >= 20) return "Combo Guard";
   if (usg >= 24 && pos === "W")           return "Shot Creator Wing";
   if (threeF >= 30 && tp >= 35)           return "Secondary Wing";
   if (dbpm >= 2.5 && usg <= 18)           return "Defensive Specialist";
@@ -1308,8 +1337,8 @@ function mapProfile(d) {
     // Tobias 2026-05-09: Filter pipeline archetypes by player's position group.
     // Pipeline can emit cross-pos matches (Wing getting "Stretch Big" etc.) — drop those.
     // Tall wings (≥81") get Stretch-4 / Glass Cleaner pass-through (Tatum/Markkanen pattern).
-    archetype: filterArchetypesByPos(d.archetype || "", resolvedPos, d.ht ?? d.height_in ?? d.college_height_inches).split("|")[0] || "",
-    archetypesAll: filterArchetypesByPos(d.archetypes_all || d.archetype || "", resolvedPos, d.ht ?? d.height_in ?? d.college_height_inches),
+    archetype: filterArchetypesByPos(d.archetype || "", resolvedPos, d.ht ?? d.height_in ?? d.college_height_inches, _ncaaArch).split("|")[0] || "",
+    archetypesAll: filterArchetypesByPos(d.archetypes_all || d.archetype || "", resolvedPos, d.ht ?? d.height_in ?? d.college_height_inches, _ncaaArch),
     feas:{repl:d.feas_repl,rot:d.feas_rot,start:d.feas_start,allstar:d.feas_allstar,
       cleared:d.feas_cleared||"",blocker:d.feas_blocker||""},
     mu:d.pred_mu??d.mu??d.projected_pie??d.pred_mu_pie??d.aspm_adj??d.aspm,
