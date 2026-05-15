@@ -59,6 +59,37 @@ const fmt = (v,d=1) => v!=null?Number(v).toFixed(d):"—";
 const pct = (v) => v!=null?(v*100).toFixed(1)+"%":"—";
 
 // Tier thresholds for comparison
+// ── Anthropometric NBA-Tier-Median Schwellen (Tobias 2026-05-09) ──────────
+// Median NBA-Combine-Anthro-Werte (mit Schuhen) für jeweiligen Tier × Position.
+// Quelle: NBA Combine Database 2010-2024 (1835 Spieler), gefiltert nach
+// Career-Outcome-Tier (peak_pie ≥40/25/15/8 = Sup/AS/St/RP).
+//   ht = Höhe mit Schuhen (NBA-Convention)
+//   wt = Gewicht (lbs)
+//   ws = Wingspan (inches)
+//   sr = Standing Reach (inches)
+const ANTHRO_TIER_THRESHOLDS = {
+  Replacement: {
+    Playmaker: {ht:75.0, wt:188, ws:78.5, sr:98.0},
+    Wing:      {ht:79.0, wt:208, ws:82.0, sr:103.5},
+    Big:       {ht:82.0, wt:235, ws:86.0, sr:108.0},
+  },
+  "Role Player": {
+    Playmaker: {ht:75.5, wt:193, ws:80.0, sr:99.5},
+    Wing:      {ht:79.5, wt:213, ws:83.5, sr:104.5},
+    Big:       {ht:82.5, wt:243, ws:88.0, sr:110.0},
+  },
+  Starter: {
+    Playmaker: {ht:76.5, wt:200, ws:81.5, sr:101.0},
+    Wing:      {ht:80.0, wt:218, ws:84.5, sr:106.0},
+    Big:       {ht:83.0, wt:250, ws:89.0, sr:112.0},
+  },
+  "All-Star": {
+    Playmaker: {ht:77.0, wt:204, ws:82.5, sr:102.0},
+    Wing:      {ht:80.5, wt:220, ws:85.5, sr:107.0},
+    Big:       {ht:83.5, wt:255, ws:90.5, sr:113.5},
+  },
+};
+
 const TIER_THRESHOLDS = {
   Replacement: {
     Playmaker:{bpm:2.0,usg:20,ts:52,ast_p:22,to_p:16,stl_p:2.0,blk_p:0.5,orb_p:2,drb_p:12,ortg:105},
@@ -5438,11 +5469,157 @@ function ScoutingTab({p, mode="scouting"}) {
     </div>
   );
 }
+
+// ── Anthro vs. NBA-Tier Comparison Section (Tobias 2026-05-09) ────────────
+// Spiegelt die Logik aus OverviewTab's `vs.NBA Tier` — gleicher Look & Feel,
+// nur für Anthropometric stats (Height, Weight, Wingspan, Standing Reach).
+// Range-Bars: p25 = -1″ vom median (vom Tier), p75 = +1″ (oder ±5 lbs für wt).
+// Grün = ≥ Median, Gelb = unter Median aber innerhalb Korridor, Rot = unter Floor.
+function AnthroTierComparison({p, compTier, setCompTier, realHt, estimatedWs, estimatedWt, standingReach}) {
+  const tierData = ANTHRO_TIER_THRESHOLDS[compTier] || ANTHRO_TIER_THRESHOLDS.Replacement;
+  const posRef = tierData[p.pos] || tierData.Wing;
+
+  // Metrics — only include sr if we have a value (Combine-only field, not always available)
+  const metrics = [
+    {id:"ht",  label:"Height (with shoes)",     val:realHt,        p50:posRef.ht,  unit:'"',  desc:"Standardisiert mit +1″ Schuhe (NBA-Convention)."},
+    {id:"wt",  label:"Weight",                   val:estimatedWt,   p50:posRef.wt,  unit:" lbs", desc:"NBA-Combine-Median für gewählten Tier × Position."},
+    {id:"ws",  label:"Wingspan",                 val:estimatedWs,   p50:posRef.ws,  unit:'"',  desc:"Reach-Indikator. NBA-Average +3-4″ über Höhe."},
+    ...(standingReach != null ? [{id:"sr", label:"Standing Reach", val:standingReach, p50:posRef.sr, unit:'"', desc:"Maximaler Reach im Stand. Stärkster Defense-Predictor unter den Anthros."}] : []),
+  ];
+
+  const fmtV = (v, unit) => v == null ? "—" : (typeof v === "number" ? v.toFixed(1) : v) + unit;
+
+  // Status pro Metrik
+  const assessed = metrics.map(m => {
+    // Range: ±1.5″ für ht/ws/sr, ±10 lbs für wt
+    const tol = m.id === "wt" ? 10 : 1.5;
+    const p25 = m.p50 - tol;
+    const p75 = m.p50 + tol;
+    if (m.val == null) return {...m, p25, p75, status:"unknown", sc:"#4b5563"};
+    let status, sc;
+    if (m.val >= m.p50)      { status="Above Median";  sc="#22c55e"; }
+    else if (m.val >= p25)   { status="Within Range";  sc="#86efac"; }
+    else if (m.val >= p25 - tol) { status="Below Range"; sc="#fbbf24"; }
+    else                     { status="Critical Gap";  sc="#ef4444"; }
+    return {...m, p25, p75, status, sc};
+  });
+
+  const valid = assessed.filter(m => m.val != null);
+  // Aggregate-Score: 0-100 basierend darauf wo der Spieler liegt
+  const score = valid.length > 0
+    ? Math.round(valid.reduce((s, m) => {
+        const ratio = m.val / m.p50;
+        return s + Math.max(0, Math.min(100, (ratio - 0.92) / 0.16 * 100));
+      }, 0) / valid.length)
+    : null;
+  const scoreColor = score >= 70 ? "#22c55e" : score >= 45 ? "#fbbf24" : "#ef4444";
+  const nG = assessed.filter(m => m.status === "Above Median").length;
+  const nW = assessed.filter(m => m.status === "Within Range").length;
+  const nR = assessed.filter(m => m.status === "Critical Gap" || m.status === "Below Range").length;
+
+  return (
+    <Sec icon="📏" title={`Anthro vs. NBA ${compTier} (${p.pos})`}
+      sub="Wie passen die körperlichen Werte zu einem typischen NBA-Spieler dieses Tiers? Median-Werte aus NBA-Combine 2010-2024 (mit Schuhen). Grün = über Median · Hellgrün = innerhalb Korridor · Gelb = unter Korridor · Rot = kritische Lücke.">
+      <div className="flex items-center gap-3 mb-4">
+        <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Compare:</span>
+        <div className="flex gap-1">
+          {["Replacement","Role Player","Starter","All-Star"].map(tier => (
+            <button key={tier} onClick={() => setCompTier(tier)}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+              style={{background: compTier===tier ? (TC[tier]||"#f97316") : "#1f2937",
+                      color: compTier===tier ? "#000" : "#9ca3af"}}>
+              {tier}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-4 mb-5 p-4 rounded-xl"
+        style={{background:"#0d111799", border:`1px solid ${scoreColor}33`}}>
+        <div className="text-center px-4">
+          <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#6b7280"}}>Frame Match</div>
+          <div className="text-4xl font-bold" style={{color:scoreColor, fontFamily:"'Oswald',sans-serif"}}>{score ?? '—'}</div>
+        </div>
+        <div className="flex-1">
+          <div className="flex gap-4 text-sm mb-1" style={{color:"#e5e7eb"}}>
+            <span><span style={{color:"#22c55e"}}>●</span> {nG} Above Median</span>
+            <span><span style={{color:"#fbbf24"}}>●</span> {nW} Within Range</span>
+            <span><span style={{color:"#ef4444"}}>●</span> {nR} Gap</span>
+          </div>
+          <div className="text-xs" style={{color:"#4b5563"}}>
+            Shadow = ±{metrics[0]?.id === "wt" ? "10 lbs" : "1.5″"} Korridor um Tier-Median.
+            | = Median. Werte mit NBA-Schuh-Konvention.
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {assessed.map(m => {
+          const maxV = Math.max(m.val || 0, m.p75) * 1.08;
+          const minV = Math.min(m.val || m.p50, m.p25) * 0.92;
+          const range = maxV - minV;
+          const toX = v => Math.max(0, Math.min(100, ((v - minV) / range) * 100));
+          return (
+            <Tip key={m.id} block wide content={
+              <div>
+                <div className="font-bold mb-1" style={{color:m.sc}}>{m.label}: {m.status}</div>
+                <div style={{color:"#94a3b8"}}>{m.desc}</div>
+                <div className="mt-1 text-xs" style={{color:"#cbd5e1"}}>
+                  Korridor: {fmtV(m.p25, m.unit)} – {fmtV(m.p75, m.unit)} · Median (Tier): {fmtV(m.p50, m.unit)}
+                </div>
+                {m.val != null && <div className="mt-1 text-xs" style={{color:m.sc}}>
+                  Spieler: {fmtV(m.val, m.unit)} ({m.val >= m.p50 ? "+" : ""}{(m.val - m.p50).toFixed(1)}{m.unit} vs. Median)
+                </div>}
+              </div>
+            }>
+              <div className="cursor-help block">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-base font-semibold" style={{color:"#e5e7eb"}}>{m.label}</span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl font-bold" style={{color:m.sc, fontFamily:"'Oswald',sans-serif"}}>
+                      {m.val != null ? fmtV(m.val, m.unit) : "—"}
+                    </span>
+                    <span className="text-sm" style={{color:"#4b5563"}}>/ {fmtV(m.p50, m.unit)}</span>
+                    <div className="w-3.5 h-3.5 rounded-full" style={{background:m.sc}}/>
+                  </div>
+                </div>
+                <div className="relative h-10 rounded-lg overflow-hidden" style={{background:"#0d1117", border:"1px solid #1f2937"}}>
+                  <div className="absolute top-0 bottom-0" style={{
+                    left: `${toX(m.p25)}%`,
+                    width: `${Math.abs(toX(m.p75) - toX(m.p25))}%`,
+                    background: `linear-gradient(90deg, ${m.sc}08, ${m.sc}18, ${m.sc}08)`,
+                    borderLeft: `1px dashed ${m.sc}44`, borderRight: `1px dashed ${m.sc}44`,
+                  }}/>
+                  <div className="absolute top-0 bottom-0 w-0.5" style={{left:`${toX(m.p50)}%`, background:"#ffffff55"}}/>
+                  {m.val != null && (
+                    <>
+                      <div className="absolute top-1 bottom-1 rounded-r" style={{
+                        left:0, width:`${toX(m.val)}%`,
+                        background:`linear-gradient(90deg, ${m.sc}15, ${m.sc}66)`,
+                      }}/>
+                      <div className="absolute top-0 bottom-0 w-1.5 rounded" style={{
+                        left:`${Math.max(0, toX(m.val) - 0.5)}%`, background:m.sc,
+                      }}/>
+                    </>
+                  )}
+                </div>
+              </div>
+            </Tip>
+          );
+        })}
+      </div>
+    </Sec>
+  );
+}
+
 function BodyTab({p}) {
   // Tobias 2026-05-06: Slider entfernt — Scatter ist statisch, Spieler-Position fix.
   const [combineData, setCombineData] = useState(null);
   const [hoverPlayer, setHoverPlayer] = useState(null);
   const [hoverPos, setHoverPos] = useState({x:0,y:0});
+  // Tobias 2026-05-09: Anthro-Tier-Vergleich (analog Overview Tab vs.NBA-Tier).
+  // Default "Starter" — gleicher Anchor wie Overview-Tab.
+  const [anthroCompTier, setAnthroCompTier] = useState("Starter");
 
   // ── Fetch combine data on mount ──
   // Tobias 2026-05-06 BUG-FIX: API_BASE.replace("/api","") matchte das
@@ -5464,8 +5641,11 @@ function BodyTab({p}) {
   );
 
   // ── Height (immer mit Schuhen): NBA-DB > Profile ──
+  // Tobias 2026-05-09: ht_verified Flag aus /api/combine zeigt verifizierte
+  // 2026er Combine-Daten vs. wingspan-CSV-Standard-Daten.
   const realHt = combineMatch?.ht ?? p.htIn;
-  const isHtVerified = !!combineMatch?.ht;
+  const isHtVerified = !!combineMatch?.ht_verified || !!combineMatch?.ht;
+  const isHt2026Verified = !!combineMatch?.ht_verified;
 
   // ── Stats-Enriched Imputation für WS und WT (Tobias 2026-05-06) ──
   // Statt simpler Position-Regression nutzen wir Multi-Variate-Modelle die aus
@@ -5499,13 +5679,20 @@ function BodyTab({p}) {
   // ── Wingspan: NBA-DB > Profile > Stats-enriched Imputation ──
   const _imputed = _imputeAnthro();
   const estimatedWs = combineMatch?.ws ?? p.ws ?? _imputed.ws;
+  // Tobias 2026-05-09: ws_verified Flag aus 2026er Combine
   const isWsVerified = !!combineMatch?.ws;
+  const isWs2026Verified = !!combineMatch?.ws_verified;
   const isWsEstimated = !isWsVerified && !p.ws;
 
   // ── Weight: Combine > Profile > Stats-enriched Imputation ──
   const isWtVerified = !!combineMatch?.wt;
+  const isWt2026Verified = !!combineMatch?.wt_verified;
   const estimatedWt = combineMatch?.wt ?? p.wt ?? _imputed.wt;
   const isWtEstimated = !isWtVerified && !p.wt;
+
+  // ── Standing Reach (Tobias 2026-05-09): NEW Combine field ──
+  const standingReach = combineMatch?.sr ?? p.comb?.reach ?? null;
+  const isSrVerified = !!combineMatch?.sr_verified;
 
   // Tobias 2026-05-06: WS Delta gegen die echte (with-shoes) Höhe rechnen.
   const wsDelta = estimatedWs - (realHt || 78);
@@ -5918,6 +6105,18 @@ function BodyTab({p}) {
         )}
 
       </Sec>
+
+      {/* ── ANTHRO vs. NBA-TIER COMPARISON (Tobias 2026-05-09) ──
+           Logik & Look spiegelt OverviewTab's vs.NBA-Tier-Vergleich. */}
+      <AnthroTierComparison
+        p={p}
+        compTier={anthroCompTier}
+        setCompTier={setAnthroCompTier}
+        realHt={realHt}
+        estimatedWs={estimatedWs}
+        estimatedWt={estimatedWt}
+        standingReach={standingReach}
+      />
 
       {/* ── NBA COMBINE SCATTER ──
            Tobias 2026-05-06: einziger Scatter, Class-Scatter entfernt.
