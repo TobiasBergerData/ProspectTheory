@@ -490,7 +490,10 @@ def _to_inches(val) -> float:
 
 def _load_combine_data():
     """Lazy-load + cache anthro measurements als list[dict].
-    Output pro Spieler: name, pos (group), pos_raw, ht (with shoes), ws, wt, ht_imputed, wt_imputed."""
+    Output pro Spieler: name, pos (group), pos_raw, ht (with shoes), ws, wt, sr, *_verified flags.
+
+    Tobias 2026-05-09: Combine 2026 verifizierte Werte überschreiben imputierte.
+    verified_2026 Flag im wingspan-CSV signalisiert echte (nicht imputierte) Werte."""
     global _combine_cache
     if _combine_cache is not None:
         return _combine_cache
@@ -499,6 +502,26 @@ def _load_combine_data():
     raw_dir = DATA_DIR.parent / "raw"
     wingspan_path = raw_dir / "wingspan_all_2026-03-13.csv"
     combine_path = raw_dir / "barttorvik_with_nba_and_combine_COMPLETE.csv"
+    combine_2026_path = raw_dir / "combine_2026_verified.csv"  # Tobias 2026-05-09
+
+    # Step 0: Load 2026 verified Combine data (preferred over imputation)
+    verified_2026 = {}
+    if combine_2026_path.exists():
+        with open(combine_2026_path, "r", encoding="utf-8") as f:
+            for r in _csv.DictReader(f):
+                name = (r.get("player_name") or "").strip().lower()
+                if not name:
+                    continue
+                ht_ws = _to_inches(r.get("height_with_shoes_in"))
+                ws    = _to_inches(r.get("wingspan_in"))
+                wt    = _to_inches(r.get("weight_lbs"))
+                sr    = _to_inches(r.get("standing_reach_in"))
+                verified_2026[name] = {
+                    "ht": round(ht_ws, 1) if ht_ws > 0 else None,
+                    "ws": round(ws, 1) if ws > 0 else None,
+                    "wt": round(wt, 1) if wt > 0 else None,
+                    "sr": round(sr, 1) if sr > 0 else None,
+                }
 
     # Step 1: Build weight-lookup from Combine (per name_lower)
     wt_lookup = {}
@@ -538,17 +561,64 @@ def _load_combine_data():
             wt = wt_lookup.get(name_lower)
             year = year_lookup.get(name_lower)
             raw_pos = r.get("primary_pos") or r.get("pos2") or ""
+
+            # Tobias 2026-05-09: Override mit verifizierten 2026er Combine-Werten wenn vorhanden
+            v26 = verified_2026.get(name_lower)
+            final_ht = round(ht_with_shoes, 1)
+            final_ws = round(ws, 1)
+            final_wt = wt
+            final_sr = None
+            ht_verified = ws_verified = wt_verified = sr_verified = False
+
+            if v26:
+                if v26.get("ht"):  final_ht = v26["ht"]; ht_verified = True
+                if v26.get("ws"):  final_ws = v26["ws"]; ws_verified = True
+                if v26.get("wt"):  final_wt = v26["wt"]; wt_verified = True
+                if v26.get("sr"):  final_sr = v26["sr"]; sr_verified = True
+
             out.append({
                 "name": name,
                 "year": year,
                 "pos_raw": raw_pos,
                 "pos": _to_pos_group(raw_pos),
-                "ht": round(ht_with_shoes, 1),  # WITH shoes (NBA convention)
-                "ws": round(ws, 1),
-                "wt": wt,  # None wenn nicht in Combine
-                "ht_source": "measured_with_shoe_lift",
-                "wt_source": "combine" if wt is not None else "imputed",
+                "ht": final_ht,
+                "ws": final_ws,
+                "wt": final_wt,
+                "sr": final_sr,  # NEW: Standing Reach
+                "ht_verified": ht_verified,
+                "ws_verified": ws_verified,
+                "wt_verified": wt_verified,
+                "sr_verified": sr_verified,
+                "ht_source": "combine_2026" if ht_verified else "measured_with_shoe_lift",
+                "wt_source": "combine_2026" if wt_verified else ("combine" if wt is not None else "imputed"),
             })
+
+    # Step 3: Add 2026er-only entries (Players not yet in wingspan_all CSV)
+    existing_names = {row["name"].lower() for row in out}
+    for name_lower, v in verified_2026.items():
+        if name_lower in existing_names:
+            continue
+        # Try to recover the original-case name from the verified CSV
+        with open(combine_2026_path, "r", encoding="utf-8") as f:
+            for r in _csv.DictReader(f):
+                if (r.get("player_name") or "").strip().lower() == name_lower:
+                    out.append({
+                        "name": r.get("player_name").strip(),
+                        "year": 2026,
+                        "pos_raw": r.get("position") or "",
+                        "pos": _to_pos_group(r.get("position") or ""),
+                        "ht": v.get("ht"),
+                        "ws": v.get("ws"),
+                        "wt": v.get("wt"),
+                        "sr": v.get("sr"),
+                        "ht_verified": v.get("ht") is not None,
+                        "ws_verified": v.get("ws") is not None,
+                        "wt_verified": v.get("wt") is not None,
+                        "sr_verified": v.get("sr") is not None,
+                        "ht_source": "combine_2026",
+                        "wt_source": "combine_2026" if v.get("wt") else "missing",
+                    })
+                    break
 
     _combine_cache = out
     return out
@@ -557,7 +627,7 @@ def _load_combine_data():
 @app.get("/api/combine")
 async def get_combine_data():
     """NBA Anthropometrik (Wingspan-DB 1.835 Spieler + Combine-Weights).
-    Höhe IMMER mit Schuhen (Wingspan-CSV no-shoes + 1.0″ Standard-Lift).
+    Höhe IMMER mit Schuhen (Wingspan-CSV no-shoes + SHOE_LIFT_INCHES Standard-Lift).
     Weight-Daten aus Combine wenn vorhanden, sonst null (Frontend imputiert)."""
     return {"players": _load_combine_data()}
 
