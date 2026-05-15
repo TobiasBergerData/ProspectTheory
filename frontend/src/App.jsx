@@ -59,36 +59,59 @@ const fmt = (v,d=1) => v!=null?Number(v).toFixed(d):"—";
 const pct = (v) => v!=null?(v*100).toFixed(1)+"%":"—";
 
 // Tier thresholds for comparison
-// ── Anthropometric NBA-Tier-Median Schwellen (Tobias 2026-05-09) ──────────
-// Median NBA-Combine-Anthro-Werte (mit Schuhen) für jeweiligen Tier × Position.
+// ── Anthropometric NBA-Tier-Median Schwellen (Tobias 2026-05-09 v2) ───────
+// 5-Position-Klassifikation (PG/SG/SF/PF/C) — präziser als 3-Position-System
+// weil "Wing" zu breit war (umfasste SG 6'5" und SF 6'8" gleichzeitig).
 // Quelle: NBA Combine Database 2010-2024 (1835 Spieler), gefiltert nach
-// Career-Outcome-Tier (peak_pie ≥40/25/15/8 = Sup/AS/St/RP).
-//   ht = Höhe mit Schuhen (NBA-Convention)
+// Career-Outcome-Tier (peak_pie ≥40/25/15/8 = Sup/AS/St/RP) × NBA-Position.
+//   ht = Höhe mit Schuhen (NBA-Convention, +1.25″ shoe-lift)
 //   wt = Gewicht (lbs)
 //   ws = Wingspan (inches)
 //   sr = Standing Reach (inches)
 const ANTHRO_TIER_THRESHOLDS = {
   Replacement: {
-    Playmaker: {ht:75.0, wt:188, ws:78.5, sr:98.0},
-    Wing:      {ht:79.0, wt:208, ws:82.0, sr:103.5},
-    Big:       {ht:82.0, wt:235, ws:86.0, sr:108.0},
+    PG: {ht:74.5, wt:185, ws:77.5, sr:97.5},
+    SG: {ht:76.5, wt:195, ws:80.5, sr:101.0},
+    SF: {ht:79.0, wt:210, ws:82.5, sr:104.5},
+    PF: {ht:81.5, wt:228, ws:85.0, sr:107.0},
+    C:  {ht:83.0, wt:243, ws:87.5, sr:110.5},
   },
   "Role Player": {
-    Playmaker: {ht:75.5, wt:193, ws:80.0, sr:99.5},
-    Wing:      {ht:79.5, wt:213, ws:83.5, sr:104.5},
-    Big:       {ht:82.5, wt:243, ws:88.0, sr:110.0},
+    PG: {ht:75.0, wt:190, ws:79.0, sr:99.0},
+    SG: {ht:77.0, wt:200, ws:81.5, sr:102.0},
+    SF: {ht:79.5, wt:215, ws:84.0, sr:105.5},
+    PF: {ht:82.0, wt:235, ws:87.0, sr:108.5},
+    C:  {ht:83.5, wt:250, ws:89.0, sr:112.0},
   },
   Starter: {
-    Playmaker: {ht:76.5, wt:200, ws:81.5, sr:101.0},
-    Wing:      {ht:80.0, wt:218, ws:84.5, sr:106.0},
-    Big:       {ht:83.0, wt:250, ws:89.0, sr:112.0},
+    PG: {ht:75.5, wt:195, ws:80.5, sr:100.5},
+    SG: {ht:77.5, wt:205, ws:82.5, sr:103.5},
+    SF: {ht:80.0, wt:220, ws:85.0, sr:106.5},
+    PF: {ht:82.5, wt:245, ws:88.5, sr:110.5},
+    C:  {ht:84.0, wt:255, ws:90.5, sr:113.5},
   },
   "All-Star": {
-    Playmaker: {ht:77.0, wt:204, ws:82.5, sr:102.0},
-    Wing:      {ht:80.5, wt:220, ws:85.5, sr:107.0},
-    Big:       {ht:83.5, wt:255, ws:90.5, sr:113.5},
+    PG: {ht:75.5, wt:198, ws:81.0, sr:101.0},
+    SG: {ht:78.0, wt:210, ws:84.0, sr:105.0},
+    SF: {ht:80.5, wt:225, ws:86.0, sr:107.5},
+    PF: {ht:82.5, wt:250, ws:89.5, sr:112.0},
+    C:  {ht:84.5, wt:260, ws:92.0, sr:115.0},
   },
 };
+
+// Fallback wenn pos_detailed (PG/SG/SF/PF/C) fehlt — leite aus pos + height ab.
+// Wird genutzt für historische / intl Spieler ohne BartTorvik-role.
+function inferDetailedPos(pos3, htIn, astP) {
+  const h = htIn || 78;
+  const a = astP || 0;
+  if (pos3 === "Playmaker") return (h <= 76 && a >= 22) ? "PG" : (h <= 76 ? "PG" : "SG");
+  if (pos3 === "Big")       return (h >= 83 ? "C" : "PF");
+  // Wing
+  if (h <= 78) return "SG";
+  if (h <= 80) return "SF";
+  if (h <= 82) return "SF";  // Tall Wings
+  return "PF";
+}
 
 const TIER_THRESHOLDS = {
   Replacement: {
@@ -1245,6 +1268,9 @@ function mapProfile(d) {
 
   return {
     name: d.name, pos: resolvedPos,
+    // Tobias 2026-05-09: 5-Position-Klassifikation (PG/SG/SF/PF/C) für Body-Tab
+    // Anthro-Vergleich. Wenn Backend pos_detailed liefert, nehme das. Sonst leite ab.
+    posDetailed: d.pos_detailed || inferDetailedPos(resolvedPos, d.ht ?? d.height_in ?? d.college_height_inches, d.ast_p ?? d.astP),
     team: d.team ?? d.college_team ?? "", conf: d.conf ?? d.college_conf ?? "",
     confTier: d.conf_tier ?? d.confTier ?? "", cls: d.cls ?? d.class ?? "",
     yr: d.yr ?? d.season_year ?? d.draft_year ?? 2026,
@@ -5477,7 +5503,10 @@ function ScoutingTab({p, mode="scouting"}) {
 // Grün = ≥ Median, Gelb = unter Median aber innerhalb Korridor, Rot = unter Floor.
 function AnthroTierComparison({p, compTier, setCompTier, realHt, estimatedWs, estimatedWt, standingReach}) {
   const tierData = ANTHRO_TIER_THRESHOLDS[compTier] || ANTHRO_TIER_THRESHOLDS.Replacement;
-  const posRef = tierData[p.pos] || tierData.Wing;
+  // Tobias 2026-05-09: 5-Position-Klassifikation (PG/SG/SF/PF/C) statt 3-Tier.
+  // Fallback-Hierarchie: posDetailed → infer aus pos+ht+astP → SF (sicherster Mittelwert).
+  const posDetailed = p.posDetailed || inferDetailedPos(p.pos, p.htIn || realHt, p.astP);
+  const posRef = tierData[posDetailed] || tierData.SF;
 
   // Metrics — only include sr if we have a value (Combine-only field, not always available)
   const metrics = [
@@ -5518,7 +5547,7 @@ function AnthroTierComparison({p, compTier, setCompTier, realHt, estimatedWs, es
   const nR = assessed.filter(m => m.status === "Critical Gap" || m.status === "Below Range").length;
 
   return (
-    <Sec icon="📏" title={`Anthro vs. NBA ${compTier} (${p.pos})`}
+    <Sec icon="📏" title={`Anthro vs. NBA ${compTier} (${posDetailed})`}
       sub="How does this player's frame compare to a typical NBA player at the chosen tier? Median values from NBA Combine 2010-2024 (with shoes). Green = above median · Light green = within range · Yellow = below range · Red = critical gap.">
       <div className="flex items-center gap-3 mb-4">
         <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Compare:</span>
