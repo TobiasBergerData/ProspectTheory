@@ -5481,10 +5481,10 @@ function AnthroTierComparison({p, compTier, setCompTier, realHt, estimatedWs, es
 
   // Metrics — only include sr if we have a value (Combine-only field, not always available)
   const metrics = [
-    {id:"ht",  label:"Height (with shoes)",     val:realHt,        p50:posRef.ht,  unit:'"',  desc:"Standardisiert mit +1″ Schuhe (NBA-Convention)."},
-    {id:"wt",  label:"Weight",                   val:estimatedWt,   p50:posRef.wt,  unit:" lbs", desc:"NBA-Combine-Median für gewählten Tier × Position."},
-    {id:"ws",  label:"Wingspan",                 val:estimatedWs,   p50:posRef.ws,  unit:'"',  desc:"Reach-Indikator. NBA-Average +3-4″ über Höhe."},
-    ...(standingReach != null ? [{id:"sr", label:"Standing Reach", val:standingReach, p50:posRef.sr, unit:'"', desc:"Maximaler Reach im Stand. Stärkster Defense-Predictor unter den Anthros."}] : []),
+    {id:"ht",  label:"Height (with shoes)",     val:realHt,        p50:posRef.ht,  unit:'"',  desc:"Standardized with +1.25″ shoe-lift (NBA convention)."},
+    {id:"wt",  label:"Weight",                   val:estimatedWt,   p50:posRef.wt,  unit:" lbs", desc:"NBA Combine median for the chosen tier × position."},
+    {id:"ws",  label:"Wingspan",                 val:estimatedWs,   p50:posRef.ws,  unit:'"',  desc:"Reach indicator. NBA average is +3-4″ over height."},
+    ...(standingReach != null ? [{id:"sr", label:"Standing Reach", val:standingReach, p50:posRef.sr, unit:'"', desc:"Maximum standing reach. Strongest defensive predictor among anthropometrics."}] : []),
   ];
 
   const fmtV = (v, unit) => v == null ? "—" : (typeof v === "number" ? v.toFixed(1) : v) + unit;
@@ -5519,7 +5519,7 @@ function AnthroTierComparison({p, compTier, setCompTier, realHt, estimatedWs, es
 
   return (
     <Sec icon="📏" title={`Anthro vs. NBA ${compTier} (${p.pos})`}
-      sub="Wie passen die körperlichen Werte zu einem typischen NBA-Spieler dieses Tiers? Median-Werte aus NBA-Combine 2010-2024 (mit Schuhen). Grün = über Median · Hellgrün = innerhalb Korridor · Gelb = unter Korridor · Rot = kritische Lücke.">
+      sub="How does this player's frame compare to a typical NBA player at the chosen tier? Median values from NBA Combine 2010-2024 (with shoes). Green = above median · Light green = within range · Yellow = below range · Red = critical gap.">
       <div className="flex items-center gap-3 mb-4">
         <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Compare:</span>
         <div className="flex gap-1">
@@ -5547,8 +5547,8 @@ function AnthroTierComparison({p, compTier, setCompTier, realHt, estimatedWs, es
             <span><span style={{color:"#ef4444"}}>●</span> {nR} Gap</span>
           </div>
           <div className="text-xs" style={{color:"#4b5563"}}>
-            Shadow = ±{metrics[0]?.id === "wt" ? "10 lbs" : "1.5″"} Korridor um Tier-Median.
-            | = Median. Werte mit NBA-Schuh-Konvention.
+            Shadow = ±{metrics[0]?.id === "wt" ? "10 lbs" : "1.5″"} corridor around tier median.
+            | = median. Values use NBA shoe-lift convention.
           </div>
         </div>
       </div>
@@ -5565,10 +5565,10 @@ function AnthroTierComparison({p, compTier, setCompTier, realHt, estimatedWs, es
                 <div className="font-bold mb-1" style={{color:m.sc}}>{m.label}: {m.status}</div>
                 <div style={{color:"#94a3b8"}}>{m.desc}</div>
                 <div className="mt-1 text-xs" style={{color:"#cbd5e1"}}>
-                  Korridor: {fmtV(m.p25, m.unit)} – {fmtV(m.p75, m.unit)} · Median (Tier): {fmtV(m.p50, m.unit)}
+                  Range: {fmtV(m.p25, m.unit)} – {fmtV(m.p75, m.unit)} · Tier median: {fmtV(m.p50, m.unit)}
                 </div>
                 {m.val != null && <div className="mt-1 text-xs" style={{color:m.sc}}>
-                  Spieler: {fmtV(m.val, m.unit)} ({m.val >= m.p50 ? "+" : ""}{(m.val - m.p50).toFixed(1)}{m.unit} vs. Median)
+                  Player: {fmtV(m.val, m.unit)} ({m.val >= m.p50 ? "+" : ""}{(m.val - m.p50).toFixed(1)}{m.unit} vs. median)
                 </div>}
               </div>
             }>
