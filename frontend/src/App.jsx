@@ -3165,22 +3165,28 @@ function MindTab({p}) {
     dunk:  {label:"Dunk",  color:"#a855f7"},
   };
 
-  // No leverageEff data at all
-  if (!le) {
+  // Fallback nur wenn WEDER leverageEff NOCH mindMetrics → wirklich keine Daten.
+  // Tobias 2026-05-19: Phase 3 hat Intl-PBP-Mind (Euroleague + EuroCup) integriert,
+  // aber Intl-Spieler haben kein leverageEff (Self-Creation kommt aus NCAA-Pipeline).
+  // Tab muss daher rendern wenn mindMetrics existiert — auch ohne le.
+  if (!le && !p.mindMetrics) {
     return (
       <div className="p-6">
         <div style={{background:"#111827",borderRadius:12,padding:24,textAlign:"center",color:"#6b7280"}}>
           <div style={{fontSize:18,marginBottom:8}}>🧠</div>
           <div style={{fontSize:14,fontWeight:600,color:"#9ca3af",marginBottom:8}}>Mind Tab — PBP Intelligence</div>
           <div style={{fontSize:13}}>
-            {p.source === "intl" ? "Play-by-play data not available for international players." : "No play-by-play data for this player (pre-2008 or insufficient shot volume)."}
+            {p.source === "intl"
+              ? "Mind-Metrics not available — international PBP coverage starts 2017-18 (Euroleague/EuroCup only)."
+              : "No play-by-play data for this player (pre-2008 or insufficient shot volume)."}
           </div>
         </div>
       </div>
     );
   }
 
-  const {lweFG, raweFG, diffPrem, score, premPctl, usgPctl, usg, ts, lwTotal, zones} = le;
+  // Defensive destructure: `le` kann null sein (Intl-Spieler haben nur mindMetrics).
+  const {lweFG, raweFG, diffPrem, score, premPctl, usgPctl, usg, ts, lwTotal, zones} = le ?? {};
 
   // Insight text based on score + diffPrem
   const getInsight = () => {
@@ -3205,7 +3211,7 @@ function MindTab({p}) {
         </div>
         <div style={{fontSize:11,color:"#6b7280",lineHeight:1.5}}>
           How does this player handle <strong style={{color:"#9ca3af"}}>self-creation</strong>, <strong style={{color:"#9ca3af"}}>increased usage</strong>, and <strong style={{color:"#9ca3af"}}>adverse-event sequences</strong>?
-          Quantitative tendencies — to be confirmed with film. Built on {Math.round(lwTotal)} leverage-weighted attempts {p.mindMetrics ? `+ ${p.mindMetrics.n_actions||0} player-events` : ""} (BartTorvik 2008–2026 + ESPN PBP 2017–2026).
+          Quantitative tendencies — to be confirmed with film. Built on {Math.round(lwTotal || 0)} leverage-weighted attempts {p.mindMetrics ? `+ ${p.mindMetrics.n_actions||0} player-events` : ""} (BartTorvik 2008–2026 + ESPN PBP 2017–2026; Euroleague/EuroCup 2017–2026 for internationals).
         </div>
       </div>
 
@@ -3213,7 +3219,19 @@ function MindTab({p}) {
            Section 1: Self-Sufficiency Profile — 4-Step Decision Tree
            Tobias 2026-05-09: refactor in klare nummerierte Schritte mit
            Step-Header, Hero-Number pro Schritt, eindeutiger Verdict am Ende.
+           Tobias 2026-05-19: für Intl-Spieler ohne leverageEff (kein NCAA-PBP-
+           Self-Creation) wird die ganze Sec übersprungen — Mental Resilience
+           (mindMetrics-only) bleibt sichtbar.
          ══════════════════════════════════════════════════════════════════ */}
+      {!le && p.mindMetrics && (
+        <div style={{background:"#0d1117",border:"1px solid #1f2937",borderRadius:10,padding:"10px 14px"}}>
+          <div style={{fontSize:11,color:"#9ca3af",lineHeight:1.5}}>
+            <strong style={{color:"#f97316"}}>Note:</strong> Self-Creation metrics (rate, difficulty premium) use NCAA-only PBP data
+            and are not available for international players. Pressure response + Mental Resilience below are computed
+            from Euroleague + EuroCup PBP (2017–2026) where coverage exists.
+          </div>
+        </div>
+      )}
       <Sec icon="⚡" title="Self-Sufficiency Profile"
         sub="Four sequential questions: How often does he have to create alone? How efficient is he when he does? Does it break down under pressure? And where on the floor does he succeed?">
         {(() => {
@@ -3301,6 +3319,9 @@ function MindTab({p}) {
 
           return (
             <>
+              {/* Tobias 2026-05-19: Steps 1+2 brauchen leverageEff (NCAA-PBP).
+                  Intl-Spieler (kein le) skippen direkt zu Step 3 (Pressure). */}
+              {le && <>
               {/* ── Step 1: HOW OFTEN does he need to create alone? ── */}
               <StepHeader n={1} title="HOW OFTEN does he create alone?"
                 color="#fbbf24"
@@ -3364,6 +3385,7 @@ function MindTab({p}) {
               <div style={{background:"#0d1117",borderRadius:8,padding:"10px 14px"}}>
                 <DiffBar value={diffPrem}/>
               </div>
+              </>}
 
               {/* ── Step 3: HOW DOES PRESSURE AFFECT this? ── */}
               {p.mindMetrics && (() => {
@@ -3514,7 +3536,10 @@ function MindTab({p}) {
                 </>
               )}
 
-              {/* ── Verdict ── */}
+              {/* ── Verdict ── (Tobias 2026-05-19: nur wenn le verfügbar — Verdict
+                  basiert auf Steps 1+2 die für Intl-Spieler ohne NCAA-PBP nicht
+                  berechnet werden können) */}
+              {le && (
               <div style={{marginTop:24,background:`${verdict.color}15`,border:`2px solid ${verdict.color}55`,borderRadius:10,padding:"14px 16px"}}>
                 <div style={{fontSize:10,fontWeight:700,color:verdict.color,letterSpacing:1.2,marginBottom:6}}>VERDICT — SELF-SUFFICIENCY</div>
                 <div style={{fontSize:18,fontWeight:700,color:verdict.color,fontFamily:"Oswald,sans-serif",marginBottom:6,letterSpacing:0.3}}>
@@ -3525,6 +3550,7 @@ function MindTab({p}) {
                   Verdict combines: self-creation load (Step 1) × difficulty premium (Step 2) × pressure response (Step 3). Quantitative starting point — confirm with film before drawing conclusions.
                 </div>
               </div>
+              )}
             </>
           );
         })()}
