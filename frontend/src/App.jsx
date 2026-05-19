@@ -967,6 +967,17 @@ function mapProfile(d) {
     // Already 0-100 scale
     return Math.round(n);
   };
+  // ── Phase 2D (Tobias 2026-05-17): Source-aware Cohort-Percentile ──
+  // Intl-Spieler bekommen pctl_*_intl-Werte als primary (vs Intl-Peers),
+  // weil Vergleich mit NCAA-Peers für Stats wie FTR/FT% unfair ist (College-
+  // Reffing inflates FTR). Original `pctl_*` (vs all/NCAA) wird zusätzlich
+  // gespeichert für Tooltip-Dual-Display.
+  const _isIntl = (d.source === 'intl');
+  // Helper: pick intl_value wenn intl + vorhanden, sonst all_value
+  const _pickCohort = (intlVal, allVal) =>
+    _isIntl && intlVal != null ? intlVal : allVal;
+  // Debug-Log entfernt nach Phase 2D-Verify (Tobias 2026-05-17).
+
   const pctl = d.pctl ? {
     bpm: normPctl(d.pctl.bpm), usg: normPctl(d.pctl.usg), ts: normPctl(d.pctl.ts),
     ast: normPctl(d.pctl.ast), to: normPctl(d.pctl.to), orb: normPctl(d.pctl.orb),
@@ -976,13 +987,34 @@ function mapProfile(d) {
     obpm: normPctl(d.pctl.obpm), dbpm: normPctl(d.pctl.dbpm),
     ortg: normPctl(d.pctl.ortg), astTo: normPctl(d.pctl.astTo ?? d.pctl.ast_to),
   } : {
-    bpm: normPctl(d.pctl_bpm), usg: normPctl(d.pctl_usg), ts: normPctl(d.pctl_ts),
-    ast: normPctl(d.pctl_ast), to: normPctl(d.pctl_to), orb: normPctl(d.pctl_orb),
-    drb: normPctl(d.pctl_drb), stl: normPctl(d.pctl_stl), blk: normPctl(d.pctl_blk),
+    // Primary: für Intl pctl_*_intl, sonst pctl_*
+    bpm: normPctl(_pickCohort(d.pctl_bpm_intl, d.pctl_bpm)),
+    usg: normPctl(_pickCohort(d.pctl_usg_intl, d.pctl_usg)),
+    ts: normPctl(_pickCohort(d.pctl_ts_intl, d.pctl_ts)),
+    ast: normPctl(_pickCohort(d.pctl_ast_intl, d.pctl_ast)),
+    to: normPctl(_pickCohort(d.pctl_to_intl, d.pctl_to)),
+    orb: normPctl(_pickCohort(d.pctl_orb_intl, d.pctl_orb)),
+    drb: normPctl(_pickCohort(d.pctl_drb_intl, d.pctl_drb)),
+    stl: normPctl(_pickCohort(d.pctl_stl_intl, d.pctl_stl)),
+    blk: normPctl(_pickCohort(d.pctl_blk_intl, d.pctl_blk)),
     pts36: normPctl(d.pctl_pts36), reb36: normPctl(d.pctl_reb36), ast36: normPctl(d.pctl_ast36),
-    ftr: normPctl(d.pctl_ftr), efg: normPctl(d.pctl_efg),
-    obpm: normPctl(d.pctl_obpm), dbpm: normPctl(d.pctl_dbpm),
-    ortg: normPctl(d.pctl_ortg), astTo: normPctl(d.pctl_ast_to),
+    ftr: normPctl(_pickCohort(d.pctl_ftr_intl, d.pctl_ftr)),
+    efg: normPctl(_pickCohort(d.pctl_efg_intl, d.pctl_efg)),
+    obpm: normPctl(_pickCohort(d.pctl_obpm_intl, d.pctl_obpm)),
+    dbpm: normPctl(_pickCohort(d.pctl_dbpm_intl, d.pctl_dbpm)),
+    ortg: normPctl(_pickCohort(d.pctl_ortg_intl, d.pctl_ortg)),
+    astTo: normPctl(d.pctl_ast_to),
+    // Secondary: für Intl-Spieler die "vs all/NCAA"-Werte für Tooltip
+    bpmAll: normPctl(d.pctl_bpm), usgAll: normPctl(d.pctl_usg),
+    tsAll: normPctl(d.pctl_ts), astAll: normPctl(d.pctl_ast),
+    toAll: normPctl(d.pctl_to), orbAll: normPctl(d.pctl_orb),
+    drbAll: normPctl(d.pctl_drb), stlAll: normPctl(d.pctl_stl),
+    blkAll: normPctl(d.pctl_blk), ftrAll: normPctl(d.pctl_ftr),
+    efgAll: normPctl(d.pctl_efg), obpmAll: normPctl(d.pctl_obpm),
+    dbpmAll: normPctl(d.pctl_dbpm), ortgAll: normPctl(d.pctl_ortg),
+    // Cohort-Label für Frontend-Anzeige
+    cohort: _isIntl ? 'intl' : 'ncaa',
+    cohortLabel: _isIntl ? 'vs Intl peers' : 'vs NCAA peers',
   };
 
   // Four factors — API sends flat fields (ff_efg, ff_tov etc), NOT nested objects
@@ -1774,7 +1806,20 @@ function OverviewTab({p, compTier, setCompTier}) {
           </div>
         ))}
       </div>
-      <Sec icon="▦" title="Box Score" sub={p.gp ? `${p.gp} GP · ${fmt(p.min)} MIN/G — Traditional counting stats. Look for per-minute efficiency, not raw totals.` : (p.yr && p.yr <= 2009 ? "Per-game counting stats unavailable for 2008-2009 BartTorvik data. Advanced stats shown below." : "Game data unavailable for this player.")}>
+      <Sec icon="▦" title="Box Score" sub={(() => {
+        // Phase 2D (Tobias 2026-05-17): Cohort-Indicator für Intl-Spieler.
+        // Percentiles werden für source=intl gegen Intl-Cohort berechnet
+        // (NCAA-Vergleich für FTR/FT% etc. wäre unfair wegen College-Reffing).
+        const cohortNote = p.pctl?.cohort === 'intl'
+          ? ` · Percentiles vs Intl-Peers ${p.pos ? `(${p.pos})` : ''}`
+          : '';
+        const baseStr = p.gp
+          ? `${p.gp} GP · ${fmt(p.min)} MIN/G — Traditional counting stats. Look for per-minute efficiency, not raw totals.`
+          : (p.yr && p.yr <= 2009
+              ? "Per-game counting stats unavailable for 2008-2009 BartTorvik data. Advanced stats shown below."
+              : "Game data unavailable for this player.");
+        return baseStr + cohortNote;
+      })()}>
         <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
           {(() => {
             // Tobias 2026-05-09: AST/TO percentile fallback wenn pctl_ast_to fehlt.

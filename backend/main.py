@@ -145,6 +145,12 @@ _BOARD_FIELDS = [
     "pctl_pts36", "pctl_reb36", "pctl_ast36", "pctl_ast_to",
     "pctl_stl", "pctl_blk", "pctl_bpm", "pctl_obpm", "pctl_dbpm",
     "pctl_ftr", "pctl_to", "pctl_usg", "pctl_ts", "pctl_orb", "pctl_drb",
+    # Phase 2D (Tobias 2026-05-17): Intl-only Percentiles (Wemby-FTR-Fix).
+    # Frontend swappt für source=intl auf diese Cohort-internen Werte.
+    "pctl_ftr_intl", "pctl_ts_intl", "pctl_efg_intl", "pctl_usg_intl",
+    "pctl_ast_intl", "pctl_to_intl", "pctl_orb_intl", "pctl_drb_intl",
+    "pctl_stl_intl", "pctl_blk_intl", "pctl_bpm_intl", "pctl_obpm_intl",
+    "pctl_dbpm_intl", "pctl_ortg_intl",
     # Shooting zone data (Shooting tab)
     "rim_f", "rim_pct", "mid_f", "mid_pct", "three_f",
     "dunk_r", "dunk_pct",
