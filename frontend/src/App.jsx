@@ -1780,6 +1780,9 @@ function OverviewTab({p, compTier, setCompTier}) {
           // - Class → Years Pro (aus intl_first_pro_season).
           // - Conf Tier → 4-Tier-Klassifikation (Premier/Strong/Mid/Low) aus League-Weights.
           // - Age → "Age on Draft Day" (immer der Reference-Point der Pipeline).
+          // Tobias 2026-05-17 Phase 2D: Recruit → Liga-Weight für Intl-Spieler.
+          // Multi-Bridge League-Weights (Anchor: NCAA=1.0, Cap=2.0). Zeigt
+          // Methodik-Transparenz und erklärt warum Stats-Multiplier angewendet werden.
           const isIntl = p.source === "intl";
           const yearsPro = (isIntl && p.firstProSeason && p.yr)
             ? Math.max(1, Math.round(Number(p.yr) - Number(p.firstProSeason) + 1))
@@ -1791,16 +1794,44 @@ function OverviewTab({p, compTier, setCompTier}) {
           const computedTier = classifyConfTier(p);
           const tierColor = TIER_COLOR[computedTier] || "#9ca3af";
           const confColor = isIntl ? tierColor : (p.confTier === "Power" ? "#10b981" : "#f97316");
+
+          // Multi-Bridge League-Weights (Stand 2026-05-17). NCAA-Power = 1.000.
+          // > 1.0 = stärker als NCAA-Power-Conference, < 1.0 = schwächer.
+          const LEAGUE_WEIGHTS = {
+            "Euroleague": 1.258, "Spanish ACB": 1.145, "Turkish BSL": 1.027,
+            "French LNB": 1.023, "Italian Serie A": 1.022, "Eurocup": 1.013,
+            "Israeli BSL": 0.989, "Australian NBL": 0.971, "Champions League": 0.963,
+            "VTB United": 0.956, "Adriatic ABA": 0.951, "Greek HEBA A1": 0.937,
+            "German BBL": 0.935, "Montenegrin Liga": 0.902, "Lithuanian LKL": 0.888,
+            "Japanese B": 0.886, "Euroleague NGT": 0.836, "Overtime Elite": 0.831,
+            "Korean KBL": 0.828, "Chinese CBA": 0.800, "Serbian KLS": 0.736,
+            "Croatian A1": 0.733, "Polish PLK": 0.549,
+          };
+          const lw = isIntl ? LEAGUE_WEIGHTS[p.conf] : null;
+          const lwStr = lw != null ? `×${lw.toFixed(2)}` : (isIntl ? "—" : null);
+          const lwColor = lw == null ? "#9ca3af"
+            : lw >= 1.20 ? "#22c55e"      // Premier-Tier (Euroleague/ACB)
+            : lw >= 1.00 ? "#86efac"      // Strong (NCAA-Power equivalent)
+            : lw >= 0.85 ? "#fbbf24"      // Mid
+            :              "#f97316";     // Low
+
+          const recruitOrLw = isIntl
+            ? ["League Weight", lwStr || "—", lwColor]
+            : ["Recruit", p.recRank ? `#${p.recRank}` : "Unranked", "#e5e7eb"];
+
           return [
             ["Conference",  p.conf, confColor],
             [classLabel,    classOrYearsPro, "#e5e7eb"],
             ["Age on Draft Day", p.age != null ? ageOnDraftDay(p.age).toFixed(1) : "—", "#e5e7eb"],
-            ["Recruit",     p.recRank ? `#${p.recRank}` : "Unranked", "#e5e7eb"],
+            recruitOrLw,
             ["Source",      p.source?.toUpperCase() || "NCAA", p.source === "ncaa" ? "#3b82f6" : "#f97316"],
             ["Conf Tier",   computedTier, tierColor],
           ];
         })().map(([l,v,c])=>(
-          <div key={l} className="rounded-lg p-3" style={{background:"#111827"}}>
+          <div key={l} className="rounded-lg p-3" style={{background:"#111827"}}
+               title={l === "League Weight"
+                 ? "Multi-Bridge-Methodik: NCAA-Power = 1.00 (Anker). Liga-Weight = empirischer NBA-Translation-Faktor aus Bridge-Spielern. >1.0 = stärker als NCAA-Power, <1.0 = schwächer. Stats werden in ML mit diesem Faktor calibriert."
+                 : undefined}>
             <div className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>{l}</div>
             <div className="font-semibold mt-0.5" style={{color:c,fontFamily:"'Oswald',sans-serif"}}>{v||"—"}</div>
           </div>
@@ -1849,7 +1880,27 @@ function OverviewTab({p, compTier, setCompTier}) {
           ))}
         </div>
       </Sec>
-      <Sec icon="⚡" title="Advanced" sub="Rate stats that capture efficiency and impact independent of how big a player's role is. BPM (overall impact) and ORtg (offensive efficiency) are the strongest NBA-translation signals on this row.">
+      <Sec icon="⚡" title="Advanced" sub={(() => {
+        // Phase 2D (Tobias 2026-05-17): Liga-Weight-Hinweis für Intl-Spieler.
+        const base = "Rate stats that capture efficiency and impact independent of how big a player's role is. BPM (overall impact) and ORtg (offensive efficiency) are the strongest NBA-translation signals on this row.";
+        if (p.source === "intl" && p.conf) {
+          const LW = {
+            "Euroleague": 1.258, "Spanish ACB": 1.145, "Turkish BSL": 1.027,
+            "French LNB": 1.023, "Italian Serie A": 1.022, "Eurocup": 1.013,
+            "Israeli BSL": 0.989, "Australian NBL": 0.971, "Champions League": 0.963,
+            "VTB United": 0.956, "Adriatic ABA": 0.951, "Greek HEBA A1": 0.937,
+            "German BBL": 0.935, "Montenegrin Liga": 0.902, "Lithuanian LKL": 0.888,
+            "Japanese B": 0.886, "Euroleague NGT": 0.836, "Overtime Elite": 0.831,
+            "Korean KBL": 0.828, "Chinese CBA": 0.800, "Serbian KLS": 0.736,
+            "Croatian A1": 0.733, "Polish PLK": 0.549,
+          };
+          const lw = LW[p.conf];
+          if (lw != null) {
+            return `${base} · Stats from ${p.conf} (League-Weight ×${lw.toFixed(2)} vs NCAA-Power), ML-Modell calibriert mit Multi-Bridge.`;
+          }
+        }
+        return base;
+      })()}>
         <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
           {[["BPM",p.bpm,p.pctl?.bpm],["OBPM",p.obpm,p.pctl?.obpm],
             ...(p.ogbpm != null ? [["O-GBPM", p.ogbpm,
