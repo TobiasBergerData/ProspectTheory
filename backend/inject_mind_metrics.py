@@ -65,6 +65,12 @@ DB = BASE / "data" / "processed" / "prospecttheory.db"
 # verfügbar — wir kopieren das CSV nach backend/data/processed/ vor dem Deploy.
 CSV_LOCAL = BASE / "data" / "processed" / "pbp_mind_metrics_all.csv"
 CSV_PIPELINE = BASE.parent.parent / "data-pipeline" / "data" / "processed" / "pbp_mind_metrics_all.csv"
+# ── Phase 3 (Tobias 2026-05-17): Euroleague + EuroCup Intl-Master-CSV ──
+# Wird vom pbp_mind_metrics_intl_all.py erzeugt. Mind-Daten für Intl-Spieler
+# (Wemby EuroCup 2022-23, Doncic Euroleague 2017-18, etc.). Plus Hugo González
+# 2025-26 für aktuelle 2026-Class.
+CSV_INTL_LOCAL = BASE / "data" / "processed" / "pbp_mind_metrics_intl_all.csv"
+CSV_INTL_PIPELINE = BASE.parent.parent / "data-pipeline" / "data" / "processed" / "pbp_mind_metrics_intl_all.csv"
 
 MIN_STREAKS_FOR_RELIABLE = 25
 MIN_CLUTCH_FT_SAMPLE = 5      # only show clutch FT if n_attempts >= 5
@@ -208,7 +214,7 @@ def build_mind_block(row) -> dict:
 
 
 def main():
-    # ── Load source CSV ──
+    # ── Load NCAA-Master CSV ──
     csv_path = CSV_LOCAL if CSV_LOCAL.exists() else CSV_PIPELINE
     if not csv_path.exists():
         print(f"ERROR: pbp_mind_metrics_all.csv not found in either location:")
@@ -216,17 +222,42 @@ def main():
         print(f"  {CSV_PIPELINE}")
         print(f"  → Run: cd data-pipeline && python scripts/pbp_mind_metrics_all_seasons.py")
         sys.exit(1)
-    print(f"Loading: {csv_path}")
+    print(f"Loading NCAA: {csv_path}")
     master = pd.read_csv(csv_path, low_memory=False)
-    print(f"  {len(master):,} rows × {len(master.columns)} cols")
-    print(f"  Seasons: {sorted(master['season'].dropna().unique().tolist())}")
+    master["_source"] = "ncaa"  # explicit für Phase 3 merge-logic
+    print(f"  NCAA: {len(master):,} rows × {len(master.columns)} cols")
+    print(f"  NCAA Seasons: {sorted(master['season'].dropna().unique().tolist())}")
+
+    # ── Phase 3 (Tobias 2026-05-17): Intl-Master CSV (Euroleague + EuroCup) ──
+    csv_intl_path = CSV_INTL_LOCAL if CSV_INTL_LOCAL.exists() else CSV_INTL_PIPELINE
+    if csv_intl_path.exists():
+        print(f"Loading INTL: {csv_intl_path}")
+        master_intl = pd.read_csv(csv_intl_path, low_memory=False)
+        if "_source" not in master_intl.columns and "source" in master_intl.columns:
+            master_intl["_source"] = master_intl["source"]
+        else:
+            master_intl["_source"] = "intl"
+        print(f"  INTL: {len(master_intl):,} rows × {len(master_intl.columns)} cols")
+        if "league" in master_intl.columns:
+            print(f"  INTL Leagues: {sorted(master_intl['league'].dropna().unique().tolist())}")
+        # Konkateniere — Spielername-Match identifiziert später richtigen Spieler.
+        # Wenn ein Player BEIDE Sources hat (z.B. Doncic NCAA-Comp + Euroleague Mind),
+        # behalten wir die LATEST Season (Intl-Mind wenn jünger).
+        master = pd.concat([master, master_intl], ignore_index=True, sort=False)
+        print(f"  Combined: {len(master):,} rows (NCAA + Intl)")
+    else:
+        print(f"  [INFO] pbp_mind_metrics_intl_all.csv nicht gefunden — nur NCAA-Mind")
+        print(f"    {CSV_INTL_LOCAL}")
+        print(f"    {CSV_INTL_PIPELINE}")
 
     # Normalize names + sort by season ascending so groupby-last picks LATEST
     master["_nname"] = master["player_name"].apply(norm_name)
     master = master.sort_values("season")
-    # Per normalized-name keep latest season
+    # Per normalized-name keep latest season (egal NCAA oder Intl)
     latest = master.groupby("_nname", as_index=False).tail(1)
     print(f"  Unique players (latest-season): {len(latest):,}")
+    if "_source" in latest.columns:
+        print(f"  Source-Verteilung (latest): {latest['_source'].value_counts().to_dict()}")
 
     # Build name → row dict
     metrics_by_nname = {}
