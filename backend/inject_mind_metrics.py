@@ -53,10 +53,11 @@ INJECTED FIELD: mindMetrics (in profile.data)
 }
 """
 from __future__ import annotations
-import sqlite3, zlib, json, sys, re, unicodedata
+import sqlite3, zlib, json, sys
 from pathlib import Path
 import pandas as pd
 import numpy as np
+from name_utils import norm_name  # Backlog 1.3: Single source of truth (vorher inline)
 
 BASE = Path(__file__).resolve().parent
 DB = BASE / "data" / "processed" / "prospecttheory.db"
@@ -75,18 +76,9 @@ CSV_INTL_PIPELINE = BASE.parent.parent / "data-pipeline" / "data" / "processed" 
 MIN_STREAKS_FOR_RELIABLE = 25
 MIN_CLUTCH_FT_SAMPLE = 5      # only show clutch FT if n_attempts >= 5
 
-# ── Name-Normalisierung (matches the spike script's logic) ──
-SUFFIX_RX = re.compile(r"\s+(jr\.?|sr\.?|i+v?|ii+)\.?\s*$", re.IGNORECASE)
-
-
-def norm_name(s):
-    if not isinstance(s, str): return ""
-    s = unicodedata.normalize("NFKD", s)
-    s = "".join(c for c in s if not unicodedata.combining(c))
-    s = s.lower().replace(".", "").replace("'", "").replace("-", " ")
-    s = re.sub(r"\s+", " ", s).strip()
-    s = SUFFIX_RX.sub("", s).strip()
-    return s
+# ── Name-Normalisierung ──
+# Backlog 1.3: norm_name() lebt jetzt in name_utils.py (Single source of truth),
+# importiert oben. Verhalten unverändert gegenüber der früheren Inline-Definition.
 
 
 def safe_num(v):

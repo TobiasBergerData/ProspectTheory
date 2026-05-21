@@ -22,6 +22,7 @@ import json
 import pandas as pd
 import numpy as np
 from pathlib import Path
+from name_utils import norm_name  # Backlog 1.3: einheitliches Cross-Source-Matching
 
 # ── Paths ──────────────────────────────────────────────────────────────────
 BASE = Path(__file__).resolve().parent  # backend/ on Render
@@ -52,15 +53,17 @@ def main():
     bt["OGBPM"]       = pd.to_numeric(bt["OGBPM"],       errors="coerce")
     bt["DGBPM"]       = pd.to_numeric(bt["DGBPM"],       errors="coerce")
 
-    # Build lookup: (name, season_year) → {ogbpm, dgbpm, pid}
-    # Use first row per (name, year) if duplicates exist
+    # Build lookup: (norm_name, season_year) → {ogbpm, dgbpm, pid}
+    # Backlog 1.3: Key über norm_name() statt rohem player_name → matcht
+    # akzentuierte/punktierte Namen. Dedup weiterhin über (rohname, year),
+    # damit zwei Zeilen desselben Spielers korrekt zusammengeführt werden.
     bt_dedup = (bt.sort_values("season_year")
                   .dropna(subset=["OGBPM"])
                   .drop_duplicates(subset=["player_name", "season_year"], keep="last"))
 
     lookup: dict[tuple, dict] = {}
     for _, row in bt_dedup.iterrows():
-        key = (row["player_name"], int(row["season_year"]))
+        key = (norm_name(str(row["player_name"])), int(row["season_year"]))
         lookup[key] = {
             "ogbpm": round(float(row["OGBPM"]), 2),
             "dgbpm": round(float(row["DGBPM"]), 2) if pd.notna(row["DGBPM"]) else None,
@@ -96,7 +99,7 @@ def main():
                 print(f"  ... {i:,} / {len(rows):,} processed (updated={updated:,})")
             continue
 
-        info = lookup.get((name, year))
+        info = lookup.get((norm_name(name), year))
 
         if info is None:
             skipped += 1

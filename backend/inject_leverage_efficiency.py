@@ -58,6 +58,7 @@ import sqlite3, zlib, json, sys, traceback
 from pathlib import Path
 import numpy as np
 import pandas as pd
+from name_utils import norm_name  # Backlog 1.3: einheitliches Cross-Source-Matching
 
 # ── Paths ──────────────────────────────────────────────────────────────────
 BASE = Path(__file__).resolve().parent  # backend/ on Render
@@ -312,19 +313,17 @@ def main():
         "Ace Bailey", "VJ Edgecombe", "Tre Johnson",
         "Kasparas Jakucionis", "Noa Essengue",
     ]
+    # Backlog 1.3: norm_name-basierter Lookup statt SQL-LIKE → robust gegen
+    # Akzente UND Punkte (V.J. Edgecombe, Dončić). Einmal Profile laden.
+    val_by_nname = {norm_name(n): blob
+                    for n, blob in conn.execute("SELECT name, data FROM profiles").fetchall()}
 
     for name in check_players:
-        # Tobias 2026-05-09: dot-stripped LIKE-search to match "V.J. Edgecombe" / "VJ Edgecombe"
-        # both. Strip dots from search term + use REPLACE in SQL.
-        clean = name.replace(".", "")
-        row = conn.execute(
-            "SELECT data FROM profiles WHERE REPLACE(LOWER(name), '.', '') LIKE LOWER(?)",
-            (f"%{clean.lower()}%",)
-        ).fetchone()
-        if not row:
+        blob = val_by_nname.get(norm_name(name))
+        if not blob:
             print(f"  {name}: NOT FOUND")
             continue
-        p = json.loads(zlib.decompress(row[0]))
+        p = json.loads(zlib.decompress(blob))
         le = p.get("leverageEff")
         if not le:
             print(f"  {name}: No leverageEff")

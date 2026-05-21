@@ -56,6 +56,7 @@ import sqlite3, zlib, json, sys, traceback
 from pathlib import Path
 import numpy as np
 import pandas as pd
+from name_utils import norm_name  # Backlog 1.3: einheitliches Cross-Source-Matching
 
 # ── Paths ──────────────────────────────────────────────────────────────────
 BASE    = Path(__file__).resolve().parent  # backend/ on Render
@@ -157,11 +158,13 @@ def main():
     bt = load_barttorvik()
     print(f"  Valid player-seasons: {len(bt):,}")
 
-    # Build lookup: {player_name: [{yr, usg, adjOrtg, ...}]}
+    # Build lookup: {norm_name: [{yr, usg, adjOrtg, ...}]}
+    # Backlog 1.3: Key über norm_name() statt rohem player_name → matcht
+    # akzentuierte/punktierte Namen (Dončić, V.J. Edgecombe) gegen DB-Profile.
     lookup: dict[str, list[dict]] = {}
     for _, row in bt.iterrows():
-        name = str(row["player_name"]).strip()
-        if not name:
+        nkey = norm_name(str(row["player_name"]))
+        if not nkey:
             continue
         rec = {
             "yr":     int(row["yr"]),
@@ -173,11 +176,11 @@ def main():
             "obpm":   round(float(row["OBPM"]), 2) if pd.notna(row["OBPM"]) else None,
             "gp":     int(row["GP"]),
         }
-        lookup.setdefault(name, []).append(rec)
+        lookup.setdefault(nkey, []).append(rec)
 
     # Sort each player's seasons by year
-    for name in lookup:
-        lookup[name] = sorted(lookup[name], key=lambda x: x["yr"])
+    for nkey in lookup:
+        lookup[nkey] = sorted(lookup[nkey], key=lambda x: x["yr"])
 
     print(f"  Unique players: {len(lookup):,}")
 
@@ -206,9 +209,9 @@ def main():
         except:
             continue
 
-        seasons_bt = lookup.get(p_name)
+        seasons_bt = lookup.get(norm_name(p_name))
         if not seasons_bt:
-            # Try fuzzy: maybe slight name variation
+            # Backlog 1.3: Match jetzt über norm_name(); kein exakter Name mehr nötig.
             n_no_bt += 1
             skill_curves[player_id] = None
             continue
@@ -339,17 +342,16 @@ def main():
         "Ace Bailey", "Tre Johnson", "Kasparas Jakucionis",
         "Kon Knueppel", "Derik Queen",
     ]
+    # Backlog 1.3: norm_name-basierter Lookup statt SQL-LIKE → robust gegen
+    # Akzente UND Punkte (V.J. Edgecombe, Dončić). Einmal Profile laden.
+    val_by_nname = {norm_name(n): blob
+                    for n, blob in conn.execute("SELECT name, data FROM profiles").fetchall()}
 
     for name in check:
-        # Tobias 2026-05-09: dot-stripped lookup to match V.J./VJ etc.
-        clean = name.replace(".", "")
-        row = conn.execute(
-            "SELECT data FROM profiles WHERE REPLACE(LOWER(name), '.', '') LIKE LOWER(?)",
-            (f"%{clean.lower()}%",)
-        ).fetchone()
-        if not row:
+        blob = val_by_nname.get(norm_name(name))
+        if not blob:
             print(f"  {name}: NOT FOUND"); continue
-        p = json.loads(zlib.decompress(row[0]))
+        p = json.loads(zlib.decompress(blob))
         sc = p.get("skillCurve")
         if not sc:
             print(f"  {name}: No skillCurve"); continue
