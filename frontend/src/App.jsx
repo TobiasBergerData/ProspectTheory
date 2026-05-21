@@ -229,7 +229,7 @@ const METHODS = {
   projectionDrivers: {
     name: "Projection Drivers (SHAP Decomposition)",
     formula: "contribution_i = Σ(split gains involving feature i across all trees)",
-    desc: "Per-player feature contributions computed via LightGBM's native SHAP tree decomposition (pred_contrib). For each prospect, the model's WAR prediction is broken down into the additive contribution of each of the 28 input features. The top 5 positive contributors (boosters) and top 5 negative contributors (limiters) are displayed. Strength (+++/++/+) reflects relative magnitude within the player's own top-5 drivers. Ensemble: PIE model contributions (30%) blended with xRAPM model contributions (70%) on the Wins Added scale.",
+    desc: "Per-player feature contributions computed via LightGBM's native SHAP tree decomposition (pred_contrib). For each prospect, the model's ppWA projection is broken down into the additive contribution of each of the 28 input features. The top 5 positive contributors (boosters) and top 5 negative contributors (limiters) are displayed. Strength (+++/++/+) reflects relative magnitude within the player's own top-5 drivers. Ensemble: production-model contributions (30%) blended with xRAPM model contributions (70%) on the Wins Added scale.",
   },
   posClassification: {
     name: "Position Classification",
@@ -1509,11 +1509,11 @@ function mapProfile(d) {
       const has = d.intl_tier || d.p_intl_eu_impact != null || d.p_intl_eu != null;
       if (!has) return d.intlTierProbs ?? null;
       const TIER_META = {
-        "EuroLeague Impact": {leagues:"Euroleague", desc:"Top intl. Impact-Spieler. Stamm in der staerksten Liga."},
-        "EuroLeague":        {leagues:"Euroleague / Eurocup",     desc:"Solider Euroleague-Stamm oder Top-Eurocup."},
-        "Top European Liga": {leagues:"ACB / Italian-A / Adriatic", desc:"Stamm in einer der starken Top-Ligen Europas."},
+        "EuroLeague Impact": {leagues:"Euroleague", desc:"Top international impact player; rotation regular in the strongest league."},
+        "EuroLeague":        {leagues:"Euroleague / Eurocup",     desc:"Solid Euroleague regular or top EuroCup player."},
+        "Top European Liga": {leagues:"ACB / Italian-A / Adriatic", desc:"Regular in one of Europe's strong top leagues."},
         "Pro Basketball":    {leagues:"German-BBL / Lithuanian-LKL", desc:"Roster player in a pro league below top European tier."},
-        "Fringe Pro":        {leagues:"Lower Pro / Domestic-only",   desc:"Marginaler Pro-Status, kurze oder lokale Karriere."},
+        "Fringe Pro":        {leagues:"Lower Pro / Domestic-only",   desc:"Marginal pro status; short or domestic-only career."},
       };
       const order = ["EuroLeague Impact","EuroLeague","Top European Liga","Pro Basketball","Fringe Pro"];
       const probs = {
@@ -1830,7 +1830,7 @@ function OverviewTab({p, compTier, setCompTier}) {
         })().map(([l,v,c])=>(
           <div key={l} className="rounded-lg p-3" style={{background:"#111827"}}
                title={l === "League Weight"
-                 ? "Multi-Bridge-Methodik: NCAA-Power = 1.00 (Anker). Liga-Weight = empirischer NBA-Translation-Faktor aus Bridge-Spielern. >1.0 = stärker als NCAA-Power, <1.0 = schwächer. Stats werden in ML mit diesem Faktor calibriert."
+                 ? "Multi-bridge methodology: NCAA Power = 1.00 (anchor). League Weight = empirical NBA-translation factor derived from bridge players. >1.0 = stronger than NCAA Power, <1.0 = weaker. Stats are calibrated in the ML model with this factor."
                  : undefined}>
             <div className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>{l}</div>
             <div className="font-semibold mt-0.5" style={{color:c,fontFamily:"'Oswald',sans-serif"}}>{v||"—"}</div>
@@ -1896,7 +1896,7 @@ function OverviewTab({p, compTier, setCompTier}) {
           };
           const lw = LW[p.conf];
           if (lw != null) {
-            return `${base} · Stats from ${p.conf} (League-Weight ×${lw.toFixed(2)} vs NCAA-Power), ML-Modell calibriert mit Multi-Bridge.`;
+            return `${base} · Stats from ${p.conf} (League Weight ×${lw.toFixed(2)} vs NCAA Power), ML model calibrated via Multi-Bridge.`;
           }
         }
         return base;
@@ -3457,7 +3457,7 @@ function MindTab({p}) {
                       )}
                     </div>
                     <div style={{fontSize:9,color:"#475569",marginTop:4,fontStyle:"italic"}}>
-                      Cards mit &lt;8 attempts sind directional only — single make/miss kann eFG dramatisch verschieben.
+                      Cards with &lt;8 attempts are directional only — a single make/miss can shift eFG dramatically.
                     </div>
                   </>
                 );
@@ -3934,7 +3934,7 @@ function MindTab({p}) {
           {key:"passive",    m:mm.passive,    type:"neutral",  label:"Engagement",      sub:"actions taken under stress",    hint:"After multi-event slumps: how many actions does he take in the next 4 plays vs. expected? Low = withdraws / checks out."},
           {key:"aggressor",  m:mm.aggressor,  type:"neutral",  label:"Shot-Seeking",    sub:"more shots under stress",       hint:"After multi-event slumps: does FGA-Rate spike (force shots) or fall (fade away)? Both extremes can be tells."},
           {key:"bounceback", m:mm.bounceback, type:"positive", label:"Bounceback eFG",  sub:"shooting recovers under stress",hint:"After multi-event slumps: does eFG% on subsequent shots recover? High = clutch shot-making mentality."},
-          {key:"stamina",    m:staminaM,      type:"adverse",  label:"Match Stamina",   sub:"adverse rate H2 vs H1",         hint:"Half-2 vs Half-1 adverse-event rate. >1 = wird in 2nd half schlechter (Conditioning/Mental-Fatigue). <1 = bleibt stabil oder verbessert sich."},
+          {key:"stamina",    m:staminaM,      type:"adverse",  label:"Match Stamina",   sub:"adverse rate H2 vs H1",         hint:"Half-2 vs Half-1 adverse-event rate. >1 = gets worse in the 2nd half (conditioning / mental fatigue). <1 = stays stable or improves."},
         ];
         for (const c of cards) {
           if (!c.m || c.m.idx == null) continue;
@@ -4345,10 +4345,10 @@ function DevTrajectoryTab({p}) {
             <div style={{padding:10,background:"#1e293b",borderRadius:6,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
                 <div style={{fontSize:13,color:"#e5e7eb"}}>
-                  Saison {proSeason} — {proLeague}
+                  Season {proSeason} — {proLeague}
                 </div>
                 <div style={{fontSize:11,color:"#9ca3af",marginTop:2}}>
-                  BPM = {proBpm.toFixed(1)} bei first signifikante Rolle (≥12 MPG)
+                  BPM = {proBpm.toFixed(1)} in first significant role (≥12 MPG)
                 </div>
               </div>
               {hasProEarly && (
@@ -4514,7 +4514,7 @@ function ProjectionTab({p}) {
                   </div>
                 </Tip>
                 {p.potentialTier && p.potentialTier !== "Marginal/Out" && (
-                  <div className="text-center" title={`Highest tier where cumulative probability ≥30%. Doncic: P(Superstar)=45% → Superstar Potential. Anders als Predicted Tier (Modal-Wert) macht Potential Tier das Pre-Draft-Potenzial sichtbar.`}>
+                  <div className="text-center" title={`Highest tier where cumulative probability ≥30%. Doncic: P(Superstar)=45% → Superstar Potential. Unlike the Predicted Tier (modal value), the Potential Tier surfaces a player's pre-draft upside.`}>
                     <div className="text-xs uppercase tracking-wider cursor-help" style={{color:"#6b7280"}}>Potential ★</div>
                     <div className="text-lg font-bold mt-0.5" style={{color: p.potentialTier.includes("Superstar") ? "#fbbf24" : p.potentialTier.includes("All-Star") ? "#f97316" : p.potentialTier.includes("Starter") ? "#3b82f6" : "#06b6d4"}}>
                       {p.potentialTier.replace(" Potential", "")}
@@ -4631,7 +4631,7 @@ function ProjectionTab({p}) {
           <div className="mt-3 flex items-center gap-3 p-3 rounded-lg" style={{background:"#0c1222",border:"1px solid #1e3a5f"}}>
             <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Actual NBA Outcome:</span>
             {p.actual && <TierBadge tier={p.actual}/>}
-            {p.peakPie != null && <span className="text-sm" style={{color:"#9ca3af"}}>Peak PIE: <strong style={{color:"#fbbf24"}}>{fmt(p.peakPie,3)}</strong></span>}
+            {p.peakPie != null && <span className="text-sm" style={{color:"#9ca3af"}}>Peak WA: <strong style={{color:"#fbbf24"}}>{fmt(p.peakPie,3)}</strong></span>}
           </div>
         )}
       </Sec>
@@ -4752,12 +4752,12 @@ function ProjectionTab({p}) {
               </div>
             </div>
             <div className="mt-4 p-3 rounded-lg text-xs leading-relaxed" style={{background:"#0d111744",color:"#4b5563"}}>
-              <strong style={{color:"#6b7280"}}>How this works:</strong> For each prospect, our LightGBM model decomposes the WAR projection
+              <strong style={{color:"#6b7280"}}>How this works:</strong> For each prospect, our LightGBM model decomposes the ppWA projection
               into individual feature contributions (SHAP tree decomposition). Boosters are features where this prospect's value
               pushes the prediction above the population baseline; limiters pull it below. Strength reflects relative magnitude
               within this player's own top contributors — <span style={{color:"#22c55e"}}>+++</span> = dominant influence,{" "}
               <span style={{color:"#22c55e"}}>+</span> = still top-5 but smaller effect.
-              The ensemble blends PIE (30%) and xRAPM (70%) model contributions.
+              The ensemble blends the production model (30%) and xRAPM (70%) contributions.
             </div>
           </Sec>
         );
@@ -4822,7 +4822,7 @@ function ProjectionTab({p}) {
             sub={(() => {
               const _pNba = (Number(p.tiers?.Superstar)||0) + (Number(p.tiers?.["All-Star"])||0)
                           + (Number(p.tiers?.Starter)||0) + (Number(p.tiers?.["Role Player"])||0);
-              return `NBA-Wahrsch. ${_pNba.toFixed(0)}% — sekundaere Tier-Projektion (10e), trainiert auf 9.205 historischen Non-NBA-Karrieren.`;
+              return `NBA prob. ${_pNba.toFixed(0)}% — secondary tier projection (10e), trained on 9,205 historical non-NBA careers.`;
             })()}>
 
             {/* Hero + Actual side-by-side when historical data available */}
@@ -4897,11 +4897,11 @@ function ProjectionTab({p}) {
             {/* Validation note */}
             <div className="mt-3 p-3 rounded-lg text-xs leading-relaxed" style={{background:"#0d111744",color:"#4b5563"}}>
               <strong style={{color:"#6b7280"}}>Model validation:</strong>{" "}
-              5-Klassen-LightGBM, trainiert auf 9.205 historischen Non-NBA-Karrieren
-              (Bias-Fix: erfolgreiche NBA-Karrieren aus dem Training entfernt).
-              5-Fold-CV: 48 % Top-1-Accuracy, 78 % Top-2-Accuracy.
-              In 78 % der Faelle liegt die tatsaechliche Liga in den Top-2-Predictions.
-              {hasActual && <span style={{color:"#6b7280"}}> Tatsaechliche Liga aus realgm-Karriere-Trace.</span>}
+              5-class LightGBM, trained on 9,205 historical non-NBA careers
+              (bias fix: successful NBA careers removed from training).
+              5-fold CV: 48% top-1 accuracy, 78% top-2 accuracy.
+              In 78% of cases the actual league is among the top-2 predictions.
+              {hasActual && <span style={{color:"#6b7280"}}> Actual league from realgm career trace.</span>}
             </div>
           </Sec>
         );
@@ -5888,7 +5888,7 @@ function BodyTab({p}) {
 
     if (allPts.length < 3) {
       return <div style={{height:100,display:"flex",alignItems:"center",justifyContent:"center",color:"#4b5563",fontSize:12}}>
-        Nicht genug Prospects mit vollständigen Height/Weight/Wingspan-Daten für Scatter.
+        Not enough prospects with complete height/weight/wingspan data for the scatter plot.
       </div>;
     }
 
@@ -6013,7 +6013,7 @@ function BodyTab({p}) {
               <span style={{color:"#4b5563"}}>({posCounts[pos]||0})</span>
             </span>
           ))}
-          <span style={{color:"#4b5563"}}>Punktgröße ∝ Gewicht · {allPts.length} Prospects · hover für Details</span>
+          <span style={{color:"#4b5563"}}>Dot size ∝ weight · {allPts.length} prospects · hover for details</span>
         </div>
       </div>
     );
@@ -6480,7 +6480,7 @@ function MethodologyTab() {
     {cat:"Position Reclassification",items:[],desc:"Stats-driven position groups (Playmaker / Wing / Big) used throughout the site. Rules (Tobias 2026-05-09 v3): Big = Height ≥84\" unconditional, OR Height ≥82\" with non-wing usage profile (USG<25 AND AST%<15), OR Height ≥80\" with elite shot-blocking (BLK%≥5 AND non-wing usage). Playmaker = AST%≥25 AND Height ≤6'5\", OR AST%≥30 AND Height ≤6'7\". Wing = everything else. Designed to keep tall wings (Bailey-style 6'10\" forwards) classified as Wings rather than misclassified to Big purely by height."},
     {cat:"International Adjustments",items:[],desc:"International players receive three adjustments: (1) League Strength via empirical bridge-player ratios from 2,655 players who played both intl and NBA. Euroleague=1.40, ACB=1.39, BBL=1.18 (NCAA Power=1.0 anchor). (2) League-BPM-Scaler: raw BPM proxy is multiplied by a league-specific scaler (Euroleague ×2.1, ACB ×1.9, NBL ×1.65, etc.) to translate to NCAA-equivalent BPM before feature engineering. (3) Conference-adjusted post-hoc with translatable-USG-aware caps for strong leagues. For Athleticism, an FT-Rate + ORB%-based formula is used in place of dunk rate (which is unavailable for most international players)."},
     {cat:"Tier Feasibility (vs NBA)",items:[],desc:"Position-specific comparison against NBA tier benchmarks (p25-p75 corridors). For each tier (Replacement through All-Star), core metrics are checked: Wings = TS% + 3P%, Playmakers = AST% + TO%, Bigs = BLK% + ORB%. If a core metric exceeds p75 of the target tier, deficiencies in secondary metrics are marked 'Compensated' (yellow) instead of 'Critical Gap' (red)."},
-    {cat:"Data Sources & Coverage",items:[],desc:"NCAA Box Stats: BartTorvik (34k+ player-seasons 2008–2026, per-game + advanced + shooting zones — barttorvik.com). NCAA Play-by-Play: ESPN Play-by-Play (event-level data 2017-18 through 2025-26, ~700k player-game-events tracked). International Box Stats: RealGM (9k+ player-seasons across 12 European leagues — realgm.com). NBA Outcomes: NBA Stats API Advanced stats (27 seasons, PIE + minutes for peak computation). Anthropometrics: NBA Draft Combine measurements (NBA.com) + Databallr wingspan dataset. National Team / FIBA: FIBA event statistics for international youth and senior tournaments. All data is processed through our own pipeline — no external services are queried at runtime."},
+    {cat:"Data Sources & Coverage",items:[],desc:"NCAA Box Stats: BartTorvik (34k+ player-seasons 2008–2026, per-game + advanced + shooting zones — barttorvik.com). NCAA Play-by-Play: ESPN Play-by-Play (event-level data 2017-18 through 2025-26, ~700k player-game-events tracked). International Box Stats: RealGM (9k+ player-seasons across 12 European leagues — realgm.com). NBA Outcomes: NBA Stats API Advanced stats (27 seasons, used for peak Wins-Added computation). Anthropometrics: NBA Draft Combine measurements (NBA.com) + Databallr wingspan dataset. National Team / FIBA: FIBA event statistics for international youth and senior tournaments. All data is processed through our own pipeline — no external services are queried at runtime."},
   ];
   /* ── Pipeline Flow Diagram ── */
   const PipelineDiagram = () => {
@@ -7408,7 +7408,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
             {yearFilter && yearFilter !== "All" ? yearFilter : "All Years"} Big Board
           </h2>
           <p className="text-sm mt-1" style={{color:"#6b7280"}}>
-            Probabilistic ranking · {filtered.length} prospects · Sort: {sortLabels[sortBy] || "WAR"}
+            Probabilistic ranking · {filtered.length} prospects · Sort: {sortLabels[sortBy] || "ppWA"}
           </p>
         </div>
       </div>
@@ -8178,7 +8178,7 @@ export default function App() {
               <div className="mb-4 p-3 rounded-lg text-sm flex items-start gap-2" style={{background:"#1e3a5f",border:"1px solid #2563eb",color:"#93c5fd"}}>
                 <span style={{fontSize:"1.2em"}}>ℹ️</span>
                 <div>
-                  <strong>Estimated Counting Stats</strong> — BartTorvik 2008-2010 hat keine per-game stats. PPG/RPG/APG aus Per-100-Possessions × MPG approximiert. Modell nutzt komplette Per-100-Daten — Display-Werte sind Schätzungen.
+                  <strong>Estimated Counting Stats</strong> — BartTorvik 2008-2010 has no per-game stats. PPG/RPG/APG are approximated from per-100 possessions × MPG. The model uses the full per-100 data — displayed values are estimates.
                 </div>
               </div>
             )}
