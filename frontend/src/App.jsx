@@ -5343,6 +5343,12 @@ function ScoutingTab({p, mode="scouting"}) {
         const games = p.gameLogs.games.filter(g => g.u != null && g.o2 != null);
         if (games.length < 5) return null;
 
+        // Backlog 3.2: color dots by OPPONENT STRENGTH (os: "T"/"M"/"L") when available,
+        // else fall back to the date gradient. Lets you spot if efficiency drops vs strong teams.
+        const OPP_COL = {T:"#ef4444", M:"#fbbf24", L:"#22c55e"};
+        const OPP_LABEL = {T:"Strong opponent", M:"Average opponent", L:"Weak opponent"};
+        const hasOpp = games.some(g => g.os === "T" || g.os === "M" || g.os === "L");
+
         // Domain ranges (clip ORtg to ±200, USG 0-50)
         const USG_MIN = 0, USG_MAX = 50;
         const ORTG_MIN = 50, ORTG_MAX = 200;
@@ -5409,6 +5415,16 @@ function ScoutingTab({p, mode="scouting"}) {
                   <span>Trend slope: <strong style={{color:slopeColor}}>{slope >= 0 ? "+" : ""}{slope.toFixed(1)}</strong> ORtg per +1% USG</span>
                 </div>
               </div>
+              {hasOpp && (
+                <div style={{display:"flex",gap:14,alignItems:"center",fontSize:10,color:"#9ca3af",marginBottom:6,flexWrap:"wrap"}}>
+                  <span style={{color:"#6b7280",fontWeight:600}}>Dot = opponent strength:</span>
+                  <span><span style={{color:"#ef4444"}}>●</span> Strong</span>
+                  <span><span style={{color:"#fbbf24"}}>●</span> Average</span>
+                  <span><span style={{color:"#22c55e"}}>●</span> Weak</span>
+                  <span><span style={{color:"#6b7280"}}>●</span> Unknown</span>
+                  <span style={{color:"#475569"}}>— do red (strong-opponent) games sink to lower ORtg?</span>
+                </div>
+              )}
               <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{overflow:"visible"}}>
                 {/* Grid */}
                 {yTicks.map(v => (
@@ -5437,18 +5453,20 @@ function ScoutingTab({p, mode="scouting"}) {
                 {/* Smooth curve (LOESS-like rolling mean) — primary visual element */}
                 <path d={curvePath} fill="none" stroke="#f97316" strokeWidth={2.5} opacity={0.85}/>
 
-                {/* Game dots — gradient: early=blue, late=orange */}
+                {/* Game dots — Backlog 3.2: color by opponent strength (else date gradient) */}
                 {games.map((g, i) => {
-                  const rank = dateRank.get(g) ?? 0;
-                  const t = sortedByDate.length > 1 ? rank / (sortedByDate.length - 1) : 0.5;
-                  // Blue (early) → orange (late)
-                  const r = Math.round(96 + t * (249-96));
-                  const gn = Math.round(165 - t * 50);
-                  const b = Math.round(250 - t * 200);
+                  let fill;
+                  if (hasOpp) {
+                    fill = OPP_COL[g.os] || "#6b7280";  // gray = unknown opponent
+                  } else {
+                    const rank = dateRank.get(g) ?? 0;
+                    const t = sortedByDate.length > 1 ? rank / (sortedByDate.length - 1) : 0.5;
+                    fill = `rgb(${Math.round(96 + t*(249-96))},${Math.round(165 - t*50)},${Math.round(250 - t*200)})`;
+                  }
                   return (
                     <Tip key={i} content={
                       <div>
-                        <div style={{fontWeight:700,color:"#f97316"}}>{g.d} vs {g.h ? "" : "@"} {g.o}</div>
+                        <div style={{fontWeight:700,color:"#f97316"}}>{g.d} vs {g.h ? "" : "@"} {g.o}{OPP_LABEL[g.os] ? ` · ${OPP_LABEL[g.os]}` : ""}</div>
                         <div style={{fontSize:11,color:"#cbd5e1",marginTop:3}}>
                           {g.p} pts · {g.fm}/{g.fa} FG · {g.tm}/{g.ta} 3PT · {g.a} ast · {g.to} TO · {g.b} blk · {g.s} stl
                         </div>
@@ -5458,7 +5476,7 @@ function ScoutingTab({p, mode="scouting"}) {
                       </div>
                     }>
                       <circle cx={xS(g.u)} cy={yS(Math.max(ORTG_MIN, Math.min(ORTG_MAX, g.o2)))}
-                        r={4} fill={`rgb(${r},${gn},${b})`}
+                        r={4} fill={fill}
                         stroke="#000" strokeWidth={0.5}
                         style={{cursor:"crosshair"}}/>
                     </Tip>

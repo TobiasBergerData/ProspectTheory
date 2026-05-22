@@ -124,6 +124,7 @@ def main():
     print(f"\n  Building compact records (vectorized)...")
     # Bulk-cast numeric columns with safe defaults
     for col, default in [("pts",0),("ast",0),("fga",0),("fgm",0),("tpa",0),("tpm",0),
+                          ("fta",0),("ftm",0),  # Backlog 3.1: fta für per-Game TS%
                           ("oreb",0),("dreb",0),("tov",0),("stl",0),("blk",0),("pf",0)]:
         master[col] = pd.to_numeric(master[col], errors="coerce").fillna(default).astype(int)
     for col in ["usg_proxy", "ortg_proxy", "efg_pct"]:
@@ -131,6 +132,55 @@ def main():
     master["is_home"] = master["is_home"].fillna(False).astype(bool)
     master["date"] = master["date"].astype(str)
     master["opponent"] = master["opponent"].fillna("").astype(str)
+
+    # ── Backlog 3.2: Gegner-Stärke pro Spiel (für Skill-Curve-Färbung) ──
+    # Problem: ESPN-Gegnernamen matchen BartTorvik-Teamnamen nur ~40% direkt.
+    # Lösung (Spieler-Brücke): derselbe Spieler hat in den Game-Logs einen
+    # ESPN-Teamnamen UND in BartTorvik einen BT-Teamnamen → daraus ESPN→BT-Map.
+    # Team-Stärke = net = adjoe − adrtg (BartTorvik), Tier per globalem Tertil.
+    # → ~98% der Game-Rows bekommen so ein Gegner-Rating ("T"/"M"/"L", sonst None).
+    master["os"] = None
+    try:
+        _bt_csv = BASE / "data" / "raw" / "barttorvik_complete_final.csv"
+        if _bt_csv.exists():
+            _bt = pd.read_csv(_bt_csv, low_memory=False,
+                              usecols=["player_name", "team", "season_year", "adjoe", "adrtg"])
+            _bt["season_year"] = pd.to_numeric(_bt["season_year"], errors="coerce")
+            _bt["_net"] = (pd.to_numeric(_bt["adjoe"], errors="coerce")
+                           - pd.to_numeric(_bt["adrtg"], errors="coerce"))
+            _bt["_pn"] = _bt["player_name"].astype(str).apply(norm_name)
+            # season "2024-25" → season_year 2025 (BartTorvik nutzt das End-Jahr)
+            master["_sy"] = master["_latest_season"].astype(str).str.slice(0, 4).apply(
+                lambda x: int(x) + 1 if x.isdigit() else None)
+            # Team-Rating je (BT-team, season_year)
+            _tr = (_bt.dropna(subset=["_net", "team"])
+                      .groupby(["team", "season_year"], as_index=False)["_net"].mean())
+            _lo, _hi = _tr["_net"].quantile(0.34), _tr["_net"].quantile(0.67)
+            # Spieler → häufigster BT-team (je _pn + season_year)
+            _p2bt = (_bt.dropna(subset=["team"])
+                        .groupby(["_pn", "season_year"], as_index=False)["team"]
+                        .agg(lambda s: s.value_counts().index[0])
+                        .rename(columns={"team": "_bt_team"}))
+            # ESPN-team → BT-team Brücke (über Spieler im master)
+            _mm = master[["_nname", "_sy", "team"]].merge(
+                _p2bt, left_on=["_nname", "_sy"], right_on=["_pn", "season_year"], how="left")
+            _bridge = (_mm.dropna(subset=["_bt_team"])
+                          .groupby("team")["_bt_team"].agg(lambda s: s.value_counts().index[0]))
+            # opponent (ESPN) → BT-team → net-Rating
+            master["_opp_bt"] = master["opponent"].map(_bridge)
+            master = master.merge(
+                _tr.rename(columns={"team": "_opp_bt", "_net": "_opp_net", "season_year": "_sy"}),
+                on=["_opp_bt", "_sy"], how="left")
+            _net = master["_opp_net"]
+            _os = pd.Series(None, index=master.index, dtype=object)
+            _os[_net.notna()] = "M"
+            _os[_net >= _hi] = "T"
+            _os[_net <= _lo] = "L"
+            master["os"] = _os
+            print(f"  Opponent-strength (3.2): {master['os'].notna().mean()*100:.0f}% of game-rows "
+                  f"tiered ({len(_bridge):,} ESPN→BT teams bridged)")
+    except Exception as _e:
+        print(f"  ⚠ Opponent-strength enrichment skipped: {_e}")
 
     by_player = {}
     for nname, sub in master.groupby("_nname"):
@@ -156,6 +206,8 @@ def main():
                     (float(r.pts) / (2.0 * (float(r.fga) + 0.44 * float(r.fta))) * 100.0)
                     if (not pd.isna(r.fga)) and (not pd.isna(r.fta)) and (float(r.fga) + 0.44 * float(r.fta)) > 0
                     else None),
+                # Backlog 3.2: Opponent-Stärke-Tier ("T"=stark, "M"=mittel, "L"=schwach, None=unbekannt)
+                "os": (r.os if isinstance(r.os, str) else None),
             })
         if games:
             by_player[nname] = {"season": season, "games": games}
