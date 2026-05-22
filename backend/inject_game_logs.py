@@ -150,6 +150,12 @@ def main():
                 "u":  None if pd.isna(r.usg_proxy)  else round(float(r.usg_proxy), 1),
                 "o2": None if pd.isna(r.ortg_proxy) else round(float(r.ortg_proxy), 0),
                 "e":  None if pd.isna(r.efg_pct)    else round(float(r.efg_pct), 1),
+                # Backlog 3.1: TS% per Game (FT-aware) = PTS / (2·(FGA + 0.44·FTA)).
+                # fta/ftm sind in der Quell-CSV vorhanden, fehlten nur im kompakten Objekt.
+                "ts": (lambda _ts: None if _ts is None else round(_ts, 1))(
+                    (float(r.pts) / (2.0 * (float(r.fga) + 0.44 * float(r.fta))) * 100.0)
+                    if (not pd.isna(r.fga)) and (not pd.isna(r.fta)) and (float(r.fga) + 0.44 * float(r.fta)) > 0
+                    else None),
             })
         if games:
             by_player[nname] = {"season": season, "games": games}

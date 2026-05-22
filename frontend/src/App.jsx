@@ -2901,6 +2901,8 @@ function ClassScatterAndDev({p}) {
            hint:"Share of team possessions used. Rising = expanding role."},
           {key:"e",  label:"eFG %",         short:"eFG", color:"#22c55e", min:25,  max:75,  fmt:v=>v.toFixed(1)+"%",
            hint:"Effective FG % (weighted for 3pt). Rising = becoming more efficient."},
+          {key:"ts", label:"TS %",          short:"TS",  color:"#eab308", min:25,  max:75,  fmt:v=>v.toFixed(1)+"%",
+           hint:"True Shooting % — FT-aware shooting efficiency (includes free throws). The best single-number scoring-efficiency metric. Only shown when shot data exists."},
           {key:"a",  label:"Assists",       short:"AST", color:"#a78bfa", min:0,   max:12,  fmt:v=>v.toFixed(1),
            hint:"Per game. Rising = developing playmaking."},
           {key:"ta", label:"3PT Attempts",  short:"3PA", color:"#60a5fa", min:0,   max:14,  fmt:v=>v.toFixed(1),
