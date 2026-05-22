@@ -3442,7 +3442,7 @@ function MindTab({p}) {
                   <>
                     <StepHeader n={3} title="HOW DOES PRESSURE affect efficiency?"
                       color="#fb923c"
-                      hint={`PBP-derived splits from ${mm.season} — clutch (close late game), shot-clock pressure, and clutch free throws.`}/>
+                      hint={`PBP-derived splits from ${mm.season} — clutch (close late game), shot-clock pressure, and clutch free throws. ⚠ Reliability note: clutch-eFG splits barely repeat season-to-season (test-retest r≈0.02) — read as descriptive of this sample, not predictive. Clutch FT tracks FT%, which is far more stable (r≈0.50).`}/>
                     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(180px, 1fr))",gap:10,marginBottom:6}}>
                       <PressureCard title="Close Late-Game (FG)"
                         sub="Win-prob 20–80% in 2nd half. Real high-leverage moments."
@@ -3802,7 +3802,8 @@ function MindTab({p}) {
         // type: "neutral" → high oder low können beide Bedeutung haben
         // type: "adverse" → high = bad (mehr TOs/Fouls)
         // type: "positive" → high = good (Bounceback eFG)
-        const TendBar = ({label, sub, m, type, hint}) => {
+        const TendBar = ({label, sub, m, type, hint, reli}) => {
+          const rel = reliTier(reli);
           if (!m || m.idx == null) return (
             <div style={{background:"#0d1117",border:"1px solid #1f2937",borderRadius:8,padding:"10px 12px",opacity:0.5}}>
               <div style={{fontSize:11,fontWeight:600,color:"#6b7280"}}>{label}</div>
@@ -3877,6 +3878,9 @@ function MindTab({p}) {
                 <div style={{fontSize:10,color:"#475569",marginTop:4,fontStyle:"italic"}}>
                   Bayesian-Shrinkage: posterior = (n × raw + 30 × 1.0) / (n + 30) with n={nStreaks} streaks. Display shrinks to population mean when sample is small.
                 </div>
+                <div style={{fontSize:10,marginTop:6,padding:"4px 6px",borderRadius:4,color:rel.color,background:`${rel.color}14`}}>
+                  <strong>Reliability {rel.label}{reli!=null?` (test-retest r≈${reli.toFixed(2)})`:""}:</strong> {rel.txt}. For reference, FT% reliability ≈ 0.50 (a real, stable skill).
+                </div>
                 {sigDev && <div style={{fontSize:11,color:"#fbbf24",marginTop:4}}>⚠ CI excludes 1.0 — statistically significant deviation from baseline.</div>}
               </div>
             }>
@@ -3885,6 +3889,9 @@ function MindTab({p}) {
                   <div>
                     <div style={{fontSize:11,fontWeight:600,color:"#e5e7eb"}}>{label}</div>
                     <div style={{fontSize:9,color:"#6b7280",marginTop:1}}>{sub}</div>
+                    <div style={{display:"inline-block",fontSize:8,fontWeight:700,letterSpacing:0.3,marginTop:3,padding:"1px 5px",borderRadius:3,color:rel.color,background:`${rel.color}1a`,border:`1px solid ${rel.color}55`}}>
+                      RELIABILITY: {rel.label}{reli!=null?` · r≈${reli.toFixed(2)}`:""}
+                    </div>
                   </div>
                   <div style={{display:"flex",alignItems:"baseline",gap:8}}>
                     <span style={{fontSize:18,fontWeight:700,color:barColor,fontFamily:"Oswald,sans-serif"}}>
@@ -3928,13 +3935,22 @@ function MindTab({p}) {
 
         // Profile-Headline based on z-scores (only "auffällig" if |z| > 1.5 OR CI excludes 1.0)
         const auffaellig = [];
+        // ── Signal reliability (test-retest r, season n → n+1, measured on 5,390 player-pairs with ≥25 streaks) ──
+        // Honest usability label per metric. r≈0 = describes THIS sample only, does NOT replicate next season
+        // (i.e. not a stable trait → don't project it forward). Reference: FT% test-retest r≈0.50 (a real skill).
+        const reliTier = (r) =>
+            r == null      ? {label:"n/a",      color:"#6b7280", txt:"not validated"}
+          : r >= 0.40      ? {label:"High",     color:"#22c55e", txt:"replicates season-to-season — usable as a trait"}
+          : r >= 0.20      ? {label:"Moderate", color:"#84cc16", txt:"partly replicates — directional"}
+          : r >= 0.10      ? {label:"Low",      color:"#fbbf24", txt:"weak season-to-season signal — caution"}
+          :                  {label:"Very Low", color:"#ef4444", txt:"≈ noise — does NOT replicate next season; descriptive only"};
         const cards = [
-          {key:"hothead",    m:mm.hothead,    type:"adverse",  label:"Hothead",         sub:"more fouls under stress",       hint:"After multi-event slumps: does PF-Rate spike vs. baseline? High = frustration tells in fouls."},
-          {key:"overdriver", m:mm.overdriver, type:"adverse",  label:"Overdriver",      sub:"more TOs under stress",         hint:"After multi-event slumps: does TO-Rate spike vs. baseline? High = forces plays when frustrated."},
-          {key:"passive",    m:mm.passive,    type:"neutral",  label:"Engagement",      sub:"actions taken under stress",    hint:"After multi-event slumps: how many actions does he take in the next 4 plays vs. expected? Low = withdraws / checks out."},
-          {key:"aggressor",  m:mm.aggressor,  type:"neutral",  label:"Shot-Seeking",    sub:"more shots under stress",       hint:"After multi-event slumps: does FGA-Rate spike (force shots) or fall (fade away)? Both extremes can be tells."},
-          {key:"bounceback", m:mm.bounceback, type:"positive", label:"Bounceback eFG",  sub:"shooting recovers under stress",hint:"After multi-event slumps: does eFG% on subsequent shots recover? High = clutch shot-making mentality."},
-          {key:"stamina",    m:staminaM,      type:"adverse",  label:"Match Stamina",   sub:"adverse rate H2 vs H1",         hint:"Half-2 vs Half-1 adverse-event rate. >1 = gets worse in the 2nd half (conditioning / mental fatigue). <1 = stays stable or improves."},
+          {key:"hothead",    m:mm.hothead,    type:"adverse",  reli:0.02, label:"Hothead",         sub:"more fouls under stress",       hint:"After multi-event slumps: does PF-Rate spike vs. baseline? High = frustration tells in fouls."},
+          {key:"overdriver", m:mm.overdriver, type:"adverse",  reli:0.04, label:"Overdriver",      sub:"more TOs under stress",         hint:"After multi-event slumps: does TO-Rate spike vs. baseline? High = forces plays when frustrated."},
+          {key:"passive",    m:mm.passive,    type:"neutral",  reli:0.03, label:"Engagement",      sub:"actions taken under stress",    hint:"After multi-event slumps: how many actions does he take in the next 4 plays vs. expected? Low = withdraws / checks out."},
+          {key:"aggressor",  m:mm.aggressor,  type:"neutral",  reli:0.05, label:"Shot-Seeking",    sub:"more shots under stress",       hint:"After multi-event slumps: does FGA-Rate spike (force shots) or fall (fade away)? Both extremes can be tells."},
+          {key:"bounceback", m:mm.bounceback, type:"positive", reli:0.04, label:"Bounceback eFG",  sub:"shooting recovers under stress",hint:"After multi-event slumps: does eFG% on subsequent shots recover? High = clutch shot-making mentality."},
+          {key:"stamina",    m:staminaM,      type:"adverse",  reli:0.07, label:"Match Stamina",   sub:"adverse rate H2 vs H1",         hint:"Half-2 vs Half-1 adverse-event rate. >1 = gets worse in the 2nd half (conditioning / mental fatigue). <1 = stays stable or improves."},
         ];
         for (const c of cards) {
           if (!c.m || c.m.idx == null) continue;
@@ -3987,6 +4003,9 @@ function MindTab({p}) {
                 <div style={{fontSize:11,color:"#cbd5e1",lineHeight:1.6}}>
                   These are <strong>behavioral tendencies observed in play-by-play data</strong>, not deterministic claims. A "streak" is defined as ≥3 adverse events (missed FG, turnover, foul, missed FT) in a player's last 4 actions; we then track how he behaves in his next 4 actions.
                   Patterns shown here are <strong style={{color:"#fbbf24"}}>quantitative starting points for film review</strong> — confirm with tape before drawing conclusions. Causal interpretation requires controlling for game-state, coach-reactions, and matchup — which we don't.
+                </div>
+                <div style={{fontSize:11,color:"#fca5a5",lineHeight:1.6,marginTop:8,paddingTop:8,borderTop:"1px solid #1e3a5f"}}>
+                  <strong style={{color:"#ef4444"}}>⚠ Signal reliability (read this):</strong> we measured how well each index repeats season-to-season for players with 2+ seasons (test-retest correlation). The streak-response indices score <strong>r ≈ 0.02–0.07 — essentially zero</strong>: a player flagged this season is close to random next season. Treat them as <strong>descriptive of this sample, not as a predictive trait</strong> — do not project them forward. For reference, FT% reliability is <strong>r ≈ 0.50</strong> (a genuinely stable skill). Each card carries its own reliability tag.
                 </div>
               </div>
             </Tip>
