@@ -6492,6 +6492,205 @@ function CompsTab({p}) {
 }
 
 // ═══════════════════════════════════════════════════════════
+// TAB: RISK PROFILE  (Phase 2 — Market vs Merit + two risk axes)
+// ═══════════════════════════════════════════════════════════
+function RiskBar({label, pct, color, blurb}) {
+  return (
+    <div className="rounded-xl p-4" style={{background:"#0d1117",border:`1px solid ${color}33`}}>
+      <div className="flex items-baseline justify-between mb-2">
+        <span className="text-sm font-semibold text-gray-200">{label}</span>
+        <span className="text-2xl font-bold" style={{color}}>{pct}%</span>
+      </div>
+      <div className="h-2.5 rounded-full overflow-hidden" style={{background:"#1f2937"}}>
+        <div className="h-full rounded-full" style={{width:`${pct}%`,background:color}}/>
+      </div>
+      <p className="text-xs text-gray-400 mt-2 leading-snug">{blurb}</p>
+    </div>
+  );
+}
+
+function RiskProfileTab({p}) {
+  const [yourPick, setYourPick] = useState(7);
+  if (!p) return null;
+  const rp = p.riskProfile;
+  if (!rp || (rp.bustRisk == null && rp.starUpside == null)) {
+    return (
+      <div className="rounded-2xl p-8 text-center text-gray-400"
+           style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+        No draft risk profile is available for this player yet.
+      </div>
+    );
+  }
+
+  const bust = rp.bustRisk != null ? Math.round(rp.bustRisk * 100) : null;
+  const star = rp.starUpside != null ? Math.round(rp.starUpside * 100) : null;
+  const merit = rp.meritSlot;
+  const cons = rp.consensus;
+  const p20 = rp.marketP20, p50 = rp.marketP50, p80 = rp.marketP80;
+  const hasMarket = p20 != null && p80 != null;
+  const showUp = star != null && star >= 15 && (rp.upsideFactors || []).length > 0;
+  const showRisk = bust != null && bust >= 35 && (rp.riskFactors || []).length > 0;
+
+  const slotFmt = (s) => s == null ? "—" : `#${Math.round(s)}`;
+  const pos = (pick) => `${Math.max(0, Math.min(100, ((pick - 1) / 59) * 100))}%`;
+
+  // Verdict: model (merit) vs market (consensus)
+  let verdict = null;
+  if (hasMarket && merit != null) {
+    const gap = p50 - merit;
+    if (gap >= 12) verdict = { txt: "Potential STEAL — our model values him well above where the market drafts him", color: "#22c55e" };
+    else if (gap <= -12) verdict = { txt: "DRAFT-DAY RISK — the market is higher on him than our model; an early pick here could disappoint", color: "#ef4444" };
+    else verdict = { txt: "Fairly valued — model and market broadly agree", color: "#9ca3af" };
+  }
+
+  // "Still there at pick K?"
+  let avail = null;
+  if (hasMarket) {
+    if (yourPick <= p20) avail = { txt: "Very likely still available", color: "#22c55e" };
+    else if (yourPick <= p50) avail = { txt: "Likely still available", color: "#86efac" };
+    else if (yourPick <= p80) avail = { txt: "Coin flip — leaning gone", color: "#fbbf24" };
+    else avail = { txt: "Very likely already gone", color: "#ef4444" };
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Intro */}
+      <div className="rounded-xl p-4 text-sm text-gray-300 leading-relaxed"
+           style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+        <span className="font-semibold text-gray-100">How to read this tab.</span> Two
+        questions every front office asks: <span className="text-gray-100">“Where will
+        he actually be drafted?”</span> (the market) and <span className="text-gray-100">
+        “Where does he belong on talent?”</span> (our model). The gap between them, plus
+        two risk axes below, frame the real decision: <span className="text-gray-100">which
+        pick could get you fired — and which one would you regret passing on.</span>
+      </div>
+
+      {/* Draft Range */}
+      <div className="rounded-2xl p-5" style={{background:"linear-gradient(135deg,#0d1117,#111827)",border:"1px solid #1f2937"}}>
+        <h3 className="text-base font-bold text-gray-100 mb-1">Draft Range</h3>
+        <p className="text-xs text-gray-400 mb-5">Pick 1 (left) → 60 (right). Blue band =
+          where the market realistically drafts him. Gold marker = where our model says he
+          belongs in an average draft.</p>
+
+        <div className="relative h-16 mb-2">
+          {/* track */}
+          <div className="absolute left-0 right-0 top-7 h-1.5 rounded-full" style={{background:"#1f2937"}}/>
+          {/* market band */}
+          {hasMarket && (
+            <div className="absolute top-6 h-3.5 rounded-full"
+                 style={{left:pos(p20), width:`calc(${pos(p80)} - ${pos(p20)})`, background:"#3b82f655", border:"1px solid #3b82f6"}}/>
+          )}
+          {/* market median */}
+          {hasMarket && (
+            <div className="absolute flex flex-col items-center" style={{left:pos(p50), transform:"translateX(-50%)", top:0}}>
+              <span className="text-[10px] text-blue-300 font-semibold">Market #{Math.round(p50)}</span>
+              <div className="w-0.5 h-9 mt-0.5" style={{background:"#3b82f6"}}/>
+            </div>
+          )}
+          {/* merit marker */}
+          {merit != null && (
+            <div className="absolute flex flex-col items-center" style={{left:pos(merit), transform:"translateX(-50%)", top:0}}>
+              <div className="w-0.5 h-9" style={{background:"#fbbf24"}}/>
+              <span className="text-[10px] text-yellow-300 font-semibold mt-0.5">Merit #{Math.round(merit)}</span>
+            </div>
+          )}
+        </div>
+        {/* scale ticks */}
+        <div className="flex justify-between text-[10px] text-gray-600 px-0.5">
+          {[1,10,20,30,40,50,60].map(t=> <span key={t}>{t}</span>)}
+        </div>
+
+        {verdict && (
+          <div className="mt-4 rounded-lg px-3 py-2 text-sm font-medium"
+               style={{background:`${verdict.color}11`, border:`1px solid ${verdict.color}44`, color:verdict.color}}>
+            {verdict.txt}
+          </div>
+        )}
+        {!hasMarket && (
+          <p className="mt-3 text-xs text-gray-500">Not on consensus draft boards — market
+            range unavailable. Merit slot reflects model value only.</p>
+        )}
+
+        {/* Availability tool */}
+        {hasMarket && (
+          <div className="mt-4 pt-4 border-t border-gray-800">
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-sm text-gray-300">If your pick is</span>
+              <input type="range" min="1" max="40" value={yourPick}
+                     onChange={e=>setYourPick(Number(e.target.value))}
+                     className="flex-1 min-w-[120px]" style={{accentColor:"#3b82f6"}}/>
+              <span className="text-sm font-bold text-blue-300 w-10">#{yourPick}</span>
+            </div>
+            {avail && (
+              <div className="mt-2 text-sm font-semibold" style={{color:avail.color}}>
+                {avail.txt}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Two risk axes */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <RiskBar label="🔥 Bust Risk — the pick that gets you fired" pct={bust ?? 0} color="#ef4444"
+                 blurb="How likely he delivers LESS than the value his draft slot demands. High here at an early pick is the career-defining miss."/>
+        <RiskBar label="⭐ Star Upside — the pick you'd regret passing on" pct={star ?? 0} color="#22c55e"
+                 blurb="How likely he becomes an All-Star-level player. High here at a late slot is the lurking star you don't want to let slip."/>
+      </div>
+
+      {/* Best-case role / ceiling archetype */}
+      {rp.ceilingArchetype && (
+        <div className="rounded-xl p-4" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+          <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">Best-case NBA role</div>
+          <div className="text-lg font-bold text-gray-100">{rp.ceilingArchetype}</div>
+          {rp.ceilingWA != null && (
+            <p className="text-xs text-gray-400 mt-1">If his development hits, this is the
+              archetype he projects into. The top 10% of {rp.ceilingArchetype}s historically
+              peaked around <span className="text-gray-200 font-semibold">{Math.round(rp.ceilingWA)} Wins Added</span>.
+              Archetype matters: the same physical tools are worth far more as a high-ceiling
+              role than a replaceable one.</p>
+          )}
+        </div>
+      )}
+
+      {/* Reason codes */}
+      {(showUp || showRisk) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {showUp && (
+            <div className="rounded-xl p-4" style={{background:"#0d1117",border:"1px solid #22c55e33"}}>
+              <div className="text-sm font-semibold text-green-400 mb-2">What raises his ceiling</div>
+              <ul className="space-y-1.5">
+                {rp.upsideFactors.map((f,i)=>(
+                  <li key={i} className="text-xs text-gray-300 flex gap-2"><span className="text-green-500">↑</span>{f}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {showRisk && (
+            <div className="rounded-xl p-4" style={{background:"#0d1117",border:"1px solid #ef444433"}}>
+              <div className="text-sm font-semibold text-red-400 mb-2">What could sink the pick</div>
+              <ul className="space-y-1.5">
+                {rp.riskFactors.map((f,i)=>(
+                  <li key={i} className="text-xs text-gray-300 flex gap-2"><span className="text-red-500">↓</span>{f}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Footer / confidence */}
+      <p className="text-[11px] text-gray-600 leading-relaxed">
+        Risk axes are empirical: of past prospects with a similar projected value and archetype,
+        what share busted vs. became stars{rp.compStrength!=null ? ` (≈${Math.round(rp.compStrength)} comparable prospects weighted)` : ""}.
+        Bust risk is well-calibrated on 2008–2018 drafts; James Wiseman scored 96% bust, Tyrese
+        Haliburton 37% star upside. See the Method tab for full methodology and caveats.
+      </p>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
 // TAB: METHODOLOGY
 // ═══════════════════════════════════════════════════════════
 function MethodologyTab() {
@@ -6499,6 +6698,7 @@ function MethodologyTab() {
 
   const sections = [
     {cat:"ppWA Projection Model",items:["monteCarlo","posClassification"],desc:"The core engine: a position-stratified gradient-boosting model combined with a calibrated Elite Detector. Trained on 1,784 NCAA and international prospects (draft classes 2010–2016) with verified NBA outcomes. Target variable: Peak Wins Added — best 3-consecutive-season window in first 8 NBA years (min 200 minutes/season). Features: 8–12 theoretically grounded variables per position group (Playmaker / Wing / Big), including age, BPM percentile, BPM trajectory, conference strength, free-throw rate, athleticism score, and position-specific shooting/playmaking signals. Output: ppWA = Projected Peak Wins Added — a single, interpretable number: 'this player projects to add X wins above replacement at his peak'. Validated on holdout classes 2017–2019 with Spearman rank correlation ρ = 0.460 (out-of-sample). Cross-validated r = 0.462 (5-fold CV). Note: the model was trained on prospects who were scouted and drafted — projections for undrafted players are extrapolations beyond the training distribution."},
+    {cat:"Risk Profile Tab — Draft Range & Risk (NEW)",items:[],desc:"Reframes the projection as a front-office decision: where a player will be drafted vs. where he belongs, plus risk in both directions. (1) MARKET RANGE — the realistic pick range. Built by calibrating actual draft slot against consensus-mock rank on draft classes 2008–2018; out-of-sample on 2019–2025 the actual pick falls inside the predicted p20–p80 band 63% of the time (target ~60%), with Spearman(consensus, pick)=+0.85. (2) MERIT SLOT — where a player belongs on talent in an average draft. Our projected value (ppWA) is recalibrated onto the realized-Wins-Added scale, then mapped through an isotonic curve E[peak Wins Added | pick] built from mature drafts. Our value predicts realized NBA outcome (peak Wins Added) markedly better than the actual draft order did: Spearman +0.54 vs +0.29. The gap between Merit and Market is the steal/bust signal (e.g. Tyrese Haliburton: market #10, merit #1). (3) TWO RISK AXES, computed from a kernel-weighted empirical distribution of comparable past prospects (similar projected value × archetype affinity): BUST RISK = share of comps who delivered below the value their slot demanded — well-calibrated (predicted 75–100% → 86% actual bust rate; James Wiseman scored 96%); STAR UPSIDE = share who reached All-Star level, blended 70/30 with the archetype's empirical All-Star rate so high-ceiling archetypes get proper credit. (4) ARCHETYPE VALUE — positional value is measured, not assumed: we compute each NBA archetype's realized peak Wins Added distribution from ~1,210 NBA players. Scoring Playmaker (ceiling ~29 WA) and Stretch Rim Protector (~28) carry the highest ceilings; pure rim-runners and role-archetypes cap around starter level. This is why a player's best-case archetype shapes his upside. CAVEATS: market range needs a consensus-board presence (most deep prospects have none); the box-score value model can under-rate raw, young upside; reason-code factors are surfaced from the projection engine and are noisier for international prospects (FIBA signals translate imperfectly)."},
     {cat:"International Adjustments",items:[],desc:"International players receive three adjustments: (1) League Strength via empirical bridge-player ratios (2,655 players who played both intl and NBA). Euroleague=1.40, ACB=1.39, BBL=1.18 (NCAA Power=1.0 anchor). (2) Liga-BPM-Scaler: Raw BPM proxy (PER+eDiff) is multiplied by a league-specific scaler (Euroleague ×2.1, ACB ×1.9, NBL ×1.65, etc.) to translate to NCAA-equivalent BPM before feature engineering. (3) Conf-adj post-hoc with translatable-USG-aware caps for strong leagues."},
     {cat:"The 5 Pillars (DNA Scores)",items:["feel","shootScore","defScore","funcAth","selfCreation","overall"],desc:"Position-adjusted percentile scores (0–100) capturing the fundamental dimensions of prospect evaluation. Each pillar uses era-adjusted percentiles computed against ~34k college + ~9k international players since 2008. Box Creation (Ben Taylor method) measures total offensive creation: Scoring Creation (USG×TS) + Assist Creation (AST%×teammate possessions). Works identically for NCAA and international players."},
     {cat:"Shooting Projection",items:["projNba3p","projNba3pa","projNba3par","touchPrior"],desc:"Bayesian Beta-Binomial model for NBA 3P shooting translation. Prior: FT%-based 'motor touch' (strongest single predictor of NBA shooting per Berger 2022). κ=200 pseudo-attempts means low-volume college shooters regress heavily toward their FT% prior. For players without midrange data (internationals, pre-2010), a simplified FT%-only prior is used with higher FT% weighting."},
@@ -7647,6 +7847,7 @@ const TABS = [
   {id:"comps",label:"Comps",icon:"⇄"},
   {id:"devtrajectory",label:"Development",icon:"📈"},
   {id:"projection",label:"Projection",icon:"◆"},
+  {id:"riskprofile",label:"Risk Profile",icon:"🎯"},
   {id:"methodology",label:"Method",icon:"📖"},
 ];
 
@@ -8236,6 +8437,7 @@ export default function App() {
             {tab==="comps"&&<CompsTab p={p}/>}
             {tab==="devtrajectory"&&<DevTrajectoryTab p={p}/>}
             {tab==="projection"&&<ProjectionTab p={p}/>}
+            {tab==="riskprofile"&&<RiskProfileTab p={p}/>}
             {tab==="methodology"&&<MethodologyTab/>}
           </>
         )}
