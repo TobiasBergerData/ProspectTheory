@@ -5,6 +5,51 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, Cell, ResponsiveConta
 // CONSTANTS & HELPERS
 // ═══════════════════════════════════════════════════════════
 const TC = { Superstar:"#fbbf24","All-Star":"#f97316",Starter:"#3b82f6","Role Player":"#06b6d4",Replacement:"#8b5cf6",Negative:"#6b7280","Never Made NBA":"#374151","Out":"#374151" };
+// Empirical NBA outcomes per archetype — what tier these players TYPICALLY reach.
+// Source: data-pipeline archetype_value_prior.csv (realized peak Wins Added of
+// ~1,210 NBA players by their pre-draft archetype, draft classes ~2008–2024).
+// ceiling = tier of the top-10% (p90) outcome; starterPlus/allstarPlus = % who
+// reached Starter+ (peak WA≥15) / All-Star+ (≥25). Empirical, not normative.
+const ARCHETYPE_TIER = {
+  "Scoring Playmaker":        {ceiling:"All-Star",   starterPlus:20, allstarPlus:13, n:123},
+  "Stretch Rim Protector":    {ceiling:"All-Star",   starterPlus:21, allstarPlus:13, n:61},
+  "Rim Protector":            {ceiling:"Starter",    starterPlus:23, allstarPlus:9,  n:57},
+  "Stretch Big":              {ceiling:"Starter",    starterPlus:15, allstarPlus:9,  n:100},
+  "Passing Hub":              {ceiling:"Starter",    starterPlus:17, allstarPlus:8,  n:24},
+  "Initiator Wing":           {ceiling:"Role Player",starterPlus:10, allstarPlus:8,  n:106},
+  "Non-Specialized Playmaker":{ceiling:"Starter",    starterPlus:20, allstarPlus:7,  n:30},
+  "Point Forward":            {ceiling:"Starter",    starterPlus:14, allstarPlus:7,  n:42},
+  "Spacing Guard":            {ceiling:"Starter",    starterPlus:15, allstarPlus:6,  n:54},
+  "3-and-D Wing":             {ceiling:"Role Player",starterPlus:11, allstarPlus:5,  n:19},
+  "Non-Specialized Wing":     {ceiling:"Starter",    starterPlus:18, allstarPlus:5,  n:62},
+  "Defensive Guard":          {ceiling:"Starter",    starterPlus:21, allstarPlus:3,  n:39},
+  "Scoring Wing":             {ceiling:"Starter",    starterPlus:11, allstarPlus:3,  n:374},
+  "Glass Cleaner":            {ceiling:"Role Player",starterPlus:7,  allstarPlus:3,  n:29},
+  "Defensive Wing":           {ceiling:"Role Player",starterPlus:9,  allstarPlus:0,  n:33},
+  "Short Roll Playmaker":     {ceiling:"Role Player",starterPlus:4,  allstarPlus:0,  n:27},
+};
+// Value bands for the Research tab: realized peak Wins Added by archetype.
+// floor = 25th pct outcome (downside), median = typical, ceiling = 90th pct (upside).
+// n = sample size → how confident we are the band is real (more data = tighter estimate).
+// grp = position group (for color). Same source as ARCHETYPE_TIER.
+const ARCHETYPE_BANDS = {
+  "Scoring Playmaker":        {floor:0,   median:2.0, ceiling:29.2, n:123, grp:"Playmaker"},
+  "Stretch Rim Protector":    {floor:2.2, median:6.1, ceiling:28.4, n:61,  grp:"Big"},
+  "Stretch Big":              {floor:0,   median:1.7, ceiling:23.4, n:100, grp:"Big"},
+  "Rim Protector":            {floor:0.7, median:4.6, ceiling:22.1, n:57,  grp:"Big"},
+  "Defensive Guard":          {floor:0,   median:1.8, ceiling:21.6, n:39,  grp:"Playmaker"},
+  "Point Forward":            {floor:0,   median:0.4, ceiling:19.5, n:42,  grp:"Wing"},
+  "Non-Specialized Wing":     {floor:0,   median:-0.6,ceiling:19.4, n:62,  grp:"Wing"},
+  "Spacing Guard":            {floor:0,   median:3.2, ceiling:19.1, n:54,  grp:"Playmaker"},
+  "Passing Hub":              {floor:0,   median:0.8, ceiling:18.3, n:24,  grp:"Big"},
+  "Non-Specialized Playmaker":{floor:0,   median:0.3, ceiling:16.7, n:30,  grp:"Playmaker"},
+  "Scoring Wing":             {floor:0,   median:0.8, ceiling:16.3, n:374, grp:"Wing"},
+  "Initiator Wing":           {floor:0,   median:0.4, ceiling:13.8, n:106, grp:"Wing"},
+  "3-and-D Wing":             {floor:0,   median:-1.0,ceiling:13.8, n:19,  grp:"Wing"},
+  "Glass Cleaner":            {floor:0,   median:0.5, ceiling:12.4, n:29,  grp:"Big"},
+  "Defensive Wing":           {floor:0,   median:-0.4,ceiling:12.3, n:33,  grp:"Wing"},
+  "Short Roll Playmaker":     {floor:0,   median:2.7, ceiling:10.2, n:27,  grp:"Big"},
+};
 // Archetype colors — used in header pills and anywhere ARCH_MAP isn't in scope
 const ARCH_COLORS = {
   "Scoring Playmaker":"#fbbf24","Floor General":"#f97316","Spacing Guard":"#22c55e","Defensive Guard":"#3b82f6",
@@ -1409,6 +1454,8 @@ function mapProfile(d) {
     mindMetrics: d.mindMetrics ?? null,
     // Per-Game-Stats für Scouting Skill-Curve + Development In-Season-Trajectory
     gameLogs: d.gameLogs ?? null,
+    // Draft Risk Profile (Market/Merit range + bust/star risk) — inject_draft_risk.py
+    riskProfile: d.riskProfile ?? null,
     modernShotProfile: d.modern_shot_profile ?? null,
     sosPctl: d.sos_pctl ?? null,
     teamQuality: d.team_quality_pctl ?? null,
@@ -5575,6 +5622,7 @@ function ScoutingTab({p, mode="scouting"}) {
                   <div className="mb-1" style={{color:"#cbd5e1"}}>{info.desc}</div>
                   {info.formula&&<div className="mb-1"><span style={{color:"#94a3b8"}}>Formula:</span> <code className="text-xs" style={{color:"#7dd3fc"}}>{info.formula}</code></div>}
                   {info.freqPct != null && <div className="mb-1"><span style={{color:"#94a3b8"}}>Frequency:</span> <span style={{color: freqColor(info.freqPct)}}>{info.freqPct}% of {(info.pos||["Wing"])[0]}s</span> <span style={{color:"#475569"}}>({freqLabel(info.freqPct)})</span></div>}
+                  {ARCHETYPE_TIER[name] && <div className="mb-1"><span style={{color:"#94a3b8"}}>Typical NBA value (n={ARCHETYPE_TIER[name].n}):</span> <span style={{color:TC[ARCHETYPE_TIER[name].ceiling]}}>{ARCHETYPE_TIER[name].ceiling} ceiling</span> <span style={{color:"#475569"}}>· {ARCHETYPE_TIER[name].starterPlus}% Starter+, {ARCHETYPE_TIER[name].allstarPlus}% All-Star+</span></div>}
                   {info.roles&&<div><span style={{color:"#94a3b8"}}>Key roles:</span> <span style={{color:"#f97316"}}>{info.roles.join(", ")}</span></div>}
                   {info.pos&&<div className="mt-1"><span style={{color:"#94a3b8"}}>Positions:</span> <span style={{color:posMatch?"#86efac":"#fca5a5"}}>{info.pos.join(", ")}{posMatch?"":" ⚠ mismatch"}</span></div>}
                   {isTriggered && !isRanked && <div className="mt-1 text-xs" style={{color:"#fb923c"}}>✓ Triggered by pipeline thresholds</div>}
@@ -5606,6 +5654,12 @@ function ScoutingTab({p, mode="scouting"}) {
                   </div>
                   {showDesc && <div className="mt-1.5 text-xs leading-relaxed" style={{color: cardColor + "aa", fontWeight: isPrimary ? 500 : 400}}>{info.desc.split(".")[0]}.</div>}
                   {showDesc && info.formula && <div className="mt-1 text-xs" style={{color:"#4b5563"}}>Trigger: {info.formula}</div>}
+                  {showDesc && ARCHETYPE_TIER[name] && (
+                    <div className="mt-1 text-[10px] leading-snug" style={{color: cardColor + "99"}}>
+                      NBA ceiling: <span style={{color: TC[ARCHETYPE_TIER[name].ceiling], fontWeight:600}}>{ARCHETYPE_TIER[name].ceiling}</span>
+                      <span style={{color:"#475569"}}> · {ARCHETYPE_TIER[name].starterPlus}% Starter+ · {ARCHETYPE_TIER[name].allstarPlus}% All-Star+</span>
+                    </div>
+                  )}
                   {info.freqPct != null && (
                     <div className="mt-1 text-[10px] flex items-center gap-1" style={{color: isRanked ? cardColor + "88" : "#475569"}}>
                       <span>{info.freqPct}%</span>
@@ -6642,13 +6696,22 @@ function RiskProfileTab({p}) {
       {rp.ceilingArchetype && (
         <div className="rounded-xl p-4" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
           <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">Best-case NBA role</div>
-          <div className="text-lg font-bold text-gray-100">{rp.ceilingArchetype}</div>
-          {rp.ceilingWA != null && (
-            <p className="text-xs text-gray-400 mt-1">If his development hits, this is the
-              archetype he projects into. The top 10% of {rp.ceilingArchetype}s historically
-              peaked around <span className="text-gray-200 font-semibold">{Math.round(rp.ceilingWA)} Wins Added</span>.
-              Archetype matters: the same physical tools are worth far more as a high-ceiling
-              role than a replaceable one.</p>
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <span className="text-lg font-bold text-gray-100">{rp.ceilingArchetype}</span>
+            {ARCHETYPE_TIER[rp.ceilingArchetype] && (
+              <span className="text-xs px-2 py-0.5 rounded font-semibold"
+                    style={{background:`${TC[ARCHETYPE_TIER[rp.ceilingArchetype].ceiling]}22`, color:TC[ARCHETYPE_TIER[rp.ceilingArchetype].ceiling]}}>
+                {ARCHETYPE_TIER[rp.ceilingArchetype].ceiling} ceiling
+              </span>
+            )}
+          </div>
+          {ARCHETYPE_TIER[rp.ceilingArchetype] && (
+            <p className="text-xs text-gray-400 mt-1.5">Of past {rp.ceilingArchetype}s,
+              <span className="text-gray-200 font-semibold"> {ARCHETYPE_TIER[rp.ceilingArchetype].starterPlus}%</span> reached
+              Starter level or better and
+              <span className="text-gray-200 font-semibold"> {ARCHETYPE_TIER[rp.ceilingArchetype].allstarPlus}%</span> became
+              All-Stars (n={ARCHETYPE_TIER[rp.ceilingArchetype].n}). Archetype matters: the same
+              physical tools are worth far more as a high-ceiling role than a replaceable one.</p>
           )}
         </div>
       )}
@@ -6691,6 +6754,150 @@ function RiskProfileTab({p}) {
 }
 
 // ═══════════════════════════════════════════════════════════
+// TAB: RESEARCH  (parked next to Risk Profile — archetype value bands)
+// ═══════════════════════════════════════════════════════════
+function _conf(n) {
+  if (n >= 80) return { label: "High", color: "#22c55e" };
+  if (n >= 40) return { label: "Medium", color: "#fbbf24" };
+  return { label: "Low", color: "#9ca3af" };
+}
+
+function ResearchTab({p}) {
+  const [sortKey, setSortKey] = useState("ceiling");
+  const playerArch = p?.riskProfile?.ceilingArchetype || p?.archetype || null;
+  const GRP_COL = { Playmaker:"#8b5cf6", Wing:"#f59e0b", Big:"#3b82f6" };
+  const MAXWA = 30;
+  const xp = (wa) => Math.max(0, Math.min(100, (wa / MAXWA) * 100));
+
+  const bands = Object.entries(ARCHETYPE_BANDS).map(([name, b]) => ({ name, ...b }));
+  const sorted = [...bands].sort((a, b) => b[sortKey] - a[sortKey]);
+  const top = (key) => [...bands].sort((a, b) => b[key] - a[key])[0];
+  const upside = top("ceiling"), safe = top("floor"), bal = top("median");
+
+  const CALLOUTS = [
+    { title: "Swing for upside", sub: "highest ceiling", a: upside, val: upside.ceiling, color: "#f97316",
+      blurb: "If you're picking high and need a star, this type has the best top-10% outcome." },
+    { title: "Safest bet", sub: "highest floor", a: safe, val: safe.floor, color: "#22c55e",
+      blurb: "If you need a player who sticks, this type's downside (25th pct) is the least bad." },
+    { title: "Best balanced", sub: "highest median", a: bal, val: bal.median, color: "#3b82f6",
+      blurb: "For the best typical (median) outcome — the middle-of-the-road expectation." },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-xl px-3 py-1 inline-block text-[11px] font-semibold"
+           style={{background:"#f9731618",color:"#fb923c",border:"1px solid #f9731633"}}>
+        RESEARCH · experimental
+      </div>
+
+      <div className="rounded-xl p-4 text-sm text-gray-300 leading-relaxed"
+           style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+        <span className="font-semibold text-gray-100">Archetype value bands.</span> Each bar
+        is the realized NBA outcome range (peak Wins Added) of past players of that type:
+        left edge = downside (25th pct), dot = typical (median), right edge = upside (90th pct).
+        Read it as a draft strategy guide: <span className="text-gray-100">go for upside,
+        play it safe, or take the best middle bet — by player type.</span> The
+        <span className="text-gray-100"> sample size (n)</span> tells you how confident we can be
+        in each band: a type seen 374 times is far better understood than one seen 19 times.
+      </div>
+
+      {/* Three strategy callouts */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {CALLOUTS.map((c) => (
+          <div key={c.title} className="rounded-xl p-4" style={{background:"#0d1117",border:`1px solid ${c.color}33`}}>
+            <div className="text-xs uppercase tracking-wide" style={{color:c.color}}>{c.title}</div>
+            <div className="text-[10px] text-gray-500 mb-1">{c.sub}</div>
+            <div className="text-base font-bold text-gray-100">{c.a.name}</div>
+            <div className="text-xs text-gray-400 mt-1">{c.blurb}</div>
+            <div className="text-[10px] mt-2" style={{color:_conf(c.a.n).color}}>
+              data confidence: {_conf(c.a.n).label} (n={c.a.n})
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Sort toggle */}
+      <div className="flex items-center gap-2 text-xs flex-wrap">
+        <span className="text-gray-500">Sort by:</span>
+        {[["ceiling","Upside (ceiling)"],["median","Typical (median)"],["floor","Floor"],["n","Sample size"]].map(([k,lbl])=>(
+          <button key={k} onClick={()=>setSortKey(k)}
+                  className="px-2.5 py-1 rounded font-medium transition-colors"
+                  style={{background: sortKey===k ? "#f9731622":"#0d1117",
+                          color: sortKey===k ? "#fb923c":"#9ca3af",
+                          border:`1px solid ${sortKey===k ? "#f9731644":"#1f2937"}`}}>
+            {lbl}
+          </button>
+        ))}
+      </div>
+
+      {/* Value-band chart */}
+      <div className="rounded-2xl p-5" style={{background:"linear-gradient(135deg,#0d1117,#111827)",border:"1px solid #1f2937"}}>
+        {/* axis ruler */}
+        <div className="flex items-center mb-2">
+          <div className="w-36 shrink-0"/>
+          <div className="relative flex-1 h-4">
+            {[["Role",8],["Starter",15],["All-Star",25]].map(([lbl,wa])=>(
+              <div key={lbl} className="absolute text-[9px] text-gray-500" style={{left:`${xp(wa)}%`,transform:"translateX(-50%)"}}>{lbl}</div>
+            ))}
+          </div>
+          <div className="w-20 shrink-0"/>
+        </div>
+
+        <div className="space-y-1.5">
+          {sorted.map((b) => {
+            const col = GRP_COL[b.grp] || "#60a5fa";
+            const isPlayer = playerArch === b.name;
+            const cf = _conf(b.n);
+            return (
+              <div key={b.name} className="flex items-center rounded-md px-1 py-1"
+                   style={isPlayer ? {background:"#f9731614",border:"1px solid #f9731644"} : {}}>
+                <div className="w-36 shrink-0 text-[11px] truncate flex items-center gap-1.5"
+                     style={{color: isPlayer ? "#fb923c" : "#cbd5e1", fontWeight: isPlayer ? 700 : 400}}>
+                  <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{background:col}}/>
+                  {b.name}{isPlayer && " ◄"}
+                </div>
+                {/* track */}
+                <div className="relative flex-1 h-5">
+                  {/* tier separators */}
+                  {[8,15,25].map(w=>(
+                    <div key={w} className="absolute top-0 bottom-0 w-px" style={{left:`${xp(w)}%`,background:"#374151"}}/>
+                  ))}
+                  {/* band */}
+                  <div className="absolute top-1.5 h-2 rounded-full"
+                       style={{left:`${xp(b.floor)}%`, width:`${Math.max(1.5, xp(b.ceiling)-xp(b.floor))}%`,
+                               background:`${col}55`, border:`1px solid ${col}`}}/>
+                  {/* median marker */}
+                  <div className="absolute top-0.5 w-1 h-4 rounded-full" style={{left:`${xp(b.median)}%`,transform:"translateX(-50%)",background:col}}/>
+                </div>
+                {/* confidence */}
+                <div className="w-20 shrink-0 text-right text-[10px] flex items-center justify-end gap-1">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full" style={{background:cf.color}}/>
+                  <span style={{color:"#6b7280"}}>n={b.n}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-800 text-[10px] text-gray-500 flex-wrap">
+          <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full" style={{background:"#8b5cf6"}}/>Playmaker</span>
+          <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full" style={{background:"#f59e0b"}}/>Wing</span>
+          <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full" style={{background:"#3b82f6"}}/>Big</span>
+          <span className="ml-auto">Bar = floor→ceiling (peak Wins Added) · dot = median · confidence dot: green=high n, gray=low n</span>
+        </div>
+      </div>
+
+      <p className="text-[11px] text-gray-600 leading-relaxed">
+        Empirical, not normative — rare ≠ better. Bands come from ~1,210 NBA players grouped by
+        their pre-draft archetype (draft classes ~2008–2024). Low-n archetypes (e.g. 3-and-D Wing,
+        n=19) have noisier bands — treat their edges with caution. This view is a research aid for
+        thinking about draft strategy by player type, not a player-specific projection.
+      </p>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
 // TAB: METHODOLOGY
 // ═══════════════════════════════════════════════════════════
 function MethodologyTab() {
@@ -6699,6 +6906,7 @@ function MethodologyTab() {
   const sections = [
     {cat:"ppWA Projection Model",items:["monteCarlo","posClassification"],desc:"The core engine: a position-stratified gradient-boosting model combined with a calibrated Elite Detector. Trained on 1,784 NCAA and international prospects (draft classes 2010–2016) with verified NBA outcomes. Target variable: Peak Wins Added — best 3-consecutive-season window in first 8 NBA years (min 200 minutes/season). Features: 8–12 theoretically grounded variables per position group (Playmaker / Wing / Big), including age, BPM percentile, BPM trajectory, conference strength, free-throw rate, athleticism score, and position-specific shooting/playmaking signals. Output: ppWA = Projected Peak Wins Added — a single, interpretable number: 'this player projects to add X wins above replacement at his peak'. Validated on holdout classes 2017–2019 with Spearman rank correlation ρ = 0.460 (out-of-sample). Cross-validated r = 0.462 (5-fold CV). Note: the model was trained on prospects who were scouted and drafted — projections for undrafted players are extrapolations beyond the training distribution."},
     {cat:"Risk Profile Tab — Draft Range & Risk (NEW)",items:[],desc:"Reframes the projection as a front-office decision: where a player will be drafted vs. where he belongs, plus risk in both directions. (1) MARKET RANGE — the realistic pick range. Built by calibrating actual draft slot against consensus-mock rank on draft classes 2008–2018; out-of-sample on 2019–2025 the actual pick falls inside the predicted p20–p80 band 63% of the time (target ~60%), with Spearman(consensus, pick)=+0.85. (2) MERIT SLOT — where a player belongs on talent in an average draft. Our projected value (ppWA) is recalibrated onto the realized-Wins-Added scale, then mapped through an isotonic curve E[peak Wins Added | pick] built from mature drafts. Our value predicts realized NBA outcome (peak Wins Added) markedly better than the actual draft order did: Spearman +0.54 vs +0.29. The gap between Merit and Market is the steal/bust signal (e.g. Tyrese Haliburton: market #10, merit #1). (3) TWO RISK AXES, computed from a kernel-weighted empirical distribution of comparable past prospects (similar projected value × archetype affinity): BUST RISK = share of comps who delivered below the value their slot demanded — well-calibrated (predicted 75–100% → 86% actual bust rate; James Wiseman scored 96%); STAR UPSIDE = share who reached All-Star level, blended 70/30 with the archetype's empirical All-Star rate so high-ceiling archetypes get proper credit. (4) ARCHETYPE VALUE — positional value is measured, not assumed: we compute each NBA archetype's realized peak Wins Added distribution from ~1,210 NBA players. Scoring Playmaker (ceiling ~29 WA) and Stretch Rim Protector (~28) carry the highest ceilings; pure rim-runners and role-archetypes cap around starter level. This is why a player's best-case archetype shapes his upside. CAVEATS: market range needs a consensus-board presence (most deep prospects have none); the box-score value model can under-rate raw, young upside; reason-code factors are surfaced from the projection engine and are noisier for international prospects (FIBA signals translate imperfectly)."},
+    {cat:"Research Tab — Archetype Value Bands (EXPERIMENTAL)",items:[],desc:"A draft-strategy research aid, parked next to Risk Profile. For each of 16 NBA archetypes we compute the realized peak Wins Added distribution of past players of that type (~1,210 NBA players, draft classes ~2008–2024): floor (25th percentile = downside), median (typical), and ceiling (90th percentile = upside). Displayed as horizontal value bands so you can read draft strategy by player type: highest ceiling = swing-for-upside pick (Scoring Playmaker / Stretch Rim Protector, ceiling ~28–29 WA); highest floor = safest pick (Stretch Rim Protector); highest median = best balanced bet. Crucially, each band carries its SAMPLE SIZE (n) as a data-confidence signal — a type observed 374 times (Scoring Wing) is far better understood than one seen 19 times (3-and-D Wing), whose band edges are noisier. Rarity is shown for confidence, NOT as a value claim (rare ≠ better). The same archetype-value numbers also appear in the Roles & Archetypes tab (each archetype's NBA ceiling tier + % reaching Starter+/All-Star+) so you can see what to expect from a player type at a glance."},
     {cat:"International Adjustments",items:[],desc:"International players receive three adjustments: (1) League Strength via empirical bridge-player ratios (2,655 players who played both intl and NBA). Euroleague=1.40, ACB=1.39, BBL=1.18 (NCAA Power=1.0 anchor). (2) Liga-BPM-Scaler: Raw BPM proxy (PER+eDiff) is multiplied by a league-specific scaler (Euroleague ×2.1, ACB ×1.9, NBL ×1.65, etc.) to translate to NCAA-equivalent BPM before feature engineering. (3) Conf-adj post-hoc with translatable-USG-aware caps for strong leagues."},
     {cat:"The 5 Pillars (DNA Scores)",items:["feel","shootScore","defScore","funcAth","selfCreation","overall"],desc:"Position-adjusted percentile scores (0–100) capturing the fundamental dimensions of prospect evaluation. Each pillar uses era-adjusted percentiles computed against ~34k college + ~9k international players since 2008. Box Creation (Ben Taylor method) measures total offensive creation: Scoring Creation (USG×TS) + Assist Creation (AST%×teammate possessions). Works identically for NCAA and international players."},
     {cat:"Shooting Projection",items:["projNba3p","projNba3pa","projNba3par","touchPrior"],desc:"Bayesian Beta-Binomial model for NBA 3P shooting translation. Prior: FT%-based 'motor touch' (strongest single predictor of NBA shooting per Berger 2022). κ=200 pseudo-attempts means low-volume college shooters regress heavily toward their FT% prior. For players without midrange data (internationals, pre-2010), a simplified FT%-only prior is used with higher FT% weighting."},
@@ -7848,6 +8056,7 @@ const TABS = [
   {id:"devtrajectory",label:"Development",icon:"📈"},
   {id:"projection",label:"Projection",icon:"◆"},
   {id:"riskprofile",label:"Risk Profile",icon:"🎯"},
+  {id:"research",label:"Research",icon:"🔬"},
   {id:"methodology",label:"Method",icon:"📖"},
 ];
 
@@ -8438,6 +8647,7 @@ export default function App() {
             {tab==="devtrajectory"&&<DevTrajectoryTab p={p}/>}
             {tab==="projection"&&<ProjectionTab p={p}/>}
             {tab==="riskprofile"&&<RiskProfileTab p={p}/>}
+            {tab==="research"&&<ResearchTab p={p}/>}
             {tab==="methodology"&&<MethodologyTab/>}
           </>
         )}
