@@ -33,22 +33,22 @@ const ARCHETYPE_TIER = {
 // n = sample size → how confident we are the band is real (more data = tighter estimate).
 // grp = position group (for color). Same source as ARCHETYPE_TIER.
 const ARCHETYPE_BANDS = {
-  "Scoring Playmaker":        {floor:0,   median:2.0, ceiling:29.2, n:123, grp:"Playmaker"},
-  "Stretch Rim Protector":    {floor:2.2, median:6.1, ceiling:28.4, n:61,  grp:"Big"},
-  "Stretch Big":              {floor:0,   median:1.7, ceiling:23.4, n:100, grp:"Big"},
-  "Rim Protector":            {floor:0.7, median:4.6, ceiling:22.1, n:57,  grp:"Big"},
-  "Defensive Guard":          {floor:0,   median:1.8, ceiling:21.6, n:39,  grp:"Playmaker"},
-  "Point Forward":            {floor:0,   median:0.4, ceiling:19.5, n:42,  grp:"Wing"},
-  "Non-Specialized Wing":     {floor:0,   median:-0.6,ceiling:19.4, n:62,  grp:"Wing"},
-  "Spacing Guard":            {floor:0,   median:3.2, ceiling:19.1, n:54,  grp:"Playmaker"},
-  "Passing Hub":              {floor:0,   median:0.8, ceiling:18.3, n:24,  grp:"Big"},
-  "Non-Specialized Playmaker":{floor:0,   median:0.3, ceiling:16.7, n:30,  grp:"Playmaker"},
-  "Scoring Wing":             {floor:0,   median:0.8, ceiling:16.3, n:374, grp:"Wing"},
-  "Initiator Wing":           {floor:0,   median:0.4, ceiling:13.8, n:106, grp:"Wing"},
-  "3-and-D Wing":             {floor:0,   median:-1.0,ceiling:13.8, n:19,  grp:"Wing"},
-  "Glass Cleaner":            {floor:0,   median:0.5, ceiling:12.4, n:29,  grp:"Big"},
-  "Defensive Wing":           {floor:0,   median:-0.4,ceiling:12.3, n:33,  grp:"Wing"},
-  "Short Roll Playmaker":     {floor:0,   median:2.7, ceiling:10.2, n:27,  grp:"Big"},
+  "Scoring Playmaker":        {floor:-0.8, median:2.0, ceiling:29.2, n:123, grp:"Playmaker"},
+  "Stretch Rim Protector":    {floor:2.2,  median:6.1, ceiling:28.4, n:61,  grp:"Big"},
+  "Stretch Big":              {floor:-1.5, median:1.7, ceiling:23.4, n:100, grp:"Big"},
+  "Rim Protector":            {floor:0.7,  median:4.6, ceiling:22.1, n:57,  grp:"Big"},
+  "Defensive Guard":          {floor:-1.0, median:1.8, ceiling:21.6, n:39,  grp:"Playmaker"},
+  "Point Forward":            {floor:-0.6, median:0.4, ceiling:19.5, n:42,  grp:"Wing"},
+  "Non-Specialized Wing":     {floor:-2.1, median:-0.6,ceiling:19.4, n:62,  grp:"Wing"},
+  "Spacing Guard":            {floor:-0.4, median:3.2, ceiling:19.1, n:54,  grp:"Playmaker"},
+  "Passing Hub":              {floor:-1.4, median:0.8, ceiling:18.3, n:24,  grp:"Big"},
+  "Non-Specialized Playmaker":{floor:-2.0, median:0.3, ceiling:16.7, n:30,  grp:"Playmaker"},
+  "Scoring Wing":             {floor:-1.7, median:0.8, ceiling:16.3, n:374, grp:"Wing"},
+  "Initiator Wing":           {floor:-1.8, median:0.4, ceiling:13.8, n:106, grp:"Wing"},
+  "3-and-D Wing":             {floor:-2.1, median:-1.0,ceiling:13.8, n:19,  grp:"Wing"},
+  "Glass Cleaner":            {floor:-1.4, median:0.5, ceiling:12.4, n:29,  grp:"Big"},
+  "Defensive Wing":           {floor:-1.8, median:-0.4,ceiling:12.3, n:33,  grp:"Wing"},
+  "Short Roll Playmaker":     {floor:-0.2, median:2.7, ceiling:10.2, n:27,  grp:"Big"},
 };
 // Example NBA players per archetype, grouped by the tier they actually REACHED.
 // Source: same archetype × peak-WA join, strict name-match (no Jr/Sr collisions),
@@ -6860,13 +6860,9 @@ function ResearchTab({p}) {
   const [transPre, setTransPre] = useState("Scoring Wing");
   const playerArch = p?.riskProfile?.ceilingArchetype || p?.archetype || null;
   const GRP_COL = { Playmaker:"#8b5cf6", Wing:"#f59e0b", Big:"#3b82f6" };
-  const MAXWA = 30;
-  const xp = (wa) => Math.max(0, Math.min(100, (wa / MAXWA) * 100));
 
   const bands = Object.entries(ARCHETYPE_BANDS).map(([name, b]) => ({ name, ...b }));
   const sorted = [...bands].sort((a, b) => b[sortKey] - a[sortKey]);
-  const top = (key) => [...bands].sort((a, b) => b[key] - a[key])[0];
-  const upside = top("ceiling"), safe = top("floor"), bal = top("median");
 
   const TIERS = [["allstar","All-Star+","All-Star"],["starter","Starter","Starter"],["role","Role Player","Role Player"]];
   // Example-player block for an archetype (used in tooltip + the player's own card)
@@ -6885,15 +6881,6 @@ function ResearchTab({p}) {
     );
   };
 
-  const CALLOUTS = [
-    { title: "Swing for upside", sub: "highest ceiling", a: upside, val: upside.ceiling, color: "#f97316",
-      blurb: "If you're picking high and need a star, this type has the best top-10% outcome." },
-    { title: "Safest bet", sub: "highest floor", a: safe, val: safe.floor, color: "#22c55e",
-      blurb: "If you need a player who sticks, this type's downside (25th pct) is the least bad." },
-    { title: "Best balanced", sub: "highest median", a: bal, val: bal.median, color: "#3b82f6",
-      blurb: "For the best typical (median) outcome — the middle-of-the-road expectation." },
-  ];
-
   return (
     <div className="space-y-5">
       <div className="rounded-xl p-4 text-sm text-gray-300 leading-relaxed"
@@ -6905,21 +6892,6 @@ function ResearchTab({p}) {
         play it safe, or take the best middle bet — by player type.</span> The
         <span className="text-gray-100"> sample size (n)</span> tells you how confident we can be
         in each band: a type seen 374 times is far better understood than one seen 19 times.
-      </div>
-
-      {/* Three strategy callouts */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {CALLOUTS.map((c) => (
-          <div key={c.title} className="rounded-xl p-4" style={{background:"#0d1117",border:`1px solid ${c.color}33`}}>
-            <div className="text-xs uppercase tracking-wide" style={{color:c.color}}>{c.title}</div>
-            <div className="text-[10px] text-gray-500 mb-1">{c.sub}</div>
-            <div className="text-base font-bold text-gray-100">{c.a.name}</div>
-            <div className="text-xs text-gray-400 mt-1">{c.blurb}</div>
-            <div className="text-[10px] mt-2" style={{color:_conf(c.a.n).color}}>
-              data confidence: {_conf(c.a.n).label} (n={c.a.n})
-            </div>
-          </div>
-        ))}
       </div>
 
       {/* Sort toggle */}
@@ -6936,71 +6908,62 @@ function ResearchTab({p}) {
         ))}
       </div>
 
-      {/* Value-band chart */}
-      <div className="rounded-2xl p-5" style={{background:"linear-gradient(135deg,#0d1117,#111827)",border:"1px solid #1f2937"}}>
-        {/* axis ruler */}
-        <div className="flex items-center mb-2">
-          <div className="w-36 shrink-0"/>
-          <div className="relative flex-1 h-4">
-            {[["Role",8],["Starter",15],["All-Star",25]].map(([lbl,wa])=>(
-              <div key={lbl} className="absolute text-[9px] text-gray-500" style={{left:`${xp(wa)}%`,transform:"translateX(-50%)"}}>{lbl}</div>
-            ))}
+      {/* Value-band chart — GM-risk-profile style: horizontal bands on the peak-WA axis */}
+      {(() => {
+        const WA_TIERS = [
+          {short:"Neg",     color:"#ef4444", lo:-5, hi:3},
+          {short:"Repl",    color:"#8b5cf6", lo:3,  hi:8},
+          {short:"Role",    color:"#06b6d4", lo:8,  hi:15},
+          {short:"Starter", color:"#3b82f6", lo:15, hi:25},
+          {short:"AS",      color:"#f97316", lo:25, hi:40},
+        ];
+        const N = sorted.length;
+        const RANK_W=18, NAME_W=150, LEFT=RANK_W+NAME_W, CHART_W=360, RIGHT=82;
+        const W=LEFT+CHART_W+RIGHT, ROW_H=21, PAD_TOP=48, PAD_BOT=10;
+        const H=PAD_TOP+N*ROW_H+PAD_BOT, AMIN=-5, AR=45;
+        const xBar=v=>LEFT+(Math.max(-5,Math.min(40,v))-AMIN)/AR*CHART_W;
+        const xTicks=[0,10,20,30,40], tierBnds=[3,8,15,25];
+        const exTxt=(nm)=>{const e=ARCHETYPE_EXAMPLES[nm]; if(!e) return "";
+          return [["allstar","All-Star+"],["starter","Starter"],["role","Role"]].filter(([k])=>e[k]&&e[k].length).map(([k,l])=>`${l}: ${e[k].join(", ")}`).join("  ·  ");};
+        return (
+          <div style={{overflowX:"auto", background:"#0a0e17", borderRadius:12, border:"1px solid #1f2937"}}>
+            <svg width={W} height={H} style={{display:"block", fontFamily:"'Inter',sans-serif"}}>
+              <text x={LEFT+CHART_W/2} y={11} fontSize={8} fill="#f97316" textAnchor="middle" opacity={0.8}>Realized NBA peak Wins Added by pre-draft archetype</text>
+              {WA_TIERS.map(t=>(<rect key={t.short} x={xBar(t.lo)} y={PAD_TOP} width={Math.max(1,xBar(t.hi)-xBar(t.lo))} height={N*ROW_H} fill={t.color} opacity={0.06}/>))}
+              {tierBnds.map(v=>(<line key={v} x1={xBar(v)} y1={PAD_TOP-4} x2={xBar(v)} y2={PAD_TOP+N*ROW_H} stroke="#374151" strokeWidth={0.8} strokeDasharray="3,3"/>))}
+              {xTicks.map(v=>(<g key={v}><line x1={xBar(v)} y1={PAD_TOP-4} x2={xBar(v)} y2={PAD_TOP} stroke="#4b5563" strokeWidth={0.8}/><text x={xBar(v)} y={PAD_TOP-7} fontSize={8} fill="#4b5563" textAnchor="middle">{v}</text></g>))}
+              {WA_TIERS.map(t=>(<text key={t.short} x={(xBar(t.lo)+xBar(t.hi))/2} y={PAD_TOP-20} fontSize={7.5} fill={t.color} textAnchor="middle" opacity={0.75}>{t.short}</text>))}
+              <text x={LEFT+CHART_W/2} y={PAD_TOP-32} fontSize={8} fill="#6b7280" textAnchor="middle">peak Wins Added →</text>
+              {sorted.map((b,i)=>{
+                const y=PAD_TOP+i*ROW_H+ROW_H/2, gcol=GRP_COL[b.grp]||"#60a5fa", isP=playerArch===b.name, cf=_conf(b.n);
+                const nm=b.name.length>22?b.name.slice(0,21)+"…":b.name;
+                return (
+                  <g key={b.name}>
+                    <title>{`${b.name} (n=${b.n}, ${cf.label} confidence)\nFloor ${b.floor} · Median ${b.median} · Ceiling ${b.ceiling} peak WA\n${exTxt(b.name)}`}</title>
+                    {i%2===0 && <rect x={0} y={PAD_TOP+i*ROW_H} width={W} height={ROW_H} fill="#ffffff" opacity={0.012}/>}
+                    {isP && <rect x={0} y={PAD_TOP+i*ROW_H} width={W} height={ROW_H} fill="#f97316" opacity={0.09}/>}
+                    <rect x={0} y={PAD_TOP+i*ROW_H+3} width={3} height={ROW_H-6} fill={gcol} opacity={0.85} rx={1}/>
+                    <text x={RANK_W-3} y={y+3} fontSize={8} fill="#4b5563" textAnchor="end">{i+1}</text>
+                    <text x={RANK_W+4} y={y+3} fontSize={8.5} fill={isP?"#fb923c":"#cbd5e1"} fontWeight={isP?700:400}>{nm}</text>
+                    {WA_TIERS.map(t=>{const lo=Math.max(b.floor,t.lo), hi=Math.min(b.ceiling,t.hi); if(hi<=lo) return null;
+                      return <rect key={t.short} x={xBar(lo)} y={y-3} width={Math.max(1,xBar(hi)-xBar(lo))} height={6} fill={t.color} opacity={0.82} rx={1}/>;})}
+                    <circle cx={xBar(b.median)} cy={y} r={3} fill="#0a0e17" stroke="#e5e7eb" strokeWidth={1.2}/>
+                    <text x={Math.min(xBar(b.ceiling)+5, W-60)} y={y+3} fontSize={8} fill="#9ca3af">{b.ceiling}</text>
+                    <circle cx={W-48} cy={y} r={2.5} fill={cf.color}/>
+                    <text x={W-4} y={y+3} fontSize={7.5} fill="#6b7280" textAnchor="end">n={b.n}</text>
+                  </g>
+                );
+              })}
+            </svg>
+            <div className="flex items-center gap-4 px-4 py-2 text-[10px] text-gray-500 flex-wrap" style={{borderTop:"1px solid #1f2937"}}>
+              <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-sm" style={{background:"#8b5cf6"}}/>Playmaker</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-sm" style={{background:"#f59e0b"}}/>Wing</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-sm" style={{background:"#3b82f6"}}/>Big</span>
+              <span className="ml-auto">Band = floor→ceiling across tier zones · ○ = median · right dot = data confidence (green = high n) · hover for example players</span>
+            </div>
           </div>
-          <div className="w-20 shrink-0"/>
-        </div>
-
-        <div className="space-y-1.5">
-          {sorted.map((b) => {
-            const col = GRP_COL[b.grp] || "#60a5fa";
-            const isPlayer = playerArch === b.name;
-            const cf = _conf(b.n);
-            return (
-              <Tip key={b.name} content={
-                <div>
-                  <div className="font-bold mb-1.5" style={{color:col}}>{b.name}</div>
-                  <div className="text-[11px] text-gray-400 mb-1.5">Example NBA players by the tier they reached:</div>
-                  {exampleBlock(b.name)}
-                  <div className="text-[10px] mt-2" style={{color:cf.color}}>Data confidence: {cf.label} (n={b.n} players)</div>
-                </div>
-              }>
-              <div className="flex items-center rounded-md px-1 py-1 cursor-help"
-                   style={isPlayer ? {background:"#f9731614",border:"1px solid #f9731644"} : {}}>
-                <div className="w-36 shrink-0 text-[11px] truncate flex items-center gap-1.5"
-                     style={{color: isPlayer ? "#fb923c" : "#cbd5e1", fontWeight: isPlayer ? 700 : 400}}>
-                  <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{background:col}}/>
-                  {b.name}{isPlayer && " ◄"}
-                </div>
-                {/* track */}
-                <div className="relative flex-1 h-5">
-                  {/* tier separators */}
-                  {[8,15,25].map(w=>(
-                    <div key={w} className="absolute top-0 bottom-0 w-px" style={{left:`${xp(w)}%`,background:"#374151"}}/>
-                  ))}
-                  {/* band */}
-                  <div className="absolute top-1.5 h-2 rounded-full"
-                       style={{left:`${xp(b.floor)}%`, width:`${Math.max(1.5, xp(b.ceiling)-xp(b.floor))}%`,
-                               background:`${col}55`, border:`1px solid ${col}`}}/>
-                  {/* median marker */}
-                  <div className="absolute top-0.5 w-1 h-4 rounded-full" style={{left:`${xp(b.median)}%`,transform:"translateX(-50%)",background:col}}/>
-                </div>
-                {/* confidence */}
-                <div className="w-20 shrink-0 text-right text-[10px] flex items-center justify-end gap-1">
-                  <span className="inline-block w-1.5 h-1.5 rounded-full" style={{background:cf.color}}/>
-                  <span style={{color:"#6b7280"}}>n={b.n}</span>
-                </div>
-              </div>
-              </Tip>
-            );
-          })}
-        </div>
-
-        <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-800 text-[10px] text-gray-500 flex-wrap">
-          <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full" style={{background:"#8b5cf6"}}/>Playmaker</span>
-          <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full" style={{background:"#f59e0b"}}/>Wing</span>
-          <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full" style={{background:"#3b82f6"}}/>Big</span>
-          <span className="ml-auto">Bar = floor→ceiling (peak Wins Added) · dot = median · confidence dot: green=high n, gray=low n</span>
-        </div>
-      </div>
+        );
+      })()}
 
       {/* Examples for the current player's archetype — concrete range */}
       {playerArch && ARCHETYPE_EXAMPLES[playerArch] && (
