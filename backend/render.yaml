@@ -21,9 +21,10 @@
 #   && python -u inject_season_advanced.py     ← NEW (2026-05-09): astP/toP/stlP/blkP/ftr in seasonLines
 #   && python -u inject_game_logs.py           ← NEW (2026-05-09): per-game stats für Scouting-Skill-Curve
 #   && python -u inject_draft_risk.py          ← NEW (2026-05-23): Risk-Profile-Tab (Market/Merit/Bust/Star)
+#   && python -u inject_nba_role.py            ← NEW (2026-05-23): NBA-Rollen-Projektion (pre→post + Floor)
 #
-# WICHTIG: pbp_mind_metrics_all.csv, pbp_game_logs_*.csv UND draft_risk_all.csv
-# müssen im Repo committed sein (siehe backend/data/processed/ — <100MB OK).
+# WICHTIG: pbp_mind_metrics_all.csv, pbp_game_logs_*.csv, draft_risk_all.csv UND
+# nba_role_projection_all.csv müssen im Repo committed sein (backend/data/processed/, <100MB OK).
 #
 # Aktueller Dashboard-Start-Command:
 #   uvicorn main:app --host 0.0.0.0 --port $PORT
@@ -40,7 +41,7 @@ services:
     # Tobias 2026-05-06: One-Liner mit && (Render-Dashboard-Feld nimmt nur Single-Line).
     # `python -u` für unbuffered Output, sonst wirken die Inject-Scripts hängend.
     # `git lfs` weggelassen — nicht installiert auf Render-Container, war Fehlerquelle.
-    buildCommand: pip install -r requirements.txt && python -u build_db.py && python -u inject_shot_creation_spectrum.py && python -u inject_leverage_efficiency.py && python -u inject_skill_curve.py && python -u inject_ogbpm.py && python -u inject_mind_metrics.py && python -u inject_season_advanced.py && python -u inject_game_logs.py && python -u inject_draft_risk.py
+    buildCommand: pip install -r requirements.txt && python -u build_db.py && python -u inject_shot_creation_spectrum.py && python -u inject_leverage_efficiency.py && python -u inject_skill_curve.py && python -u inject_ogbpm.py && python -u inject_mind_metrics.py && python -u inject_season_advanced.py && python -u inject_game_logs.py && python -u inject_draft_risk.py && python -u inject_nba_role.py
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /
     envVars:

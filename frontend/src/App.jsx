@@ -50,6 +50,27 @@ const ARCHETYPE_BANDS = {
   "Defensive Wing":           {floor:0,   median:-0.4,ceiling:12.3, n:33,  grp:"Wing"},
   "Short Roll Playmaker":     {floor:0,   median:2.7, ceiling:10.2, n:27,  grp:"Big"},
 };
+// Example NBA players per archetype, grouped by the tier they actually REACHED.
+// Source: same archetype × peak-WA join, strict name-match (no Jr/Sr collisions),
+// lightly curated to recognizable, correctly-attributed names. NOTE: these are
+// PRE-DRAFT archetypes — some players evolved into a different NBA role (e.g. Jokic
+// was a pre-draft "Scoring Wing"). That's the point: it shows the realized range.
+const ARCHETYPE_EXAMPLES = {
+  "Scoring Playmaker":         {allstar:["Shai Gilgeous-Alexander","Stephen Curry"], starter:["De'Aaron Fox"], role:["Marcus Smart"]},
+  "Stretch Rim Protector":     {allstar:["Joel Embiid","Anthony Davis"], starter:["Jusuf Nurkic","Hassan Whiteside"]},
+  "Stretch Big":               {allstar:["Amar'e Stoudemire","Blake Griffin"], starter:["Zion Williamson"], role:["OG Anunoby"]},
+  "Rim Protector":             {allstar:["Rudy Gobert","DeAndre Jordan"], starter:["Steven Adams"], role:["John Collins"]},
+  "Defensive Guard":           {starter:["Jrue Holiday","Dejounte Murray"], role:["De'Anthony Melton"]},
+  "Point Forward":             {starter:["Boris Diaw","Nicolas Batum"], role:["Mike James"]},
+  "Spacing Guard":             {allstar:["Klay Thompson","Darius Garland"], starter:["George Hill"], role:["Donte DiVincenzo"]},
+  "Scoring Wing":              {allstar:["Nikola Jokic","Jayson Tatum"], starter:["Franz Wagner"], role:["Sam Hauser"]},
+  "Non-Specialized Playmaker": {allstar:["Michael Jordan","Russell Westbrook"], starter:["Jordan Clarkson"]},
+  "Non-Specialized Wing":      {allstar:["Josh Smith"], role:["Ricky Davis"]},
+  "Passing Hub":               {allstar:["Carlos Boozer"], starter:["Udonis Haslem"]},
+  "Initiator Wing":            {allstar:["Kawhi Leonard","Paul George"], starter:["Malcolm Brogdon"], role:["Cade Cunningham"]},
+  "Glass Cleaner":             {starter:["Tiago Splitter"]},
+  "Short Roll Playmaker":      {starter:["Aaron Gordon"], role:["Jakob Poeltl"]},
+};
 // Archetype colors — used in header pills and anywhere ARCH_MAP isn't in scope
 const ARCH_COLORS = {
   "Scoring Playmaker":"#fbbf24","Floor General":"#f97316","Spacing Guard":"#22c55e","Defensive Guard":"#3b82f6",
@@ -1456,6 +1477,8 @@ function mapProfile(d) {
     gameLogs: d.gameLogs ?? null,
     // Draft Risk Profile (Market/Merit range + bust/star risk) — inject_draft_risk.py
     riskProfile: d.riskProfile ?? null,
+    // NBA-Rollen-Projektion (pre→post outcome distribution + floor) — inject_nba_role.py
+    nbaRoleProjection: d.nbaRoleProjection ?? null,
     modernShotProfile: d.modern_shot_profile ?? null,
     sosPctl: d.sos_pctl ?? null,
     teamQuality: d.team_quality_pctl ?? null,
@@ -6576,6 +6599,7 @@ function RiskProfileTab({p}) {
     );
   }
 
+  const proj = p.nbaRoleProjection;  // NBA-Rollen-Projektion (pre→post)
   const bust = rp.bustRisk != null ? Math.round(rp.bustRisk * 100) : null;
   const star = rp.starUpside != null ? Math.round(rp.starUpside * 100) : null;
   const merit = rp.meritSlot;
@@ -6613,7 +6637,7 @@ function RiskProfileTab({p}) {
            style={{background:"#0d1117",border:"1px solid #1f2937"}}>
         <span className="font-semibold text-gray-100">How to read this tab.</span> Two
         questions every front office asks: <span className="text-gray-100">“Where will
-        he actually be drafted?”</span> (the market) and <span className="text-gray-100">
+        he actually be drafted?”</span> (projected from consensus mocks) and <span className="text-gray-100">
         “Where does he belong on talent?”</span> (our model). The gap between them, plus
         two risk axes below, frame the real decision: <span className="text-gray-100">which
         pick could get you fired — and which one would you regret passing on.</span>
@@ -6622,9 +6646,15 @@ function RiskProfileTab({p}) {
       {/* Draft Range */}
       <div className="rounded-2xl p-5" style={{background:"linear-gradient(135deg,#0d1117,#111827)",border:"1px solid #1f2937"}}>
         <h3 className="text-base font-bold text-gray-100 mb-1">Draft Range</h3>
-        <p className="text-xs text-gray-400 mb-5">Pick 1 (left) → 60 (right). Blue band =
-          where the market realistically drafts him. Gold marker = where our model says he
-          belongs in an average draft.</p>
+        <p className="text-xs text-gray-400 mb-2">Pick 1 (left) → 60 (right). Blue band =
+          his likely real draft slot. Gold marker = where our model says he belongs on talent.</p>
+        <p className="text-[11px] text-gray-500 mb-5 leading-snug">
+          <span className="text-gray-400">How the blue band is built:</span> we take the player's
+          existing <span className="text-gray-300">consensus mock ranking</span> and project it onto
+          where similarly-ranked players were actually drafted in 2008–2018. So it's a projection of an
+          existing consensus, not a fresh independent estimate — and the width shows how a consensus
+          rank historically translates into a real pick (teams reach, players slide), not disagreement
+          between mock boards.</p>
 
         <div className="relative h-16 mb-2">
           {/* track */}
@@ -6716,6 +6746,44 @@ function RiskProfileTab({p}) {
         </div>
       )}
 
+      {/* Projected NBA role — what his pre-draft type actually becomes (pre→post) */}
+      {proj && proj.outcomes && proj.outcomes.length > 0 && (
+        <div className="rounded-xl p-4" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+          <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">Projected NBA role</div>
+          <div className="flex items-baseline gap-2 flex-wrap mb-1">
+            <span className="text-lg font-bold text-gray-100">{proj.projRole}</span>
+            <span className="text-xs text-gray-500">— most likely role if he sticks</span>
+          </div>
+          <p className="text-[11px] text-gray-400 mb-3">Players with his pre-draft profile
+            {proj.preArchetype ? ` (${proj.preArchetype})` : ""} became — by the NBA role they reached:</p>
+          <div className="space-y-1.5">
+            {proj.outcomes.map((o, i) => {
+              const dns = o.role === "Did Not Stick";
+              const col = dns ? "#6b7280" : o.wa >= 15 ? "#3b82f6" : o.wa >= 8 ? "#06b6d4" : "#a78bfa";
+              return (
+                <div key={i} className="flex items-center gap-2 text-xs">
+                  <span className="w-40 shrink-0 truncate" style={{color: dns ? "#6b7280" : "#cbd5e1"}}>{o.role}</span>
+                  <div className="flex-1 h-3 rounded-full overflow-hidden" style={{background:"#1f2937"}}>
+                    <div className="h-full rounded-full" style={{width:`${Math.round(o.p*100)}%`, background:col}}/>
+                  </div>
+                  <span className="w-9 text-right" style={{color:"#9ca3af"}}>{Math.round(o.p*100)}%</span>
+                  <span className="w-16 text-right text-[10px]" style={{color:"#6b7280"}}>{dns ? "—" : `~${o.wa} WA`}</span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-3 pt-3 border-t border-gray-800 flex gap-4 flex-wrap text-xs">
+            <span><span className="text-gray-500">Establishes a role: </span><span className="font-semibold text-gray-200">{Math.round((proj.pEstablish ?? 0)*100)}%</span></span>
+            <span><span className="text-gray-500">Role-player value+: </span><span className="font-semibold text-gray-200">{Math.round((proj.pStick ?? 0)*100)}%</span></span>
+            {proj.expWa != null && <span><span className="text-gray-500">Expected: </span><span className="font-semibold text-gray-200">{proj.expWa} WA</span></span>}
+          </div>
+          <p className="text-[10px] text-gray-600 mt-2">
+            Based on ≈{Math.round(proj.compN || 0)} comparable past prospects (same pre-draft archetype, similar projected value).
+            {(proj.compN || 0) < 15 ? " Few comps — interpret with caution." : ""} Bar values are the typical (median) NBA outcome of that role.
+          </p>
+        </div>
+      )}
+
       {/* Reason codes */}
       {(showUp || showRisk) && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -6774,6 +6842,23 @@ function ResearchTab({p}) {
   const top = (key) => [...bands].sort((a, b) => b[key] - a[key])[0];
   const upside = top("ceiling"), safe = top("floor"), bal = top("median");
 
+  const TIERS = [["allstar","All-Star+","All-Star"],["starter","Starter","Starter"],["role","Role Player","Role Player"]];
+  // Example-player block for an archetype (used in tooltip + the player's own card)
+  const exampleBlock = (name) => {
+    const ex = ARCHETYPE_EXAMPLES[name];
+    if (!ex) return <div className="text-[11px] text-gray-500">No clean examples for this type.</div>;
+    return (
+      <div className="space-y-1">
+        {TIERS.filter(([k]) => ex[k]?.length).map(([k, lbl, tc]) => (
+          <div key={k} className="text-[11px] flex gap-1.5">
+            <span className="shrink-0 font-semibold" style={{color: TC[tc], minWidth:64}}>{lbl}:</span>
+            <span className="text-gray-300">{ex[k].join(", ")}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   const CALLOUTS = [
     { title: "Swing for upside", sub: "highest ceiling", a: upside, val: upside.ceiling, color: "#f97316",
       blurb: "If you're picking high and need a star, this type has the best top-10% outcome." },
@@ -6785,11 +6870,6 @@ function ResearchTab({p}) {
 
   return (
     <div className="space-y-5">
-      <div className="rounded-xl px-3 py-1 inline-block text-[11px] font-semibold"
-           style={{background:"#f9731618",color:"#fb923c",border:"1px solid #f9731633"}}>
-        RESEARCH · experimental
-      </div>
-
       <div className="rounded-xl p-4 text-sm text-gray-300 leading-relaxed"
            style={{background:"#0d1117",border:"1px solid #1f2937"}}>
         <span className="font-semibold text-gray-100">Archetype value bands.</span> Each bar
@@ -6849,7 +6929,15 @@ function ResearchTab({p}) {
             const isPlayer = playerArch === b.name;
             const cf = _conf(b.n);
             return (
-              <div key={b.name} className="flex items-center rounded-md px-1 py-1"
+              <Tip key={b.name} content={
+                <div>
+                  <div className="font-bold mb-1.5" style={{color:col}}>{b.name}</div>
+                  <div className="text-[11px] text-gray-400 mb-1.5">Example NBA players by the tier they reached:</div>
+                  {exampleBlock(b.name)}
+                  <div className="text-[10px] mt-2" style={{color:cf.color}}>Data confidence: {cf.label} (n={b.n} players)</div>
+                </div>
+              }>
+              <div className="flex items-center rounded-md px-1 py-1 cursor-help"
                    style={isPlayer ? {background:"#f9731614",border:"1px solid #f9731644"} : {}}>
                 <div className="w-36 shrink-0 text-[11px] truncate flex items-center gap-1.5"
                      style={{color: isPlayer ? "#fb923c" : "#cbd5e1", fontWeight: isPlayer ? 700 : 400}}>
@@ -6875,6 +6963,7 @@ function ResearchTab({p}) {
                   <span style={{color:"#6b7280"}}>n={b.n}</span>
                 </div>
               </div>
+              </Tip>
             );
           })}
         </div>
@@ -6887,11 +6976,26 @@ function ResearchTab({p}) {
         </div>
       </div>
 
+      {/* Examples for the current player's archetype — concrete range */}
+      {playerArch && ARCHETYPE_EXAMPLES[playerArch] && (
+        <div className="rounded-xl p-4" style={{background:"#0d1117",border:"1px solid #f9731633"}}>
+          <div className="text-xs uppercase tracking-wide text-orange-400 mb-1">
+            What this player's type became — {playerArch}
+          </div>
+          <p className="text-[11px] text-gray-500 mb-2.5">Past prospects who shared this
+            player's pre-draft archetype, grouped by the NBA tier they actually reached. A
+            concrete sense of the realistic range (hover any bar above for other types):</p>
+          {exampleBlock(playerArch)}
+        </div>
+      )}
+
       <p className="text-[11px] text-gray-600 leading-relaxed">
         Empirical, not normative — rare ≠ better. Bands come from ~1,210 NBA players grouped by
         their pre-draft archetype (draft classes ~2008–2024). Low-n archetypes (e.g. 3-and-D Wing,
-        n=19) have noisier bands — treat their edges with caution. This view is a research aid for
-        thinking about draft strategy by player type, not a player-specific projection.
+        n=19) have noisier bands — treat their edges with caution. Example players are pre-draft
+        archetype matches — some evolved into a different NBA role (e.g. Jokic was a pre-draft
+        “Scoring Wing”). This is a research aid for draft strategy by player type, not a
+        player-specific projection.
       </p>
     </div>
   );
@@ -6900,13 +7004,14 @@ function ResearchTab({p}) {
 // ═══════════════════════════════════════════════════════════
 // TAB: METHODOLOGY
 // ═══════════════════════════════════════════════════════════
-function MethodologyTab() {
+function MethodologyTab({p}) {
   const [methodView, setMethodView] = useState("quick"); // "quick" | "deep"
 
   const sections = [
     {cat:"ppWA Projection Model",items:["monteCarlo","posClassification"],desc:"The core engine: a position-stratified gradient-boosting model combined with a calibrated Elite Detector. Trained on 1,784 NCAA and international prospects (draft classes 2010–2016) with verified NBA outcomes. Target variable: Peak Wins Added — best 3-consecutive-season window in first 8 NBA years (min 200 minutes/season). Features: 8–12 theoretically grounded variables per position group (Playmaker / Wing / Big), including age, BPM percentile, BPM trajectory, conference strength, free-throw rate, athleticism score, and position-specific shooting/playmaking signals. Output: ppWA = Projected Peak Wins Added — a single, interpretable number: 'this player projects to add X wins above replacement at his peak'. Validated on holdout classes 2017–2019 with Spearman rank correlation ρ = 0.460 (out-of-sample). Cross-validated r = 0.462 (5-fold CV). Note: the model was trained on prospects who were scouted and drafted — projections for undrafted players are extrapolations beyond the training distribution."},
-    {cat:"Risk Profile Tab — Draft Range & Risk (NEW)",items:[],desc:"Reframes the projection as a front-office decision: where a player will be drafted vs. where he belongs, plus risk in both directions. (1) MARKET RANGE — the realistic pick range. Built by calibrating actual draft slot against consensus-mock rank on draft classes 2008–2018; out-of-sample on 2019–2025 the actual pick falls inside the predicted p20–p80 band 63% of the time (target ~60%), with Spearman(consensus, pick)=+0.85. (2) MERIT SLOT — where a player belongs on talent in an average draft. Our projected value (ppWA) is recalibrated onto the realized-Wins-Added scale, then mapped through an isotonic curve E[peak Wins Added | pick] built from mature drafts. Our value predicts realized NBA outcome (peak Wins Added) markedly better than the actual draft order did: Spearman +0.54 vs +0.29. The gap between Merit and Market is the steal/bust signal (e.g. Tyrese Haliburton: market #10, merit #1). (3) TWO RISK AXES, computed from a kernel-weighted empirical distribution of comparable past prospects (similar projected value × archetype affinity): BUST RISK = share of comps who delivered below the value their slot demanded — well-calibrated (predicted 75–100% → 86% actual bust rate; James Wiseman scored 96%); STAR UPSIDE = share who reached All-Star level, blended 70/30 with the archetype's empirical All-Star rate so high-ceiling archetypes get proper credit. (4) ARCHETYPE VALUE — positional value is measured, not assumed: we compute each NBA archetype's realized peak Wins Added distribution from ~1,210 NBA players. Scoring Playmaker (ceiling ~29 WA) and Stretch Rim Protector (~28) carry the highest ceilings; pure rim-runners and role-archetypes cap around starter level. This is why a player's best-case archetype shapes his upside. CAVEATS: market range needs a consensus-board presence (most deep prospects have none); the box-score value model can under-rate raw, young upside; reason-code factors are surfaced from the projection engine and are noisier for international prospects (FIBA signals translate imperfectly)."},
-    {cat:"Research Tab — Archetype Value Bands (EXPERIMENTAL)",items:[],desc:"A draft-strategy research aid, parked next to Risk Profile. For each of 16 NBA archetypes we compute the realized peak Wins Added distribution of past players of that type (~1,210 NBA players, draft classes ~2008–2024): floor (25th percentile = downside), median (typical), and ceiling (90th percentile = upside). Displayed as horizontal value bands so you can read draft strategy by player type: highest ceiling = swing-for-upside pick (Scoring Playmaker / Stretch Rim Protector, ceiling ~28–29 WA); highest floor = safest pick (Stretch Rim Protector); highest median = best balanced bet. Crucially, each band carries its SAMPLE SIZE (n) as a data-confidence signal — a type observed 374 times (Scoring Wing) is far better understood than one seen 19 times (3-and-D Wing), whose band edges are noisier. Rarity is shown for confidence, NOT as a value claim (rare ≠ better). The same archetype-value numbers also appear in the Roles & Archetypes tab (each archetype's NBA ceiling tier + % reaching Starter+/All-Star+) so you can see what to expect from a player type at a glance."},
+    {cat:"Risk Profile Tab — Draft Range & Risk (NEW)",items:[],desc:"Reframes the projection as a front-office decision: where a player will be drafted vs. where he belongs, plus risk in both directions. (1) MARKET RANGE — the realistic pick range, PROJECTED from an existing consensus mock ranking (a single consensus board, one rank per player). We do not generate a new consensus; we take that rank and map it onto where similarly-ranked players were actually drafted in 2008–2018. The band width therefore reflects how a consensus rank historically translates into a real pick (teams reach, prospects slide) — NOT disagreement between different mock boards. Two players with the same consensus rank get the same band. Out-of-sample on 2019–2025 the actual pick falls inside the predicted p20–p80 band 63% of the time (target ~60%), with Spearman(consensus, pick)=+0.85. (2) MERIT SLOT — where a player belongs on talent in an average draft. Our projected value (ppWA) is recalibrated onto the realized-Wins-Added scale, then mapped through an isotonic curve E[peak Wins Added | pick] built from mature drafts. Our value predicts realized NBA outcome (peak Wins Added) markedly better than the actual draft order did: Spearman +0.54 vs +0.29. The gap between Merit and Market is the steal/bust signal (e.g. Tyrese Haliburton: market #10, merit #1). (3) TWO RISK AXES, computed from a kernel-weighted empirical distribution of comparable past prospects (similar projected value × archetype affinity): BUST RISK = share of comps who delivered below the value their slot demanded — well-calibrated (predicted 75–100% → 86% actual bust rate; James Wiseman scored 96%); STAR UPSIDE = share who reached All-Star level, blended 70/30 with the archetype's empirical All-Star rate so high-ceiling archetypes get proper credit. (4) ARCHETYPE VALUE — positional value is measured, not assumed: we compute each NBA archetype's realized peak Wins Added distribution from ~1,210 NBA players. Scoring Playmaker (ceiling ~29 WA) and Stretch Rim Protector (~28) carry the highest ceilings; pure rim-runners and role-archetypes cap around starter level. This is why a player's best-case archetype shapes his upside. CAVEATS: market range needs a consensus-board presence (most deep prospects have none); the box-score value model can under-rate raw, young upside; reason-code factors are surfaced from the projection engine and are noisier for international prospects (FIBA signals translate imperfectly)."},
+    {cat:"Risk Profile Tab — Projected NBA Role (pre→post, NEW)",items:[],desc:"Answers 'what does this player's TYPE actually become in the NBA, and what is that worth?' (1) NBA-OUTCOME ROLES: every NBA player (1,780, ≥500 peak-window minutes) is classified into the SAME archetype taxonomy as our prospects, but from his realized NBA peak — using the identical role-score formulas and assignment logic as the prospect pipeline, only ranked against NBA peers instead of college peers. So pre-draft type and NBA type share one comparable label set. Each NBA role's value is measured empirically: Scoring Playmaker (lead guard) is most valuable (median ~25 peak Wins Added, 50% All-Star); 'empty' roles (Non-Specialized / Slashing / Defensive Wing) rarely stick (8–14% reach Role-Player value). (2) TRANSITION: across matured drafted classes (≤2020), P(NBA outcome | pre-draft archetype), INCLUDING an honest 'Did Not Stick' (no established ≥500-min role). The same type's outcome depends heavily on talent — an elite-projected Scoring Playmaker sticks 75% / All-Star 38%, a marginal one 6% / 0% ('a scoring guard has to be elite to play'). (3) PER-PROSPECT PROJECTION: outcome distribution = kernel-weighted comparable past prospects (same pre-draft archetype × similar projected value). Output: most-likely NBA role, full outcome distribution with each role's typical value, P(establishes a role) and P(reaches Role-Player value) as the FLOOR, expected Wins Added. Floor calibration is sound (predicted 0–15%→5% actual, 50–100%→86%; James Wiseman projects 14% stick, Wembanyama 100%). CAVEATS: NBA stats lack height → NBA position is box-derived (occasional guard/wing/big misfires); college-tuned role thresholds on NBA percentiles cause rare star misfires (Harden→Defensive Guard via his turnover profile); extreme-talent prospects (Boozer) have few comps (flagged); draft-position confound (early picks get more opportunity)."},
+    {cat:"Archetype Value Bands (Research — this tab)",items:[],desc:"A draft-strategy research sub-section shown above (Method tab). For each of 16 NBA archetypes we compute the realized peak Wins Added distribution of past players of that type (~1,210 NBA players, draft classes ~2008–2024): floor (25th percentile = downside), median (typical), and ceiling (90th percentile = upside). Displayed as horizontal value bands so you can read draft strategy by player type: highest ceiling = swing-for-upside pick (Scoring Playmaker / Stretch Rim Protector, ceiling ~28–29 WA); highest floor = safest pick (Stretch Rim Protector); highest median = best balanced bet. Each band carries its SAMPLE SIZE (n) as a data-confidence signal — a type observed 374 times (Scoring Wing) is far better understood than one seen 19 times (3-and-D Wing), whose edges are noisier. Rarity is shown for confidence, NOT as a value claim (rare ≠ better). Hover any band (or see the highlighted card for the current player's type) for EXAMPLE NBA PLAYERS grouped by the tier they reached — a concrete sense of the range (note: these are pre-draft archetypes; some players, like Jokic from a pre-draft 'Scoring Wing', evolved into a different NBA role). The same archetype-value numbers also appear in the Roles & Archetypes tab (each archetype's NBA ceiling tier + % reaching Starter+/All-Star+)."},
     {cat:"International Adjustments",items:[],desc:"International players receive three adjustments: (1) League Strength via empirical bridge-player ratios (2,655 players who played both intl and NBA). Euroleague=1.40, ACB=1.39, BBL=1.18 (NCAA Power=1.0 anchor). (2) Liga-BPM-Scaler: Raw BPM proxy (PER+eDiff) is multiplied by a league-specific scaler (Euroleague ×2.1, ACB ×1.9, NBL ×1.65, etc.) to translate to NCAA-equivalent BPM before feature engineering. (3) Conf-adj post-hoc with translatable-USG-aware caps for strong leagues."},
     {cat:"The 5 Pillars (DNA Scores)",items:["feel","shootScore","defScore","funcAth","selfCreation","overall"],desc:"Position-adjusted percentile scores (0–100) capturing the fundamental dimensions of prospect evaluation. Each pillar uses era-adjusted percentiles computed against ~34k college + ~9k international players since 2008. Box Creation (Ben Taylor method) measures total offensive creation: Scoring Creation (USG×TS) + Assist Creation (AST%×teammate possessions). Works identically for NCAA and international players."},
     {cat:"Shooting Projection",items:["projNba3p","projNba3pa","projNba3par","touchPrior"],desc:"Bayesian Beta-Binomial model for NBA 3P shooting translation. Prior: FT%-based 'motor touch' (strongest single predictor of NBA shooting per Berger 2022). κ=200 pseudo-attempts means low-volume college shooters regress heavily toward their FT% prior. For players without midrange data (internationals, pre-2010), a simplified FT%-only prior is used with higher FT% weighting."},
@@ -7030,6 +7135,11 @@ function MethodologyTab() {
           </button>
         ))}
       </div>
+
+      {/* ── Archetype Value Bands (Research sub-section) ── */}
+      <Sec icon="🔬" title="Archetype Value Bands" sub="Research · draft strategy by player type — what to expect, and how sure we are.">
+        <ResearchTab p={p}/>
+      </Sec>
 
       {/* ── QUICK VIEW ── */}
       {methodView === "quick" && (
@@ -8056,7 +8166,6 @@ const TABS = [
   {id:"devtrajectory",label:"Development",icon:"📈"},
   {id:"projection",label:"Projection",icon:"◆"},
   {id:"riskprofile",label:"Risk Profile",icon:"🎯"},
-  {id:"research",label:"Research",icon:"🔬"},
   {id:"methodology",label:"Method",icon:"📖"},
 ];
 
@@ -8647,8 +8756,7 @@ export default function App() {
             {tab==="devtrajectory"&&<DevTrajectoryTab p={p}/>}
             {tab==="projection"&&<ProjectionTab p={p}/>}
             {tab==="riskprofile"&&<RiskProfileTab p={p}/>}
-            {tab==="research"&&<ResearchTab p={p}/>}
-            {tab==="methodology"&&<MethodologyTab/>}
+            {tab==="methodology"&&<MethodologyTab p={p}/>}
           </>
         )}
       </main>
