@@ -7004,7 +7004,7 @@ function ResearchTab({p}) {
 // ═══════════════════════════════════════════════════════════
 // TAB: METHODOLOGY
 // ═══════════════════════════════════════════════════════════
-function MethodologyTab({p}) {
+function MethodologyTab() {
   const [methodView, setMethodView] = useState("quick"); // "quick" | "deep"
 
   const sections = [
@@ -7135,11 +7135,6 @@ function MethodologyTab({p}) {
           </button>
         ))}
       </div>
-
-      {/* ── Archetype Value Bands (Research sub-section) ── */}
-      <Sec icon="🔬" title="Archetype Value Bands" sub="Research · draft strategy by player type — what to expect, and how sure we are.">
-        <ResearchTab p={p}/>
-      </Sec>
 
       {/* ── QUICK VIEW ── */}
       {methodView === "quick" && (
@@ -8166,12 +8161,12 @@ const TABS = [
   {id:"devtrajectory",label:"Development",icon:"📈"},
   {id:"projection",label:"Projection",icon:"◆"},
   {id:"riskprofile",label:"Risk Profile",icon:"🎯"},
-  {id:"methodology",label:"Method",icon:"📖"},
 ];
 
 export default function App() {
   const [sel,setSel]=useState(null);
   const [tab,setTab]=useState("overview");
+  const [boardView,setBoardView]=useState("bigboard");  // Startseite: bigboard | research | methods
   const [search,setSearch]=useState("");
   const [showS,setShowS]=useState(false);
   // Default comparison tier: "Starter" is the most informative baseline for first-round prospects
@@ -8635,14 +8630,34 @@ export default function App() {
       </header>
       <main className="max-w-7xl mx-auto px-4 md:px-8 py-6">
         {!sel ? (
-          loading ? (
-            <div className="flex flex-col items-center justify-center py-20">
-              <div className="w-12 h-12 rounded-full border-4 border-t-transparent animate-spin mb-4" style={{borderColor:"#f97316",borderTopColor:"transparent"}}/>
-              <p className="text-sm" style={{color:"#6b7280"}}>Loading prospects...</p>
+          <>
+            {/* Meta-level navigation: Big Board (default) · Research · Methods */}
+            <div className="flex gap-2 mb-6 flex-wrap">
+              {[["bigboard","Big Board","▦"],["research","Research","🔬"],["methods","Methods","📖"]].map(([id,label,icon])=>(
+                <button key={id} onClick={()=>setBoardView(id)}
+                  className="px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+                  style={{background: boardView===id?"#f97316":"transparent",
+                          color: boardView===id?"#000":"#9ca3af",
+                          border:`1px solid ${boardView===id?"#f97316":"#374151"}`}}>
+                  <span className="mr-1.5">{icon}</span>{label}
+                </button>
+              ))}
             </div>
-          ) : (
-            <BigBoardView onSelect={selectPlayer} boardData={boardData} setBoardData={setBoardData} loading={loading} setLoading={setLoading} availableYears={availableYears} yearFilter={yearFilter} setYearFilter={setYearFilter}/>
-          )
+            {boardView==="bigboard" ? (
+              loading ? (
+                <div className="flex flex-col items-center justify-center py-20">
+                  <div className="w-12 h-12 rounded-full border-4 border-t-transparent animate-spin mb-4" style={{borderColor:"#f97316",borderTopColor:"transparent"}}/>
+                  <p className="text-sm" style={{color:"#6b7280"}}>Loading prospects...</p>
+                </div>
+              ) : (
+                <BigBoardView onSelect={selectPlayer} boardData={boardData} setBoardData={setBoardData} loading={loading} setLoading={setLoading} availableYears={availableYears} yearFilter={yearFilter} setYearFilter={setYearFilter}/>
+              )
+            ) : boardView==="research" ? (
+              <ResearchTab p={null}/>
+            ) : (
+              <MethodologyTab/>
+            )}
+          </>
         ) : profileLoading && !pReady ? (
           <div className="max-w-4xl mx-auto py-8">
             <div className="animate-pulse space-y-4">
@@ -8756,7 +8771,6 @@ export default function App() {
             {tab==="devtrajectory"&&<DevTrajectoryTab p={p}/>}
             {tab==="projection"&&<ProjectionTab p={p}/>}
             {tab==="riskprofile"&&<RiskProfileTab p={p}/>}
-            {tab==="methodology"&&<MethodologyTab p={p}/>}
           </>
         )}
       </main>
