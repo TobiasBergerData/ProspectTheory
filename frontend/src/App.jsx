@@ -313,14 +313,14 @@ const METHODS = {
     desc: "Usage-role-adjusted Four Factors measuring possession efficiency. Players bucketed by usage (Primary ≥28%, Secondary ≥22%, Finisher ≥15%, LowUsage <15%). Each factor z-scored within role × season. NPV > +2.0 = 'Elite Floor Raiser', +0.5–2.0 = 'Winning Piece', −0.5–0.5 = 'Role Dependent', < −1.0 = 'High Maintenance'. This is NOT a talent rating — it's an efficiency index measuring how 'expensive' it is for a coach to keep this player on the floor.",
   },
   monteCarlo: {
-    name: "ppWA Projection Model (v2)",
-    formula: "ppWA = P(Elite) × E[WA | Elite] + (1 − P(Elite)) × WA_reg",
-    desc: "Two-component mixture model. WA_reg: position-stratified HistGradientBoosting (sklearn, N=1,784 prospects 2010–2016) with known NBA outcomes. Elite Detector: calibrated Logistic Regression predicting P(WA ≥ 10.0 = All-Star+). ppWA blends both signals — if P(Elite) is high, the player is pushed toward the expected WA of elite players (22.2 WA). Temporal split: train 2010–2016, holdout 2017–2019 (no future leakage). Validated: Spearman ρ = 0.460 on holdout (vs craftednba.com benchmark 0.373), CV r = 0.462 (5-fold), MAR = 12.0 per class. WA tiers: Superstar ≥25, All-Star ≥10, Starter ≥4, Role Player ≥1, Replacement ≥0. Survivorship caveat: training set is scouted/drafted players only.",
+    name: "Added Wins Projection Model",
+    formula: "Added Wins = P(NBA) × E[Added Wins | NBA]",
+    desc: "Two-stage (hurdle) model. Stage 1 — P(NBA): a calibrated logistic model trained on the FULL prospect pool (~15k players, NBA reached or not), ROC-AUC 0.98 on a 2017–2019 holdout. Stage 2 — E[Added Wins | NBA]: a regularized ElasticNet trained on 752 NBA careers. The target is the best consecutive-3-season Added Wins: a team-anchored blend of on-court impact (xRAPM, 70%) and box production (30%), scaled so each roster's player-wins sum to the team's actual wins-above-replacement (additivity). Temporal split: train ≤2016, holdout 2017–2019 (no future leakage). Validated: value-model Spearman ρ = 0.41 on holdout vs craftednba.com 0.373. Realized-WA tiers: Superstar ≥41, All-Star ≥28, Starter ≥15, Role Player ≥2. Honest caveat: the projected number is an EXPECTED value and is deliberately modest — a college profile rarely signals stardom (e.g. SGA), so star upside is shown via the tier distribution, not inflated into the point estimate. A separate high-floor model (P(NBA or EuroLeague-tier), trained on international career outcomes too) gives the downside.",
   },
   projectionDrivers: {
     name: "Projection Drivers (SHAP Decomposition)",
     formula: "contribution_i = Σ(split gains involving feature i across all trees)",
-    desc: "Per-player feature contributions computed via LightGBM's native SHAP tree decomposition (pred_contrib). For each prospect, the model's ppWA projection is broken down into the additive contribution of each of the 28 input features. The top 5 positive contributors (boosters) and top 5 negative contributors (limiters) are displayed. Strength (+++/++/+) reflects relative magnitude within the player's own top-5 drivers. Ensemble: production-model contributions (30%) blended with xRAPM model contributions (70%) on the Wins Added scale.",
+    desc: "Per-player feature contributions from the value model. For each prospect, the Added-Wins projection is broken into the additive contribution of each input feature (exact linear attribution for the ElasticNet backbone). Boosters push the projection above the population baseline; limiters pull it below. The Added-Wins target itself blends box production (30%) and on-court impact / xRAPM (70%).",
   },
   posClassification: {
     name: "Position Classification",
@@ -1534,7 +1534,7 @@ function mapProfile(d) {
     // Original modal tier is preserved as `predTierRaw` for debugging / methodology.
     predTier: (() => {
       const fallback = d.v2Tier ?? d.pred_tier ?? d.predicted_tier ?? d.tier;
-      const probs = d.v2TierProbs;
+      const probs = d.addedWins?.tierProbs ?? d.v2TierProbs;  // prefer Added-Wins distribution
       if (probs) return recalibrateTier(probs, fallback);
       // Legacy probs from prob_* fields (×100 already in tiers field above)
       const legacy = {
@@ -1553,17 +1553,22 @@ function mapProfile(d) {
     potentialTier: d.potential_tier ?? null,
     countingStatsImputed: d.counting_stats_imputed ?? false,
     ups: d.ups ?? d.ups_raw,
-    // ppWA = Projected Peak Wins Added (Model v2: HistGradientBoosting + Elite Detector)
-    ppwa: d.ppwa ?? null,
-    pElite: d.pElite ?? null,
-    waFloor: d.waFloor ?? null,
-    waCeiling: d.waCeiling ?? null,
+    // Tobias 2026-05-25: PRIMARY VALUE METRIC converged to Added Wins (inject_added_wins.py).
+    // Prefer addedWins.* everywhere; fall back to legacy ppWA so players without a new
+    // projection still render. Added Wins is on the same realized-WA scale (just an honest,
+    // compressed expectation) and tierProbs share the same %-scale keys as v2TierProbs.
+    ppwa: d.addedWins?.ev ?? d.ppwa ?? null,
+    pElite: d.addedWins?.tierProbs
+      ? ((d.addedWins.tierProbs.Superstar || 0) + (d.addedWins.tierProbs["All-Star"] || 0)) / 100
+      : (d.pElite ?? null),
+    waFloor: d.addedWins?.floor ?? d.waFloor ?? null,
+    waCeiling: d.addedWins?.ceiling ?? d.waCeiling ?? null,
     waSigma: d.waSigma ?? d.v2_sigma ?? null,
     v2Conf: d.v2Conf ?? null,
-    v2TierProbs: d.v2TierProbs ?? null,  // %-scale already: {Superstar:30.9, All-Star:41.8, ...}
+    v2TierProbs: d.addedWins?.tierProbs ?? d.v2TierProbs ?? null,  // %-scale {Superstar:0.3, ...}
     v2Boosters: d.v2Boosters ?? null,
     v2Limiters: d.v2Limiters ?? null,
-    war: d.ppwa ?? d.war ?? d.projected_war ?? d.war_score ?? null,
+    war: d.addedWins?.ev ?? d.ppwa ?? d.war ?? d.projected_war ?? d.war_score ?? null,
     humble: d.humble ?? d.f_humble ?? d.hmb ?? null,
     aspm: d.aspm ?? d.aspm_adj,
     production: d.production ?? d.prod,
@@ -1571,7 +1576,7 @@ function mapProfile(d) {
     careerPath: d.career_path ?? d.path ?? "NBA",
     // Tier probabilities: v2TierProbs is already %-scale from new model
     // Fall back to prob_* fields (×100 for %) from the legacy model
-    tiers: d.v2TierProbs ? d.v2TierProbs : {
+    tiers: d.addedWins?.tierProbs ? d.addedWins.tierProbs : d.v2TierProbs ? d.v2TierProbs : {
       Superstar:((d.prob_super??d.prob_superstar??d.probs?.superstar??0)*100),
       "All-Star":((d.prob_allstar??d.probs?.allstar??0)*100),
       Starter:((d.prob_starter??d.probs?.starter??0)*100),
@@ -4541,14 +4546,10 @@ function ProjectionTab({p}) {
     {label:"USG%", val:p.usg, desc:"Usage rate — production volume signal", color:p.usg>25?"#22c55e":p.usg>20?"#86efac":"#fbbf24"},
   ].filter(d => d.val != null);
 
-  // ppWA color scale - synced to Backend Tier-Schwellen 2026-04-30:
-  // Superstar>=47, All-Star>=33, Starter>=17, Roleplayer>=8, Replacement>=0, Out<0
-  const warColor = war >= 47 ? "#fbbf24"  // Superstar gold
-                 : war >= 33 ? "#f97316"  // All-Star orange
-                 : war >= 17 ? "#3b82f6"  // Starter blue
-                 : war >=  8 ? "#06b6d4"  // Roleplayer cyan
-                 : war >=  0 ? "#8b5cf6"  // Replacement purple
-                 : "#6b7280";              // Out gray
+  // Tobias 2026-05-25: color now keyed to the projected TIER (from the calibrated
+  // tier distribution), not raw magnitude — Added Wins is an honest expected value
+  // (compressed), so magnitude thresholds no longer apply. TC = master tier→color.
+  const warColor = TC[predTier] || "#8b5cf6";
 
   // Confidence (v2Conf from model, fallback to legacy)
   const rawConf = p.v2Conf || p.confidence;
@@ -4562,15 +4563,15 @@ function ProjectionTab({p}) {
         <div className="absolute top-0 right-0 w-48 h-48 opacity-5 blur-3xl rounded-full" style={{background:`radial-gradient(circle,${warColor},transparent)`}}/>
         <div className="relative">
           <Tip wide content={<div>
-            <div className="font-bold mb-2" style={{color:"#f97316"}}>ppWA — Projected Peak Wins Added</div>
+            <div className="font-bold mb-2" style={{color:"#f97316"}}>Added Wins — Expected Peak Value</div>
             <div className="mb-2" style={{color:"#cbd5e1"}}>
-              <strong>Formula:</strong> ppWA = P(Elite) × E[WA|Elite] + (1−P(Elite)) × WA_reg
+              <strong>Formula:</strong> Added Wins = P(NBA) × E[Added Wins | NBA]
             </div>
             <div className="mb-2" style={{color:"#9ca3af",fontSize:"0.85em"}}>
-              Two-component mixture: HistGradientBoosting regression (WA_reg) + calibrated Elite Detector (logistic) estimating P(WA ≥ 10 = All-Star+). If elite probability is high, the projection blends toward the average WA of elite players (22.2 WA).
+              Two stages: P(NBA) — a calibrated model trained on the full ~15k-prospect pool — times the expected peak value if he reaches the league. The value target is the best-3-season Added Wins, a team-anchored blend of on-court impact (xRAPM) and box production, so a roster's player-wins sum to the team's actual wins. It is an expected value — deliberately modest; star upside lives in the tier distribution below.
             </div>
             <div style={{color:"#6b7280",fontSize:"0.8em"}}>
-              N=1,784 prospects (draft classes 2010–2016) · Holdout validation 2017–2019: Spearman ρ = 0.460 vs craftednba.com 0.373 · ρ measures rank-order accuracy on out-of-sample data · WA tiers: Superstar ≥25, All-Star ≥10, Starter ≥4, Role ≥1 · Fringe/undrafted projections are extrapolations beyond training distribution.
+              Value model: 752 NBA careers, temporal holdout 2017–2019 Spearman ρ = 0.41 vs craftednba.com 0.373 · P(NBA) ROC-AUC 0.98 · realized-WA tiers: Superstar ≥41, All-Star ≥28, Starter ≥15, Role Player ≥2 · fringe/undrafted projections are extrapolations beyond the training distribution.
             </div>
           </div>}>
             <div className="cursor-help">
@@ -4702,7 +4703,7 @@ function ProjectionTab({p}) {
       <Sec icon="◆" title="Tier Distribution"
         sub={showNonNba
           ? `Unconditional career outcome distribution — NBA tier bars scaled by P(NBA) ${(pNba*100).toFixed(0)}%. "Non-NBA" covers G League, international, or out of pro ball.`
-          : "What career outcome is most likely? Probabilities derived from the ppWA Gaussian distribution (v2 model). Tier thresholds: Superstar ≥25 WA · All-Star ≥10 · Starter ≥4 · Role Player ≥1."}>
+          : "What career outcome is most likely? Probabilities derived from the Added-Wins projection distribution. Realized-WA tier thresholds: Superstar ≥41 · All-Star ≥28 · Starter ≥15 · Role Player ≥2."}>
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={tierData} margin={{top:5,right:5,bottom:5,left:5}}>
             <XAxis dataKey="name" tick={{fill:"#9ca3af",fontSize:11}} axisLine={false} tickLine={false}/>
@@ -4870,12 +4871,12 @@ function ProjectionTab({p}) {
               </div>
             </div>
             <div className="mt-4 p-3 rounded-lg text-xs leading-relaxed" style={{background:"#0d111744",color:"#4b5563"}}>
-              <strong style={{color:"#6b7280"}}>How this works:</strong> For each prospect, our LightGBM model decomposes the ppWA projection
-              into individual feature contributions (SHAP tree decomposition). Boosters are features where this prospect's value
+              <strong style={{color:"#6b7280"}}>How this works:</strong> For each prospect, the value model decomposes the projection
+              into individual feature contributions. Boosters are features where this prospect's value
               pushes the prediction above the population baseline; limiters pull it below. Strength reflects relative magnitude
               within this player's own top contributors — <span style={{color:"#22c55e"}}>+++</span> = dominant influence,{" "}
               <span style={{color:"#22c55e"}}>+</span> = still top-5 but smaller effect.
-              The ensemble blends the production model (30%) and xRAPM (70%) contributions.
+              The Added-Wins target itself blends box production (30%) and on-court impact / xRAPM (70%).
             </div>
           </Sec>
         );
@@ -5078,7 +5079,7 @@ function ProjectionTab({p}) {
                     : <>From the 14-Role Inference Matrix (z-scores vs NCAA peers): Spacer + Defender + Driver + Playmaker + Rim-Protector + Rebounder + 6 hybrids. The dominant 1-2 roles determine the archetype. <strong style={{color:"#e5e7eb"}}>You see this in the Roles & Archetypes tab.</strong></>
                   }/>
                 <TopFlow step={2} title="Predicted NBA Tier" color="#f97316"
-                  body={<>LightGBM model trained on 27 seasons of NBA outcomes (2008–2024 careers, validated on Pre-Draft features only). Predicts probability across 6 tiers: <strong style={{color:"#e5e7eb"}}>Superstar (≥25 ppWA peak), All-Star (≥10), Starter (≥4), Role Player (≥1), Bench, Out</strong>. Cross-validation: r=0.461 ± 0.100 on hold-out. <strong style={{color:"#e5e7eb"}}>You see this in the Tier Distribution above.</strong></>
+                  body={<>Calibrated model trained on NBA outcomes (1996–2024 careers, validated on Pre-Draft features only). Predicts probability across 6 tiers on the realized Added-Wins scale: <strong style={{color:"#e5e7eb"}}>Superstar (≥41 peak), All-Star (≥28), Starter (≥15), Role Player (≥2), Replacement, Negative</strong>. Temporal holdout 2017–2019: Spearman ρ = 0.41. <strong style={{color:"#e5e7eb"}}>You see this in the Tier Distribution above.</strong></>
                   }/>
                 <TopFlow step={3} title="Position-Specific NBA Role Mapping" color="#22c55e"
                   body={<>The Pre-Draft Role × Predicted Tier matrix maps to one of 72 specific NBA outcomes per position. Higher tier = more demanding role; lower tier = more specialized/limited role. <strong style={{color:"#e5e7eb"}}>The "NBA Projection" pill in the header is the modal outcome.</strong></>
@@ -7113,8 +7114,8 @@ function MethodologyTab() {
   const [methodView, setMethodView] = useState("quick"); // "quick" | "deep"
 
   const sections = [
-    {cat:"ppWA Projection Model",items:["monteCarlo","posClassification"],desc:"The core engine: a position-stratified gradient-boosting model combined with a calibrated Elite Detector. Trained on 1,784 NCAA and international prospects (draft classes 2010–2016) with verified NBA outcomes. Target variable: Peak Wins Added — best 3-consecutive-season window in first 8 NBA years (min 200 minutes/season). Features: 8–12 theoretically grounded variables per position group (Playmaker / Wing / Big), including age, BPM percentile, BPM trajectory, conference strength, free-throw rate, athleticism score, and position-specific shooting/playmaking signals. Output: ppWA = Projected Peak Wins Added — a single, interpretable number: 'this player projects to add X wins above replacement at his peak'. Validated on holdout classes 2017–2019 with Spearman rank correlation ρ = 0.460 (out-of-sample). Cross-validated r = 0.462 (5-fold CV). Note: the model was trained on prospects who were scouted and drafted — projections for undrafted players are extrapolations beyond the training distribution."},
-    {cat:"Risk Profile Tab — Draft Range & Risk (NEW)",items:[],desc:"Reframes the projection as a front-office decision: where a player will be drafted vs. where he belongs, plus risk in both directions. (1) MARKET RANGE — the realistic pick range, PROJECTED from an existing consensus mock ranking (a single consensus board, one rank per player). We do not generate a new consensus; we take that rank and map it onto where similarly-ranked players were actually drafted in 2008–2018. The band width therefore reflects how a consensus rank historically translates into a real pick (teams reach, prospects slide) — NOT disagreement between different mock boards. Two players with the same consensus rank get the same band. Out-of-sample on 2019–2025 the actual pick falls inside the predicted p20–p80 band 63% of the time (target ~60%), with Spearman(consensus, pick)=+0.85. (2) MERIT SLOT — where a player belongs on talent in an average draft. Our projected value (ppWA) is recalibrated onto the realized-Wins-Added scale, then mapped through an isotonic curve E[peak Wins Added | pick] built from mature drafts. Our value predicts realized NBA outcome (peak Wins Added) markedly better than the actual draft order did: Spearman +0.54 vs +0.29. The gap between Merit and Market is the steal/bust signal (e.g. Tyrese Haliburton: market #10, merit #1). (3) TWO RISK AXES, computed from a kernel-weighted empirical distribution of comparable past prospects (similar projected value × archetype affinity): BUST RISK = share of comps who delivered below the value their slot demanded — well-calibrated (predicted 75–100% → 86% actual bust rate; James Wiseman scored 96%); STAR UPSIDE = share who reached All-Star level, blended 70/30 with the archetype's empirical All-Star rate so high-ceiling archetypes get proper credit. (4) ARCHETYPE VALUE — positional value is measured, not assumed: we compute each NBA archetype's realized peak Wins Added distribution from ~1,210 NBA players. Scoring Playmaker (ceiling ~29 WA) and Stretch Rim Protector (~28) carry the highest ceilings; pure rim-runners and role-archetypes cap around starter level. This is why a player's best-case archetype shapes his upside. CAVEATS: market range needs a consensus-board presence (most deep prospects have none); the box-score value model can under-rate raw, young upside; reason-code factors are surfaced from the projection engine and are noisier for international prospects (FIBA signals translate imperfectly)."},
+    {cat:"Added Wins Projection Model",items:["monteCarlo","posClassification"],desc:"The core engine: a two-stage (hurdle) value model. Stage 1 estimates P(NBA) on the FULL prospect pool (~15k NCAA + international players, NBA reached or not) — a calibrated logistic model, ROC-AUC 0.98 on a 2017–2019 holdout. Stage 2 predicts the expected value if he reaches the league — a regularized, fully-explainable ElasticNet trained on 752 NBA careers. The headline = P(NBA) × E[Added Wins | NBA]. Target variable: Added Wins — the best 3-consecutive-season window in the first 8 NBA years, a team-anchored blend of player-isolated on-court impact (xRAPM, 70%) and box production (30%), scaled so a roster's player-wins sum to the team's actual wins-above-replacement (additivity). Trained with a temporal split (≤2016 train, 2017–2019 holdout, no future leakage). Validated: value-model Spearman ρ = 0.41 out-of-sample (vs craftednba.com benchmark 0.373). Output: a single interpretable number plus a full tier-probability distribution. Honest caveat: the number is an EXPECTED value and is deliberately modest — a college profile rarely signals stardom (e.g. SGA looked ordinary at Kentucky), so star upside is shown via the tier distribution, not inflated into the point estimate. A separate high-floor model (P(NBA or EuroLeague-tier), trained on international career outcomes too) gives the downside. Projections for undrafted/fringe players are extrapolations beyond the training distribution."},
+    {cat:"Risk Profile Tab — Draft Range & Risk (NEW)",items:[],desc:"Reframes the projection as a front-office decision: where a player will be drafted vs. where he belongs, plus risk in both directions. (1) MARKET RANGE — the realistic pick range, PROJECTED from an existing consensus mock ranking (a single consensus board, one rank per player). We do not generate a new consensus; we take that rank and map it onto where similarly-ranked players were actually drafted in 2008–2018. The band width therefore reflects how a consensus rank historically translates into a real pick (teams reach, prospects slide) — NOT disagreement between different mock boards. Two players with the same consensus rank get the same band. Out-of-sample on 2019–2025 the actual pick falls inside the predicted p20–p80 band 63% of the time (target ~60%), with Spearman(consensus, pick)=+0.85. (2) MERIT SLOT — where a player belongs on talent in an average draft. Our projected value (Added Wins) is recalibrated onto the realized-Wins-Added scale, then mapped through an isotonic curve E[peak Wins Added | pick] built from mature drafts. Our value predicts realized NBA outcome (peak Wins Added) markedly better than the actual draft order did: Spearman +0.54 vs +0.29. The gap between Merit and Market is the steal/bust signal (e.g. Tyrese Haliburton: market #10, merit #1). (3) TWO RISK AXES, computed from a kernel-weighted empirical distribution of comparable past prospects (similar projected value × archetype affinity): BUST RISK = share of comps who delivered below the value their slot demanded — well-calibrated (predicted 75–100% → 86% actual bust rate; James Wiseman scored 96%); STAR UPSIDE = share who reached All-Star level, blended 70/30 with the archetype's empirical All-Star rate so high-ceiling archetypes get proper credit. (4) ARCHETYPE VALUE — positional value is measured, not assumed: we compute each NBA archetype's realized peak Wins Added distribution from ~1,210 NBA players. Scoring Playmaker (ceiling ~29 WA) and Stretch Rim Protector (~28) carry the highest ceilings; pure rim-runners and role-archetypes cap around starter level. This is why a player's best-case archetype shapes his upside. CAVEATS: market range needs a consensus-board presence (most deep prospects have none); the box-score value model can under-rate raw, young upside; reason-code factors are surfaced from the projection engine and are noisier for international prospects (FIBA signals translate imperfectly)."},
     {cat:"Risk Profile Tab — Projected NBA Role (pre→post, NEW)",items:[],desc:"Answers 'what does this player's TYPE actually become in the NBA, and what is that worth?' (1) NBA-OUTCOME ROLES: every NBA player (1,780, ≥500 peak-window minutes) is classified into the SAME archetype taxonomy as our prospects, but from his realized NBA peak — using the identical role-score formulas and assignment logic as the prospect pipeline, only ranked against NBA peers instead of college peers. So pre-draft type and NBA type share one comparable label set. Each NBA role's value is measured empirically: Scoring Playmaker (lead guard) is most valuable (median ~25 peak Wins Added, 50% All-Star); 'empty' roles (Non-Specialized / Slashing / Defensive Wing) rarely stick (8–14% reach Role-Player value). (2) TRANSITION: across matured drafted classes (≤2020), P(NBA outcome | pre-draft archetype), INCLUDING an honest 'Did Not Stick' (no established ≥500-min role). The same type's outcome depends heavily on talent — an elite-projected Scoring Playmaker sticks 75% / All-Star 38%, a marginal one 6% / 0% ('a scoring guard has to be elite to play'). (3) PER-PROSPECT PROJECTION: outcome distribution = kernel-weighted comparable past prospects (same pre-draft archetype × similar projected value). Output: most-likely NBA role, full outcome distribution with each role's typical value, P(establishes a role) and P(reaches Role-Player value) as the FLOOR, expected Wins Added. Floor calibration is sound (predicted 0–15%→5% actual, 50–100%→86%; James Wiseman projects 14% stick, Wembanyama 100%). CAVEATS: NBA stats lack height → NBA position is box-derived (occasional guard/wing/big misfires); college-tuned role thresholds on NBA percentiles cause rare star misfires (Harden→Defensive Guard via his turnover profile); extreme-talent prospects (Boozer) have few comps (flagged); draft-position confound (early picks get more opportunity)."},
     {cat:"Archetype Value Bands (Research — this tab)",items:[],desc:"A draft-strategy research sub-section shown above (Method tab). For each of 16 NBA archetypes we compute the realized peak Wins Added distribution of past players of that type (~1,210 NBA players, draft classes ~2008–2024): floor (25th percentile = downside), median (typical), and ceiling (90th percentile = upside). Displayed as horizontal value bands so you can read draft strategy by player type: highest ceiling = swing-for-upside pick (Scoring Playmaker / Stretch Rim Protector, ceiling ~28–29 WA); highest floor = safest pick (Stretch Rim Protector); highest median = best balanced bet. Each band carries its SAMPLE SIZE (n) as a data-confidence signal — a type observed 374 times (Scoring Wing) is far better understood than one seen 19 times (3-and-D Wing), whose edges are noisier. Rarity is shown for confidence, NOT as a value claim (rare ≠ better). Hover any band (or see the highlighted card for the current player's type) for EXAMPLE NBA PLAYERS grouped by the tier they reached — a concrete sense of the range (note: these are pre-draft archetypes; some players, like Jokic from a pre-draft 'Scoring Wing', evolved into a different NBA role). The same archetype-value numbers also appear in the Roles & Archetypes tab (each archetype's NBA ceiling tier + % reaching Starter+/All-Star+). PRE-DRAFT → NBA TRANSITION: a second view shows, per pre-draft archetype, what those players actually became in the NBA (drafted classes ≤2020) — including an honest 'Did Not Stick' (never established a rotation role). E.g. a pre-draft Scoring Wing most often does not stick or becomes a role-filler; a Stretch Rim Protector usually becomes a Stretch Big / Rim Protector. A talent overlay then splits the same type by projected-value tier: an elite-projected Scoring Playmaker sticks 75% / All-Star 38%, a marginal one 6% / 0% — quantifying 'a scoring guard has to be elite to be worth it'. (Drafted-player population, so it carries a draft-position confound; thin pre-draft types omitted.)"},
     {cat:"International Adjustments",items:[],desc:"International players receive three adjustments: (1) League Strength via empirical bridge-player ratios (2,655 players who played both intl and NBA). Euroleague=1.40, ACB=1.39, BBL=1.18 (NCAA Power=1.0 anchor). (2) Liga-BPM-Scaler: Raw BPM proxy (PER+eDiff) is multiplied by a league-specific scaler (Euroleague ×2.1, ACB ×1.9, NBL ×1.65, etc.) to translate to NCAA-equivalent BPM before feature engineering. (3) Conf-adj post-hoc with translatable-USG-aware caps for strong leagues."},
@@ -7204,7 +7205,7 @@ function MethodologyTab() {
           </div>
         </div>
         <div style={{textAlign:"center",color:"#6b7280",fontSize:10,marginBottom:2}}>
-          ppWA = P(Elite) × E[WA|Elite] + (1 − P(Elite)) × wa_pred
+          Added Wins = P(NBA) × E[Added Wins | NBA]
         </div>
         {arrow()}
 
@@ -7212,7 +7213,7 @@ function MethodologyTab() {
         <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8}}>
           <div style={boxStyle("#f97316")}>
             <div style={{color:"#f97316", fontSize:12, fontWeight:700, fontFamily:"'Oswald',sans-serif"}}>NBA Projection</div>
-            <div style={{color:"#6b7280", fontSize:10, marginTop:3}}>ppWA score<br/>5 tier probabilities<br/>Boosters + Limiters</div>
+            <div style={{color:"#6b7280", fontSize:10, marginTop:3}}>Added Wins score<br/>5 tier probabilities<br/>Boosters + Limiters</div>
           </div>
           <div style={boxStyle("#60a5fa")}>
             <div style={{color:"#60a5fa", fontSize:12, fontWeight:700, fontFamily:"'Oswald',sans-serif"}}>Intl Projection</div>
@@ -7253,7 +7254,7 @@ function MethodologyTab() {
               <li style={{marginBottom:6}}><strong style={{color:"#fbbf24"}}>Body measurements</strong> — height, weight, wingspan, ape index. These translate to NBA-level athleticism.</li>
               <li style={{marginBottom:6}}><strong style={{color:"#fbbf24"}}>Behavior under pressure</strong> — derived from raw play-by-play data: how does this player respond when things go wrong? Does he force shots? Foul more? Withdraw? This is the part most public tools don't quantify.</li>
             </ul>
-            <p style={{marginBottom:12}}>A trained projection model combines these into a single number — <strong style={{color:"#e5e7eb"}}>ppWA (Projected Peak Wins Added)</strong> — plus tier probabilities (Superstar / All-Star / Starter / Role Player / Bench / Out). On top of that we layer position-specific role-fit, archetype matching, and historical comparisons.</p>
+            <p style={{marginBottom:12}}>A trained projection model combines these into a single number — <strong style={{color:"#e5e7eb"}}>Added Wins (expected peak value = P(NBA) × value if he reaches the league)</strong> — plus tier probabilities (Superstar / All-Star / Starter / Role Player / Replacement / Negative). On top of that we layer position-specific role-fit, archetype matching, and historical comparisons.</p>
           </div>
         </Sec>
 
@@ -7309,7 +7310,7 @@ function MethodologyTab() {
 
       <Sec icon="📖" title="Methodology & Model Documentation" sub="Complete documentation of all computed metrics, formulas, and their statistical foundations.">
         <div className="text-sm mb-3" style={{color:"#9ca3af"}}>
-          ProspectTheory uses <strong style={{color:"#e5e7eb"}}>ppWA (Projected Peak Wins Added)</strong> — a single, interpretable metric built from a two-component mixture model: position-stratified gradient-boosting regression combined with a calibrated Elite Detector. Trained on N=1,784 prospects (draft classes 2010–2016) with verified NBA outcomes. Target: best 3-consecutive-season peak in first 8 NBA years. All scores are position-aware (Playmaker / Wing / Big) and era-adjusted. Holdout validation (2017–2019): Spearman ρ = 0.460.
+          ProspectTheory uses <strong style={{color:"#e5e7eb"}}>Added Wins (expected peak value)</strong> — a single, interpretable metric from a two-stage model: P(NBA) trained on the full ~15k-prospect pool, times the expected value if he reaches the league (regularized ElasticNet on 752 NBA careers). Target: the best 3-consecutive-season Added Wins peak (team-anchored impact + production) in the first 8 NBA years. Temporal holdout (2017–2019): value-model Spearman ρ = 0.41; P(NBA) ROC-AUC 0.98.
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
           {[
@@ -7402,17 +7403,17 @@ function MethodologyTab() {
       <Sec icon="🎯" title="GM Risk Profile"
         sub="Three draft philosophies that reorder the Big Board Range View. Same players, different priorities — reflecting real front-office decision-making contexts.">
         <div className="space-y-3 text-sm" style={{color:"#cbd5e1"}}>
-          <p style={{color:"#94a3b8"}}>Two prospects with identical ppWA of 6.0 can have completely different risk profiles: one might be 70% Starter / 30% Role Player (safe, bankable), while another is 30% All-Star / 40% Replacement (high variance). The optimal draft choice depends on where your team is in its competitive window.</p>
+          <p style={{color:"#94a3b8"}}>Two prospects with identical Added Wins of 6.0 can have completely different risk profiles: one might be 70% Starter / 30% Role Player (safe, bankable), while another is 30% All-Star / 40% Replacement (high variance). The optimal draft choice depends on where your team is in its competitive window.</p>
           <div className="grid gap-3" style={{gridTemplateColumns:"repeat(3,1fr)"}}>
             {[["🎰 Ceiling First","#f59e0b","#78350f",
-              "Sort: 65% Ceiling Score + 35% ppWA",
+              "Sort: 65% Ceiling Score + 35% Added Wins",
               "Rebuilding teams, tanking franchises, or GMs willing to accept bust risk for a potential star. Boom/Bust picks rise. A 5% Superstar probability is an asset, not a liability. This GM is picking lottery tickets.",
             ],["⚖️ Balanced","#6b7280","#1f2937",
-              "Sort: ppWA (expected value)",
+              "Sort: Added Wins (expected value)",
               "Standard draft order. Best proxy for long-run roster value. Neither ceiling nor floor is systematically privileged. Default view.",
             ],["🛡️ Floor First","#06b6d4","#0c4a6e",
-              "Sort: 65% Floor Score + 35% ppWA",
-              "Win-now teams, GMs protecting their jobs, or franchises with no room for a bust. High-variance picks drop. A player who reliably delivers 4-6 ppWA is more valuable than a boom/bust candidate with the same expected value.",
+              "Sort: 65% Floor Score + 35% Added Wins",
+              "Win-now teams, GMs protecting their jobs, or franchises with no room for a bust. High-variance picks drop. A player who reliably delivers 4-6 Added Wins is more valuable than a boom/bust candidate with the same expected value.",
             ]].map(([label,color,bg,formula,desc])=>(
               <div key={label} className="p-3 rounded-lg" style={{background:"#0d1117",border:`1px solid ${color}44`}}>
                 <div className="font-bold mb-1" style={{color}}>{label}</div>
@@ -7599,7 +7600,7 @@ function RangeView({ players, gmRisk }) {
     ? "Ceiling Sort — convex utility: Superstar probability rewarded disproportionately"
     : gmRisk === "floor"
     ? "Floor Sort — concave utility: bust risk penalized catastrophically (quadratic)"
-    : "Balanced Sort — linear expected value E[ppWA] via tier probabilities";
+    : "Balanced Sort — linear expected value E[Added Wins] via tier probabilities";
 
   const posColors = { Playmaker: "#3b82f6", Wing: "#f97316", Big: "#8b5cf6" };
 
@@ -7649,8 +7650,8 @@ function RangeView({ players, gmRisk }) {
           );
         })}
 
-        {/* ── "ppWA" axis label ── */}
-        <text x={LEFT_CHT + CHART_W / 2} y={PAD_TOP - 30} fontSize={7} fill="#6b7280" textAnchor="middle">ppWA →</text>
+        {/* ── "Added Wins" axis label ── */}
+        <text x={LEFT_CHT + CHART_W / 2} y={PAD_TOP - 30} fontSize={7} fill="#6b7280" textAnchor="middle">Added Wins →</text>
 
         {/* ── Chart border ── */}
         <rect x={LEFT_CHT} y={PAD_TOP} width={CHART_W} height={N * ROW_H} fill="none" stroke="#1f2937" strokeWidth={0.5}/>
@@ -7786,7 +7787,7 @@ function RangeView({ players, gmRisk }) {
 
         {/* ── Caption ── */}
         <text x={LEFT_CHT + CHART_W / 2} y={H - 5} fontSize={6} fill="#374151" textAnchor="middle">
-          bar = p10–p90 projection range · dot = median ppWA · overlapping bars = statistically interchangeable prospects · left stripe = position
+          bar = p10–p90 projection range · dot = median Added Wins · overlapping bars = statistically interchangeable prospects · left stripe = position
         </text>
       </svg>
     </div>
@@ -7923,7 +7924,7 @@ function TierBoardView({ players, onSelect }) {
                         <div key={p.player_id || p.name} onClick={() => onSelect(p.name)}
                              className="cursor-pointer hover:bg-white hover:bg-opacity-5"
                              style={{ padding: "2px 6px", borderRadius: 4, marginBottom: 2 }}
-                             title={`#${p._rank} · ppWA ${p.war?.toFixed?.(1) ?? "—"} · ${p.archetype || ""}`}>
+                             title={`#${p._rank} · Added Wins ${p.war?.toFixed?.(1) ?? "—"} · ${p.archetype || ""}`}>
                           <span style={{ color: tier.color, fontSize: 12, fontWeight: 500 }}>{p.name}</span>
                           <span style={{ color: "#6b7280", fontSize: 9, marginLeft: 4 }}>#{p._rank}</span>
                         </div>
@@ -8043,7 +8044,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
   const posColors = {Playmaker:"#3b82f6", Wing:"#f97316", Big:"#8b5cf6"};
 
   // Sort label for header
-  const sortLabels = {war:"ppWA", age:"Age (youngest)", bpm:"BPM", super:"Star %", allstar:"All-Star %", starter:"Starter %", role:"Role %", tier:"Tier"};
+  const sortLabels = {war:"Added Wins", age:"Age (youngest)", bpm:"BPM", super:"Star %", allstar:"All-Star %", starter:"Starter %", role:"Role %", tier:"Tier"};
 
   // Clickable column header
   const SortTh = ({sortKey, children, align="left"}) => (
@@ -8065,7 +8066,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
             {yearFilter && yearFilter !== "All" ? yearFilter : "All Years"} Big Board
           </h2>
           <p className="text-sm mt-1" style={{color:"#6b7280"}}>
-            Probabilistic ranking · {filtered.length} prospects · Sort: {sortLabels[sortBy] || "ppWA"}
+            Probabilistic ranking · {filtered.length} prospects · Sort: {sortLabels[sortBy] || "Added Wins"}
           </p>
         </div>
       </div>
@@ -8098,7 +8099,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
         </div>
         {/* Sort buttons */}
         <div className="flex gap-1">
-          {[["war","ppWA"],["age","Age"],["bpm","BPM"]].map(([k,l])=>(
+          {[["war","Added Wins"],["age","Age"],["bpm","BPM"]].map(([k,l])=>(
             <button key={k} onClick={()=>setSortBy(k)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
               style={{background:sortBy===k?"#f97316":"#1f2937",color:sortBy===k?"#000":"#9ca3af"}}>
               {l}
@@ -8163,7 +8164,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
                 <th className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>Pos</th>
                 <th className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>Team</th>
                 <SortTh sortKey="age">Age</SortTh>
-                <SortTh sortKey="war">ppWA</SortTh>
+                <SortTh sortKey="war">Added Wins</SortTh>
                 <SortTh sortKey="bpm">BPM</SortTh>
                 <SortTh sortKey="tier">NBA Tier</SortTh>
                 <th className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>Intl Tier</th>
@@ -8481,7 +8482,7 @@ export default function App() {
       if (team) dparts.push(team);
       if (yr)   dparts.push(`Class ${yr}`);
       if (tier) dparts.push(`Projected ${tier}`);
-      if (ppwa != null) dparts.push(`${ppwa} ppWA`);
+      if (ppwa != null) dparts.push(`${ppwa} Added Wins`);
       dparts.push("Stats, projection & NBA comps.");
       desc = dparts.join(' · ').slice(0, 160);
 
@@ -8794,7 +8795,7 @@ export default function App() {
                     <div className="text-xs uppercase tracking-widest mb-1 flex items-center gap-2" style={{color:"#6b7280"}}>
                       <span>{p.draftYear || p.yr} Draft Class{p.source!=="ncaa"?` · ${p.source?.toUpperCase()}`:""}</span>
                       {p.classRank && (
-                        <Tip content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>Model Draft Class Rank</div><div style={{color:"#cbd5e1"}}>Ranked #{p.classRank} in the {p.draftYear||p.yr} class by projected peak wins added (ppWA). Based on ProspectTheory v2 model — not a scout consensus ranking.</div></div>}>
+                        <Tip content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>Model Draft Class Rank</div><div style={{color:"#cbd5e1"}}>Ranked #{p.classRank} in the {p.draftYear||p.yr} class by projected Added Wins (expected peak value). Based on the ProspectTheory value model — not a scout consensus ranking.</div></div>}>
                           <span className="px-1.5 py-0.5 rounded font-bold cursor-help" style={{background:"#f9731622",color:"#fb923c",border:"1px solid #f9731644",fontFamily:"'Oswald',sans-serif",fontSize:"0.7rem"}}>
                             #{p.classRank} MODEL
                           </span>
