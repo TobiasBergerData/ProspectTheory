@@ -1504,6 +1504,8 @@ function mapProfile(d) {
     riskProfile: d.riskProfile ?? null,
     // NBA-Rollen-Projektion (pre→post outcome distribution + floor) — inject_nba_role.py
     nbaRoleProjection: d.nbaRoleProjection ?? null,
+    // Added-Wins projection (P(NBA) × E[AW|NBA], team-anchored target) — inject_added_wins.py
+    addedWins: d.addedWins ?? null,
     modernShotProfile: d.modern_shot_profile ?? null,
     sosPctl: d.sos_pctl ?? null,
     teamQuality: d.team_quality_pctl ?? null,
@@ -6625,6 +6627,7 @@ function RiskProfileTab({p}) {
   }
 
   const proj = p.nbaRoleProjection;  // NBA-Rollen-Projektion (pre→post)
+  const aw = p.addedWins;            // Added-Wins projection (P(NBA) × E[AW|NBA])
   const bust = rp.bustRisk != null ? Math.round(rp.bustRisk * 100) : null;
   const star = rp.starUpside != null ? Math.round(rp.starUpside * 100) : null;
   const merit = rp.meritSlot;
@@ -6667,6 +6670,48 @@ function RiskProfileTab({p}) {
         two risk axes below, frame the real decision: <span className="text-gray-100">which
         pick could get you fired — and which one would you regret passing on.</span>
       </div>
+
+      {/* NBA Added-Wins Projection */}
+      {aw && aw.ev != null && (() => {
+        const tp = aw.tierProbs || {};
+        const TIERS = [
+          {k:"Superstar",c:"#fbbf24"},{k:"All-Star",c:"#f97316"},
+          {k:"Starter",c:"#3b82f6"},{k:"Role Player",c:"#06b6d4"},
+          {k:"Replacement",c:"#8b5cf6"},{k:"Negative",c:"#ef4444"}];
+        const pAS = (tp["Superstar"]||0) + (tp["All-Star"]||0);
+        const pStarter = pAS + (tp["Starter"]||0);
+        const pNba = aw.pNba != null ? Math.round(aw.pNba*100) : null;
+        const floor = aw.pHighPro != null ? Math.round(aw.pHighPro*100) : null;
+        return (
+          <div className="rounded-xl p-4" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+            <div className="text-sm font-semibold text-gray-100 mb-1">NBA Added-Wins Projection</div>
+            <div className="text-xs text-gray-400 mb-3 leading-relaxed">
+              Expected extra wins this player adds in his best 3 NBA seasons — a team-anchored
+              blend of on-court impact and box production. The expected value is deliberately
+              modest (most prospects aren’t stars); the star upside lives in the distribution below.
+            </div>
+            <div className="flex flex-wrap gap-5 mb-3">
+              <div><div className="text-2xl font-bold text-gray-100">{aw.ev.toFixed(1)}</div>
+                   <div className="text-[10px] text-gray-500 uppercase tracking-wide">Expected Added Wins</div></div>
+              <div><div className="text-lg text-gray-200">{aw.condNba!=null?aw.condNba.toFixed(1):"—"}</div>
+                   <div className="text-[10px] text-gray-500 uppercase tracking-wide">If he reaches the NBA</div></div>
+              {pNba!=null && <div><div className="text-lg text-gray-200">{pNba}%</div>
+                   <div className="text-[10px] text-gray-500 uppercase tracking-wide">P(reaches NBA)</div></div>}
+              {floor!=null && <div><div className="text-lg text-gray-200">{floor}%</div>
+                   <div className="text-[10px] text-gray-500 uppercase tracking-wide">Floor: NBA/EuroLeague-level</div></div>}
+            </div>
+            <div className="flex h-5 rounded overflow-hidden mb-1">
+              {TIERS.map(t => { const v = tp[t.k]||0; return v>0 ?
+                <div key={t.k} style={{width:`${v}%`,background:t.c}} title={`${t.k}: ${v}%`}/> : null; })}
+            </div>
+            <div className="flex justify-between text-[10px] text-gray-500">
+              <span>P(All-Star+): <span className="text-orange-300 font-semibold">{pAS.toFixed(0)}%</span></span>
+              <span>P(Starter+): <span className="text-blue-300 font-semibold">{pStarter.toFixed(0)}%</span></span>
+            </div>
+            {aw.drivers && <div className="text-[11px] text-gray-400 mt-2">Key drivers: {aw.drivers}</div>}
+          </div>
+        );
+      })()}
 
       {/* Draft Range */}
       <div className="rounded-2xl p-5" style={{background:"linear-gradient(135deg,#0d1117,#111827)",border:"1px solid #1f2937"}}>
