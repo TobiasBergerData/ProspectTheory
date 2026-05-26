@@ -131,6 +131,9 @@ _BOARD_FIELDS = [
     # ppWA model v2 + Pfad-3-Output (war ist der primaere Wert, ppwa optional/legacy)
     "war", "ppwa", "pElite", "waFloor", "waCeiling", "waSigma",
     "v2Tier", "v2TierProbs", "v2Conf", "posGroup",
+    # Added-Wins projection (NEW primary metric) — MUST be sent or the board falls
+    # back to legacy ppWA and mixes scales (Tobias 2026-05-25).
+    "addedWins",
     # Legacy prediction fields (fallback)
     "pred_mu", "pred_sigma", "pred_p_nba", "pred_tier",
     # Tier probabilities (old model — still used as fallback in tier chart)
