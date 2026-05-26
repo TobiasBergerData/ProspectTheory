@@ -1,13 +1,23 @@
 """
 inject_added_wins.py
 ====================
-Injects the Added-Wins projection (new value model: P(NBA) × E[AW|NBA], team-
-anchored impact+production target) into the profile blobs.
+Injects the UNIFIED prospect Added-Wins projection into the profile blobs.
 
-Source: added_wins_projection.csv (data-pipeline/scripts/02j_combine_projection.py).
+This is a PROSPECT database: every player — NCAA and International alike — is
+scored by ONE model on his PRE-DRAFT profile, so the headline number means the
+same thing for everyone ("how good a prospect is he, in projected 3-year-peak
+Added Wins"). That is what makes "Boozer better/worse than Jokić, Wembanyama,
+Zion" a fair comparison. NO realized values are mixed in — an established star's
+number is still his prospect projection, exactly like a current draft pick.
+
+Source: added_wins_projection.csv (data-pipeline 02h→02i→02j on the unified pool;
+        model_utils.load_prospects() = NCAA v5 ∪ International RealGM on the
+        common-core feature set both leagues share).
 Match:  by `slug` — the canonical UNIQUE player key. NOT by name: there are 8
-        distinct "Chris Johnson"s, and name-matching mixes them. Slug encodes
-        school+year (chris-johnson-lsu-09) so each maps to exactly one player.
+        distinct "Chris Johnson"s, and name-matching mixes them. The slug encodes
+        school/club+year (luka-doncic, chris-johnson-lsu-09) so each maps to one
+        player. Duplicate projection rows for one slug carry identical ev, so the
+        write is deterministic.
 
 Field written: profile["addedWins"] = {
     ev          : headline expected Added Wins = P(NBA) × E[AW|NBA]
@@ -95,7 +105,7 @@ def build_lookup() -> dict:
 
 
 def main():
-    print("[inject_added_wins] Loading CSV …")
+    print("[inject_added_wins] Loading unified projection CSV …")
     lookup = build_lookup()
     print(f"[inject_added_wins] Projections (by slug): {len(lookup):,}")
 
