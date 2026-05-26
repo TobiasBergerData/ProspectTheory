@@ -1532,9 +1532,11 @@ function mapProfile(d) {
     pNba:d.pred_p_nba??d.pNba??d.pn,
     // Tobias 2026-05-09: predTier is now threshold-recalibrated (see recalibrateTier).
     // Original modal tier is preserved as `predTierRaw` for debugging / methodology.
-    predTier: (() => {
+    predTier: d.addedWins?.projTier ?? (() => {
+      // Added-Wins projTier = reasonable-POTENTIAL tier by class standing (realistic
+      // class spread). Falls back to the recalibrated modal tier for legacy profiles.
       const fallback = d.v2Tier ?? d.pred_tier ?? d.predicted_tier ?? d.tier;
-      const probs = d.addedWins?.tierProbs ?? d.v2TierProbs;  // prefer Added-Wins distribution
+      const probs = d.addedWins?.tierProbs ?? d.v2TierProbs;
       if (probs) return recalibrateTier(probs, fallback);
       // Legacy probs from prob_* fields (×100 already in tiers field above)
       const legacy = {
@@ -1564,6 +1566,7 @@ function mapProfile(d) {
     waFloor: d.addedWins?.floor ?? d.waFloor ?? null,
     waCeiling: d.addedWins?.ceiling ?? d.waCeiling ?? null,
     waSigma: d.waSigma ?? d.v2_sigma ?? null,
+    pNba: d.addedWins?.pNba ?? d.pNba ?? null,   // real P(NBA) for the Non-NBA chart bar
     v2Conf: d.v2Conf ?? null,
     v2TierProbs: d.addedWins?.tierProbs ?? d.v2TierProbs ?? null,  // %-scale {Superstar:0.3, ...}
     v2Boosters: d.v2Boosters ?? null,
