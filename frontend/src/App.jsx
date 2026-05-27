@@ -313,9 +313,9 @@ const METHODS = {
     desc: "Usage-role-adjusted Four Factors measuring possession efficiency. Players bucketed by usage (Primary ≥28%, Secondary ≥22%, Finisher ≥15%, LowUsage <15%). Each factor z-scored within role × season. NPV > +2.0 = 'Elite Floor Raiser', +0.5–2.0 = 'Winning Piece', −0.5–0.5 = 'Role Dependent', < −1.0 = 'High Maintenance'. This is NOT a talent rating — it's an efficiency index measuring how 'expensive' it is for a coach to keep this player on the floor.",
   },
   monteCarlo: {
-    name: "Added Wins Projection Model",
-    formula: "Added Wins = P(NBA) × E[Added Wins | NBA]",
-    desc: "Two-stage (hurdle) model. Stage 1 — P(NBA): a calibrated logistic model trained on the FULL prospect pool (~15k players, NBA reached or not), ROC-AUC 0.98 on a 2017–2019 holdout. Stage 2 — E[Added Wins | NBA]: a regularized ElasticNet trained on 752 NBA careers. The target is the best consecutive-3-season Added Wins: a team-anchored blend of on-court impact (xRAPM, 70%) and box production (30%), scaled so each roster's player-wins sum to the team's actual wins-above-replacement (additivity). Temporal split: train ≤2016, holdout 2017–2019 (no future leakage). Validated: value-model Spearman ρ = 0.41 on holdout vs craftednba.com 0.373. Realized-WA tiers: Superstar ≥41, All-Star ≥28, Starter ≥15, Role Player ≥2. Honest caveat: the projected number is an EXPECTED value and is deliberately modest — a college profile rarely signals stardom (e.g. SGA), so star upside is shown via the tier distribution, not inflated into the point estimate. A separate high-floor model (P(NBA or EuroLeague-tier), trained on international career outcomes too) gives the downside.",
+    name: "Projected Peak Wins Added (PPWA)",
+    formula: "PPWA = 60% × Comparable-Player Projection + 40% × [ P(NBA) × E[Added Wins | NBA] ]",
+    desc: "PPWA blends two projections of the same target: a prospect's best consecutive-3-season Added Wins peak (team-anchored, on-court impact via xRAPM 70% + box production 30%, scaled so a roster's player-wins sum to the team's wins). LAYER 1 — STATISTICAL: a two-stage hurdle model, dual-track by data depth. Stage 1 is P(NBA); Stage 2 is E[Added Wins | NBA]. NCAA prospects are scored with the full BartTorvik feature set (adjoe / strength-of-schedule / shot-location / recruiting) that separates real prospects from weak-competition stat-stuffers; internationals use the box-stat common core (no tracking abroad), league-weighted onto the NCAA scale via bridge players and unit-normalized so an intl 61% TS reads as elite; the two models calibrate to one scale, then isotonically map onto the realized Wins-Added scale. LAYER 2 — COMPARABLE-PLAYER (exp_wa): each prospect is matched to his pre-draft archetype peers, weighted by how close their projected value is to his, and assigned their REALIZED peak Wins-Added — what the players most like him actually became. The two are blended 60% comparison / 40% statistical, because the comparison layer is more accurate out-of-sample (year-grouped CV Spearman ρ ≈ 0.49 vs 0.40) and does not flatten generational outliers the way a regression does. Temporal/grouped holdout: blended ρ ≈ 0.50; P(NBA) ROC-AUC 0.95 (0.98 on NCAA). Tiers are calibrated to realistic per-class output (~0.5 Superstar, 3 All-Star, 12 Starter per draft class). Honest caveat: the comparison value reflects what a prospect's TYPE usually becomes — a player whose comps succeeded can still bust individually; that downside is shown in the tier distribution and risk axis, not subtracted from the headline.",
   },
   projectionDrivers: {
     name: "Projection Drivers (SHAP Decomposition)",
@@ -4566,15 +4566,15 @@ function ProjectionTab({p}) {
         <div className="absolute top-0 right-0 w-48 h-48 opacity-5 blur-3xl rounded-full" style={{background:`radial-gradient(circle,${warColor},transparent)`}}/>
         <div className="relative">
           <Tip wide content={<div>
-            <div className="font-bold mb-2" style={{color:"#f97316"}}>Added Wins — Expected Peak Value</div>
+            <div className="font-bold mb-2" style={{color:"#f97316"}}>PPWA — Projected Peak Wins Added</div>
             <div className="mb-2" style={{color:"#cbd5e1"}}>
-              <strong>Formula:</strong> Added Wins = P(NBA) × E[Added Wins | NBA]
+              <strong>Formula:</strong> PPWA = 60% × Comparable-Player + 40% × [ P(NBA) × E[Added Wins | NBA] ]
             </div>
             <div className="mb-2" style={{color:"#9ca3af",fontSize:"0.85em"}}>
-              Two stages: P(NBA) — a calibrated model trained on the full ~15k-prospect pool — times the expected peak value if he reaches the league. The value target is the best-3-season Added Wins, a team-anchored blend of on-court impact (xRAPM) and box production, so a roster's player-wins sum to the team's actual wins. It is an expected value — deliberately modest; star upside lives in the tier distribution below.
+              Two views, blended: a statistical projection — P(NBA) × expected value if he reaches the league — and a comparable-player projection that gives each prospect the realized peak Wins-Added of the historical prospects he most resembles before the draft. The value target is the best-3-season Added Wins (team-anchored: on-court impact via xRAPM + box production). The comparison layer carries the blend (60%) because it predicts real outcomes better and doesn't flatten unusual profiles; the statistical layer fills in where no archetype match exists.
             </div>
             <div style={{color:"#6b7280",fontSize:"0.8em"}}>
-              Value model: 752 NBA careers, temporal holdout 2017–2019 Spearman ρ = 0.41 vs craftednba.com 0.373 · P(NBA) ROC-AUC 0.98 · realized-WA tiers: Superstar ≥41, All-Star ≥28, Starter ≥15, Role Player ≥2 · fringe/undrafted projections are extrapolations beyond the training distribution.
+              Year-grouped holdout: comparison ρ ≈ 0.49, blended PPWA ρ ≈ 0.50, vs 0.40 for the regression alone · P(NBA) ROC-AUC 0.95 (0.98 on NCAA) · tiers calibrated to realistic per-class output (~0.5 Superstar / 3 All-Star / 12 Starter per draft class) · fringe/undrafted projections are extrapolations beyond the training distribution.
             </div>
           </div>}>
             <div className="cursor-help">
@@ -4706,7 +4706,7 @@ function ProjectionTab({p}) {
       <Sec icon="◆" title="Tier Distribution"
         sub={showNonNba
           ? `Unconditional career outcome distribution — NBA tier bars scaled by P(NBA) ${(pNba*100).toFixed(0)}%. "Non-NBA" covers G League, international, or out of pro ball.`
-          : "What career outcome is most likely? Probabilities derived from the Added-Wins projection distribution. Realized-WA tier thresholds: Superstar ≥41 · All-Star ≥28 · Starter ≥15 · Role Player ≥2."}>
+          : "How does the projected grade break down? Bars show each tier's probability, from the player's projected Added Wins and the model's uncertainty. Tiers are graded on the projection scale, calibrated to realistic per-class NBA output (~0.5 Superstar · 3 All-Star · 12 Starter per draft class)."}>
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={tierData} margin={{top:5,right:5,bottom:5,left:5}}>
             <XAxis dataKey="name" tick={{fill:"#9ca3af",fontSize:11}} axisLine={false} tickLine={false}/>
@@ -5082,7 +5082,7 @@ function ProjectionTab({p}) {
                     : <>From the 14-Role Inference Matrix (z-scores vs NCAA peers): Spacer + Defender + Driver + Playmaker + Rim-Protector + Rebounder + 6 hybrids. The dominant 1-2 roles determine the archetype. <strong style={{color:"#e5e7eb"}}>You see this in the Roles & Archetypes tab.</strong></>
                   }/>
                 <TopFlow step={2} title="Predicted NBA Tier" color="#f97316"
-                  body={<>Calibrated model trained on NBA outcomes (1996–2024 careers, validated on Pre-Draft features only). Predicts probability across 6 tiers on the realized Added-Wins scale: <strong style={{color:"#e5e7eb"}}>Superstar (≥41 peak), All-Star (≥28), Starter (≥15), Role Player (≥2), Replacement, Negative</strong>. Temporal holdout 2017–2019: Spearman ρ = 0.41. <strong style={{color:"#e5e7eb"}}>You see this in the Tier Distribution above.</strong></>
+                  body={<>Calibrated model trained on NBA outcomes (validated on Pre-Draft features only). Predicts a probability across 6 tier grades — <strong style={{color:"#e5e7eb"}}>Superstar, All-Star, Starter, Role Player, Replacement, Negative</strong> — graded on the projection scale and calibrated to realistic per-class NBA output (~0.5 Superstar, 3 All-Star, 12 Starter per draft class), so the elite reach Superstar/All-Star while the count stays realistic. Temporal holdout 2017–2019: Spearman ρ = 0.44. <strong style={{color:"#e5e7eb"}}>You see this in the Tier Distribution above.</strong></>
                   }/>
                 <TopFlow step={3} title="Position-Specific NBA Role Mapping" color="#22c55e"
                   body={<>The Pre-Draft Role × Predicted Tier matrix maps to one of 72 specific NBA outcomes per position. Higher tier = more demanding role; lower tier = more specialized/limited role. <strong style={{color:"#e5e7eb"}}>The "NBA Projection" pill in the header is the modal outcome.</strong></>
@@ -7208,7 +7208,7 @@ function MethodologyTab() {
           </div>
         </div>
         <div style={{textAlign:"center",color:"#6b7280",fontSize:10,marginBottom:2}}>
-          Added Wins = P(NBA) × E[Added Wins | NBA]
+          PPWA = 60% × Comparable-Player Projection + 40% × [ P(NBA) × E[Added Wins | NBA] ]
         </div>
         {arrow()}
 
@@ -7257,7 +7257,7 @@ function MethodologyTab() {
               <li style={{marginBottom:6}}><strong style={{color:"#fbbf24"}}>Body measurements</strong> — height, weight, wingspan, ape index. These translate to NBA-level athleticism.</li>
               <li style={{marginBottom:6}}><strong style={{color:"#fbbf24"}}>Behavior under pressure</strong> — derived from raw play-by-play data: how does this player respond when things go wrong? Does he force shots? Foul more? Withdraw? This is the part most public tools don't quantify.</li>
             </ul>
-            <p style={{marginBottom:12}}>A trained projection model combines these into a single number — <strong style={{color:"#e5e7eb"}}>Added Wins (expected peak value = P(NBA) × value if he reaches the league)</strong> — plus tier probabilities (Superstar / All-Star / Starter / Role Player / Replacement / Negative). On top of that we layer position-specific role-fit, archetype matching, and historical comparisons.</p>
+            <p style={{marginBottom:12}}>A trained projection model turns these into one interpretable number — <strong style={{color:"#e5e7eb"}}>Projected Peak Wins Added (PPWA)</strong>, our estimate of a prospect's peak NBA value on the real Wins-Added scale. PPWA blends two complementary views: (1) a two-stage <strong style={{color:"#fbbf24"}}>statistical projection</strong> — P(reaching the NBA) × expected value if he does — and (2) a <strong style={{color:"#fbbf24"}}>comparable-player projection</strong> that hands each prospect the <em>realized</em> peak value of the historical prospects he most resembles before the draft. We weight them 60/40 toward the comparison layer, because out-of-sample it predicts real NBA outcomes better (Spearman ρ ≈ 0.49 vs 0.40 for the regression alone) and, unlike a regression, it does not flatten generational outliers — a one-of-one prospect inherits his comps' value instead of being shrunk toward the average. On top of the number we layer tier probabilities (Superstar / All-Star / Starter / Role Player / Replacement / Negative), position-specific role-fit, archetype matching, and historical comparisons.</p>
           </div>
         </Sec>
 
@@ -7292,10 +7292,11 @@ function MethodologyTab() {
         <Sec icon="🛠" title="What's Honest About This" sub="Limitations the Plain-Language version doesn't hide.">
           <div style={{fontSize:13,color:"#d1d5db",lineHeight:"1.8"}}>
             <ul style={{paddingLeft:20,listStyle:"disc"}}>
-              <li style={{marginBottom:6}}>Trained only on prospects who were drafted (1,784 from 2010-2016). Undrafted players are extrapolations.</li>
-              <li style={{marginBottom:6}}>Holdout validation (2017-2019) shows Spearman ρ = 0.46 — meaning the model gets directionally right ~46% of the rank-order of NBA outcomes. That's far from perfect but better than guessing.</li>
+              <li style={{marginBottom:6}}><strong style={{color:"#22c55e"}}>Strength — the comparison layer sees outliers a regression can't.</strong> A regression shrinks unusual profiles toward the average, so a one-of-one prospect (e.g. a 7'4" creator) gets a compressed, too-low number. Giving him the realized value of his closest historical comps restores him to his peers' level — and out-of-sample this is the more accurate signal (ρ ≈ 0.49 vs 0.40).</li>
+              <li style={{marginBottom:6}}><strong style={{color:"#f59e0b"}}>Weakness — comps are only as good as the history.</strong> If a profile is genuinely unprecedented, or its archetype cell is thin, the comp estimate is uncertain (we expose the effective comp count). The comparison value reflects what that <em>type</em> of prospect usually becomes — so it can rate a player highly whose specific career later busts; that downside lives in the tier distribution and the risk axis, not in the headline.</li>
+              <li style={{marginBottom:6}}>Value models trained on drafted NBA careers; undrafted players are extrapolations. Year-grouped holdout: blended PPWA Spearman ρ ≈ 0.50 — directionally right about half the rank-order of NBA outcomes. Far from perfect, clearly better than chance.</li>
               <li style={{marginBottom:6}}>For prospects in pre-2017 NCAA seasons, we cannot compute Mind-Tab metrics (PBP data lacks player attribution before 2017).</li>
-              <li style={{marginBottom:6}}>For internationals, Mental Resilience is unavailable (we don't have FIBA-level event PBP). Internationals get reduced Body-Tab signal too (no Combine measurements).</li>
+              <li style={{marginBottom:6}}>For internationals, Mental Resilience is unavailable (we don't have FIBA-level event PBP), and Body-Tab signal is reduced (no Combine measurements). International production is league-weighted onto the NCAA scale via bridge players, and shooting/efficiency rates are unit-normalized so an international 61% TS reads as elite, not as zero.</li>
               <li style={{marginBottom:6}}>Game-by-Game Skill-Curve uses an approximate Usage-proxy (% of team possessions consumed) rather than the standard NBA-USG (which requires per-game minutes data we don't have).</li>
               <li style={{marginBottom:6}}>All projections are pre-team-context. Same prospect on different rosters can have wildly different NBA outcomes — a Stretch Big is gold for a Jokic-system, less useful for a slow-paced offense.</li>
             </ul>
@@ -7313,7 +7314,7 @@ function MethodologyTab() {
 
       <Sec icon="📖" title="Methodology & Model Documentation" sub="Complete documentation of all computed metrics, formulas, and their statistical foundations.">
         <div className="text-sm mb-3" style={{color:"#9ca3af"}}>
-          ProspectTheory uses <strong style={{color:"#e5e7eb"}}>Added Wins (expected peak value)</strong> — a single, interpretable metric from a two-stage model: P(NBA) trained on the full ~15k-prospect pool, times the expected value if he reaches the league (regularized ElasticNet on 752 NBA careers). Target: the best 3-consecutive-season Added Wins peak (team-anchored impact + production) in the first 8 NBA years. Temporal holdout (2017–2019): value-model Spearman ρ = 0.41; P(NBA) ROC-AUC 0.98.
+          ProspectTheory's headline metric is <strong style={{color:"#e5e7eb"}}>Projected Peak Wins Added (PPWA)</strong> — a blend of two projections of the same target (a prospect's best 3-consecutive-season Wins-Added peak, team-anchored impact + production, in his first 8 NBA years). <strong style={{color:"#fbbf24"}}>(1) Statistical projection:</strong> P(NBA), trained on the full ~15k-prospect pool, times E[Added Wins | NBA], a regularized ElasticNet on NBA careers — then isotonically recalibrated onto the realized Wins-Added scale. <strong style={{color:"#fbbf24"}}>(2) Comparable-player projection (exp_wa):</strong> for each prospect we find his pre-draft archetype peers, weight them by how close their projected value is to his, and average their <em>realized</em> peak Wins-Added — the value the players most like him actually delivered. PPWA = 60% comparison + 40% statistical (the comparison layer falls back to the statistical one for the ~20% of prospects without an archetype match). Temporal holdout (year-grouped CV): comparison ρ ≈ 0.49, blend ρ ≈ 0.50, vs 0.40 for the regression alone; P(NBA) ROC-AUC 0.95.
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
           {[
