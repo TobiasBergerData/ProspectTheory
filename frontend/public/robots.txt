@@ -1,0 +1,11 @@
+# ProspectTheory — robots.txt
+# Public site, all pages indexable.
+
+User-agent: *
+Allow: /
+
+# Block stale Vercel preview deployments from indexing
+User-agent: *
+Disallow: /api/
+
+Sitemap: https://prospecttheory.io/sitemap.xml
