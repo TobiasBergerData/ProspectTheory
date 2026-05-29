@@ -2116,6 +2116,43 @@ function OverviewTab({p, compTier, setCompTier}) {
 }
 
 // ═══════════════════════════════════════════════════════════
+// 2026-05-29 — PBP-Data-Gating
+// ESPN PBP for the 2025-26 NCAA season stopped updating after 12/06/2025
+// (HTML format change). Features that rely on PBP (Mind-Tab, Game-by-Game
+// Skill-Curve, Self-Sufficiency, Shot Creation, In-Season Trajectory) are
+// hidden for the 2026 class — partial-season data would mislead. For all
+// other classes the full data is in place and these features remain active.
+// ═══════════════════════════════════════════════════════════
+const isPBPLimited2026 = (p) => {
+  const yr = p?.draftYear ?? p?.yr;
+  return yr === 2026 || String(yr) === "2026";
+};
+function PBPNotAvailable({title, icon="📊", season="2025-26"}) {
+  return (
+    <Sec icon={icon} title={title} sub={`Hidden for the ${season} class — partial PBP coverage`}>
+      <div style={{background:"#0d1117",border:"1px solid #1f2937",borderRadius:8,padding:"20px 22px"}}>
+        <div style={{color:"#fbbf24",fontSize:12,fontWeight:700,letterSpacing:0.5,marginBottom:8}}>📊 LIMITED COVERAGE</div>
+        <div style={{color:"#9ca3af",fontSize:12,lineHeight:1.7}}>
+          This view draws on ESPN play-by-play data. For the {season} season, our scrape currently ends at <strong style={{color:"#cbd5e1"}}>12/06/2025</strong> — a partial-season snapshot would mislead, so we hide the view rather than render half-data. Full coverage returns once the scraper catches up.
+          <br/><br/>
+          For prospects in resolved classes (≤2025) this section is fully populated.
+        </div>
+      </div>
+    </Sec>
+  );
+}
+// Sample-size honesty: render a small inline warning above PBP charts when the
+// underlying event count is too small to read confidently.
+function PBPSampleWarning({n, threshold, unit="actions"}) {
+  if (n == null || n >= threshold) return null;
+  return (
+    <div style={{background:"#fbbf2410",border:"1px solid #fbbf2444",borderRadius:6,padding:"8px 10px",marginBottom:10,fontSize:11,color:"#fbbf24"}}>
+      <strong>⚠ Small sample:</strong> only {n} {unit} analysed (threshold for confident reading: {threshold}). Read direction, not magnitude.
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
 // TAB: SHOOTING (v4 — FT in diet, dunks stacked in rim, pos×tier FGA)
 // ═══════════════════════════════════════════════════════════
 function ShootingTab({p}) {
@@ -2458,6 +2495,7 @@ function ShootingTab({p}) {
           selfMakesByZone[z] = selfMakes;
           totalSelfMakes += selfMakes;
         });
+        if (isPBPLimited2026(p)) return <PBPNotAvailable title="Shot Creation Spectrum" icon="🎯"/>;
         return (
           <Sec icon="🎯" title="Shot Creation Spectrum" sub={`PBP-based creation profile — ${scd.overall.fga} FGA tracked · ${fmt(scd.overall.selfPct||0)}% overall self-created`}>
             <div className="space-y-3">
@@ -3067,6 +3105,7 @@ function ClassScatterAndDev({p}) {
 
         const yTicks = [0, 0.25, 0.5, 0.75, 1.0];
 
+        if (isPBPLimited2026(p)) return <PBPNotAvailable title="In-Season Trajectory" icon="📈"/>;
         return (
           <Sec icon="📈" title="In-Season Trajectory — Did The Player Develop?"
             sub={`${N} games this season. Rolling ${K}-game mean for 6 indicators (4 offense + 2 defense/discipline). Use this to spot: role expansion (USG), efficiency growth (eFG), new skills (AST/3PA), defensive growth (Stocks), discipline (PF).`}>
@@ -3183,6 +3222,14 @@ function ClassScatterAndDev({p}) {
 // ═══════════════════════════════════════════════════════════
 function MindTab({p}) {
   if (!p) return null;
+  // 2026-05-29 — entire Mind tab is PBP-derived; hide for 2026 class.
+  if (isPBPLimited2026(p)) {
+    return (
+      <div className="space-y-6">
+        <PBPNotAvailable title="Mind Tab — Behaviour Under Pressure" icon="🧠"/>
+      </div>
+    );
+  }
 
   const le = p.leverageEff ?? null;
 
@@ -5547,6 +5594,7 @@ function ScoutingTab({p, mode="scouting"}) {
         const avgU = meanU;
         const avgO = meanO;
 
+        if (isPBPLimited2026(p)) return <PBPNotAvailable title="Game-by-Game Skill Curve" icon="📊"/>;
         return (
           <Sec icon="📊" title="Game-by-Game Skill Curve"
             sub={`${games.length} games across ${nSeasons} ${nSeasons===1?"season":"seasons"}${seasonsList.length?` (${seasonsList.join(" · ")})`:""}. Each dot = one game. Smooth curve uses LOWESS with tricubic weights; the shaded band shows the ±1 SD spread of the local ORtg distribution. Used to read where efficiency stops scaling with possession load — the higher the curve stays at high usage, the better he handles a bigger role.`}>
