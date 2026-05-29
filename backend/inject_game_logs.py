@@ -113,15 +113,15 @@ def main():
     master = master.sort_values(["_nname", "season", "date"])
     master = master.drop_duplicates(subset=["_nname", "season", "game_id"], keep="first")
     print(f"  After dedupe: {len(master):,} rows")
-    # 2026-05-29 Tobias: latest-season-only filter REMOVED — for the Skill-Curve we
-    # want ALL available seasons stacked (more dots = smoother curve, better breakpoint
-    # visibility). The frontend can still show season-of-interest via toggle/color.
-    # `_latest_season` is kept on the row for the SoS-bridge (which uses season_year).
+    # 2026-05-29 Tobias: Multi-Season-Versuch zurückgerollt — Multi-Season-JSON-Blobs
+    # haben die DB inflated und Render Free-Tier-Memory überfordert (Health-Checks
+    # timed out, Spieler luden nicht). Bis wir den Skill-Curve auf BartTorvik-
+    # Per-Game-Scraping umstellen, bleibt es bei latest-season-only.
     latest_season = master.groupby("_nname", as_index=False)["season"].last()
     latest_season.columns = ["_nname", "_latest_season"]
     master = master.merge(latest_season, on="_nname")
-    print(f"  All-season rows kept: {len(master):,} rows · {master['_nname'].nunique():,} players · "
-          f"{master['season'].nunique()} distinct seasons")
+    master = master[master["season"] == master["_latest_season"]]
+    print(f"  After latest-season filter: {len(master):,} rows · {master['_nname'].nunique():,} players")
 
     # Vectorized field extraction — much faster than iterrows
     print(f"\n  Building compact records (vectorized)...")
