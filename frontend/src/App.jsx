@@ -293,14 +293,14 @@ const METHODS = {
     desc: "Zwei-Stufen-Modell (Berger 2022, Kap. 7). Stage 1 = Empirical Bayes Shrinkage des Pre-Draft-3P% gegen die NCAA-Liga-Verteilung (α₀=23.89, β₀=44.67, μ₀=34.8%, effektives κ=69 — alles aus Daten gefittet, nichts hand-getunt). Stage 2 = Beta-Regression M1: NBA-3P% wird aus FT% + 2PJ% (NCAA-PBP) + 3P-Estimate prognostiziert. Holdout-RMSE 0.0380 (n=675 NCAA, übertrifft Diss-Wert 0.0559). Intl-Variante ohne 2PJ% (keine PBP-Daten), RMSE 0.0367 (n=392). KEINE Hand-Werte mehr — vollständig daten-gefittet.",
   },
   projNba3pa: {
-    name: "Projected NBA 3PA/game (Elastic)",
-    formula: "proj_nba_fga × proj_3par / 100  where FGA scales by usage (8.5–15.0)",
-    desc: "No longer fixed at 10.5 FGA. High-usage creators (high USG%, low %Assisted) scale up to 15.0 FGA/game; role players scale down to 8.5. This 'elasticity' captures that primary scorers take more shots in the NBA.",
+    name: "Projected NBA 3PA/game (Heuristik)",
+    formula: "projected_FGA_tier × proj_3PAr / 100",
+    desc: "ROLLEN-ABHÄNGIGE Schätzung. 3PA/G hängt von Minuten und Possessions ab — wir kennen die NBA-Rolle nicht im Voraus. Diese Schätzung multipliziert das rollenunabhängige 3PAr (aus M4) mit einem Tier-spezifischen FGA-Wert (Role Player 9, Starter 12, All-Star 15). Eher ein Indikator als ein Punktschätzer. Für eine saubere Schießer-Charakteristik unabhängig von Rolle: 3P% (M1) und 3PAr (M4) sind die methodisch korrekten Metriken.",
   },
   projNba3par: {
-    name: "Projected NBA 3P Attempt Rate",
-    formula: "3P_freq × 0.80 + FT% touch bonus + 5 (NBA era)",
-    desc: "What % of NBA shots will be threes. College 3P frequency as base, scaled 0.8× for maturity. FT% touch bonus reflects coaches green-lighting shooters. Blake Griffin adjustment for extremely low-volume shooters.",
+    name: "Projected NBA 3P-Attempt-Rate (Diss-M4, rollenunabhängig)",
+    formula: "logit⁻¹(β₀ + β₁·NCAA-3PAr + β₂·2PJ% + β₃·FT% + β₄·3P-Estimate)",
+    desc: "Diss-Stage 3 (modifiziert): NBA-3PAr = 3PA/FGA aus Beta-Regression. ROLLEN-UNABHÄNGIG, weil 3PAr eine pure Schießer-Charakteristik ist (welcher Prozentsatz der eigenen Würfe von draußen kommt). Selbst Role-Player und Starter haben individuelle 3PAr. Holdout-RMSE 0.130 NCAA n=662, 0.126 Intl n=383. Inputs: College-3PAr + 2PJ% (NCAA-PBP only) + FT% + EB-3P-Estimate. Diss-Original prognostizierte 3PAp40 (rollenabhängig), wir haben das auf 3PAr (rollenunabhängig) umgestellt.",
   },
   touchPrior: {
     name: "Pre-Draft-3P%-Estimate (Empirical Bayes)",
@@ -2230,6 +2230,9 @@ function ShootingTab({p}) {
   const m1Pool = m1?.pool || null;
   const preDraft3pEstimate = m1?.preDraft3pEstimate != null
     ? m1.preDraft3pEstimate * 100 : null;
+  // 2026-05-29 Tobias: M4 jetzt auf 3PAr (rollenunabhängig) statt 3PA/G.
+  // 3PAr = % der eigenen FGA von draußen → unabhängig von Possessions/Minuten/Rolle.
+  const projNba3parM4 = m1?.projNba3parM4 ?? null;
   const hasMidData = midPct != null;
   const midForPrior = midPct ?? (twoPct ? twoPct * 0.6 : null);
   // touchPrior = Diss-Stage-1 (EB 3P-Estimate). Fällt sonst auf alte FT/Mid-Linear-Combo zurück.
@@ -2259,7 +2262,11 @@ function ShootingTab({p}) {
   };
   const bestTier = p.predTier || "Starter";
   const projFGA = (tierPosFga[bestTier]||tierPosFga["Starter"])[p.pos] || 13;
-  const proj3PAr = threeF != null ? Math.min(55, Math.round(threeF * 0.85 + (ft > 80 ? 3 : 0) + 5)) : null;
+  // 2026-05-29 Tobias: M4 jetzt rollenunabhängig — proj_nba_3par_m4 ist direkt 3PAr in %.
+  // Fallback auf heuristische Berechnung wenn M4 fehlt.
+  const proj3PAr = projNba3parM4 ?? (threeF != null ? Math.min(55, Math.round(threeF * 0.85 + (ft > 80 ? 3 : 0) + 5)) : null);
+  // 3PA/G ist rollen-abhängig (Possessions × 3PAr) → nur als Indikator wenn wir
+  // einen Tier-spezifischen FGA-Wert kennen. Bleibt im UI als heuristische Schätzung.
   const projNba3pa = proj3PAr != null ? Math.round(projFGA * proj3PAr / 100 * 10) / 10 : null;
 
   const sc = (pct, type) => {
@@ -7148,7 +7155,7 @@ function MethodologyTab() {
     {cat:"Development Tab — Season-by-Season Breakdown",items:[],desc:"Per-season table of all seasons with meaningful playing time (≥8% USG). Columns: Year, USG%, AdjOrtg (BartTorvik opponent-adjusted offensive rating), vs. Peer (delta from cross-sectional peer curve), TS%, AST%, TO%, BPM. Δ markers show year-over-year change. Multi-season improvement is one of the strongest NBA success signals."},
     {cat:"Roles & Archetypes Tab",items:[],desc:"Two-stage role inference. Stage 1 — Role Inference Matrix: 14 NBA roles scored as z-scores relative to position peers. Offensive: Scorer, Playmaker, Spacer, Driver, Crasher. Defensive: On-Ball, Switch Potential, Rim Protect, Rebounder. Hybrid: Connector, Helio-Scorer, Event Creator, Zone Pressure, Micro-Spacer. Each role combines 2-4 statistical inputs weighted by NBA translation research. Z≥+2.0 = Elite, ≥+1.0 = Impact, <-1.0 = Liability. Stage 2 — NBA Archetype Fit: 19 NBA archetypes per position, sorted left→right by empirical rarity (most common to rarest, computed from the actual frequency in 46k player-seasons). The pipeline assigns a primary, secondary, and tertiary archetype based on dominant role scores. Rarity = how strict are the position-specific role thresholds — rare archetypes are objectively harder to find on draft day."},
     {cat:"Body Tab — Anthropometrics + Wingspan/Height Scatter",items:[],desc:"Height (with shoes, +1.25\"-NBA-standard), Weight, Wingspan, and Wingspan Delta (wingspan − height). For Combine-tested players (1.835 NBA players in our database), measurements are sourced directly. For others, we use stats-enriched imputation: a multivariate Ridge regression trained on 1.266 NBA players for Wingspan (R²=0.735, MAE 1.56\") and 528 for Weight (R²=0.614, MAE 11.7 lbs), using player height + position group + box-score stats (BLK%, STL%, ORB%, DRB%, BPM components). Imputed values are flagged with badges. The scatter plot shows 1.835 NBA Combine participants as gray dots colored by position; the selected prospect is overlaid in orange. Use it to find physical comps within a realistic body-type band."},
-    {cat:"Shooting Tab — Diss-M1 (Berger 2022) NBA-3P Projection",items:[],desc:"Implementiert die zwei-stufige Methodik aus Berger (2022) Kapitel 7. STUFE 1 — Pre-Draft-3P%-Estimate via Empirical Bayes Shrinkage: p̂ᵢ = (α₀ + 3PMᵢ) / (α₀ + β₀ + 3PAᵢ), wobei α₀ und β₀ aus der NCAA-Liga-Verteilung mit Methode-of-Moments gefittet werden (16.771 NCAA-Spieler ≥20 3PA → α₀=23.89, β₀=44.67, implizites μ₀=34.8%, effektives κ=69). Kleine 3PA-Samples werden Richtung Liga-Median shrinkt (Boozer 0%/2 Versuche → 38.2%). STUFE 2 — Beta-Regression M1 für NBA-Translation: logit(NBA-3P%) = β₀ + β₁·FT% + β₂·2PJ% + β₃·3P-Estimate. Koeffizienten neu auf Holdout gefittet, KEINE Diss-Werte 1:1 übernommen. NCAA n=675 RMSE=0.0380 (übertrifft Diss-Wert 0.0559); Intl n=392 RMSE=0.0367 (M1-light ohne 2PJ%, da keine PBP-Daten — KEINE Imputation). Komplett daten-getrieben, keine Hand-Anker mehr."},
+    {cat:"Shooting Tab — Diss-M1/M4 (Berger 2022) NBA-Schießer-Projektion",items:[],desc:"Drei-Stufen-Modell aus Berger (2022) Kapitel 7, modifiziert für Rollen-Neutralität. STUFE 1 — Pre-Draft-3P%-Estimate via Empirical Bayes Shrinkage: p̂ᵢ = (α₀ + 3PMᵢ) / (α₀ + β₀ + 3PAᵢ), α₀ und β₀ aus NCAA-Liga-Verteilung mit Methode-of-Moments gefittet (16.771 NCAA-Spieler ≥20 3PA → α₀=23.89, β₀=44.67, μ₀=34.8%, κ=69). Kleine 3PA-Samples werden Richtung Liga-Median geshrinkt (Boozer 0%/2 Versuche → 38.2%). STUFE 2 — M1 für NBA-3P%-Quote: logit(NBA-3P%) = β₀ + β₁·FT% + β₂·2PJ% + β₃·3P-Estimate. NCAA n=675 RMSE=0.0380 (übertrifft Diss-Wert 0.0559); Intl n=383 RMSE=0.0367 (M1-light ohne 2PJ%, KEINE Imputation). STUFE 3 — M4 für NBA-3PAr (3PA/FGA): logit(NBA-3PAr) = β₀ + β₁·NCAA-3PAr + β₂·2PJ% + β₃·FT% + β₄·3P-Estimate. NCAA n=662 RMSE=0.130, Intl n=383 RMSE=0.126. WICHTIG: Diss-Original M4 prognostizierte 3PAp40 (rollenabhängig — hängt von Possessions/Minuten ab). Wir haben das auf 3PAr (3PA/FGA) umgestellt — pure Schießer-Charakteristik, unabhängig von Rolle/Spielzeit. 3P% (Quote) und 3PAr (Tendenz) zusammen beschreiben den Schießer vollständig ohne Rollen-Annahmen. ALLE Werte daten-getrieben, kein Hand-Tuning."},
     {cat:"Possession Impact (CFFR)",items:["fourFactors"],desc:"Context-Free Four Factor Rating measuring possession efficiency per Dean Oliver's Four Factors framework. Usage-role adjusted: Primary (USG≥28%), Secondary (≥22%), Finisher (≥15%), Low-Usage (<15%). Each factor (eFG% 40%, TO% 25%, ORB% 20%, FTr 15%) is percentiled WITHIN the player's usage bucket — so a primary scorer with 52% eFG rates against fellow primaries, not against low-usage finishers. Composite: Net Possession Value (0–100). Verdict tiers: Elite Floor Raiser (≥70), Winning Piece (55–70), Role Dependent (45–55), High Maintenance (<45)."},
     {cat:"Comps Tab",items:[],desc:"Two distinct nearest-neighbor comparison engines. Statistical Comps: era-adjusted percentile vectors over 8 dimensions (BPM, USG%, TS%, AST%, STL%, BLK%, 3P%, FT%). Pre-draft seasons only — comparing what these players looked like before the NBA. Similarity rescaled 50–95 within shown pool to differentiate. 'Reached Tier' shows the comp's verified NBA outcome (or v2 model projection for current prospects). Anthropometric Comps: Euclidean distance in inch-space over height/weight/wingspan. Optional sliders allow exploration of how comp matches change with adjusted body measurements (e.g. 'how would this prospect's comps look at +10 lbs?')."},
     {cat:"Position Reclassification",items:[],desc:"Stats-driven position groups (Playmaker / Wing / Big) used throughout the site. Rules (Tobias 2026-05-09 v3): Big = Height ≥84\" unconditional, OR Height ≥82\" with non-wing usage profile (USG<25 AND AST%<15), OR Height ≥80\" with elite shot-blocking (BLK%≥5 AND non-wing usage). Playmaker = AST%≥25 AND Height ≤6'5\", OR AST%≥30 AND Height ≤6'7\". Wing = everything else. Designed to keep tall wings (Bailey-style 6'10\" forwards) classified as Wings rather than misclassified to Big purely by height."},

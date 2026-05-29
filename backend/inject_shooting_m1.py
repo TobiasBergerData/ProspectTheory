@@ -70,6 +70,9 @@ def build_lookup() -> dict:
         lookup[nl] = {
             "preDraft3pEstimate": _num(r.pre_draft_3p_estimate),
             "projNba3pPctM1": _num(r.proj_nba_3p_pct_m1),
+            # 2026-05-29: M4 jetzt auf 3PAr (rollenunabhängig) statt 3PA/G.
+            "projNba3parM4": _num(getattr(r, "proj_nba_3par_m4", None)),
+            "ncaa3parRaw": _num(getattr(r, "ncaa_3par", None)),
             "pool": _str(r.pool),
             "inputs": {
                 "ftPct": _num(r.ft_pct),
