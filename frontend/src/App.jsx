@@ -6868,23 +6868,9 @@ function RiskProfileTab({p}) {
             range unavailable. Merit slot reflects model value only.</p>
         )}
 
-        {/* Availability tool */}
-        {hasMarket && (
-          <div className="mt-4 pt-4 border-t border-gray-800">
-            <div className="flex items-center gap-3 flex-wrap">
-              <span className="text-sm text-gray-300">If your pick is</span>
-              <input type="range" min="1" max="40" value={yourPick}
-                     onChange={e=>setYourPick(Number(e.target.value))}
-                     className="flex-1 min-w-[120px]" style={{accentColor:"#3b82f6"}}/>
-              <span className="text-sm font-bold text-blue-300 w-10">#{yourPick}</span>
-            </div>
-            {avail && (
-              <div className="mt-2 text-sm font-semibold" style={{color:avail.color}}>
-                {avail.txt}
-              </div>
-            )}
-          </div>
-        )}
+        {/* 2026-05-29 Tobias: availability slider removed — the Merit/Market overlap
+            visualization already conveys the key signal (where the player belongs vs
+            where he'll go). The slider added noise without adding decision-relevant info. */}
       </div>
 
       {/* Two risk axes */}
@@ -6898,6 +6884,9 @@ function RiskProfileTab({p}) {
       {/* Best-case role / ceiling archetype */}
       {rp.ceilingArchetype && (
         <div className="rounded-xl p-4" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+          <div className="text-xs text-gray-500 mb-3" style={{lineHeight:1.6}}>
+            <strong style={{color:"#9ca3af"}}>How to read this:</strong> Two NBA roles below — read them as a pair. <strong style={{color:"#cbd5e1"}}>Best-case role</strong> is the ceiling archetype this prospect could grow INTO under perfect development and team fit (the highest-value role within his archetype-cohort's historical outcomes). <strong style={{color:"#cbd5e1"}}>Projected role</strong> is the role he most likely actually STICKS in based on kernel-weighted comp cohort (where his archetype neighbours peaked, weighted by similarity in projected value). Gap between the two = development upside the team must unlock. A wide gap with a credible bridge (e.g. plays in a system that develops the missing skill) is the steal pattern.
+          </div>
           <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">Best-case NBA role</div>
           <div className="flex items-baseline gap-2 flex-wrap">
             <span className="text-lg font-bold text-gray-100">{rp.ceilingArchetype}</span>
