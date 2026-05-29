@@ -5,8 +5,6 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, Cell, ResponsiveConta
 // CONSTANTS & HELPERS
 // ═══════════════════════════════════════════════════════════
 const TC = { Superstar:"#fbbf24","All-Star":"#f97316",Starter:"#3b82f6","Role Player":"#06b6d4",Replacement:"#8b5cf6",Negative:"#6b7280","Never Made NBA":"#374151","Out":"#374151" };
-<<<<<<< HEAD
-=======
 // Empirical NBA outcomes per archetype — what tier these players TYPICALLY reach.
 // Source: data-pipeline archetype_value_prior.csv (realized peak Wins Added of
 // ~1,210 NBA players by their pre-draft archetype, draft classes ~2008–2024).
@@ -98,7 +96,6 @@ const ARCHETYPE_TALENT = {
   "Scoring Wing":          {low:[4,0,76], mid:[17,0,75], high:[50,12,76]},
   "Initiator Wing":        {low:[4,0,23], mid:[5,0,21],  high:[43,30,23]},
 };
->>>>>>> 989a7c7147386315cb0e3d52dd0224f9daca4762
 // Archetype colors — used in header pills and anywhere ARCH_MAP isn't in scope
 const ARCH_COLORS = {
   "Scoring Playmaker":"#fbbf24","Floor General":"#f97316","Spacing Guard":"#22c55e","Defensive Guard":"#3b82f6",
@@ -291,9 +288,9 @@ const METHODS = {
     desc: "Master composite. Age-adjusted BPM penalizes older players: BPM − (age−20)×0.5. Height bonus: +1.5pts/inch above position average. Captures total prospect value.",
   },
   projNba3p: {
-    name: "Projected NBA 3P% (Bayesian Beta-Binomial)",
-    formula: "Posterior = (κ·μ₀ + 3PM) / (κ + 3PA)  where μ₀ = 0.20 + 0.18·FT% + 0.05·Mid%, κ=200",
-    desc: "Bayesian conjugate update (Berger 2022). The prior μ₀ encodes FT%-based motor touch — neuromuscular consistency that predicts NBA shooting. κ=200 pseudo-attempts means low-volume shooters regress heavily toward their FT%-derived prior ('Blake Griffin Check': 12 college 3PA → 94% prior weight). High-volume shooters (300+ 3PA) let data dominate.",
+    name: "Projected NBA 3P% (Diss-M1, Berger 2022)",
+    formula: "Stage 1: p̂ᵢ = (α₀ + 3PMᵢ) / (α₀ + β₀ + 3PAᵢ)   |   Stage 2: logit⁻¹(β₀ + β₁·FT + β₂·2PJ + β₃·p̂ᵢ)",
+    desc: "Zwei-Stufen-Modell (Berger 2022, Kap. 7). Stage 1 = Empirical Bayes Shrinkage des Pre-Draft-3P% gegen die NCAA-Liga-Verteilung (α₀=23.89, β₀=44.67, μ₀=34.8%, effektives κ=69 — alles aus Daten gefittet, nichts hand-getunt). Stage 2 = Beta-Regression M1: NBA-3P% wird aus FT% + 2PJ% (NCAA-PBP) + 3P-Estimate prognostiziert. Holdout-RMSE 0.0380 (n=675 NCAA, übertrifft Diss-Wert 0.0559). Intl-Variante ohne 2PJ% (keine PBP-Daten), RMSE 0.0367 (n=392). KEINE Hand-Werte mehr — vollständig daten-gefittet.",
   },
   projNba3pa: {
     name: "Projected NBA 3PA/game (Elastic)",
@@ -306,9 +303,9 @@ const METHODS = {
     desc: "What % of NBA shots will be threes. College 3P frequency as base, scaled 0.8× for maturity. FT% touch bonus reflects coaches green-lighting shooters. Blake Griffin adjustment for extremely low-volume shooters.",
   },
   touchPrior: {
-    name: "Touch Prior (μ₀)",
-    formula: "0.20 + 0.18 × FT% + 0.05 × Mid%",
-    desc: "The Bayesian prior for NBA 3P%. Based on FT% (neuromuscular touch consistency) and midrange accuracy (shooting-range indicator). A player with 85% FT + 28% 3P has vastly more latent potential than one with 65% FT + 35% 3P. Replaces TS% as the primary touch indicator.",
+    name: "Pre-Draft-3P%-Estimate (Empirical Bayes)",
+    formula: "p̂ᵢ = (α₀ + 3PMᵢ) / (α₀ + β₀ + 3PAᵢ)   |   α₀=23.89, β₀=44.67 (NCAA-Liga-Fit)",
+    desc: "Diss-Stage-1 (Berger 2022). Empirical Bayes Shrinkage des College-3P% gegen die NCAA-Liga-Verteilung — bei kleiner 3PA-Sample (Boozer: 2 Versuche, 0%) zieht der Prior stark Richtung Liga-Median (34.8%); bei großer Sample (Curry: 327 Versuche, 38.8%) dominiert die Beobachtung. α₀ und β₀ sind via Methode-of-Moments aus 16.771 NCAA-Spielern mit ≥20 3PA gefittet — KEINE Hand-Werte. Eliminiert Small-Sample-Shooting-Luck wie in der Diss beschrieben.",
   },
   fourFactors: {
     name: "Possession Impact (CFFR)",
@@ -1253,11 +1250,7 @@ function mapProfile(d) {
   // (e.g., "Floor General" for a Big, "Rim Protector" for a Playmaker)
   // Filter them through position restrictions before including
   const POS_RESTRICTED_GREEN = {
-<<<<<<< HEAD
-    "Floor General": ["Playmaker"],       // Only guards/playmakers
-=======
     "Floor General": ["Playmaker","Wing"], // Guards + wings (computeBadges: isG || isW)
->>>>>>> 989a7c7147386315cb0e3d52dd0224f9daca4762
     "Passing Hub": ["Big"],                 // Only bigs
     "Two-Way Wing": ["Wing","Playmaker"], // Not bigs
     "Rim Protector": ["Big","Wing"],      // Not playmakers
@@ -1286,15 +1279,6 @@ function mapProfile(d) {
   // so astTov is now always available for NCAA prospects → no more "missing data" bypass.
   // Thresholds mirror computeBadges exactly; server badges that fail here get rejected.
   const statValidate = (badge) => {
-<<<<<<< HEAD
-    const _astP = tmpP.astP ?? 0;
-    const _astTov = tmpP.astTov ?? 1.5;
-    const _selfCreation = d.self_creation ?? d.self_creation_idx ?? d.self_creation_pct ?? 0;
-    if (badge === "Passing Hub" && !(_astP > 18 && _astTov > 1.2)) return false;
-    if (badge === "Floor General" && !(_astTov > 2.0 && _astP > 22)) return false;
-    if (badge === "Self-Creator" && !(_selfCreation > 70)) return false;
-    if (badge === "Tunnel Vision" && !(tmpP.astTov != null && _astTov < 0.8)) return false;
-=======
     const pos    = getBadgePos(tmpP);              // "G" | "W" | "B"
     const isG = pos === "G", isW = pos === "W", isB = pos === "B";
     const _astP   = tmpP.astP   ?? 0;
@@ -1391,7 +1375,6 @@ function mapProfile(d) {
     // ── "High Feel" (server-only badge, not in computeBadges) ──
     if (badge === "High Feel" && !(_feel != null && _feel > 70)) return false;
 
->>>>>>> 989a7c7147386315cb0e3d52dd0224f9daca4762
     return true;
   };
   const serverGreen = filterByPos(
@@ -1507,8 +1490,6 @@ function mapProfile(d) {
     // PBP self-creation (real assisted-shot data, 2008-2026)
     pbpSelfCreation: d.self_creation_raw ?? d.overall_self_creation ?? null,
     creationScore: d.creation_score ?? null,
-<<<<<<< HEAD
-=======
     // Shot Creation Spectrum (zone-level PBP data)
     shotCreation: d.shotCreation ?? null,
     // Leverage-Weighted Efficiency (self-creation-weighted eFG%)
@@ -1525,7 +1506,6 @@ function mapProfile(d) {
     nbaRoleProjection: d.nbaRoleProjection ?? null,
     // Added-Wins projection (P(NBA) × E[AW|NBA], team-anchored target) — inject_added_wins.py
     addedWins: d.addedWins ?? null,
->>>>>>> 989a7c7147386315cb0e3d52dd0224f9daca4762
     modernShotProfile: d.modern_shot_profile ?? null,
     sosPctl: d.sos_pctl ?? null,
     teamQuality: d.team_quality_pctl ?? null,
@@ -1540,16 +1520,11 @@ function mapProfile(d) {
       connector:d.role_connector,helio:d.role_helio,event:d.role_event,
       zone:d.role_zone,microSpacer:d.role_micro_spacer},
     roleVersatility:d.role_versatility,
-<<<<<<< HEAD
-    archetype:d.archetype||"",
-    archetypesAll:d.archetypes_all||d.archetype||"",
-=======
     // Tobias 2026-05-09: Filter pipeline archetypes by player's position group.
     // Pipeline can emit cross-pos matches (Wing getting "Stretch Big" etc.) — drop those.
     // Tall wings (≥81") get Stretch-4 / Glass Cleaner pass-through (Tatum/Markkanen pattern).
     archetype: filterArchetypesByPos(d.archetype || "", resolvedPos, d.ht ?? d.height_in ?? d.college_height_inches, _ncaaArch).split("|")[0] || "",
     archetypesAll: filterArchetypesByPos(d.archetypes_all || d.archetype || "", resolvedPos, d.ht ?? d.height_in ?? d.college_height_inches, _ncaaArch),
->>>>>>> 989a7c7147386315cb0e3d52dd0224f9daca4762
     feas:{repl:d.feas_repl,rot:d.feas_rot,start:d.feas_start,allstar:d.feas_allstar,
       cleared:d.feas_cleared||"",blocker:d.feas_blocker||""},
     mu:d.pred_mu??d.mu??d.projected_pie??d.pred_mu_pie??d.aspm_adj??d.aspm,
@@ -2245,23 +2220,32 @@ function ShootingTab({p}) {
   const creationPctl = p.creationScore ?? p.selfCreation ?? null;
 
   // ── Touch prior + Bayesian ──
+  // 2026-05-29 Tobias: Diss-Methodik M1 (Berger 2022, Kap. 7) — der M1-Output kommt
+  // jetzt aus dem Pipeline (shooting.m1.projNba3pPctM1) statt aus der hand-getunten
+  // Inline-Formel. Stage-1 = Empirical Bayes auf 3PA (α₀=23.89, β₀=44.67 aus NCAA-
+  // Liga-Verteilung); Stage-2 = Beta-Regression mit empirisch gefitteten
+  // Koeffizienten (NCAA n=675 RMSE=0.0380; Intl n=392 RMSE=0.0367, kein 2PJ%).
+  // Legacy-Fallback: alte Bayesian-Variante wenn M1 fehlt (vor-2026-Daten).
+  const m1 = p.shooting?.m1 || null;
+  const m1Pool = m1?.pool || null;
+  const preDraft3pEstimate = m1?.preDraft3pEstimate != null
+    ? m1.preDraft3pEstimate * 100 : null;
   const hasMidData = midPct != null;
   const midForPrior = midPct ?? (twoPct ? twoPct * 0.6 : null);
-  // When no midrange data (intl/08-09): FT%-heavy prior (absorbs mid weight)
-  const touchPrior = p.projPrior ?? (hasMidData
+  // touchPrior = Diss-Stage-1 (EB 3P-Estimate). Fällt sonst auf alte FT/Mid-Linear-Combo zurück.
+  const touchPrior = preDraft3pEstimate ?? p.projPrior ?? (hasMidData
     ? ((0.20 + 0.18 * (ft ?? 75) / 100 + 0.05 * (midForPrior) / 100) * 100)
-    : ((0.22 + 0.22 * (ft ?? 75) / 100) * 100));  // FT-only prior
-  // Touch Prior Percentile (Tobias 2026-05-06): empirische Annäherung an die
-  // Class-Verteilung. Range typischerweise 30-44%, Median ≈ 36%, std ≈ 3%.
-  // Approximation via Normal-CDF ist gut genug ohne Pipeline-pctl.
+    : ((0.22 + 0.22 * (ft ?? 75) / 100) * 100));
+  // Touch Prior Percentile — Range 28-44% (Liga-Verteilung).
   const touchPriorPctl = touchPrior != null
-    ? Math.round(Math.max(0, Math.min(100, ((touchPrior - 30) / 14) * 100)))
+    ? Math.round(Math.max(0, Math.min(100, ((touchPrior - 28) / 16) * 100)))
     : null;
-  const projNba3p = p.projNba3p ?? (() => {
+  // projNba3p = Diss-Stage-2 M1-Output. Fallback auf alte Bayesian-Posterior wenn M1 fehlt.
+  const projNba3p = m1?.projNba3pPctM1 ?? p.projNba3p ?? (() => {
     if (ft == null) return null;
     const mu0 = hasMidData
       ? 0.20 + 0.18 * (ft / 100) + 0.05 * (midForPrior / 100)
-      : 0.22 + 0.22 * (ft / 100);  // FT-only prior (no midrange data)
+      : 0.22 + 0.22 * (ft / 100);
     const kappa = 200;
     const est3PA = threePA || (threeF != null && estFgaPG ? Math.round(estFgaPG * gp * threeF / 100) : 50);
     const est3PM = tp != null ? Math.round(est3PA * tp / 100) : Math.round(est3PA * mu0);
@@ -2446,25 +2430,6 @@ function ShootingTab({p}) {
             )}
           </div>
         </div>
-<<<<<<< HEAD
-        <div className="mt-3 flex items-center gap-6 text-sm" style={{color:"#9ca3af"}}>
-          <Tip content={<div>True Shooting % — PTS / (2 × FGA + 0.44 × FTA).</div>}>
-            <span className="cursor-help">TS%: <strong style={{color:sc(ts,"ft")}}>{ts!=null?fmt(ts):"—"}</strong></span>
-          </Tip>
-                    <Tip content={<div>{hasPbpCreation
-            ? <>Self-Creation Rate (PBP). Percentage of made shots that were unassisted — higher means more shots created off the dribble. Based on real play-by-play assisted shot tracking data (2008-2026). Elite: &gt;65%, Good: 50-65%, Average: 35-50%.</>
-            : <>Box Creation (Ben Taylor). Scoring Creation (USG×TS) + Assist Creation. Measures total offensive creation. Elite: &gt;25, Good: 18-25, Average: 12-18.</>
-          }</div>}>
-            <span className="cursor-help">{hasPbpCreation ? "Self-Creation" : "Box Creation"}: <strong style={{color: hasPbpCreation
-              ? (selfCreationRaw > 65 ? "#22c55e" : selfCreationRaw > 50 ? "#86efac" : selfCreationRaw > 35 ? "#fbbf24" : "#ef4444")
-              : (selfCreationScore > 25 ? "#22c55e" : selfCreationScore > 18 ? "#f97316" : selfCreationScore > 12 ? "#fbbf24" : "#ef4444")
-            }}>{hasPbpCreation ? fmt(selfCreationRaw) + "%" : fmt(selfCreationScore)}</strong> <span style={{color:"#4b5563"}}>({selfCreationLabel})</span>
-            {creationPctl != null && <span style={{color:"#475569"}}> · Pctl: {Math.round(creationPctl)}</span>}
-            </span>
-          </Tip>
-        </div>
-=======
->>>>>>> 989a7c7147386315cb0e3d52dd0224f9daca4762
       </Sec>
 
       {/* ═══ SHOT CREATION SPECTRUM ═══ */}
@@ -4850,9 +4815,13 @@ function ProjectionTab({p}) {
             return { label: label || "?", strength: parseInt(str) || 1 };
           });
         };
-        // v2Boosters/v2Limiters (new SHAP format) take priority over legacy string fields
-        const boosters = parseDrvs(p.v2Boosters ?? p.projectionBoosters);
-        const limiters = parseDrvs(p.v2Limiters ?? p.projectionLimiters);
+        // v2Boosters/v2Limiters (new SHAP format) take priority over legacy string fields.
+        // Filter out Mind-derived labels: the Mind tab's PBP-attribution data isn't deep enough
+        // (esp. for intl + pre-2017 NCAA) to flow into the headline projection drivers.
+        const MIND_LABEL_RX = /(^basketball iq$|^composure|^mental resil|^hothead|^overdriver|^engagement|^bounceback|^shot[-\s]?seek|^decision quality|^match[-\s]?phase|^stamina|^clutch[-\s]?mind|^mind[_\s]|streak)/i;
+        const dropMind = (arr) => arr.filter(d => !MIND_LABEL_RX.test(String(d.label || "")));
+        const boosters = dropMind(parseDrvs(p.v2Boosters ?? p.projectionBoosters));
+        const limiters = dropMind(parseDrvs(p.v2Limiters ?? p.projectionLimiters));
         const hasDrvData = boosters.length > 0 || limiters.length > 0;
 
         // Strength pips: filled squares for strength, empty for remaining slots
@@ -5236,18 +5205,6 @@ function ScoutingTab({p, mode="scouting"}) {
   // normative claims about which archetype is "more valuable".
   const archetype = p.archetype || "Unknown";
   const ARCH_MAP = {
-<<<<<<< HEAD
-    "Scoring Playmaker": {desc:"Dual-threat point guard. Scores at high volume while maintaining playmaking.",color:"#fbbf24",
-      pos:["Playmaker"],formula:"Scorer>65 + Playmaker>55",roles:["Scorer","Playmaker","Event Creator"]},
-    "Floor General":       {desc:"Lead playmaker who creates for others. Elite AST/TO and half-court orchestration.",color:"#f97316",
-      pos:["Playmaker"],formula:"Playmaker>65",roles:["Playmaker","Connector","Event Creator"]},
-    "Spacing Guard":      {desc:"Off-ball scoring guard. Elite spacing with catch-and-shoot gravity.",color:"#22c55e",
-      pos:["Playmaker"],formula:"Spacer>65",roles:["Spacer","Scorer","Micro-Spacer"]},
-    "Defensive Guard":     {desc:"Perimeter lockdown specialist. Ball pressure and steal ability define his value.",color:"#3b82f6",
-      pos:["Playmaker"],formula:"Def Score>60",roles:["On-Ball D","Connector","Zone Pressure"]},
-    "Non-Specialized Playmaker":         {desc:"Versatile guard without a dominant skill. Jack-of-all-trades backcourt piece.",color:"#8b5cf6",
-      pos:["Playmaker"],formula:"Default (no role >65)",roles:["Scorer","Playmaker","Spacer"]},
-=======
     // === PLAYMAKER (n=12,089) ===
     "Non-Specialized Playmaker": {desc:"Versatile guard without a dominant skill. Jack-of-all-trades backcourt piece.",color:"#8b5cf6",
       pos:["Playmaker"],formula:"Default (no role >70)",roles:["Scorer","Playmaker","Spacer"], freqPct:52.8},
@@ -5263,19 +5220,10 @@ function ScoutingTab({p, mode="scouting"}) {
     // === WING (n=26,838) ===
     "Non-Specialized Wing":      {desc:"Multi-tool forward without a dominant skill. Fits many lineups.",color:"#a78bfa",
       pos:["Wing"],formula:"Default (no role >65)",roles:["Connector","Switch Pot.","Spacer"], freqPct:44.2},
->>>>>>> 989a7c7147386315cb0e3d52dd0224f9daca4762
     "Scoring Wing":        {desc:"Pure scorer without elite creation. Efficient finisher who needs structure.",color:"#ef4444",
       pos:["Wing"],formula:"Scorer>75",roles:["Scorer","Driver","Spacer"], freqPct:21.1},
     "Defensive Wing":      {desc:"Elite wing defender. Versatile stopper who guards multiple positions.",color:"#06b6d4",
-<<<<<<< HEAD
-      pos:["Wing"],formula:"Def Score>65",roles:["On-Ball D","Switch Pot.","Zone Pressure"]},
-    "Slashing Wing":       {desc:"Attacks the rim with explosiveness. Transition weapon and paint-pressure.",color:"#f43f5e",
-      pos:["Wing"],formula:"Driver>65",roles:["Driver","Crasher","On-Ball D"]},
-    "Non-Specialized Wing":      {desc:"Multi-tool forward without a dominant skill. Fits many lineups.",color:"#a78bfa",
-      pos:["Wing"],formula:"Default (no role >65)",roles:["Connector","Switch Pot.","Spacer"]},
-=======
       pos:["Wing"],formula:"Defender>65",roles:["On-Ball D","Switch Pot.","Zone Pressure"], freqPct:11.1},
->>>>>>> 989a7c7147386315cb0e3d52dd0224f9daca4762
     "Point Forward":       {desc:"Oversized playmaker. Creates mismatches with size + passing vision.",color:"#10b981",
       pos:["Wing","Big"],formula:"Playmaker>65",roles:["Playmaker","Connector","Driver"], freqPct:11.1},
     "Slashing Wing":       {desc:"Attacks the rim with explosiveness. Transition weapon and paint-pressure.",color:"#f43f5e",
@@ -5289,17 +5237,6 @@ function ScoutingTab({p, mode="scouting"}) {
     "Non-Specialized Big":          {desc:"Well-rounded center without a standout skill. Does a bit of everything.",color:"#60a5fa",
       pos:["Big"],formula:"Default (no role >65)",roles:["Rim Protect","Rebounder","Switch Pot."], freqPct:31.5},
     "Stretch Big":         {desc:"Shooting big who spaces the floor. Gravity from the 5 position.",color:"#22c55e",
-<<<<<<< HEAD
-      pos:["Big"],formula:"Spacer>65",roles:["Spacer","Rim Protect","Rebounder"]},
-    "Stretch Rim Protector":{desc:"Unicorn big — protects the rim AND stretches the floor. Extreme roster flexibility.",color:"#10b981",
-      pos:["Big"],formula:"Rim Protect>75 + Spacer>65",roles:["Rim Protect","Spacer","Rebounder"]},
-    "Rim Protector":       {desc:"Elite shot-blocker. Deters drives and alters shots. Anchors paint defense.",color:"#3b82f6",
-      pos:["Big"],formula:"Rim Protect>75",roles:["Rim Protect","Rebounder","Switch Pot."]},
-    "Passing Hub":       {desc:"Playmaking big — Jokic/Draymond archetype. Creates from post/elbow with vision.",color:"#fbbf24",
-      pos:["Big"],formula:"Playmaker>55",roles:["Playmaker","Connector","Driver"]},
-    "Short Roll Playmaker":{desc:"Decision-making big in the short roll. Drives and passes from the elbow/FT line area.",color:"#f59e0b",
-      pos:["Big"],formula:"Driver>55 + Playmaker>55",roles:["Driver","Playmaker","Connector"]},
-=======
       pos:["Big"],formula:"Spacer>65",roles:["Spacer","Rim Protect","Rebounder"], freqPct:21.3},
     "Rim Protector":       {desc:"Elite shot-blocker. Deters drives and alters shots. Anchors paint defense.",color:"#3b82f6",
       pos:["Big"],formula:"Rim Protect>75",roles:["Rim Protect","Rebounder","Switch Pot."], freqPct:13.1},
@@ -5307,21 +5244,12 @@ function ScoutingTab({p, mode="scouting"}) {
       pos:["Big"],formula:"Driver>55 + Playmaker>55",roles:["Driver","Playmaker","Connector"], freqPct:10.2},
     "Passing Hub":       {desc:"Playmaking big — Jokic/Draymond archetype. Creates from post/elbow with vision.",color:"#fbbf24",
       pos:["Big"],formula:"Playmaker>55",roles:["Playmaker","Connector","Driver"], freqPct:9.1},
->>>>>>> 989a7c7147386315cb0e3d52dd0224f9daca4762
     "Glass Cleaner":       {desc:"Dominant rebounder. Controls both boards and creates second chances.",color:"#f97316",
       pos:["Big"],formula:"Rebounder>65",roles:["Rebounder","Crasher","Rim Protect"], freqPct:8.3},
     "Stretch Rim Protector":{desc:"Unicorn big — protects the rim AND stretches the floor. Extreme roster flexibility.",color:"#10b981",
       pos:["Big"],formula:"Rim Protect>75 + Spacer>65",roles:["Rim Protect","Spacer","Rebounder"], freqPct:3.4},
     "Scoring Big":         {desc:"Offense-first big. Post scoring, face-up game, or finishing at the rim.",color:"#ef4444",
-<<<<<<< HEAD
-      pos:["Big"],formula:"Scorer>65",roles:["Scorer","Crasher","Driver"]},
-    "Non-Specialized Big":          {desc:"Well-rounded center without a standout skill. Does a bit of everything.",color:"#60a5fa",
-      pos:["Big"],formula:"Default (no role >65)",roles:["Rim Protect","Rebounder","Switch Pot."]},
-    "Initiator Wing":        {desc:"Creates own offense off the dribble. Self-creation specialist with high usage.",color:"#fb923c",
-      pos:["Wing","Playmaker"],formula:"Scorer>70 + Playmaker>55 + USG>26",roles:["Scorer","Driver","Helio-Scorer"]},
-=======
       pos:["Big"],formula:"Scorer>65",roles:["Scorer","Crasher","Driver"], freqPct:3.2},
->>>>>>> 989a7c7147386315cb0e3d52dd0224f9daca4762
   };
   const allArchetypes = Object.entries(ARCH_MAP);
   // Pipeline-triggered archetypes (from 10c assign_archetypes_multi)
@@ -5422,11 +5350,7 @@ function ScoutingTab({p, mode="scouting"}) {
       {/* ── PILLARS ── */}
       <Sec icon="🔬" title="The 5 Pillars" sub="A prospect's DNA in 5 numbers, each on a 0–100 scale. Each score is position-adjusted (a guard's defensive number is rated against guards, a big's against bigs). These are the building blocks the projection model uses. Hover any pillar for the exact formula.">
         {p.source !== "ncaa" && <div className="mb-3 px-3 py-1.5 rounded-lg text-xs" style={{background:"#f9731611",color:"#f97316",border:"1px solid #f9731633"}}>
-<<<<<<< HEAD
-          ⚠ International data gaps: Athleticism uses Dunk Rate which is unavailable for most intl players — score may undervalue athletic intl prospects. Box Creation uses USG%, TS%, AST% — same formula for NCAA and international players. No shot zone data needed.
-=======
           ⚠ International data: Athleticism uses a dunk-free formula (FTr + ORB% + Stocks + DRB% + USG%) on the same 0-100 scale — directly comparable to NCAA players, who additionally get Dunk% and rim frequency as signals. Box Creation, Shooting and Defense apply source-specific adjusters (FIBA pace, assist-rate inflation); all values are position-percentiled and cross-source comparable.
->>>>>>> 989a7c7147386315cb0e3d52dd0224f9daca4762
         </div>}
         <div className="grid grid-cols-5 gap-3">
           {pillars.map(pl=>(
@@ -5726,11 +5650,7 @@ function ScoutingTab({p, mode="scouting"}) {
       </Sec>
 
       {/* ── ARCHETYPE — formulas + secondary/tertiary + versatility ── */}
-<<<<<<< HEAD
-      <Sec icon="🏷" title="NBA Archetype Fit" sub="What NBA role does this prospect project into? PRIMARY = pipeline-assigned from dominant role scores. 2ND/3RD = best alternative fits within the same position group. Colored = triggered by pipeline thresholds. Greyed = not triggered.">
-=======
       <Sec icon="🏷" title="NBA Archetype Fit" sub="What NBA role does this prospect project into? PRIMARY is his best-fit archetype (assigned from his dominant role scores). 2ND/3RD are alternative fits within his position. Within each position, cards are sorted left → right by how OFTEN that archetype actually appears in real basketball (common → rare). Rarity is measured across 46k player-seasons — so you can see if a prospect projects into a common role-player template or an unusually scarce profile.">
->>>>>>> 989a7c7147386315cb0e3d52dd0224f9daca4762
         {/* Role Versatility — prominent */}
         {p.roleVersatility != null && (
           <div className="flex items-center gap-4 mb-4 p-3 rounded-lg" style={{background:"#0d111788",border:"1px solid #1f2937"}}>
@@ -5754,13 +5674,6 @@ function ScoutingTab({p, mode="scouting"}) {
           const renderCard = ([name, info]) => {
             const isPrimary   = primaryArch   === name;
             const isSecondary = secondaryArch === name;
-<<<<<<< HEAD
-            const isTertiary = tertiaryArch === name;
-            const isRanked = isPrimary || isSecondary || isTertiary;
-            const isTriggered = pipelineTriggered.has(name);
-            const rank = isPrimary ? "PRIMARY" : isSecondary ? "2ND" : isTertiary ? "3RD" : null;
-            const posMatch = (info.pos||[]).includes(p.pos);
-=======
             const isTertiary  = tertiaryArch  === name;
             const isRanked    = isPrimary || isSecondary || isTertiary;
             const isTriggered = pipelineTriggered.has(name);
@@ -5768,7 +5681,6 @@ function ScoutingTab({p, mode="scouting"}) {
             const posMatch = (info.pos||[]).includes(p.pos);
             const cardColor = isPrimary ? O.pri : isSecondary ? O.sec : isTertiary ? O.ter : O.pri;
             const cardOpacity = isPrimary ? 1.0 : isSecondary ? 0.78 : isTertiary ? 0.58 : isTriggered ? 0.4 : 0.22;
->>>>>>> 989a7c7147386315cb0e3d52dd0224f9daca4762
             const showDesc = isRanked;
             return (
               <Tip key={name} content={
@@ -5779,26 +5691,6 @@ function ScoutingTab({p, mode="scouting"}) {
                   {info.freqPct != null && <div className="mb-1"><span style={{color:"#94a3b8"}}>Frequency:</span> <span style={{color: freqColor(info.freqPct)}}>{info.freqPct}% of {(info.pos||["Wing"])[0]}s</span> <span style={{color:"#475569"}}>({freqLabel(info.freqPct)})</span></div>}
                   {ARCHETYPE_TIER[name] && <div className="mb-1"><span style={{color:"#94a3b8"}}>Typical NBA value (n={ARCHETYPE_TIER[name].n}):</span> <span style={{color:TC[ARCHETYPE_TIER[name].ceiling]}}>{ARCHETYPE_TIER[name].ceiling} ceiling</span> <span style={{color:"#475569"}}>· {ARCHETYPE_TIER[name].starterPlus}% Starter+, {ARCHETYPE_TIER[name].allstarPlus}% All-Star+</span></div>}
                   {info.roles&&<div><span style={{color:"#94a3b8"}}>Key roles:</span> <span style={{color:"#f97316"}}>{info.roles.join(", ")}</span></div>}
-<<<<<<< HEAD
-                  {info.pos&&<div className="mt-1"><span style={{color:"#94a3b8"}}>Positions:</span> <span style={{color:posMatch?"#22c55e":"#ef4444"}}>{info.pos.join(", ")}{posMatch?"":" ⚠ mismatch"}</span></div>}
-                  {isTriggered && !isRanked && <div className="mt-1 text-xs" style={{color:"#22c55e"}}>✓ Triggered by pipeline thresholds</div>}
-                </div>
-              }>
-                <div className={`rounded-lg cursor-help transition-all ${isPrimary ? "ring-2 p-4" : isRanked ? "p-4" : "p-3"}`}
-                  style={{
-                    background: isPrimary ? info.color + "22" : isSecondary ? info.color + "18" : isTertiary ? info.color + "12" : isTriggered ? info.color + "0c" : "#0d1117",
-                    border: `${isPrimary?"2":"1"}px solid ${isPrimary ? info.color : isRanked ? info.color + "66" : isTriggered ? info.color + "44" : "#1f293766"}`,
-                    opacity: isRanked ? 1 : isTriggered ? 0.85 : 0.3,
-                    ringColor: isPrimary ? info.color : "transparent",
-                  }}>
-                  <div className="flex items-center gap-2">
-                    {rank && <span className={`text-xs px-1.5 py-0.5 rounded font-bold ${isPrimary?"text-sm":""}`} style={{background:info.color+"33",color:info.color}}>{rank}</span>}
-                    {!rank && isTriggered && <span className="text-xs px-1.5 py-0.5 rounded" style={{background:info.color+"22",color:info.color}}>✓</span>}
-                    <div className={`font-semibold truncate ${isRanked?"text-sm":"text-xs"}`} style={{color: (isRanked || isTriggered) ? info.color : "#6b7280"}}>{name} <span style={{color:"#475569"}}>ⓘ</span></div>
-                  </div>
-                  {showDesc && <div className="mt-1.5 text-xs leading-relaxed" style={{color:info.color+"bb"}}>{info.desc.split(".")[0]}.</div>}
-                  {showDesc && info.formula && <div className="mt-1 text-xs" style={{color:"#4b5563"}}>Trigger: {info.formula}</div>}
-=======
                   {info.pos&&<div className="mt-1"><span style={{color:"#94a3b8"}}>Positions:</span> <span style={{color:posMatch?"#86efac":"#fca5a5"}}>{info.pos.join(", ")}{posMatch?"":" ⚠ mismatch"}</span></div>}
                   {isTriggered && !isRanked && <div className="mt-1 text-xs" style={{color:"#fb923c"}}>✓ Triggered by pipeline thresholds</div>}
                 </div>
@@ -5842,7 +5734,6 @@ function ScoutingTab({p, mode="scouting"}) {
                       <span>{freqLabel(info.freqPct)}</span>
                     </div>
                   )}
->>>>>>> 989a7c7147386315cb0e3d52dd0224f9daca4762
                 </div>
               </Tip>
             );
@@ -7239,20 +7130,13 @@ function MethodologyTab() {
   const [methodView, setMethodView] = useState("quick"); // "quick" | "deep"
 
   const sections = [
-<<<<<<< HEAD
-    {cat:"WAR Projection Model",items:["monteCarlo","posClassification"],desc:"Core engine: LightGBM gradient boosting trained on 1,181 NCAA+International prospects with known NBA outcomes (PIE peak over best 3 consecutive seasons, min 200 minutes/year). 32 features including age, anthropometrics, production, efficiency, trajectory slopes, and league strength. Validated at r=0.41 (5-fold CV, honest out-of-fold). WAR = (projected_PIE − median_PIE) × 400. Tier thresholds: Superstar ≥18 WAR, All-Star ≥12, Starter ≥5, Roleplayer ≥1."},
-    {cat:"International Adjustments",items:[],desc:"International players receive three adjustments: (1) League Strength via empirical bridge-player ratios (2,655 players who played both intl and NBA). Euroleague=1.40, ACB=1.39, BBL=1.18 (NCAA Power=1.0 anchor). (2) Liga-BPM-Scaler: Raw BPM proxy (PER+eDiff) is multiplied by a league-specific scaler (Euroleague ×2.1, ACB ×1.9, NBL ×1.65, etc.) to translate to NCAA-equivalent BPM before feature engineering. (3) Conf-adj post-hoc with translatable-USG-aware caps for strong leagues."},
-    {cat:"The 5 Pillars (DNA Scores)",items:["feel","shootScore","defScore","funcAth","selfCreation","overall"],desc:"Position-adjusted percentile scores (0–100) capturing the fundamental dimensions of prospect evaluation. Each pillar uses era-adjusted percentiles computed against ~34k college + ~9k international players since 2008. Box Creation (Ben Taylor method) measures total offensive creation: Scoring Creation (USG×TS) + Assist Creation (AST%×teammate possessions). Works identically for NCAA and international players."},
-    {cat:"Shooting Projection",items:["projNba3p","projNba3pa","projNba3par","touchPrior"],desc:"Bayesian Beta-Binomial model for NBA 3P shooting translation. Prior: FT%-based 'motor touch' (strongest single predictor of NBA shooting per Berger 2023). κ=200 pseudo-attempts means low-volume college shooters regress heavily toward their FT% prior. For players without midrange data (internationals, pre-2010), a simplified FT%-only prior is used with higher FT% weighting."},
-=======
     {cat:"Added Wins Projection Model",items:["monteCarlo","posClassification"],desc:"The core engine: a two-stage (hurdle) value model. Stage 1 estimates P(NBA) on the FULL prospect pool (~15k NCAA + international players, NBA reached or not) — a calibrated logistic model, ROC-AUC 0.98 on a 2017–2019 holdout. Stage 2 predicts the expected value if he reaches the league — a regularized, fully-explainable ElasticNet trained on 752 NBA careers. The headline = P(NBA) × E[Added Wins | NBA]. Target variable: Added Wins — the best 3-consecutive-season window in the first 8 NBA years, a team-anchored blend of player-isolated on-court impact (xRAPM, 70%) and box production (30%), scaled so a roster's player-wins sum to the team's actual wins-above-replacement (additivity). Trained with a temporal split (≤2016 train, 2017–2019 holdout, no future leakage). Validated: value-model Spearman ρ = 0.41 out-of-sample (vs craftednba.com benchmark 0.373). Output: a single interpretable number plus a full tier-probability distribution. Honest caveat: the number is an EXPECTED value and is deliberately modest — a college profile rarely signals stardom (e.g. SGA looked ordinary at Kentucky), so star upside is shown via the tier distribution, not inflated into the point estimate. A separate high-floor model (P(NBA or EuroLeague-tier), trained on international career outcomes too) gives the downside. Projections for undrafted/fringe players are extrapolations beyond the training distribution."},
     {cat:"Risk Profile Tab — Draft Range & Risk (NEW)",items:[],desc:"Reframes the projection as a front-office decision: where a player will be drafted vs. where he belongs, plus risk in both directions. (1) MARKET RANGE — the realistic pick range, PROJECTED from an existing consensus mock ranking (a single consensus board, one rank per player). We do not generate a new consensus; we take that rank and map it onto where similarly-ranked players were actually drafted in 2008–2018. The band width therefore reflects how a consensus rank historically translates into a real pick (teams reach, prospects slide) — NOT disagreement between different mock boards. Two players with the same consensus rank get the same band. Out-of-sample on 2019–2025 the actual pick falls inside the predicted p20–p80 band 63% of the time (target ~60%), with Spearman(consensus, pick)=+0.85. (2) MERIT SLOT — where a player belongs on talent in an average draft. Our projected value (Added Wins) is recalibrated onto the realized-Wins-Added scale, then mapped through an isotonic curve E[peak Wins Added | pick] built from mature drafts. Our value predicts realized NBA outcome (peak Wins Added) markedly better than the actual draft order did: Spearman +0.54 vs +0.29. The gap between Merit and Market is the steal/bust signal (e.g. Tyrese Haliburton: market #10, merit #1). (3) TWO RISK AXES, computed from a kernel-weighted empirical distribution of comparable past prospects (similar projected value × archetype affinity): BUST RISK = share of comps who delivered below the value their slot demanded — well-calibrated (predicted 75–100% → 86% actual bust rate; James Wiseman scored 96%); STAR UPSIDE = share who reached All-Star level, blended 70/30 with the archetype's empirical All-Star rate so high-ceiling archetypes get proper credit. (4) ARCHETYPE VALUE — positional value is measured, not assumed: we compute each NBA archetype's realized peak Wins Added distribution from ~1,210 NBA players. Scoring Playmaker (ceiling ~29 WA) and Stretch Rim Protector (~28) carry the highest ceilings; pure rim-runners and role-archetypes cap around starter level. This is why a player's best-case archetype shapes his upside. CAVEATS: market range needs a consensus-board presence (most deep prospects have none); the box-score value model can under-rate raw, young upside; reason-code factors are surfaced from the projection engine and are noisier for international prospects (FIBA signals translate imperfectly)."},
     {cat:"Risk Profile Tab — Projected NBA Role (pre→post, NEW)",items:[],desc:"Answers 'what does this player's TYPE actually become in the NBA, and what is that worth?' (1) NBA-OUTCOME ROLES: every NBA player (1,780, ≥500 peak-window minutes) is classified into the SAME archetype taxonomy as our prospects, but from his realized NBA peak — using the identical role-score formulas and assignment logic as the prospect pipeline, only ranked against NBA peers instead of college peers. So pre-draft type and NBA type share one comparable label set. Each NBA role's value is measured empirically: Scoring Playmaker (lead guard) is most valuable (median ~25 peak Wins Added, 50% All-Star); 'empty' roles (Non-Specialized / Slashing / Defensive Wing) rarely stick (8–14% reach Role-Player value). (2) TRANSITION: across matured drafted classes (≤2020), P(NBA outcome | pre-draft archetype), INCLUDING an honest 'Did Not Stick' (no established ≥500-min role). The same type's outcome depends heavily on talent — an elite-projected Scoring Playmaker sticks 75% / All-Star 38%, a marginal one 6% / 0% ('a scoring guard has to be elite to play'). (3) PER-PROSPECT PROJECTION: outcome distribution = kernel-weighted comparable past prospects (same pre-draft archetype × similar projected value). Output: most-likely NBA role, full outcome distribution with each role's typical value, P(establishes a role) and P(reaches Role-Player value) as the FLOOR, expected Wins Added. Floor calibration is sound (predicted 0–15%→5% actual, 50–100%→86%; James Wiseman projects 14% stick, Wembanyama 100%). CAVEATS: NBA stats lack height → NBA position is box-derived (occasional guard/wing/big misfires); college-tuned role thresholds on NBA percentiles cause rare star misfires (Harden→Defensive Guard via his turnover profile); extreme-talent prospects (Boozer) have few comps (flagged); draft-position confound (early picks get more opportunity)."},
     {cat:"Archetype Value Bands (Research — this tab)",items:[],desc:"A draft-strategy research sub-section shown above (Method tab). For each of 16 NBA archetypes we compute the realized peak Wins Added distribution of past players of that type (~1,210 NBA players, draft classes ~2008–2024): floor (25th percentile = downside), median (typical), and ceiling (90th percentile = upside). Displayed as horizontal value bands so you can read draft strategy by player type: highest ceiling = swing-for-upside pick (Scoring Playmaker / Stretch Rim Protector, ceiling ~28–29 WA); highest floor = safest pick (Stretch Rim Protector); highest median = best balanced bet. Each band carries its SAMPLE SIZE (n) as a data-confidence signal — a type observed 374 times (Scoring Wing) is far better understood than one seen 19 times (3-and-D Wing), whose edges are noisier. Rarity is shown for confidence, NOT as a value claim (rare ≠ better). Hover any band (or see the highlighted card for the current player's type) for EXAMPLE NBA PLAYERS grouped by the tier they reached — a concrete sense of the range (note: these are pre-draft archetypes; some players, like Jokic from a pre-draft 'Scoring Wing', evolved into a different NBA role). The same archetype-value numbers also appear in the Roles & Archetypes tab (each archetype's NBA ceiling tier + % reaching Starter+/All-Star+). PRE-DRAFT → NBA TRANSITION: a second view shows, per pre-draft archetype, what those players actually became in the NBA (drafted classes ≤2020) — including an honest 'Did Not Stick' (never established a rotation role). E.g. a pre-draft Scoring Wing most often does not stick or becomes a role-filler; a Stretch Rim Protector usually becomes a Stretch Big / Rim Protector. A talent overlay then splits the same type by projected-value tier: an elite-projected Scoring Playmaker sticks 75% / All-Star 38%, a marginal one 6% / 0% — quantifying 'a scoring guard has to be elite to be worth it'. (Drafted-player population, so it carries a draft-position confound; thin pre-draft types omitted.)"},
     {cat:"International Adjustments",items:[],desc:"International players receive three adjustments: (1) League Strength via empirical bridge-player ratios (2,655 players who played both intl and NBA). Euroleague=1.40, ACB=1.39, BBL=1.18 (NCAA Power=1.0 anchor). (2) Liga-BPM-Scaler: Raw BPM proxy (PER+eDiff) is multiplied by a league-specific scaler (Euroleague ×2.1, ACB ×1.9, NBL ×1.65, etc.) to translate to NCAA-equivalent BPM before feature engineering. (3) Conf-adj post-hoc with translatable-USG-aware caps for strong leagues."},
     {cat:"The 5 Pillars (DNA Scores)",items:["feel","shootScore","defScore","funcAth","selfCreation","overall"],desc:"Position-adjusted percentile scores (0–100) capturing the fundamental dimensions of prospect evaluation. Each pillar uses era-adjusted percentiles computed against ~34k college + ~9k international players since 2008. Box Creation (Ben Taylor method) measures total offensive creation: Scoring Creation (USG×TS) + Assist Creation (AST%×teammate possessions). Works identically for NCAA and international players."},
-    {cat:"Shooting Projection",items:["projNba3p","projNba3pa","projNba3par","touchPrior"],desc:"Bayesian Beta-Binomial model for NBA 3P shooting translation. Prior: FT%-based 'motor touch' (strongest single predictor of NBA shooting per Berger 2022). κ=200 pseudo-attempts means low-volume college shooters regress heavily toward their FT% prior. For players without midrange data (internationals, pre-2010), a simplified FT%-only prior is used with higher FT% weighting."},
->>>>>>> 989a7c7147386315cb0e3d52dd0224f9daca4762
+    {cat:"Shooting Projection (Diss-M1, Berger 2022)",items:["projNba3p","projNba3pa","projNba3par","touchPrior"],desc:"Zwei-Stufen-Modell aus der zugrunde liegenden Diss (Kap. 7). Stufe 1: Empirical Bayes Shrinkage des College-3P% gegen die NCAA-Liga-Verteilung (α₀, β₀ via Methode-of-Moments aus 16.771 Spielern gefittet — Liga-Median μ₀=34.8%, effektives κ=69). Kleine Samples (Boozer 0%/2 Versuche, Saraf 0%/2) werden Richtung Liga-Median gepullt. Stufe 2: Beta-Regression M1 für NBA-Translation = FT% + 2PJ% (PBP, NCAA-only) + Pre-Draft-3P%-Estimate. Koeffizienten frisch auf Holdout gefittet (n=675 NCAA RMSE 0.0380, n=392 Intl RMSE 0.0367). Intl bekommt M1-light ohne 2PJ% — KEINE Imputation für fehlende PBP-Daten. Alle Werte daten-getrieben, kein Hand-Tuning."},
     {cat:"Possession Impact (CFFR)",items:["fourFactors"],desc:"Context-Free Four Factor Rating measuring possession efficiency per Dean Oliver's framework. Usage-role adjusted: Primary (USG≥28%), Secondary (≥22%), Finisher (≥15%), Low-Usage (<15%). Each factor (eFG% 40%, TO% 25%, ORB% 20%, FTr 15%) is percentiled WITHIN the player's usage bucket, so a primary scorer with 52% eFG rates correctly against peers, not low-usage finishers."},
     {cat:"Role Inference Matrix",items:[],desc:"14 NBA roles scored as z-scores relative to position peers. Offensive: Scorer, Playmaker, Spacer, Driver, Crasher. Defensive: On-Ball, Switch Potential, Rim Protect, Rebounder. Hybrid: Connector, Helio-Scorer, Event Creator, Zone Pressure, Micro-Spacer. Each role combines 2-4 statistical inputs weighted by NBA translation research. Z≥+2.0 = Elite, ≥+1.0 = Impact, <-1.0 = Liability."},
     {cat:"Archetype Classification",items:[],desc:"18 NBA archetypes assigned by position + dominant role scores. Playmaker archetypes: Scoring Playmaker, Floor General, Spacing Guard, Defensive Guard, Non-Specialized Playmaker. Wing: Initiator Wing, Scoring Wing, 3-and-D, Defensive Wing, Point Forward, Slashing Wing, Non-Specialized Wing. Big: Stretch Big, Stretch Rim Protector, Rim Protector, Short Roll Playmaker, Passing Hub, Glass Cleaner, Scoring Big, Non-Specialized Big. Primary archetype from pipeline, secondary/tertiary from role-score matching within position."},
@@ -7264,7 +7148,7 @@ function MethodologyTab() {
     {cat:"Development Tab — Season-by-Season Breakdown",items:[],desc:"Per-season table of all seasons with meaningful playing time (≥8% USG). Columns: Year, USG%, AdjOrtg (BartTorvik opponent-adjusted offensive rating), vs. Peer (delta from cross-sectional peer curve), TS%, AST%, TO%, BPM. Δ markers show year-over-year change. Multi-season improvement is one of the strongest NBA success signals."},
     {cat:"Roles & Archetypes Tab",items:[],desc:"Two-stage role inference. Stage 1 — Role Inference Matrix: 14 NBA roles scored as z-scores relative to position peers. Offensive: Scorer, Playmaker, Spacer, Driver, Crasher. Defensive: On-Ball, Switch Potential, Rim Protect, Rebounder. Hybrid: Connector, Helio-Scorer, Event Creator, Zone Pressure, Micro-Spacer. Each role combines 2-4 statistical inputs weighted by NBA translation research. Z≥+2.0 = Elite, ≥+1.0 = Impact, <-1.0 = Liability. Stage 2 — NBA Archetype Fit: 19 NBA archetypes per position, sorted left→right by empirical rarity (most common to rarest, computed from the actual frequency in 46k player-seasons). The pipeline assigns a primary, secondary, and tertiary archetype based on dominant role scores. Rarity = how strict are the position-specific role thresholds — rare archetypes are objectively harder to find on draft day."},
     {cat:"Body Tab — Anthropometrics + Wingspan/Height Scatter",items:[],desc:"Height (with shoes, +1.25\"-NBA-standard), Weight, Wingspan, and Wingspan Delta (wingspan − height). For Combine-tested players (1.835 NBA players in our database), measurements are sourced directly. For others, we use stats-enriched imputation: a multivariate Ridge regression trained on 1.266 NBA players for Wingspan (R²=0.735, MAE 1.56\") and 528 for Weight (R²=0.614, MAE 11.7 lbs), using player height + position group + box-score stats (BLK%, STL%, ORB%, DRB%, BPM components). Imputed values are flagged with badges. The scatter plot shows 1.835 NBA Combine participants as gray dots colored by position; the selected prospect is overlaid in orange. Use it to find physical comps within a realistic body-type band."},
-    {cat:"Shooting Tab — Bayesian NBA-3P Projection",items:[],desc:"For each prospect, a posterior NBA 3-point shooting projection is computed using a Bayesian Beta-Binomial model. Prior: FT% serves as 'motor touch' baseline (the strongest single predictor of NBA shooting per Berger 2022). κ=200 pseudo-attempts means low-volume college shooters regress heavily toward their FT% prior. For players with PBP data, midrange touch percentages refine the prior. Output: posterior 3P%, projected NBA 3PA per game, and projected NBA 3-point attempt rate. Internationals get a simplified FT%-only prior (no midrange data available)."},
+    {cat:"Shooting Tab — Diss-M1 (Berger 2022) NBA-3P Projection",items:[],desc:"Implementiert die zwei-stufige Methodik aus Berger (2022) Kapitel 7. STUFE 1 — Pre-Draft-3P%-Estimate via Empirical Bayes Shrinkage: p̂ᵢ = (α₀ + 3PMᵢ) / (α₀ + β₀ + 3PAᵢ), wobei α₀ und β₀ aus der NCAA-Liga-Verteilung mit Methode-of-Moments gefittet werden (16.771 NCAA-Spieler ≥20 3PA → α₀=23.89, β₀=44.67, implizites μ₀=34.8%, effektives κ=69). Kleine 3PA-Samples werden Richtung Liga-Median shrinkt (Boozer 0%/2 Versuche → 38.2%). STUFE 2 — Beta-Regression M1 für NBA-Translation: logit(NBA-3P%) = β₀ + β₁·FT% + β₂·2PJ% + β₃·3P-Estimate. Koeffizienten neu auf Holdout gefittet, KEINE Diss-Werte 1:1 übernommen. NCAA n=675 RMSE=0.0380 (übertrifft Diss-Wert 0.0559); Intl n=392 RMSE=0.0367 (M1-light ohne 2PJ%, da keine PBP-Daten — KEINE Imputation). Komplett daten-getrieben, keine Hand-Anker mehr."},
     {cat:"Possession Impact (CFFR)",items:["fourFactors"],desc:"Context-Free Four Factor Rating measuring possession efficiency per Dean Oliver's Four Factors framework. Usage-role adjusted: Primary (USG≥28%), Secondary (≥22%), Finisher (≥15%), Low-Usage (<15%). Each factor (eFG% 40%, TO% 25%, ORB% 20%, FTr 15%) is percentiled WITHIN the player's usage bucket — so a primary scorer with 52% eFG rates against fellow primaries, not against low-usage finishers. Composite: Net Possession Value (0–100). Verdict tiers: Elite Floor Raiser (≥70), Winning Piece (55–70), Role Dependent (45–55), High Maintenance (<45)."},
     {cat:"Comps Tab",items:[],desc:"Two distinct nearest-neighbor comparison engines. Statistical Comps: era-adjusted percentile vectors over 8 dimensions (BPM, USG%, TS%, AST%, STL%, BLK%, 3P%, FT%). Pre-draft seasons only — comparing what these players looked like before the NBA. Similarity rescaled 50–95 within shown pool to differentiate. 'Reached Tier' shows the comp's verified NBA outcome (or v2 model projection for current prospects). Anthropometric Comps: Euclidean distance in inch-space over height/weight/wingspan. Optional sliders allow exploration of how comp matches change with adjusted body measurements (e.g. 'how would this prospect's comps look at +10 lbs?')."},
     {cat:"Position Reclassification",items:[],desc:"Stats-driven position groups (Playmaker / Wing / Big) used throughout the site. Rules (Tobias 2026-05-09 v3): Big = Height ≥84\" unconditional, OR Height ≥82\" with non-wing usage profile (USG<25 AND AST%<15), OR Height ≥80\" with elite shot-blocking (BLK%≥5 AND non-wing usage). Playmaker = AST%≥25 AND Height ≤6'5\", OR AST%≥30 AND Height ≤6'7\". Wing = everything else. Designed to keep tall wings (Bailey-style 6'10\" forwards) classified as Wings rather than misclassified to Big purely by height."},
@@ -7337,7 +7221,7 @@ function MethodologyTab() {
           </div>
         </div>
         <div style={{textAlign:"center",color:"#6b7280",fontSize:10,marginBottom:2}}>
-          Rank = P(NBA) × E[Added Wins | NBA]   ·   Probability width = realized spread of the prospect's comps
+          Rank = 0.5 × ev_recal (regression) + 0.5 × exp_wa (comp engine) + humble bonus   ·   Probability width = realized SD of the comp cohort
         </div>
         {arrow()}
 
@@ -7386,7 +7270,7 @@ function MethodologyTab() {
               <li style={{marginBottom:6}}><strong style={{color:"#fbbf24"}}>Body measurements</strong> — height, weight, wingspan, ape index. These translate to NBA-level athleticism.</li>
               <li style={{marginBottom:6}}><strong style={{color:"#fbbf24"}}>Behavior under pressure</strong> — derived from raw play-by-play data: how does this player respond when things go wrong? Does he force shots? Foul more? Withdraw? This is the part most public tools don't quantify.</li>
             </ul>
-            <p style={{marginBottom:12}}>A trained projection model turns these into one interpretable number — <strong style={{color:"#e5e7eb"}}>Projected Peak Wins Added (PPWA)</strong>, our estimate of a prospect's peak NBA value. The system is <strong style={{color:"#fbbf24"}}>decoupled</strong> into two honest jobs. The board <strong style={{color:"#fbbf24"}}>ranking</strong> comes from a two-stage statistical projection — P(reaching the NBA) × expected value if he does — recalibrated to the real Wins-Added scale. The tier <strong style={{color:"#fbbf24"}}>probabilities</strong> come from a <em>comparable-player</em> method: each prospect's outcome uncertainty is the realized spread of the historical prospects he most resembles before the draft (a player is never his own comp, and the comp set is widened until it holds enough real peers). That keeps the odds honest — a top prospect reads as, say, a 50% chance at stardom <em>with real bust risk</em>, never a false 99% lock. We deliberately don't let comps drive the ranking: used that way they over-rate high-projected role players and shrink the truly unique stars. On top of the number we layer tier probabilities (Superstar / All-Star / Starter / Role Player / Replacement / Negative), position-specific role-fit, archetype matching, and historical comparisons.</p>
+            <p style={{marginBottom:12}}>A trained projection model turns these into one interpretable number — <strong style={{color:"#e5e7eb"}}>Projected Peak Wins Added (PPWA)</strong>, our estimate of a prospect's peak NBA value. The headline is a <strong style={{color:"#fbbf24"}}>50/50 blend of two independent estimators</strong>. (1) A two-stage statistical projection — P(reaching the NBA) × expected value if he does — recalibrated to the real Wins-Added scale. (2) A <em>comparable-player</em> realized average: the mean peak-WA of the historical prospects he most resembles before the draft (a player is never his own comp, and the comp set is widened until it holds enough real peers). Why both? On 879 resolved NBA careers (≤2019) the comp signal alone reaches Spearman ρ=0.46 and the regression alone ρ=0.39; the empirically optimal blend sits near α=0.40–0.50 (ρ≈0.48). We pick 50/50 — symmetric, no hand-tuned weight, within 0.002 of the empirical optimum. The two estimators correct each other's failure modes: the regression over-projects young Wings with high BPM but poor shooting (Sochan, Wiseman, Bol Bol); the comp engine recognises that those archetype-profiles historically didn't translate — and conversely lifts Curry, Wembanyama, Embiid whose comp cohorts hit star outcomes. On top we add a small data-fitted humble bonus tied to pre-draft consensus rank (isotonic-regressed from the residual aw − blend), and we surface tier probabilities (Superstar / All-Star / Starter / Role Player / Replacement / Negative) whose width comes from the realized spread of each prospect's comp cohort — so a top prospect reads as, say, a 50% chance at stardom <em>with real bust risk</em>, never a false 99% lock.</p>
           </div>
         </Sec>
 
@@ -7443,7 +7327,7 @@ function MethodologyTab() {
 
       <Sec icon="📖" title="Methodology & Model Documentation" sub="Complete documentation of all computed metrics, formulas, and their statistical foundations.">
         <div className="text-sm mb-3" style={{color:"#9ca3af"}}>
-          ProspectTheory's headline metric is <strong style={{color:"#e5e7eb"}}>Projected Peak Wins Added (PPWA)</strong> — an estimate of a prospect's best 3-consecutive-season Wins-Added peak (team-anchored impact + production, first 8 NBA years). The system is <strong style={{color:"#fbbf24"}}>decoupled</strong> into a ranking signal and a probability signal. <strong style={{color:"#fbbf24"}}>(1) Ranking — statistical projection:</strong> P(NBA), trained on the full ~15k-prospect pool, times E[Added Wins | NBA], a regularized ElasticNet on NBA careers, smoothly rescaled to the realized Wins-Added scale. This drives the board order. <strong style={{color:"#fbbf24"}}>(2) Probabilities — comparable-player method:</strong> for each prospect we find his pre-draft archetype peers (leave-one-out — a player is never his own comp — with an adaptive bandwidth that guarantees ≥10 effective comps), and use the <em>realized</em> spread of those peers' careers (busts → stars) as the width of his tier-probability distribution, centred on the headline. So the odds are honest (no 99% locks), not a tight parametric band. <strong style={{color:"#fbbf24"}}>Why decoupled:</strong> as a ranking signal the comps over-rate high-projected role players and regress true one-of-one stars (and a self-comp leak previously produced false 99% Superstar odds) — so the regression ranks, the comps calibrate uncertainty. Holdout: regression ranking ρ ≈ 0.39; P(NBA) ROC-AUC 0.95.
+          ProspectTheory's headline metric is <strong style={{color:"#e5e7eb"}}>Projected Peak Wins Added (PPWA)</strong> — an estimate of a prospect's best 3-consecutive-season Wins-Added peak (team-anchored impact + production, first 8 NBA years). The headline is a <strong style={{color:"#fbbf24"}}>50/50 blend of two independent estimators</strong>. <strong style={{color:"#fbbf24"}}>(1) Statistical projection (ev_recal):</strong> P(NBA), trained on the full ~15k-prospect pool, times E[Added Wins | NBA], a regularized ElasticNet on NBA careers, smoothly rescaled to the realized Wins-Added scale. <strong style={{color:"#fbbf24"}}>(2) Comp-engine realized average (exp_wa):</strong> for each prospect we find his pre-draft archetype peers (leave-one-out — a player is never his own comp — with an adaptive bandwidth that guarantees ≥10 effective comps), and take the kernel-weighted mean of those peers' <em>realized</em> peak-WA. <strong style={{color:"#fbbf24"}}>Why blend:</strong> on 879 resolved NBA careers Spearman(ev_recal, realized) ≈ 0.39 and Spearman(exp_wa, realized) ≈ 0.46 — the comp engine is the stronger ranking signal. The empirical optimum sits at α=0.40–0.50 (ρ≈0.48). 50/50 is within 0.002 of the optimum, symmetric and free of hand-tuned weights. The two estimators correct each other: the regression over-projects high-BPM young Wings with poor shooting (Sochan, Wiseman, Bol Bol), the comp engine catches that; and conversely lifts Curry/Wembanyama/Embiid whose comp-cohorts hit star outcomes. Plus a small data-fitted humble bonus tied to mock-draft consensus rank (isotonic-regressed from the residual aw − blend). <strong style={{color:"#fbbf24"}}>Tier probabilities</strong> use the realized spread of the comp cohort as σ, centred on the headline — honest odds (no 99% locks), not a tight parametric band. Holdout: blend ρ ≈ 0.46; P(NBA) ROC-AUC 0.95.
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
           {[
@@ -8939,12 +8823,8 @@ export default function App() {
                     <div className="flex flex-wrap items-center gap-2 mt-1 text-sm" style={{color:"#9ca3af"}}>
                       <span className="px-2 py-0.5 rounded text-xs font-semibold" style={{background:"#f9731622",color:"#f97316"}}>{p.pos}</span>
                       {(() => {
-<<<<<<< HEAD
-                        const allArch = (p.archetypesAll || p.archetype || "").split("|").filter(Boolean);
-=======
                         // Cap to top-3 archetypes in header to avoid visual clutter (pipeline may emit up to 7 matches for versatile players)
                         const allArch = (p.archetypesAll || p.archetype || "").split("|").filter(Boolean).slice(0, 3);
->>>>>>> 989a7c7147386315cb0e3d52dd0224f9daca4762
                         return allArch.map((a, i) => {
                           const ac = ARCH_COLORS[a] || "#60a5fa";
                           return (
@@ -8956,11 +8836,7 @@ export default function App() {
                           );
                         });
                       })()}
-<<<<<<< HEAD
-                      <span>{p.team}</span><span>·</span><span>{p.ht}</span><span>·</span><span>Age {p.age!=null?Number(p.age).toFixed(1):"—"}</span>
-=======
                       <span>{p.team}</span><span>·</span><span>{p.ht}</span><span>·</span><span>Age {p.age!=null?ageOnDraftDay(p.age).toFixed(1):"—"}</span>
->>>>>>> 989a7c7147386315cb0e3d52dd0224f9daca4762
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
