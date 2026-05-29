@@ -113,12 +113,15 @@ def main():
     master = master.sort_values(["_nname", "season", "date"])
     master = master.drop_duplicates(subset=["_nname", "season", "game_id"], keep="first")
     print(f"  After dedupe: {len(master):,} rows")
-    # For each player: take rows from their latest season only
+    # 2026-05-29 Tobias: latest-season-only filter REMOVED — for the Skill-Curve we
+    # want ALL available seasons stacked (more dots = smoother curve, better breakpoint
+    # visibility). The frontend can still show season-of-interest via toggle/color.
+    # `_latest_season` is kept on the row for the SoS-bridge (which uses season_year).
     latest_season = master.groupby("_nname", as_index=False)["season"].last()
     latest_season.columns = ["_nname", "_latest_season"]
     master = master.merge(latest_season, on="_nname")
-    master = master[master["season"] == master["_latest_season"]]
-    print(f"  After latest-season filter: {len(master):,} rows · {master['_nname'].nunique():,} players")
+    print(f"  All-season rows kept: {len(master):,} rows · {master['_nname'].nunique():,} players · "
+          f"{master['season'].nunique()} distinct seasons")
 
     # Vectorized field extraction — much faster than iterrows
     print(f"\n  Building compact records (vectorized)...")
@@ -149,8 +152,9 @@ def main():
             _bt["_net"] = (pd.to_numeric(_bt["adjoe"], errors="coerce")
                            - pd.to_numeric(_bt["adrtg"], errors="coerce"))
             _bt["_pn"] = _bt["player_name"].astype(str).apply(norm_name)
-            # season "2024-25" → season_year 2025 (BartTorvik nutzt das End-Jahr)
-            master["_sy"] = master["_latest_season"].astype(str).str.slice(0, 4).apply(
+            # 2026-05-29 Tobias: SoS pro Spiel-Saison (nicht pro Spieler-letzte-Saison).
+            # season "2024-25" → season_year 2025 (BartTorvik nutzt das End-Jahr).
+            master["_sy"] = master["season"].astype(str).str.slice(0, 4).apply(
                 lambda x: int(x) + 1 if x.isdigit() else None)
             # Team-Rating je (BT-team, season_year)
             _tr = (_bt.dropna(subset=["_net", "team"])
@@ -184,33 +188,34 @@ def main():
 
     by_player = {}
     for nname, sub in master.groupby("_nname"):
-        season = sub["_latest_season"].iloc[0]
-        # Build games list via to_dict('records') — much faster than iterrows
+        latest = sub["_latest_season"].iloc[0]
+        # 2026-05-29 Tobias: jedes Game bekommt sein season-Feld ("yr") für das
+        # Frontend (Multi-Season-Skill-Curve, Season-Toggle, Farb-Differenzierung).
+        # "stl" wurde umbenannt zu "st" weil "s" jetzt season heißt.
         games = []
         for r in sub.itertuples(index=False):
             games.append({
                 "d":  r.date,
                 "o":  r.opponent,
                 "h":  1 if r.is_home else 0,
+                "yr": r.season,                         # ← NEW: per-game season
                 "p":  int(r.pts), "a": int(r.ast),
                 "fa": int(r.fga), "fm": int(r.fgm),
                 "ta": int(r.tpa), "tm": int(r.tpm),
                 "rb": int(r.oreb) + int(r.dreb),
-                "to": int(r.tov), "s": int(r.stl), "b": int(r.blk), "pf": int(r.pf),
+                "to": int(r.tov), "st": int(r.stl), "b": int(r.blk), "pf": int(r.pf),
                 "u":  None if pd.isna(r.usg_proxy)  else round(float(r.usg_proxy), 1),
                 "o2": None if pd.isna(r.ortg_proxy) else round(float(r.ortg_proxy), 0),
                 "e":  None if pd.isna(r.efg_pct)    else round(float(r.efg_pct), 1),
-                # Backlog 3.1: TS% per Game (FT-aware) = PTS / (2·(FGA + 0.44·FTA)).
-                # fta/ftm sind in der Quell-CSV vorhanden, fehlten nur im kompakten Objekt.
                 "ts": (lambda _ts: None if _ts is None else round(_ts, 1))(
                     (float(r.pts) / (2.0 * (float(r.fga) + 0.44 * float(r.fta))) * 100.0)
                     if (not pd.isna(r.fga)) and (not pd.isna(r.fta)) and (float(r.fga) + 0.44 * float(r.fta)) > 0
                     else None),
-                # Backlog 3.2: Opponent-Stärke-Tier ("T"=stark, "M"=mittel, "L"=schwach, None=unbekannt)
                 "os": (r.os if isinstance(r.os, str) else None),
             })
         if games:
-            by_player[nname] = {"season": season, "games": games}
+            seasons_list = sorted(sub["season"].unique().tolist())
+            by_player[nname] = {"season": latest, "seasons": seasons_list, "games": games}
     print(f"  Compact records: {len(by_player):,} players")
 
     # Inject into DB profiles (conn already open from earlier name-fetch)

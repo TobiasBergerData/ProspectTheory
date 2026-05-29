@@ -5464,36 +5464,62 @@ function ScoutingTab({p, mode="scouting"}) {
         const games = p.gameLogs.games.filter(g => g.u != null && g.o2 != null);
         if (games.length < 5) return null;
 
-        // Backlog 3.2: color dots by OPPONENT STRENGTH (os: "T"/"M"/"L") when available,
-        // else fall back to the date gradient. Lets you spot if efficiency drops vs strong teams.
         const OPP_COL = {T:"#ef4444", M:"#fbbf24", L:"#22c55e"};
         const OPP_LABEL = {T:"Strong opponent", M:"Average opponent", L:"Weak opponent"};
         const hasOpp = games.some(g => g.os === "T" || g.os === "M" || g.os === "L");
 
-        // Domain ranges (clip ORtg to ±200, USG 0-50)
+        // Multi-season awareness — count distinct seasons across game-rows
+        const seasonsSet = new Set(games.map(g => g.yr).filter(Boolean));
+        const nSeasons = seasonsSet.size || 1;
+        const seasonsList = (p.gameLogs.seasons && p.gameLogs.seasons.length) ? p.gameLogs.seasons : Array.from(seasonsSet).sort();
+
         const USG_MIN = 0, USG_MAX = 50;
         const ORTG_MIN = 50, ORTG_MAX = 200;
-        const W = 720, H = 320, PAD = {l: 50, r: 20, t: 18, b: 36};
+        const W = 720, H = 340, PAD = {l: 50, r: 20, t: 18, b: 36};
         const xS = (u) => PAD.l + ((u - USG_MIN) / (USG_MAX - USG_MIN)) * (W - PAD.l - PAD.r);
         const yS = (o) => PAD.t + ((ORTG_MAX - o) / (ORTG_MAX - ORTG_MIN)) * (H - PAD.t - PAD.b);
 
-        // Sort by USG for smooth-curve calculation (LOESS-like rolling mean)
+        // 2026-05-29 Tobias: LOWESS-Smoother mit tricubic weights (Bart-Torvik-Style).
+        // Bandwidth = max(0.30, k/N) — bei kleinen Samples (10 Spiele) ist die Curve
+        // notgedrungen lokaler. Plus 1-SD-Konfidenzband aus lokalen Residuen.
         const sortedByUsg = [...games].sort((a, b) => a.u - b.u);
-        // For each USG-bin: rolling mean of ORtg from k=7 nearest neighbors in USG
-        const k = Math.max(5, Math.min(9, Math.floor(games.length / 4)));
-        const smoothPts = [];
-        for (let i = 0; i < sortedByUsg.length; i++) {
-          const start = Math.max(0, i - Math.floor(k / 2));
-          const end = Math.min(sortedByUsg.length, start + k);
-          const slice = sortedByUsg.slice(start, end);
-          const meanU = slice.reduce((a, g) => a + g.u, 0) / slice.length;
-          const meanO = slice.reduce((a, g) => a + g.o2, 0) / slice.length;
-          smoothPts.push({u: meanU, o: meanO});
+        const N = sortedByUsg.length;
+        const bandwidth = Math.max(0.3, Math.min(0.6, 7 / N));   // dynamic
+        const kNeighbors = Math.max(5, Math.round(bandwidth * N));
+        // Evaluate smoother on a dense grid (60 points), not just at observations
+        const gridPts = [];
+        for (let i = 0; i <= 60; i++) {
+          const u = USG_MIN + (USG_MAX - USG_MIN) * (i / 60);
+          // K nearest neighbors by |u - g.u|
+          const withDist = sortedByUsg.map(g => ({u: g.u, o: g.o2, d: Math.abs(g.u - u)}));
+          withDist.sort((a, b) => a.d - b.d);
+          const near = withDist.slice(0, kNeighbors);
+          const dMax = near[near.length - 1].d || 1e-6;
+          let wSum = 0, weighted = 0, w2Sum = 0, wO2 = 0;
+          for (const nd of near) {
+            const w = Math.pow(1 - Math.pow(nd.d / dMax, 3), 3);
+            wSum += w; weighted += w * nd.o; w2Sum += w * w; wO2 += w * nd.o * nd.o;
+          }
+          const meanO = wSum > 0 ? weighted / wSum : null;
+          // local variance → 1-SD band (clamped)
+          const varO = wSum > 0 ? Math.max(0, wO2 / wSum - meanO * meanO) : 0;
+          const sd = Math.sqrt(varO);
+          gridPts.push({u, o: meanO, sd});
         }
-        // Build SVG path for smooth curve (catmull-rom-ish, just polyline since pts are sorted)
-        const curvePath = smoothPts.map((pt, i) =>
-          `${i === 0 ? "M" : "L"} ${xS(pt.u).toFixed(1)} ${yS(pt.o).toFixed(1)}`
+        // Smooth path
+        const curvePath = gridPts.map((pt, i) =>
+          `${i === 0 ? "M" : "L"} ${xS(pt.u).toFixed(1)} ${yS(Math.max(ORTG_MIN, Math.min(ORTG_MAX, pt.o))).toFixed(1)}`
         ).join(" ");
+        // Confidence band (±1 SD), clamped to drawable range
+        const upperPath = gridPts.map((pt, i) => {
+          const o = Math.max(ORTG_MIN, Math.min(ORTG_MAX, pt.o + pt.sd));
+          return `${i === 0 ? "M" : "L"} ${xS(pt.u).toFixed(1)} ${yS(o).toFixed(1)}`;
+        }).join(" ");
+        const lowerPath = gridPts.slice().reverse().map((pt, i) => {
+          const o = Math.max(ORTG_MIN, Math.min(ORTG_MAX, pt.o - pt.sd));
+          return `L ${xS(pt.u).toFixed(1)} ${yS(o).toFixed(1)}`;
+        }).join(" ");
+        const bandPath = `${upperPath} ${lowerPath} Z`;
 
         // OLS line through raw points for comparison
         const n = games.length;
@@ -5523,7 +5549,7 @@ function ScoutingTab({p, mode="scouting"}) {
 
         return (
           <Sec icon="📊" title="Game-by-Game Skill Curve"
-            sub={`${games.length} games from ${p.gameLogs.season}. Each dot = one game. Curve shows how efficiency (individual offensive rating) scales with possession-load (% of team possessions consumed). Used to spot the breakpoint where production drops at higher load.`}>
+            sub={`${games.length} games across ${nSeasons} ${nSeasons===1?"season":"seasons"}${seasonsList.length?` (${seasonsList.join(" · ")})`:""}. Each dot = one game. Smooth curve uses LOWESS with tricubic weights; the shaded band shows the ±1 SD spread of the local ORtg distribution. Used to read where efficiency stops scaling with possession load — the higher the curve stays at high usage, the better he handles a bigger role.`}>
             <div style={{background:"#0d1117",border:"1px solid #1f2937",borderRadius:8,padding:"12px 14px",marginBottom:12}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,flexWrap:"wrap",gap:8}}>
                 <div>
@@ -5571,8 +5597,10 @@ function ScoutingTab({p, mode="scouting"}) {
                         stroke={slopeColor} strokeWidth={1.5} strokeDasharray="6,4" opacity={0.7}/>
                 )}
 
-                {/* Smooth curve (LOESS-like rolling mean) — primary visual element */}
-                <path d={curvePath} fill="none" stroke="#f97316" strokeWidth={2.5} opacity={0.85}/>
+                {/* 2026-05-29 — confidence band (±1 SD), beneath the curve */}
+                <path d={bandPath} fill="#f9731622" stroke="none"/>
+                {/* Smooth curve (LOWESS, tricubic-weighted) — primary visual element */}
+                <path d={curvePath} fill="none" stroke="#f97316" strokeWidth={2.5} opacity={0.95}/>
 
                 {/* Game dots — Backlog 3.2: color by opponent strength (else date gradient) */}
                 {games.map((g, i) => {
@@ -5587,9 +5615,9 @@ function ScoutingTab({p, mode="scouting"}) {
                   return (
                     <Tip key={i} content={
                       <div>
-                        <div style={{fontWeight:700,color:"#f97316"}}>{g.d} vs {g.h ? "" : "@"} {g.o}{OPP_LABEL[g.os] ? ` · ${OPP_LABEL[g.os]}` : ""}</div>
+                        <div style={{fontWeight:700,color:"#f97316"}}>{g.d} {g.h ? "vs" : "@"} {g.o}{g.yr ? ` · ${g.yr}` : ""}{OPP_LABEL[g.os] ? ` · ${OPP_LABEL[g.os]}` : ""}</div>
                         <div style={{fontSize:11,color:"#cbd5e1",marginTop:3}}>
-                          {g.p} pts · {g.fm}/{g.fa} FG · {g.tm}/{g.ta} 3PT · {g.a} ast · {g.to} TO · {g.b} blk · {g.s} stl
+                          {g.p} pts · {g.fm}/{g.fa} FG · {g.tm}/{g.ta} 3PT · {g.a} ast · {g.to} TO · {g.b} blk · {(g.st ?? g.s) ?? 0} stl
                         </div>
                         <div style={{fontSize:11,color:"#94a3b8",marginTop:3}}>
                           USG <strong style={{color:"#f97316"}}>{g.u}%</strong> · ORtg <strong style={{color:"#22c55e"}}>{g.o2}</strong> · eFG <strong style={{color:"#fbbf24"}}>{g.e}%</strong>
@@ -5609,15 +5637,15 @@ function ScoutingTab({p, mode="scouting"}) {
                 <text x={12} y={H/2} textAnchor="middle" fontSize={11} fill="#9ca3af" transform={`rotate(-90,12,${H/2})`}>Individual Offensive Rating</text>
               </svg>
               <div style={{display:"flex",gap:14,marginTop:8,fontSize:10,color:"#6b7280",flexWrap:"wrap"}}>
-                <span>● <span style={{color:"#60a5fa"}}>early-season</span> → <span style={{color:"#f97316"}}>late-season</span> color gradient</span>
-                <span>━ orange smooth curve = rolling-mean trend</span>
+                {!hasOpp && <span>● <span style={{color:"#60a5fa"}}>early-season</span> → <span style={{color:"#f97316"}}>late-season</span> color gradient</span>}
+                <span>━ orange LOWESS curve · ▒ ±1 SD band</span>
                 <span style={{color:slopeColor}}>--- {slope >= 0 ? "+" : ""}{slope.toFixed(2)} OLS slope</span>
               </div>
               <div style={{marginTop:8,fontSize:10,color:"#475569",lineHeight:1.6,fontStyle:"italic"}}>
                 <strong style={{color:"#6b7280"}}>How to read:</strong> A flat or rising curve = he holds efficiency even as load grows.
-                A steeply falling curve at high USG = production drops when defenses focus on him.
-                Look for breakpoints — usage levels where the curve clearly bends down.
-                ORtg is individual (not team-context), USG-proxy is share-of-team-possessions (not standard NBA-USG with minutes).
+                A falling curve at high USG = production drops when defenses focus on him.
+                The shaded band ≈ how variable his per-game output is at that load — wide band = boom/bust at that usage, narrow = stable.
+                ORtg is individual (not team-context); USG-proxy is share-of-team-possessions (not the standard NBA-USG with minutes adjustment).
               </div>
             </div>
           </Sec>
@@ -7150,7 +7178,7 @@ function MethodologyTab() {
     {cat:"Tier Feasibility (vs NBA)",items:[],desc:"Position-specific comparison against NBA tier benchmarks (p25-p75 corridors). For each tier (Replacement through All-Star), core metrics are checked: Wings = TS%+3P%, Playmakers = AST%+TO%, Bigs = BLK%+ORB%. If a core metric exceeds p75 of the target tier, deficiencies in secondary metrics are marked 'Compensated' (yellow) instead of 'Critical Gap' (red)."},
     {cat:"Mind Tab — Self-Sufficiency Profile",items:[],desc:"Four sequential questions answered with a final verdict: (1) HOW OFTEN does he create his own shot? — share of made FGs that were unassisted, with position-peer percentile. (2) HOW EFFICIENT when self-creating? — Self-Created eFG% vs. Assisted eFG%, with a Difficulty Premium indicator (positive = better on hard shots). (3) HOW DOES PRESSURE affect efficiency? — three pressure contexts from PBP data: Close Late-Game (win prob 20–80% in 2nd half), Late Shot Clock (≥22 secs into possession), and Clutch Free Throws (last 5 min Half 2 with score-diff ≤5). (4) WHERE does he succeed? — per-zone eFG%/self%/asst% breakdown (Rim/Mid/3pt/Dunk). Verdict combines all four into one of seven profile labels: Self-Sufficient Star, Self-Sufficient Scorer, High Volume / Low Efficiency, Off-Ball Clutch Performer, Off-Ball Beneficiary, Pressure-Sensitive Creator, or Balanced Creator."},
     {cat:"Mind Tab — Mental Resilience (NEW)",items:[],desc:"Quantifies behavioral tendencies after adverse-event streaks from raw play-by-play data. We define an adverse-event streak as ≥3 negative events (missed FG, turnover, foul, missed FT trip) in a player's last 4 actions; we then track how he behaves in his next 4 actions. Five tendency indices, each shown as point-estimate + 95% confidence interval + within-position z-score: (a) Hothead = post-streak foul-rate / baseline; (b) Overdriver = TO-rate change; (c) Engagement (Passive) = action volume change; (d) Shot-Seeking (Aggressor) = FGA-rate change; (e) Bounceback eFG = made/FGA change. Plus a Match-Phase-Drift block: stamina_idx + overdriver_drift + hothead_drift compare 1st-half streaks vs 2nd-half streaks (mental fatigue signal). Bayesian-Shrinkage applied: posterior = (n × raw + 30 × 1.0) / (n + 30) — small samples shrink toward the population mean. CRITICAL CAVEAT: these are quantitative tendencies observed in PBP data, not deterministic claims. ~88-95% of the league has CIs that include 1.0 (= no detectable effect). Trust extreme z-scores (|z|>1.5) and CIs that exclude 1.0. Always verify with film."},
-    {cat:"Scouting Tab — Game-by-Game Skill Curve (NEW)",items:[],desc:"Per-game scatter plot of every game in the season: x-axis = Usage% per game (share of team possessions consumed), y-axis = Individual Offensive Rating per game (= (PTS + 0.5×AST) / Possessions × 100). A LOESS-like rolling-mean curve is fitted through the points to reveal scaling behavior — does efficiency hold up at higher usage, or break down at a clear threshold? Color gradient blue→orange shows chronological order (early-season → late-season). Each dot is interactive (hover for date, opponent, full stat-line). USG-proxy is approximate (% of team possessions, not the standard NBA-USG with minutes adjustment) since per-game minutes data is unavailable from the play-by-play source."},
+    {cat:"Scouting Tab — Game-by-Game Skill Curve",items:[],desc:"Per-game scatter plot of every game the player has on file (multi-season aggregated when available): x-axis = Usage% per game (share of team possessions consumed), y-axis = Individual Offensive Rating per game (= (PTS + 0.5×AST) / Possessions × 100). A LOWESS curve with tricubic weights (Bart-Torvik-style smoothing) is fitted across the full usage range — the shaded ±1 SD band shows the local spread of per-game ORtg at each load. Dot color encodes opponent strength when available (T/M/L tertiles from BartTorvik AdjOE−AdjD per team×season), else a chronological gradient blue→orange. Hover any dot for date, opponent, season, full stat-line. Used to read where the player stops scaling: a flat or rising curve at high USG = he holds up under load (no shrinking from defenses), a downward-bending curve = a soft ceiling on how much he can carry. USG-proxy is approximate (% of team possessions, not the standard NBA-USG with minutes adjustment)."},
     {cat:"Development Tab — In-Season Trajectory (NEW)",items:[],desc:"Multi-stat overlay plot for ANY game-log player: 6 indicators on rolling K-game means (K = max(3, min(7, N/5))) over the season. Stats: Usage% (role expansion), eFG% (efficiency growth), Assists (developing playmaking), 3PT Attempts (expanding shooting range), Stocks = STL+BLK (defensive growth), and Personal Fouls (discipline — falling = good, inverted color). OLS slopes per stat shown as season-scale trends. The single-stat 'Rolling Trend' below uses an alternate game-log source for multi-season players when available."},
     {cat:"Development Tab — Season-by-Season Breakdown",items:[],desc:"Per-season table of all seasons with meaningful playing time (≥8% USG). Columns: Year, USG%, AdjOrtg (BartTorvik opponent-adjusted offensive rating), vs. Peer (delta from cross-sectional peer curve), TS%, AST%, TO%, BPM. Δ markers show year-over-year change. Multi-season improvement is one of the strongest NBA success signals."},
     {cat:"Roles & Archetypes Tab",items:[],desc:"Two-stage role inference. Stage 1 — Role Inference Matrix: 14 NBA roles scored as z-scores relative to position peers. Offensive: Scorer, Playmaker, Spacer, Driver, Crasher. Defensive: On-Ball, Switch Potential, Rim Protect, Rebounder. Hybrid: Connector, Helio-Scorer, Event Creator, Zone Pressure, Micro-Spacer. Each role combines 2-4 statistical inputs weighted by NBA translation research. Z≥+2.0 = Elite, ≥+1.0 = Impact, <-1.0 = Liability. Stage 2 — NBA Archetype Fit: 19 NBA archetypes per position, sorted left→right by empirical rarity (most common to rarest, computed from the actual frequency in 46k player-seasons). The pipeline assigns a primary, secondary, and tertiary archetype based on dominant role scores. Rarity = how strict are the position-specific role thresholds — rare archetypes are objectively harder to find on draft day."},
