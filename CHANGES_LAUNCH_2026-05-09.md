@@ -657,4 +657,156 @@ git push origin main
 
 ---
 
+# Phase 2 + 3 — PBP Mind-Vollintegration (Tobias 2026-05-17)
+
+## Sektion 21: NCAA-PBP Vollausbau + Mind-Features
+
+### 21.1 NCAA PBP Backfill (Pre-Conference → Full Season)
+
+**Problem (Pre-Sonntags-Launch)**: NCAA-PBP-Daten endeten bei `2025-12-28`. Conference Play + March Madness (Januar–April 2026) fehlten. Mind-Metriken für 2026-Class waren auf ~30 % Sample-Coverage (nur Pre-Conference) — methodisch nicht entscheidungsrelevant.
+
+**Datenquelle gewechselt**: `lbenz730/ncaahoopR_data` (alt, stagnierend) → `sportsdataverse-py` direkt aus ESPN-API (aktiv gepflegt, <72h Lag).
+
+**Scrape**: `scrape_pbp_sdv.py --season 2025-26 --range 2025-11-01 2026-05-17`. Resultat: **6.318 Games, 99.32 % Erfolgsrate** (43 Fails = abgesagte Games).
+
+**Mind-Spike Re-Aggregation**: 4.673 Player-Seasons in 2025-26 (vorher ~1.900).
+
+**Boozer-Effekt**: n_streaks von 10 (Pre-Conference) auf **30** (Full-Season) → statistisch valide.
+
+### 21.2 Phase 2A — Mind-Display in Backend-DB
+
+`inject_mind_metrics.py` injiziert `mindMetrics`-Objekt pro Profile-Blob. Frontend nutzt bereits den verschachtelten Pfad — kein UI-Code-Update nötig.
+
+**Coverage**: 15.341 / 44.793 Profile (~34 %) — passt zur NCAA-2017+-Datenverfügbarkeit.
+
+**Top-2026 Mind-Profile**:
+| Spieler | Saison | n | Clutch-WP-Δ | Late-Clock-Δ | Pattern |
+|---|---|---|---|---|---|
+| Cooper Flagg | 2024-25 | 43 | **+32.0** ✓ | −19.1 | Clutch-Closer |
+| Cameron Boozer | 2025-26 | 30 | −20.2 | −12.5 | Compiler, Clutch-Schwäche |
+| AJ Dybantsa | 2025-26 | 44 | −0.5 | −13.1 | Clutch-stabil, FT-Issue |
+
+### 21.3 Phase 2B — Mind-Features im ML-Training
+
+`10c_ml_calibration.py` FEATURES-Liste um 6 robuste Mind-Features erweitert (passive, bounceback, clutch_efg, clutch_wp_efg, late_clock, clutch_ft).
+
+**Modell-Verbesserung**:
+| Metric | Vorher (41 features) | Nachher (50) | Δ |
+|---|---|---|---|
+| CV r (5-fold) | 0.469 ± 0.073 | **0.494 ± 0.067** | +0.025 |
+| xRAPM r | 0.482 | **0.502** | +0.020 |
+| Top-10 Backtest | 74 % | **76 %** | +2 pp |
+| Avg rank error | 10.1 | **9.9** | −0.2 |
+
+Mind-Features in SHAP-Limitern bei Top-Prospects sichtbar.
+
+### 21.4 Phase 2C — Fragile Mind-Features raus aus ML
+
+**Sensitivity-Test**: Aggressor/Overdriver/Hothead haben Pearson r=0.40–0.60 unter looser/stricter Streak-Definition → nicht robust. Aus 10c-FEATURES entfernt, **bleiben aber im Display** (für Top-Analyst directional sichtbar).
+
+### 21.5 Phase 2D — Intl-Cohort Percentile (Wemby-FTR-Fix)
+
+**Problem**: Wembanyama FTR=39 % → 17. Perzentil (NCAA-Bigs haben wegen College-Reffing 50–60 % FTR → unfair).
+
+**Fix**: 14 neue `pctl_*_intl`-Spalten in 10c (innerhalb Intl-Cohort, gruppiert nach `pos_group`). Frontend mapProfile: für `source==='intl'` swap auf `pctl_*_intl`. Plus Box-Score-Sub-Note "Percentiles vs Intl-Peers (Big)".
+
+**Effekt Wembanyama**:
+| Stat | vs all | vs Intl-Bigs |
+|---|---|---|
+| FTR | 17 % | **59 %** |
+| BLK | 91 % | **99 %** |
+| TS% | 60 % | 47 % (Intl-Bigs sind effizienter) |
+
+### 21.6 Liga-Weight-Card im Overview-Header
+
+Für Intl-Spieler ersetzt "Recruit" durch "League Weight" (×-Faktor, NCAA-Power = 1.00 Anker).
+
+Farbcoding: ≥ 1.20 🟢 Premier, ≥ 1.00 🟢 Strong, ≥ 0.85 🟡 Mid, < 0.85 🟠 Low.
+
+Plus Advanced-Sub: "Stats from {Liga} (League-Weight ×{x} vs NCAA-Power), ML-Modell calibriert mit Multi-Bridge."
+
+## Sektion 22: Phase 3 — Euroleague + EuroCup PBP
+
+### 22.1 Euroleague-API-Scrape
+
+`euroleague_api` (giasemidis) Python-Paket + eigener Mapper `euroleague_to_ncaahoopR_mapper.py`.
+
+**Coverage**: **4.883 Games über 10 Saisons** (Euroleague 2016-17 → 2025-26 + EuroCup 2016-17 → 2025-26).
+
+**Mapper-Details**:
+- Quarter→Half: Q1+Q2 → 1, Q3+Q4 → 2, OT → 3+
+- `secs_remaining` game-level: `(4-PERIOD)*600 + markertime_secs`
+- Player-Name-Normalisierung: "GRIGONIS, MARIUS" → "Marius Grigonis"
+- POINTS_A/B forward-fill (nur bei Scoring-Plays gesetzt)
+- Win-Probability: nicht verfügbar in Euroleague-API → NaN
+
+### 22.2 Phase 3A — Intl-Mind im Display
+
+`pbp_mind_metrics_intl_all.py` orchestriert per Liga + Saison den `pbp_mind_metrics_spike.py` (parametrisiert via `--pbp-root` + `--output-tag`). Resultat: **4.196 player-seasons** über 10 Saisons + 2 Leagues.
+
+`inject_mind_metrics.py` erweitert: NCAA-Master + Intl-Master, pro Spielername latest-Season.
+
+**Post-Inject**: 16.586 / 44.793 Profile (+1.245 vs Phase 2A).
+
+**Top-Bridge-Spieler mit Intl-Mind**:
+| Spieler | Saison | n | Aggressor | Clutch-WP-Δ | Late-Clock-Δ |
+|---|---|---|---|---|---|
+| Luka Doncic | 2017-18 EU | 21 | 1.09 | −10.3 | −21.5 |
+| Wembanyama | 2021-22 EU | 10 | 1.11 | −6.5 | **+10.7** ✓ |
+| Goga Bitadze | 2018-19 EU | 7 | 1.22 | −8.7 | −35.6 |
+| Hugo González | 2024-25 EU | 2 | 0.60 | +22.0 | limited |
+
+**Methodisches Highlight**: Wemby positiver Late-Clock-Delta — selten und starkes Self-Creator-Signal.
+
+**Limits**: Sengun (Turkish BSL), Valanciunas/Capela (LKL) fehlen — nicht in EU/EuroCup zur relevanten Saison. Phase 4 (BBL/Turkish BSL/French LNB scrapen) als Folge.
+
+### 22.3 Phase 3B — Intl-Mind im ML-Training
+
+`10c_ml_calibration.py` Mind-Feature-Merge erweitert um Intl-CSV. Modell lernt von 1.629 zusätzlichen Trainings-Cases (Doncic, Wemby, etc.). Effekt: methodisch sauberer (keine NaN-Lücken für historische Intl-Bridge-Spieler).
+
+### 22.4 FIBA-Specifics — Disclaimer
+
+- **Shot-Clock**: FIBA 24s vs NCAA 30s → `LATE_SHOT_CLOCK_THRESHOLD=22` (NCAA) entspricht ~16s für FIBA. Aktuell keine Liga-spezifische Anpassung — kleiner Drift in `late_clock_delta_efg` für Intl-Spieler.
+- **Quarter vs Half**: gemappt im euroleague_to_ncaahoopR_mapper.py.
+- **Win-Probability**: nicht in Euroleague-API → `clutch_wp_*` fällt auf NaN-Default (Spike `wp_val=0.5`).
+
+## Updated Spot-Check Liste
+
+### Phase 2 (Live nach Commit-Chain aa20808 + Vorgänger)
+- [ ] Boozer Mind-Tab: **n=30** streaks
+- [ ] Cooper Flagg Mind-Tab: Clutch-WP **+32.0pp** (Closer)
+- [ ] Wembanyama Box-Score: **FTR 59** (Intl-Cohort)
+- [ ] Wembanyama Header: "League Weight ×1.02"-Card (gelb)
+- [ ] Wembanyama Box-Score-Sub: "Percentiles vs Intl-Peers (Big)"
+- [ ] Doncic Header: "League Weight ×1.26" (grün)
+
+### Phase 3 (Live nach Commit aa20808 Render-Build)
+- [ ] Luka Doncic Mind-Tab: n=21 (Euroleague 2017-18)
+- [ ] Wembanyama Mind-Tab: n=10 (Euroleague 2021-22, ASVEL-Cameo, Late-Clock +10.7)
+- [ ] Bitadze Mind-Tab: n=7 (Euroleague 2018-19)
+- [ ] Hugo González Mind-Tab: n=2 (limited-sample-warning)
+
+## Offene Backlog-Items (Stand 2026-05-17)
+
+**Methodisch**:
+- FIBA-Shot-Clock-Adjustment (16s für Intl-Spieler statt 22s NCAA-Default)
+- Mind-Tab-Disclaimer für Intl: "Daten aus {Liga} ({Saison})"
+- Sensitivity-Marker (⚠) in UI für fragile Indizes
+
+**Daten-Erweiterung**:
+- Phase 4: BBL / Turkish BSL / French LNB / Adriatic ABA direkt scrapen
+- xRAPM-Refresh (jährlich Selenium)
+
+**UX / Cosmetic**:
+- Tooltip Dual-Display ("vs Intl: 59 | vs NCAA: 17")
+- 10d Top-5-Print sortieren nach WAR
+- Liga-Sanity-Heuristik per-Conference-Threshold
+
+**Infrastructure**:
+- DB-Size: `api_anthro_comps.json` (57 MB) splitten falls nötig
+- Automated Refresh-Pipeline: GitHub-Actions für BartTorvik/Consensus
+
+---
+
+*Phase 2+3 dokumentiert 2026-05-17. Original Sunday-Launch-Doku: oben.*
 *Dokument erstellt 2026-05-09 vor Sunday-Launch.*
