@@ -2088,61 +2088,63 @@ function OverviewTab({p, compTier, setCompTier}) {
           </div>
         </div>
 
-        {/* Tobias 2026-06-02: Clearance Verdict — historisch validierte Lift-Faktoren
-            pro Tier. Cleared = wieviele Stats >= median der Outcome-Cohort.
-            Schwellen aus Audit auf 353 NBA-Spielern 2008-2018. */}
+        {/* Tobias 2026-06-02 v3: Verdict — class-aware for NCAA + bridge-cohort for Intl. */}
         {(() => {
           const inR = assessed.filter(m=>m.status==="In-Range").length;
           const total = assessed.filter(m=>m.pctP50!=null).length;
           if (total < 8) return null;
-          // Tier-spezifische Verdicts mit historischer Validierung
+          const clsMap = {"Fr":1,"Freshman":1,"So":2,"Sophomore":2,"Jr":3,"Junior":3,"Sr":4,"Senior":4};
+          const clsRaw = p.cls || p.classLabel || "";
+          const classNum = clsMap[clsRaw] || (p.seasons ? Math.min(4, parseInt(p.seasons)) : null);
+          const className = classNum === 1 ? "Freshman" : classNum === 2 ? "Sophomore" :
+                            classNum === 3 ? "Junior" : classNum === 4 ? "Senior" : null;
           const VERDICTS = {
             "Replacement": [
-              {min:6, label:"Plays Replacement-level box profile", color:"#22c55e",
-               desc:"Every drafted NBA player reaches Replacement-level — this is the baseline floor, not a forecast."},
-              {min:3, label:"Below Replacement-level statistical profile", color:"#fbbf24",
-               desc:"Box profile sits below Replacement-tier medians on most dimensions. Many late-second-rounders still reach NBA Replacement-level — read this view as a profile fit, not a ceiling."},
-              {min:0, label:"Atypical for Replacement-tier", color:"#ef4444",
-               desc:"Most stats sit below the typical Replacement-tier corridor. Development-stars (Westbrook 2/10, Khris Middleton 2/10) started here too — pair with Skill-Curve and Comps."},
+              {min:6, label:"Plays Replacement-level box profile", color:"#22c55e", desc:"Every drafted NBA player reaches Replacement-level — this is the baseline floor, not a forecast."},
+              {min:3, label:"Below Replacement-level statistical profile", color:"#fbbf24", desc:"Box profile sits below Replacement-tier medians on most dimensions."},
+              {min:0, label:"Atypical for Replacement-tier", color:"#ef4444", desc:"Development-stars (Westbrook 2/10) started here too — pair with Skill-Curve and Comps."},
             ],
             "Role Player": [
-              {min:8, label:"Strong Role-Player profile fit", color:"#22c55e",
-               desc:"Historically 70-90% of college players who clear 8+ Role-Player thresholds end up reaching Role-Player tier or higher. 1.4–1.7× Base-Rate lift."},
-              {min:6, label:"Plausible Role-Player fit", color:"#22c55e",
-               desc:"6–7/10 cleared. Historical precision 68–70%. Solid profile signal."},
-              {min:4, label:"Mixed Role-Player signals", color:"#fbbf24",
-               desc:"~46% historically reach Role-Player. Some core stats hit, others miss — Mind, Skill-Curve and Comps decide direction."},
-              {min:0, label:"Atypical Role-Player profile", color:"#ef4444",
-               desc:"<4/10. Stars like Tatum (3/10) and SGA (3/10) developed past this profile, but historical base-rate is low (~35%)."},
+              {min:8, label:"Strong Role-Player profile fit", color:"#22c55e", desc:"Historically 70–90% of college players who clear 8+ Role-Player thresholds reach Role-Player tier or higher (1.4–1.7× Base-Rate lift)."},
+              {min:6, label:"Plausible Role-Player fit", color:"#22c55e", desc:"6–7/10 cleared. Historical precision 68–70%."},
+              {min:4, label:"Mixed Role-Player signals", color:"#fbbf24", desc:"~46% historically reach Role-Player. Mind, Skill-Curve, Comps decide direction."},
+              {min:0, label:"Atypical Role-Player profile", color:"#ef4444", desc:"Stars like Tatum (3/10) and SGA (3/10) developed past this profile."},
             ],
             "Starter": [
-              {min:9, label:"Generation-level Starter profile (very rare)", color:"#22c55e",
-               desc:"9+/10 historisch → 80% precision (2.5× Base-Rate). Only ~5 players per decade clear this bar."},
-              {min:8, label:"Strong Starter profile fit", color:"#22c55e",
-               desc:"8/10 → 64% Precision (2× Base-Rate). Players like Zion Williamson, Karl-Anthony Towns sat here pre-draft."},
-              {min:6, label:"Plausible Starter fit", color:"#fbbf24",
-               desc:"6–7/10 → 36-50% precision. Profile is mid; development signal becomes the tie-breaker."},
-              {min:0, label:"Atypical Starter profile", color:"#ef4444",
-               desc:"<6/10. SGA / Tatum / Donovan Mitchell were here pre-draft and became Stars — this is NOT a hard veto."},
+              {min:9, label:"Generation-level Starter profile", color:"#22c55e", desc:"9+/10 → 80% precision (2.5× Base-Rate). Only a handful per decade."},
+              {min:8, label:"Strong Starter profile fit", color:"#22c55e", desc:"8/10 → 64% Precision (2× Base-Rate). Players like Zion Williamson, KAT sat here pre-draft."},
+              {min:6, label:"Plausible Starter fit", color:"#fbbf24", desc:"6–7/10 → 36–50% precision. Development signal becomes tie-breaker."},
+              {min:0, label:"Atypical Starter profile", color:"#ef4444", desc:"SGA / Tatum / Donovan Mitchell were here pre-draft and became Stars — NOT a hard veto."},
             ],
             "All-Star": [
-              {min:9, label:"Historically unique All-Star profile", color:"#22c55e",
-               desc:"9+/10 against All-Star thresholds — only Caleb Wilson 2026 (10/10), Boozer 2026 (9/10), Cooper Flagg 2026 (9/10) hit this in 18 years. Below All-Star outcome is statistically very rare from here."},
-              {min:8, label:"Strong All-Star profile fit", color:"#22c55e",
-               desc:"8/10 → 55% precision = 4× Base-Rate. Joel Embiid, Karl-Anthony Towns, Ben Simmons, Blake Griffin, Kevin Love, Deandre Ayton sat exactly here pre-draft."},
-              {min:6, label:"Plausible Star-Candidate signals", color:"#fbbf24",
-               desc:"6–7/10 cleared. Curry (6/10), Harden (6/10), Kawhi (6/10), AD (7/10) developed past this profile. Box-stats alone don't decide — check Mind, Skill-Curve and Comps."},
-              {min:0, label:"Atypical for All-Star profile", color:"#ef4444",
-               desc:"<6/10. Half of all historical All-Stars sat here pre-draft (Tatum 3/10, SGA 3/10, Westbrook 2/10, Middleton 2/10). This is NOT a veto — it just means: box-score profile alone won't tell you. Focus on Mind, Comps, and Skill-Curve scaling."},
+              {min:9, label:"Historically unique All-Star profile", color:"#22c55e", desc:_isIntlSrc ? "9+/10 within Intl-Bridge-Cohort — extremely rare. Tracy McGrady, Sengun and Andray Blatche are the only historical cases." : "9+/10 against All-Star thresholds — only Caleb Wilson 2026 (10/10), Boozer 2026 (9/10), Cooper Flagg 2026 (9/10) hit this in 18 years."},
+              {min:8, label:"Strong All-Star profile fit", color:"#22c55e", desc:_isIntlSrc ? "8/10 in Intl-Bridge → 23% precision = 5.5× Intl Base-Rate. Tracy McGrady, Gilbert Arenas, Andrei Kirilenko sat exactly here pre-NBA." : "8/10 → 55% overall precision = 4× Base-Rate. Joel Embiid, KAT, Ben Simmons, Blake Griffin, Kevin Love, Deandre Ayton sat exactly here pre-draft."},
+              {min:6, label:"Plausible Star-Candidate signals", color:"#fbbf24", desc:_isIntlSrc ? "6–7/10 in Intl-Bridge → 0–7% precision. Most Intl-All-Stars (Doncic, Wemby) sat BELOW this profile pre-NBA because intl box-stats translate imperfectly." : "6–7/10 cleared. Curry (6/10), Harden (6/10), Kawhi (6/10), AD (7/10) developed past this profile."},
+              {min:0, label:"Atypical for All-Star profile", color:"#ef4444", desc:_isIntlSrc ? "<6/10 cleared in Intl-Bridge. Doncic and Wemby sat here — intl box-stats are noisy proxies. Comp-Engine + Skill-Curve decide direction." : "Half of historical All-Stars sat here pre-draft (Tatum 3/10, SGA 3/10, Westbrook 2/10). NOT a veto — focus on Mind, Comps, Skill-Curve."},
             ],
           };
           const list = VERDICTS[compTier] || [];
           const verdict = list.find(v => inR >= v.min) || list[list.length-1];
           if (!verdict) return null;
+          let classNote = null;
+          if (_isIntlSrc) {
+            if (inR >= 8 && compTier === "All-Star") {
+              classNote = {color:"#fbbf24", icon:"i", txt:"Intl-Bridge cohort: 400 players who entered the NBA via Euroleague / ACB / BBL / FIBA youth tournaments. Thresholds are the medians of this cohort. Note: league strength varies (Euroleague = top, NBL = low) and pro-experience replaces the college-class concept — the maturity effect runs in a different direction."};
+            }
+          } else if (compTier === "All-Star" && inR >= 8) {
+            if (classNum === 1) classNote = {color:"#22c55e", icon:"✓", txt:"Freshman 8+/10 historically → 83% Precision (5 of 6). Embiid, KAT, Ben Simmons, Blake Griffin and Kevin Love cleared 8+ as Freshmen and became All-Stars. Strongest single signal we measure."};
+            else if (classNum === 2) classNote = {color:"#fbbf24", icon:"~", txt:"Sophomore 8+/10 historically → 25% Precision. Weaker than Freshman: more development time already inside college."};
+            else if (classNum === 3) classNote = {color:"#ef4444", icon:"!", txt:"Junior 8+/10 historically → 0% Precision (0 of 1). Maturity advantage over younger competition — box profile reflects age, not star talent."};
+            else if (classNum === 4) classNote = {color:"#ef4444", icon:"!", txt:"Senior 8+/10 historically → 0% Precision (0 of 3). Sindarius Thornwell cleared 10/10 as Senior → peakWA −2.9. Senior college dominance is a maturity edge, not an NBA star signal."};
+          } else if (compTier === "Starter" && inR === 10 && classNum && classNum >= 4 && !_isIntlSrc) {
+            classNote = {color:"#ef4444", icon:"!", txt:"10/10 Starter as Senior: historically 0% Precision. Old-for-Class effect — profile looks strong because of age advantage, but NBA outcomes settled at Replacement-level."};
+          }
           return (
             <div className="mt-4 rounded-xl p-4" style={{background:"#0d1117", border:`1px solid ${verdict.color}55`}}>
               <div style={{fontSize:11,fontWeight:700,color:"#6b7280",letterSpacing:1,marginBottom:6}}>
                 CLEARANCE VERDICT vs {compTier.toUpperCase()}
+                {className && !_isIntlSrc && <span style={{color:"#9ca3af",marginLeft:8}}>· {className}</span>}
+                {_isIntlSrc && <span style={{color:"#9ca3af",marginLeft:8}}>· Intl Cohort</span>}
               </div>
               <div className="flex items-baseline gap-3 mb-2">
                 <span style={{fontSize:24,fontWeight:700,color:verdict.color,fontFamily:"Oswald, sans-serif"}}>
@@ -2151,6 +2153,16 @@ function OverviewTab({p, compTier, setCompTier}) {
                 <span style={{fontSize:14,fontWeight:600,color:verdict.color}}>{verdict.label}</span>
               </div>
               <div style={{fontSize:11,color:"#9ca3af",lineHeight:1.6}}>{verdict.desc}</div>
+              {classNote && (
+                <div className="mt-3 pt-3" style={{borderTop:"1px solid #1f2937"}}>
+                  <div style={{fontSize:11,fontWeight:600,color:classNote.color,lineHeight:1.6}}>
+                    <span style={{marginRight:6}}>{classNote.icon}</span>{classNote.txt}
+                  </div>
+                </div>
+              )}
+              <div className="mt-2 text-xs" style={{color:"#4b5563"}}>
+                Thresholds: {_thresholdCohort}
+              </div>
             </div>
           );
         })()}
