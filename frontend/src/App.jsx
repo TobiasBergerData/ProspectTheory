@@ -2473,6 +2473,158 @@ function ShootingTab({p}) {
 
   return (
     <div className="space-y-5">
+      {/* Tobias 2026-06-02: 3-Layer Shooting Projection explainer (Skill / Intent / Volume). */}
+      <div className="rounded-2xl p-5 mb-4" style={{background:"linear-gradient(135deg,#0d1117,#111827)", border:"1px solid #1f2937"}}>
+        <h3 className="text-base font-bold text-gray-100 mb-2">How 3P Projection Works — Three Layers</h3>
+        <p className="text-xs text-gray-400 mb-4">A 3-point projection mixes three different questions. We split them out so each can be read on its own.</p>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="rounded-lg p-3" style={{background:"#0a0e14", border:"1px solid #22c55e44"}}>
+            <div style={{fontSize:10,fontWeight:700,color:"#22c55e",letterSpacing:1,marginBottom:4}}>LAYER 1 — SKILL</div>
+            <div style={{fontSize:13,fontWeight:600,color:"#e5e7eb",marginBottom:6}}>How well does he shoot? <span style={{color:"#22c55e"}}>(NBA 3P%)</span></div>
+            <p style={{fontSize:11,color:"#9ca3af",lineHeight:1.6}}>
+              <strong>Inputs:</strong> College 3P% (Bayesian-shrunken toward the 34.8% league mean), FT% (touch — our single strongest predictor), mid-range FG%.
+            </p>
+            <p style={{fontSize:11,color:"#9ca3af",lineHeight:1.6,marginTop:4}}>
+              <strong>Output:</strong> Point estimate with a confidence range. <em>e.g. "35.5% — realistically 33–38%"</em>.
+            </p>
+            <p style={{fontSize:10,color:"#6b7280",marginTop:4,fontStyle:"italic"}}>Validation: MAE 2.5 pp on 506 NBA shooters. Pearson r = 0.40.</p>
+          </div>
+
+          <div className="rounded-lg p-3" style={{background:"#0a0e14", border:"1px solid #fbbf2444"}}>
+            <div style={{fontSize:10,fontWeight:700,color:"#fbbf24",letterSpacing:1,marginBottom:4}}>LAYER 2 — INTENT</div>
+            <div style={{fontSize:13,fontWeight:600,color:"#e5e7eb",marginBottom:6}}>How often does he take the three? <span style={{color:"#fbbf24"}}>(NBA 3PAr)</span></div>
+            <p style={{fontSize:11,color:"#9ca3af",lineHeight:1.6}}>
+              <strong>Inputs:</strong> College 3PAr (share of his college shots from three), touch (FT%), the Layer-1 skill estimate.
+            </p>
+            <p style={{fontSize:11,color:"#9ca3af",lineHeight:1.6,marginTop:4}}>
+              <strong>Why separate:</strong> A great shooter can take few threes (Joel Embiid). An average shooter can take many (Joe Ingles). Skill ≠ Intent.
+            </p>
+            <p style={{fontSize:10,color:"#6b7280",marginTop:4,fontStyle:"italic"}}>Validation: MAE 9.7 pp. Pearson r = 0.73.</p>
+          </div>
+
+          <div className="rounded-lg p-3" style={{background:"#0a0e14", border:"1px solid #f9731644"}}>
+            <div style={{fontSize:10,fontWeight:700,color:"#f97316",letterSpacing:1,marginBottom:4}}>LAYER 3 — VOLUME</div>
+            <div style={{fontSize:13,fontWeight:600,color:"#e5e7eb",marginBottom:6}}>How many threes per game? <span style={{color:"#f97316"}}>(NBA 3PA / G)</span></div>
+            <p style={{fontSize:11,color:"#9ca3af",lineHeight:1.6}}>
+              <strong>Not directly predictable from college</strong> — college 3PA-per-game has near-zero correlation with NBA 3PA-per-game (r = 0.005). Volume is a function of role, not talent.
+            </p>
+            <p style={{fontSize:11,color:"#9ca3af",lineHeight:1.6,marginTop:4}}>
+              <strong>How we get there:</strong> 3PA = 3PAr × FGA. FGA depends on Tier × Position. We show conditional ranges: <em>"If Starter: 5 attempts. If All-Star: 6."</em>
+            </p>
+            <p style={{fontSize:10,color:"#6b7280",marginTop:4,fontStyle:"italic"}}>Empirical NBA FGA-per-36 per Tier × Position table.</p>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg p-3" style={{background:"#0a0e14", border:"1px solid #1f2937"}}>
+          <div style={{fontSize:11,color:"#9ca3af",lineHeight:1.7}}>
+            <strong style={{color:"#e5e7eb"}}>Why this matters.</strong> If a player has high touch (FT% 84%) but moderate intent (33% of shots are 3s), he&apos;s a <em>willing-but-not-eager</em> shooter — like Cooper Flagg. A player with weak touch but high intent — many bad-form shooters — is a <em>red flag</em>. We surface both axes so you can read which one is strong and which is weak.
+          </div>
+          <div className="mt-2" style={{fontSize:11,color:"#9ca3af",lineHeight:1.7}}>
+            <strong style={{color:"#e5e7eb"}}>Each layer can be wrong independently.</strong> Skill mis-fires on small samples (Caleb Wilson: 27 college 3PA). Intent shifts with coach and role (Joe Harris was projected at 35% intent and coached into 45%). Volume hinges on the tier projection itself, which has its own error bars. So we show <strong>ranges, not single numbers</strong>.
+          </div>
+        </div>
+      </div>
+
+      {/* Tobias 2026-06-02 v10: Shooting Projection v2 block — three-layer with ranges + badges */}
+      {p.shooting && (
+        <div className="rounded-2xl p-5 mb-4" style={{background:"#0d1117", border:"1px solid #1f2937"}}>
+          <h3 className="text-base font-bold text-gray-100 mb-1">Three-Layer 3P Projection</h3>
+          <p className="text-xs text-gray-400 mb-4">Each layer reported with a confidence range. Touch + Intent badges read the FT% and 3PAr signals separately.</p>
+
+          <div className="rounded-lg p-4 mb-3" style={{background:"#0a0e14", border:"1px solid #22c55e44"}}>
+            <div className="flex items-baseline justify-between mb-1">
+              <div>
+                <span style={{fontSize:10,fontWeight:700,color:"#22c55e",letterSpacing:1}}>LAYER 1 — SKILL</span>
+                <span className="ml-2" style={{fontSize:11,color:"#6b7280"}}>(NBA 3P%)</span>
+              </div>
+              {p.shooting.touchTier && (
+                <span className="px-2 py-0.5 rounded" style={{
+                  fontSize:10, fontWeight:700, letterSpacing:0.5,
+                  background: p.shooting.touchTier === "Elite" ? "#22c55e22" :
+                              p.shooting.touchTier === "Strong" ? "#22c55e22" :
+                              p.shooting.touchTier === "Average" ? "#fbbf2422" : "#ef444422",
+                  color:    p.shooting.touchTier === "Elite" ? "#22c55e" :
+                            p.shooting.touchTier === "Strong" ? "#22c55e" :
+                            p.shooting.touchTier === "Average" ? "#fbbf24" : "#ef4444",
+                }}>TOUCH: {p.shooting.touchTier.toUpperCase()}</span>
+              )}
+            </div>
+            <div className="flex items-baseline gap-3 mb-2">
+              <span style={{fontSize:28,fontWeight:700,color:"#22c55e",fontFamily:"Oswald, sans-serif"}}>
+                {p.shooting.skill?.p50?.toFixed(1)}%
+              </span>
+              {p.shooting.skill?.lo != null && p.shooting.skill?.hi != null && (
+                <span style={{fontSize:13,color:"#9ca3af"}}>
+                  realistically {p.shooting.skill.lo.toFixed(1)}–{p.shooting.skill.hi.toFixed(1)}%
+                </span>
+              )}
+            </div>
+            {p.shooting.ftPct != null && (
+              <div style={{fontSize:10,color:"#6b7280"}}>
+                FT% touch prior: {(p.shooting.ftPct * 100).toFixed(1)}% · pool: {p.shooting.pool?.toUpperCase()}
+                {p.shooting.nNcaa3pa != null && ` · sample: ${Math.round(p.shooting.nNcaa3pa)} college 3PA`}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-lg p-4 mb-3" style={{background:"#0a0e14", border:"1px solid #fbbf2444"}}>
+            <div className="flex items-baseline justify-between mb-1">
+              <div>
+                <span style={{fontSize:10,fontWeight:700,color:"#fbbf24",letterSpacing:1}}>LAYER 2 — INTENT</span>
+                <span className="ml-2" style={{fontSize:11,color:"#6b7280"}}>(NBA 3PAr — share of shots from 3)</span>
+              </div>
+              {p.shooting.intent?.tier && (
+                <span className="px-2 py-0.5 rounded" style={{
+                  fontSize:10, fontWeight:700, letterSpacing:0.5,
+                  background: p.shooting.intent.tier === "High" ? "#22c55e22" :
+                              p.shooting.intent.tier === "Moderate" ? "#fbbf2422" : "#ef444422",
+                  color:    p.shooting.intent.tier === "High" ? "#22c55e" :
+                            p.shooting.intent.tier === "Moderate" ? "#fbbf24" : "#ef4444",
+                }}>INTENT: {p.shooting.intent.tier.toUpperCase()}</span>
+              )}
+            </div>
+            <div className="flex items-baseline gap-3">
+              <span style={{fontSize:28,fontWeight:700,color:"#fbbf24",fontFamily:"Oswald, sans-serif"}}>
+                {p.shooting.intent?.p50?.toFixed(0)}%
+              </span>
+              {p.shooting.intent?.lo != null && p.shooting.intent?.hi != null && (
+                <span style={{fontSize:13,color:"#9ca3af"}}>
+                  realistically {p.shooting.intent.lo.toFixed(0)}–{p.shooting.intent.hi.toFixed(0)}%
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-lg p-4" style={{background:"#0a0e14", border:"1px solid #f9731644"}}>
+            <div style={{fontSize:10,fontWeight:700,color:"#f97316",letterSpacing:1,marginBottom:6}}>
+              LAYER 3 — VOLUME <span style={{color:"#6b7280",letterSpacing:0,fontWeight:400,marginLeft:6}}>(NBA 3PA per game, conditional on tier)</span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {[
+                {key:"allStar",     label:"All-Star",     color:"#22c55e"},
+                {key:"starter",     label:"Starter",      color:"#22c55e"},
+                {key:"rolePlayer",  label:"Role Player",  color:"#fbbf24"},
+                {key:"replacement", label:"Replacement",  color:"#9ca3af"},
+              ].map(({key, label, color}) => (
+                <div key={key} className="rounded p-2" style={{background:"#111827"}}>
+                  <div style={{fontSize:10,color:color,letterSpacing:0.5,marginBottom:2}}>{label.toUpperCase()}</div>
+                  <div style={{fontSize:20,fontWeight:700,color:"#e5e7eb",fontFamily:"Oswald, sans-serif"}}>
+                    {p.shooting.volume?.[key] != null ? p.shooting.volume[key].toFixed(1) : "—"}
+                  </div>
+                  <div style={{fontSize:9,color:"#6b7280"}}>3PA/g</div>
+                </div>
+              ))}
+            </div>
+            <div style={{fontSize:10,color:"#6b7280",marginTop:6,lineHeight:1.5}}>
+              Volume can&apos;t be projected directly from college (r=0.005 vs NBA 3PA/g). We decompose:
+              3PA = 3PAr × FGA, where FGA depends on tier × position. The 4 numbers above answer
+              <em> &quot;if he becomes Tier X, how many 3s per game does that imply?&quot;</em>
+            </div>
+          </div>
+        </div>
+      )}
+
       {useSimplifiedCourt && (
         <div className="p-3 rounded-lg text-sm" style={{background:"#1e3a5f33",border:"1px solid #3b82f644",color:"#93c5fd"}}>
           {isIntl ? "International prospect" : "Pre-2010 NCAA"} — shot-type tracking (rim/mid/dunk) not available. Showing 2P/3P/FT split.
