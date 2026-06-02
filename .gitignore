@@ -22,3 +22,4 @@ frontend/dist/
 # === Backups ===
 *.bak
 *.bak2
+backend/prospecttheory.db
