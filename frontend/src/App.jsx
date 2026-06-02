@@ -2093,6 +2093,25 @@ function OverviewTab({p, compTier, setCompTier}) {
           const inR = assessed.filter(m=>m.status==="In-Range").length;
           const total = assessed.filter(m=>m.pctP50!=null).length;
           if (total < 8) return null;
+          // Tobias 2026-06-02 Option C: Min-Floor — kleine Samples = Profile-Artifakt
+          const _sampleMin = (Number(p.gp) || 0) * (Number(p.min) || 0);
+          const _sampleHardFloor = _sampleMin > 0 && _sampleMin < 100;
+          const _sampleSoftWarn  = _sampleMin > 0 && _sampleMin >= 100 && _sampleMin < 500;
+          if (_sampleHardFloor) {
+            return (
+              <div className="mt-4 rounded-xl p-4" style={{background:"#0d1117", border:"1px solid #ef444455"}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#6b7280",letterSpacing:1,marginBottom:6}}>
+                  CLEARANCE VERDICT vs {compTier.toUpperCase()} · Insufficient Sample
+                </div>
+                <div style={{fontSize:13,fontWeight:600,color:"#ef4444",marginBottom:6}}>
+                  Only {Math.round(_sampleMin)} minutes of college sample — verdict suppressed.
+                </div>
+                <div style={{fontSize:11,color:"#9ca3af",lineHeight:1.6}}>
+                  Below 100 total minutes, the box-stat profile is a small-sample artifact rather than a player signal. Bol Bol (158 min, foot injury) and James Wiseman (16 min, 3-game NCAA suspension) both cleared 8+ on tiny samples and busted in the NBA — exactly because the cleared profile never reflected real college performance. Wait for more data, or rely on Mind, Comp-Engine and Skill-Curve.
+                </div>
+              </div>
+            );
+          }
           const clsMap = {"Fr":1,"Freshman":1,"So":2,"Sophomore":2,"Jr":3,"Junior":3,"Sr":4,"Senior":4};
           const clsRaw = p.cls || p.classLabel || "";
           const classNum = clsMap[clsRaw] || (p.seasons ? Math.min(4, parseInt(p.seasons)) : null);
@@ -2117,7 +2136,7 @@ function OverviewTab({p, compTier, setCompTier}) {
               {min:0, label:"Atypical Starter profile", color:"#ef4444", desc:"SGA / Tatum / Donovan Mitchell were here pre-draft and became Stars — NOT a hard veto."},
             ],
             "All-Star": [
-              {min:9, label:"Historically unique All-Star profile", color:"#22c55e", desc:_isIntlSrc ? "9+/10 within Intl-Bridge-Cohort — extremely rare. Tracy McGrady, Sengun and Andray Blatche are the only historical cases." : "9+/10 against All-Star thresholds — only Caleb Wilson 2026 (10/10), Boozer 2026 (9/10), Cooper Flagg 2026 (9/10) hit this in 18 years."},
+              {min:9, label:"Historically unique All-Star profile", color:"#22c55e", desc:_isIntlSrc ? "9+/10 within Intl-Bridge-Cohort — extremely rare. Tracy McGrady, Sengun and Andray Blatche are the only historical cases." : "9+/10 against All-Star thresholds — in 18 years of NCAA history only 3 Freshmen with substantial sample (≥500 min) have hit this: Caleb Wilson 2026 (10/10, first ever, UNC), Cameron Boozer 2026 (9/10, Duke), Cooper Flagg 2025 (9/10, Duke). The current 2025-2026 class is historically unique — having three Freshmen at 9+/10 in adjacent years has never happened in our 18-year dataset."},
               {min:8, label:"Strong All-Star profile fit", color:"#22c55e", desc:_isIntlSrc ? "8/10 in Intl-Bridge → 23% precision = 5.5× Intl Base-Rate. Tracy McGrady, Gilbert Arenas, Andrei Kirilenko sat exactly here pre-NBA." : "8/10 → 55% overall precision = 4× Base-Rate. Joel Embiid, KAT, Ben Simmons, Blake Griffin, Kevin Love, Deandre Ayton sat exactly here pre-draft."},
               {min:6, label:"Plausible Star-Candidate signals", color:"#fbbf24", desc:_isIntlSrc ? "6–7/10 in Intl-Bridge → 0–7% precision. Most Intl-All-Stars (Doncic, Wemby) sat BELOW this profile pre-NBA because intl box-stats translate imperfectly." : "6–7/10 cleared. Curry (6/10), Harden (6/10), Kawhi (6/10), AD (7/10) developed past this profile."},
               {min:0, label:"Atypical for All-Star profile", color:"#ef4444", desc:_isIntlSrc ? "<6/10 cleared in Intl-Bridge. Doncic and Wemby sat here — intl box-stats are noisy proxies. Comp-Engine + Skill-Curve decide direction." : "Half of historical All-Stars sat here pre-draft (Tatum 3/10, SGA 3/10, Westbrook 2/10). NOT a veto — focus on Mind, Comps, Skill-Curve."},
@@ -2132,7 +2151,7 @@ function OverviewTab({p, compTier, setCompTier}) {
               classNote = {color:"#fbbf24", icon:"i", txt:"Intl-Bridge cohort: 400 players who entered the NBA via Euroleague / ACB / BBL / FIBA youth tournaments. Thresholds are the medians of this cohort. Note: league strength varies (Euroleague = top, NBL = low) and pro-experience replaces the college-class concept — the maturity effect runs in a different direction."};
             }
           } else if (compTier === "All-Star" && inR >= 8) {
-            if (classNum === 1) classNote = {color:"#22c55e", icon:"✓", txt:"Freshman 8+/10 historically → 83% Precision (5 of 6). Embiid, KAT, Ben Simmons, Blake Griffin and Kevin Love cleared 8+ as Freshmen and became All-Stars. Strongest single signal we measure."};
+            if (classNum === 1) classNote = {color:"#22c55e", icon:"✓", txt:"Freshman 8+/10 with substantial sample (≥500 min) historically → 86% Precision (6 of 7). Embiid, KAT, Ben Simmons, Kevin Love, Deandre Ayton and Zion all cleared 8+ as Freshmen with real college minutes and became All-Stars. The single miss: Michael Beasley (Kansas St., 2,508 min) — profile-strong but Off-Court issues killed development. Bol Bol (158 min, foot injury) and James Wiseman (16 min, 3-game NCAA suspension) are excluded because their clearances came from tiny samples, not real profiles. Strongest single signal we measure for a Freshman — pair with Mind for character-risk and Skill-Curve for development."};
             else if (classNum === 2) classNote = {color:"#fbbf24", icon:"~", txt:"Sophomore 8+/10 historically → 25% Precision. Weaker than Freshman: more development time already inside college."};
             else if (classNum === 3) classNote = {color:"#ef4444", icon:"!", txt:"Junior 8+/10 historically → 0% Precision (0 of 1). Maturity advantage over younger competition — box profile reflects age, not star talent."};
             else if (classNum === 4) classNote = {color:"#ef4444", icon:"!", txt:"Senior 8+/10 historically → 0% Precision (0 of 3). Sindarius Thornwell cleared 10/10 as Senior → peakWA −2.9. Senior college dominance is a maturity edge, not an NBA star signal."};
@@ -2145,7 +2164,13 @@ function OverviewTab({p, compTier, setCompTier}) {
                 CLEARANCE VERDICT vs {compTier.toUpperCase()}
                 {className && !_isIntlSrc && <span style={{color:"#9ca3af",marginLeft:8}}>· {className}</span>}
                 {_isIntlSrc && <span style={{color:"#9ca3af",marginLeft:8}}>· Intl Cohort</span>}
+                {_sampleMin > 0 && <span style={{color:"#6b7280",marginLeft:8}}>· {Math.round(_sampleMin)} min sample</span>}
               </div>
+              {_sampleSoftWarn && (
+                <div className="mb-2 rounded px-2 py-1" style={{background:"#fbbf2410", border:"1px solid #fbbf2444"}}>
+                  <div style={{fontSize:11,fontWeight:600,color:"#fbbf24"}}>⚠ Limited sample ({Math.round(_sampleMin)} min). Confidence reduced — small-sample profiles are noisy.</div>
+                </div>
+              )}
               <div className="flex items-baseline gap-3 mb-2">
                 <span style={{fontSize:24,fontWeight:700,color:verdict.color,fontFamily:"Oswald, sans-serif"}}>
                   {inR}<span style={{fontSize:14,color:"#6b7280"}}>/{total}</span>
