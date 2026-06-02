@@ -23,3 +23,6 @@ frontend/dist/
 *.bak
 *.bak2
 backend/prospecttheory.db
+
+# Backup files from rescue scripts
+frontend/src/*.bak*
