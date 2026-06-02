@@ -366,6 +366,7 @@ const BADGE_DEFS = {
   "Swiss Army Knife":       { cat:"green", rule:"Role Versatility > 75 & 4+ roles > 50", desc:"Elite multi-role utility. Can credibly play 4+ distinct NBA roles. Coaches never have to take this player off the floor — fits every lineup." },
   "Young for Class":        { cat:"green", rule:"Age < expected for class year",         desc:"Younger than classmates. A 17-year-old Freshman, 19-year-old Junior, or any player significantly below the typical age for their class year. More development runway than peers at the same stage." },
   "Scoring Playmaker":    { cat:"green", rule:"Playmaker & USG>25 & TS%>55",         desc:"Dual-threat point guard. Scores efficiently at high volume while maintaining playmaking. The most coveted archetype in modern NBA." },
+  "Possession Demon":       { cat:"green", rule:"All 4 CFFR Factors positive (min ≥ 55) & mean ≥ 70", desc:"Helps on all four possession dimensions — shoots efficiently (eFG), protects the ball (TO), generates extra possessions (OREB), and draws fouls (FTR). Rare composite of value-per-possession. Role-context-adjusted via CFFR z-scores." },
 
   // ── YELLOW — Potential / Swing skills ──
   "Latent Sniper":          { cat:"yellow", rule:"FT%>85 & 3P%<33",                    desc:"Elite FT% signals neuromuscular shooting consistency that hasn't yet translated to 3P range. Bayesian prior strongly favors breakout — mechanics are there, volume will follow." },
@@ -391,6 +392,7 @@ const BADGE_DEFS = {
   "Passive Defender":       { cat:"red",   rule:"STL%+BLK%<2.5 & PFR<2.5",            desc:"Low stocks AND low fouls = not engaging defensively. This player avoids contact on both ends — no steals, no blocks, no fouls. At the NBA level, passive defenders get targeted in pick-and-roll and isolation." },
   "Old for Class":          { cat:"red",   rule:"Age > 22.5",                          desc:"Older than typical draft prospect. Development runway is shorter; what you see is closer to the ceiling." },
   "Turnover Prone":         { cat:"red",   rule:"TO% > 25",                            desc:"Excessive turnovers at any position. Ball security is a fundamental NBA requirement that doesn't improve easily." },
+  "High Maintenance":       { cat:"red",   rule:"CFFR < 45 (red zone of Net Possession Value)", desc:"Drains team possessions overall. Net Possession Value is in the red zone — at least one Four Factor (eFG / TO / OREB / FTR) is well below role expectation, and the composite signals he hurts the team's possession economy more than he helps." },
 };
 
 // ── Position group for badge logic (consistent with resolvePosition) ──
@@ -680,6 +682,22 @@ function computeBadges(p) {
   if (isIntl && age < 18.5 && bpm > 4.0)                            green.push("International Prodigy");
   // Pro-Ready Teen
   if (isIntl && age < 19 && bpm > 2.0)                              green.push("Pro-Ready Teen");
+  // Possession Demon — positiv auf allen vier CFFR-Faktoren (Tobias 2026-06-01).
+  // CFFR-Werte sind 0–100 (50 = mean, 75 ≈ z=0.5, 25 ≈ z=-0.5). Schwelle: jeder
+  // Faktor mindestens leicht überdurchschnittlich (>55), composite >70.
+  // Reliability-Gate via cffr (Backend filtert intern auf >=200 min).
+  // TODO Migrationspfad: nach Backend (10c_ml_calibration compute_badges) verschieben
+  // beim nächsten vollen 10c-Rerun für Single-Source-of-Truth.
+  {
+    const _ffEfg = p.ff_efg, _ffTov = p.ff_tov, _ffOrb = p.ff_orb, _ffFtr = p.ff_ftr;
+    const _allPresent = _ffEfg != null && _ffTov != null && _ffOrb != null && _ffFtr != null;
+    if (_allPresent) {
+      const _ffMin  = Math.min(_ffEfg, _ffTov, _ffOrb, _ffFtr);
+      const _ffMean = (_ffEfg + _ffTov + _ffOrb + _ffFtr) / 4;
+      const _cffr   = p.cffr ?? 0;
+      if (_ffMin >= 55 && _ffMean >= 70 && _cffr >= 60) green.push("Possession Demon");
+    }
+  }
 
   // ═══ YELLOW BADGES ═══
   // Moreyballer: ≥75% of shots from rim + 3P (excludes mid-range).
@@ -733,6 +751,10 @@ function computeBadges(p) {
     if (stocks < 2.5 && fouls40 > 0 && fouls40 < 2.5)              red.push("Passive Defender");
     else if (stocks < 1.8 && fouls40 === 0)                         red.push("Passive Defender");
   }
+  // High Maintenance — CFFR in der roten Zone des Net Possession Value (Tobias 2026-06-01).
+  // Spiegel-Badge zu Possession Demon: drainiert Possessions mehr als er hilft.
+  // TODO Migrationspfad: nach Backend (10c_ml_calibration) beim nächsten 10c-Rerun.
+  if (p.cffr != null && p.cffr < 45)                                 red.push("High Maintenance");
 
   return { green, yellow, red };
 }
@@ -2498,6 +2520,8 @@ function ShootingTab({p}) {
         if (isPBPLimited2026(p)) return <PBPNotAvailable title="Shot Creation Spectrum" icon="🎯"/>;
         return (
           <Sec icon="🎯" title="Shot Creation Spectrum" sub={`PBP-based creation profile — ${scd.overall.fga} FGA tracked · ${fmt(scd.overall.selfPct||0)}% overall self-created`}>
+            {/* Sample-size honesty (Tobias 2026-05-30) */}
+            <PBPSampleWarning n={scd.overall.fga} threshold={100} unit="FGA"/>
             <div className="space-y-3">
               {/* Zone bars: each zone shows FGA, FG%, self-creation rate */}
               {zones.map(z => {
@@ -3385,13 +3409,12 @@ function MindTab({p}) {
         </div>
       </div>
 
+      {/* Sample-size honesty (Tobias 2026-05-30): warn when PBP event-count
+          is too small for confident reading. Threshold 200 events ≈ ~10–15 games. */}
+      <PBPSampleWarning n={p.mindMetrics?.n_actions} threshold={200} unit="player-events"/>
+
       {/* ══════════════════════════════════════════════════════════════════
            Section 1: Self-Sufficiency Profile — 4-Step Decision Tree
-           Tobias 2026-05-09: refactor in klare nummerierte Schritte mit
-           Step-Header, Hero-Number pro Schritt, eindeutiger Verdict am Ende.
-           Tobias 2026-05-19: für Intl-Spieler ohne leverageEff (kein NCAA-PBP-
-           Self-Creation) wird die ganze Sec übersprungen — Mental Resilience
-           (mindMetrics-only) bleibt sichtbar.
          ══════════════════════════════════════════════════════════════════ */}
       {!le && p.mindMetrics && (
         <div style={{background:"#0d1117",border:"1px solid #1f2937",borderRadius:10,padding:"10px 14px"}}>
@@ -5600,7 +5623,9 @@ function ScoutingTab({p, mode="scouting"}) {
         if (isPBPLimited2026(p)) return <PBPNotAvailable title="Game-by-Game Skill Curve" icon="📊"/>;
         return (
           <Sec icon="📊" title="Game-by-Game Skill Curve"
-            sub={`${games.length} games across ${nSeasons} ${nSeasons===1?"season":"seasons"}${seasonsList.length?` (${seasonsList.join(" · ")})`:""}. Each dot = one game. Smooth curve uses LOWESS with tricubic weights; the shaded band shows the ±1 SD spread of the local ORtg distribution. Used to read where efficiency stops scaling with possession load — the higher the curve stays at high usage, the better he handles a bigger role.`}>
+            sub={`${games.length} games across ${nSeasons} ${nSeasons===1?"season":"seasons"}${seasonsList.length?` (${seasonsList.join(" · ")})`:""}. Each dot = one game. The orange LOWESS curve traces THIS player's individual response to higher load — a falling orange line = efficiency drops when he carries more. The green dashed line is the peer-expected curve from 71k player-seasons (cross-sectional: high-usage players tend to be the strong ones, so the peer line rises). Sitting above the green line at his usage = better than peers at the same load.`}>
+            {/* Sample-size honesty (Tobias 2026-05-30): LOWESS-Smoother braucht ≥ 20 Spiele. */}
+            <PBPSampleWarning n={games.length} threshold={20} unit="games"/>
             <div style={{background:"#0d1117",border:"1px solid #1f2937",borderRadius:8,padding:"12px 14px",marginBottom:12}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,flexWrap:"wrap",gap:8}}>
                 <div>
@@ -5637,9 +5662,29 @@ function ScoutingTab({p, mode="scouting"}) {
                     <text x={xS(u)} y={H-PAD.b+14} textAnchor="middle" fontSize={9} fill="#6b7280">{u}%</text>
                   </g>
                 ))}
-                {/* Mean horizontal */}
-                <line x1={PAD.l} x2={W-PAD.r} y1={yS(avgO)} y2={yS(avgO)} stroke="#22c55e44" strokeWidth={1} strokeDasharray="3,3"/>
-                <text x={W-PAD.r-2} y={yS(avgO)-3} textAnchor="end" fontSize={9} fill="#22c55e88">avg ORtg</text>
+                {/* Peer-Expected ORtg curve (Tobias 2026-06-01): population mean adjORtg
+                    bei jeder USG aus 71k player-seasons (quadratische Approximation aus
+                    inject_skill_curve.py). Die Kurve ist NICHT fallend mit USG, weil
+                    Cross-Section: starke Spieler tragen hohe USG. Die orange LOWESS-Kurve
+                    zeigt dagegen die individuelle Game-by-Game-Reaktion auf USG-Last —
+                    eine fallende orange Curve über einer steigenden Peer-Linie = Spieler
+                    bricht bei eigener Last ein. */}
+                {(() => {
+                  const peer = (u) => -0.00518827 * u * u + 1.62620613 * u + 69.50561015;
+                  const pts = [];
+                  for (let i = 0; i <= 60; i++) {
+                    const u = USG_MIN + (USG_MAX - USG_MIN) * (i / 60);
+                    const o = Math.max(ORTG_MIN, Math.min(ORTG_MAX, peer(u)));
+                    pts.push(`${i === 0 ? "M" : "L"} ${xS(u).toFixed(1)} ${yS(o).toFixed(1)}`);
+                  }
+                  const lastY = yS(Math.max(ORTG_MIN, Math.min(ORTG_MAX, peer(USG_MAX - 3)))) - 3;
+                  return (
+                    <>
+                      <path d={pts.join(" ")} fill="none" stroke="#22c55e66" strokeWidth={1.2} strokeDasharray="3,3"/>
+                      <text x={W-PAD.r-2} y={lastY} textAnchor="end" fontSize={9} fill="#22c55e99">peer-expected ORtg</text>
+                    </>
+                  );
+                })()}
 
                 {/* OLS trend (dashed) */}
                 {Math.abs(slope) > 0.05 && (
@@ -8878,104 +8923,4 @@ export default function App() {
           <>
             <button onClick={()=>setSel(null)} className="mb-4 flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:bg-white hover:bg-opacity-5"
               style={{color:"#9ca3af",border:"1px solid #374151"}}>
-              <span>←</span> Back to Big Board
-            </button>
-            {tab!=="methodology" && <>
-              <div className="mb-5 rounded-2xl p-5 relative overflow-hidden" style={{background:"linear-gradient(135deg,#111827 0%,#0f172a 50%,#1e1b4b 100%)",border:"1px solid #1f2937"}}>
-                <div className="absolute top-0 right-0 w-48 h-48 rounded-full opacity-5" style={{background:"radial-gradient(circle,#f97316,transparent)",transform:"translate(30%,-30%)"}}/>
-                <div className="flex flex-col md:flex-row md:items-center gap-3 relative z-10">
-                  <div className="flex-1">
-                    <div className="text-xs uppercase tracking-widest mb-1 flex items-center gap-2" style={{color:"#6b7280"}}>
-                      <span>{p.draftYear || p.yr} Draft Class{p.source!=="ncaa"?` · ${p.source?.toUpperCase()}`:""}</span>
-                      {p.classRank && (
-                        <Tip content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>Model Draft Class Rank</div><div style={{color:"#cbd5e1"}}>Ranked #{p.classRank} in the {p.draftYear||p.yr} class by projected Added Wins (expected peak value). Based on the ProspectTheory value model — not a scout consensus ranking.</div></div>}>
-                          <span className="px-1.5 py-0.5 rounded font-bold cursor-help" style={{background:"#f9731622",color:"#fb923c",border:"1px solid #f9731644",fontFamily:"'Oswald',sans-serif",fontSize:"0.7rem"}}>
-                            #{p.classRank} MODEL
-                          </span>
-                        </Tip>
-                      )}
-                    </div>
-                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight" style={{fontFamily:"'Oswald',sans-serif"}}>{sel}</h1>
-                    <div className="flex flex-wrap items-center gap-2 mt-1 text-sm" style={{color:"#9ca3af"}}>
-                      <span className="px-2 py-0.5 rounded text-xs font-semibold" style={{background:"#f9731622",color:"#f97316"}}>{p.pos}</span>
-                      {(() => {
-                        // Cap to top-3 archetypes in header to avoid visual clutter (pipeline may emit up to 7 matches for versatile players)
-                        const allArch = (p.archetypesAll || p.archetype || "").split("|").filter(Boolean).slice(0, 3);
-                        return allArch.map((a, i) => {
-                          const ac = ARCH_COLORS[a] || "#60a5fa";
-                          return (
-                            <span key={a} className="px-2 py-0.5 rounded text-xs font-semibold" style={{
-                              background: i === 0 ? ac + "33" : ac + "18",
-                              color: i === 0 ? ac : ac + "cc",
-                              border: `1px solid ${i === 0 ? ac + "55" : ac + "33"}`
-                            }}>{a}</span>
-                          );
-                        });
-                      })()}
-                      <span>{p.team}</span><span>·</span><span>{p.ht}</span><span>·</span><span>Age {p.age!=null?ageOnDraftDay(p.age).toFixed(1):"—"}</span>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {(() => {
-                      // Max 5 badges in header, red priority
-                      const reds = (p.redFlags||[]).slice(0,3);
-                      const greens = (p.badges||[]).slice(0, 5 - reds.length);
-                      return [...reds.map((f,i)=><BadgeChip key={`rf${i}`} text={f} color="#ef4444"/>),
-                              ...greens.map((b,i)=><BadgeChip key={i} text={b}/>)];
-                    })()}
-                  </div>
-                </div>
-              </div>
-            </>}
-            {p.confidence==="very_low"&&(
-              <div className="mb-4 p-3 rounded-lg text-sm" style={{background:"#7f1d1d",border:"1px solid #991b1b",color:"#fca5a5"}}>
-                ⚠️ <strong>Insufficient Data</strong> — This player has only {Math.round(p.sampleMin||0)} minutes. Scores may be unreliable.
-              </div>
-            )}
-            {p.confidence==="limited"&&(
-              <div className="mb-4 p-3 rounded-lg text-sm" style={{background:"#78350f",border:"1px solid #92400e",color:"#fcd34d"}}>
-                ⚡ <strong>Limited Sample</strong> — Based on {Math.round(p.sampleMin||0)} minutes. Interpret with caution.
-              </div>
-            )}
-            {p.injuryFallbackSeason && (
-              <div className="mb-4 p-3 rounded-lg text-sm flex items-start gap-2" style={{background:"#7c2d12",border:"1px solid #9a3412",color:"#fdba74"}}>
-                <span style={{fontSize:"1.2em"}}>🩹</span>
-                <div>
-                  <strong>Injury-Adjusted Projection</strong> — Player's {Math.round(p.injuryFallbackSeason)}-season was injury-shortened.
-                  Prediction is based on the {Math.round(p.season_year || p.year || 0)}-season (full sample) instead. Display info reflects current team/year.
-                </div>
-              </div>
-            )}
-            {p.countingStatsImputed && (
-              <div className="mb-4 p-3 rounded-lg text-sm flex items-start gap-2" style={{background:"#1e3a5f",border:"1px solid #2563eb",color:"#93c5fd"}}>
-                <span style={{fontSize:"1.2em"}}>ℹ️</span>
-                <div>
-                  <strong>Estimated Counting Stats</strong> — BartTorvik 2008-2010 has no per-game stats. PPG/RPG/APG are approximated from per-100 possessions × MPG. The model uses the full per-100 data — displayed values are estimates.
-                </div>
-              </div>
-            )}
-            <div className="flex gap-1 mb-5 overflow-x-auto pb-2" style={{scrollbarWidth:"none"}}>
-              {TABS.map(t=><button key={t.id} onClick={()=>setTab(t.id)} className="px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap"
-                style={{background:tab===t.id?"#f97316":"transparent",color:tab===t.id?"#000":"#9ca3af"}}>
-                <span className="mr-1">{t.icon}</span>{t.label}
-              </button>)}
-            </div>
-            {tab==="overview"&&<OverviewTab p={p} compTier={compTier} setCompTier={setCompTier}/>}
-            {tab==="shooting"&&<ShootingTab p={p}/>}
-            {tab==="body"&&<BodyTab p={p}/>}
-            {tab==="mind"&&<MindTab p={p}/>}
-            {tab==="scouting"&&<ScoutingTab p={p} mode="scouting"/>}
-            {tab==="roles"&&<ScoutingTab p={p} mode="roles"/>}
-            {tab==="comps"&&<CompsTab p={p}/>}
-            {tab==="devtrajectory"&&<DevTrajectoryTab p={p}/>}
-            {tab==="projection"&&<ProjectionTab p={p}/>}
-            {tab==="riskprofile"&&<RiskProfileTab p={p}/>}
-          </>
-        )}
-      </main>
-      <footer className="mt-12 py-6 text-center text-xs" style={{color:"#374151",borderTop:"1px solid #111827"}}>
-        <span style={{color:"#6b7280"}}>ProspectTheory</span> · NBA Draft Intelligence · Data: BartTorvik, RealGM, NBA API, Draft Combine, Databallr
-      </footer>
-    </div>
-  );
-}
+              <span>←</span> Back to Big 
