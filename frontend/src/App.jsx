@@ -2868,7 +2868,10 @@ function ShootingTab({p}) {
           selfMakesByZone[z] = selfMakes;
           totalSelfMakes += selfMakes;
         });
-        if (isPBPLimited2026(p)) return <PBPNotAvailable title="Shot Creation Spectrum" icon="🎯"/>;
+        /* Tobias 2026-06-03 v6: SC reactivated for 2026 — season complete */
+        // SC was previously hidden for 2026 due to partial-season PBP scrape.
+        // As of 2026-06-03 the 2025-26 NCAA season is complete in the source data;
+        // PBPSampleWarning still guards low-sample players (<100 FGA threshold).
         return (
           <Sec icon="🎯" title="Shot Creation Spectrum" sub={`PBP-based creation profile — ${scd.overall.fga} FGA tracked · ${fmt(scd.overall.selfPct||0)}% overall self-created`}>
             {/* Sample-size honesty (Tobias 2026-05-30) */}
