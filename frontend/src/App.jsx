@@ -2534,7 +2534,104 @@ function ShootingTab({p}) {
         </div>
       </div>
 
-      
+      {/* Tobias 2026-06-02 v10: Shooting Projection v2 block — three-layer with ranges + badges */}
+      {p.shooting && (
+        <div className="rounded-2xl p-5 mb-4" style={{background:"#0d1117", border:"1px solid #1f2937"}}>
+          <h3 className="text-base font-bold text-gray-100 mb-1">Three-Layer 3P Projection</h3>
+          <p className="text-xs text-gray-400 mb-4">Each layer reported with a confidence range. Touch + Intent badges read the FT% and 3PAr signals separately.</p>
+
+          <div className="rounded-lg p-4 mb-3" style={{background:"#0a0e14", border:"1px solid #22c55e44"}}>
+            <div className="flex items-baseline justify-between mb-1">
+              <div>
+                <span style={{fontSize:10,fontWeight:700,color:"#22c55e",letterSpacing:1}}>LAYER 1 — SKILL</span>
+                <span className="ml-2" style={{fontSize:11,color:"#6b7280"}}>(NBA 3P%)</span>
+              </div>
+              {p.shooting.touchTier && (
+                <span className="px-2 py-0.5 rounded" style={{
+                  fontSize:10, fontWeight:700, letterSpacing:0.5,
+                  background: p.shooting.touchTier === "Elite" ? "#22c55e22" :
+                              p.shooting.touchTier === "Strong" ? "#22c55e22" :
+                              p.shooting.touchTier === "Average" ? "#fbbf2422" : "#ef444422",
+                  color:    p.shooting.touchTier === "Elite" ? "#22c55e" :
+                            p.shooting.touchTier === "Strong" ? "#22c55e" :
+                            p.shooting.touchTier === "Average" ? "#fbbf24" : "#ef4444",
+                }}>TOUCH: {p.shooting.touchTier.toUpperCase()}</span>
+              )}
+            </div>
+            <div className="flex items-baseline gap-3 mb-2">
+              <span style={{fontSize:28,fontWeight:700,color:"#22c55e",fontFamily:"Oswald, sans-serif"}}>
+                {p.shooting.skill?.p50?.toFixed(1)}%
+              </span>
+              {p.shooting.skill?.lo != null && p.shooting.skill?.hi != null && (
+                <span style={{fontSize:13,color:"#9ca3af"}}>
+                  realistically {p.shooting.skill.lo.toFixed(1)}–{p.shooting.skill.hi.toFixed(1)}%
+                </span>
+              )}
+            </div>
+            {p.shooting.ftPct != null && (
+              <div style={{fontSize:10,color:"#6b7280"}}>
+                FT% touch prior: {(p.shooting.ftPct * 100).toFixed(1)}% · pool: {p.shooting.pool?.toUpperCase()}
+                {p.shooting.nNcaa3pa != null && ` · sample: ${Math.round(p.shooting.nNcaa3pa)} college 3PA`}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-lg p-4 mb-3" style={{background:"#0a0e14", border:"1px solid #fbbf2444"}}>
+            <div className="flex items-baseline justify-between mb-1">
+              <div>
+                <span style={{fontSize:10,fontWeight:700,color:"#fbbf24",letterSpacing:1}}>LAYER 2 — INTENT</span>
+                <span className="ml-2" style={{fontSize:11,color:"#6b7280"}}>(NBA 3PAr — share of shots from 3)</span>
+              </div>
+              {p.shooting.intent?.tier && (
+                <span className="px-2 py-0.5 rounded" style={{
+                  fontSize:10, fontWeight:700, letterSpacing:0.5,
+                  background: p.shooting.intent.tier === "High" ? "#22c55e22" :
+                              p.shooting.intent.tier === "Moderate" ? "#fbbf2422" : "#ef444422",
+                  color:    p.shooting.intent.tier === "High" ? "#22c55e" :
+                            p.shooting.intent.tier === "Moderate" ? "#fbbf24" : "#ef4444",
+                }}>INTENT: {p.shooting.intent.tier.toUpperCase()}</span>
+              )}
+            </div>
+            <div className="flex items-baseline gap-3">
+              <span style={{fontSize:28,fontWeight:700,color:"#fbbf24",fontFamily:"Oswald, sans-serif"}}>
+                {p.shooting.intent?.p50?.toFixed(0)}%
+              </span>
+              {p.shooting.intent?.lo != null && p.shooting.intent?.hi != null && (
+                <span style={{fontSize:13,color:"#9ca3af"}}>
+                  realistically {p.shooting.intent.lo.toFixed(0)}–{p.shooting.intent.hi.toFixed(0)}%
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-lg p-4" style={{background:"#0a0e14", border:"1px solid #f9731644"}}>
+            <div style={{fontSize:10,fontWeight:700,color:"#f97316",letterSpacing:1,marginBottom:6}}>
+              LAYER 3 — VOLUME <span style={{color:"#6b7280",letterSpacing:0,fontWeight:400,marginLeft:6}}>(NBA 3PA per game, conditional on tier)</span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {[
+                {key:"allStar",     label:"All-Star",     color:"#22c55e"},
+                {key:"starter",     label:"Starter",      color:"#22c55e"},
+                {key:"rolePlayer",  label:"Role Player",  color:"#fbbf24"},
+                {key:"replacement", label:"Replacement",  color:"#9ca3af"},
+              ].map(({key, label, color}) => (
+                <div key={key} className="rounded p-2" style={{background:"#111827"}}>
+                  <div style={{fontSize:10,color:color,letterSpacing:0.5,marginBottom:2}}>{label.toUpperCase()}</div>
+                  <div style={{fontSize:20,fontWeight:700,color:"#e5e7eb",fontFamily:"Oswald, sans-serif"}}>
+                    {p.shooting.volume?.[key] != null ? p.shooting.volume[key].toFixed(1) : "—"}
+                  </div>
+                  <div style={{fontSize:9,color:"#6b7280"}}>3PA/g</div>
+                </div>
+              ))}
+            </div>
+            <div style={{fontSize:10,color:"#6b7280",marginTop:6,lineHeight:1.5}}>
+              Volume can&apos;t be projected directly from college (r=0.005 vs NBA 3PA/g). We decompose:
+              3PA = 3PAr × FGA, where FGA depends on tier × position. The 4 numbers above answer
+              <em> &quot;if he becomes Tier X, how many 3s per game does that imply?&quot;</em>
+            </div>
+          </div>
+        </div>
+      )}
 
       {useSimplifiedCourt && (
         <div className="p-3 rounded-lg text-sm" style={{background:"#1e3a5f33",border:"1px solid #3b82f644",color:"#93c5fd"}}>
@@ -2835,7 +2932,45 @@ function ShootingTab({p}) {
       })()}
 
       {/* ═══ NBA SHOOTING PROJECTION ═══ */}
-      
+      <Sec icon="🔮" title="NBA Shooting Projection" sub={isIntl||useSimplifiedCourt?"How well does he project to shoot in the NBA? Dissertation Stage 1 shrinks his pre-draft 3P% against the NCAA league-wide distribution — small 3PA samples are pulled toward the league median; Stage 2 (M1) translates FT% and the 3P-Estimate into an NBA 3P%. Intl variant has no 2-point-jumper data, so the 2PJ% term drops out.":"How well does he project to shoot in the NBA? Dissertation Stage 1 shrinks his pre-draft 3P% against the NCAA league-wide distribution (small 3PA samples regress strongly toward the league median); Stage 2 (M1) translates FT% + 2PJ% + 3P-Estimate into an NBA 3P%; Stage 3 (M4) projects role-independent 3PAr (3PA/FGA) from the same inputs. All coefficients fitted on the resolved holdout, none hand-tuned."}>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+          {[
+            ["projNba3p","Proj. 3P%", projNba3p, projNba3p!=null?(projNba3p>36?"#22c55e":projNba3p>32?"#fbbf24":"#ef4444"):"#6b7280"],
+            ["projNba3pa","Proj. 3PA/G", projNba3pa, projNba3pa!=null?(projNba3pa>5?"#3b82f6":"#6b7280"):"#6b7280"],
+            ["projNba3par","Proj. 3PAr", proj3PAr, proj3PAr!=null?(proj3PAr>30?"#3b82f6":"#6b7280"):"#6b7280"],
+            ["touchPrior","Touch Prior", touchPrior, touchPrior>37?"#22c55e":touchPrior>34?"#fbbf24":"#ef4444"],
+          ].map(([key,l,v,c])=>{
+            const m=METHODS[key]||METHODS.touchPrior;
+            return (
+              <Tip key={key} wide content={
+                <div><div className="font-bold mb-1" style={{color:"#f97316"}}>{m?.name||l}</div>
+                {m?.formula&&<div className="mb-1"><span style={{color:"#94a3b8"}}>Formula:</span><br/><code className="text-xs" style={{color:"#7dd3fc"}}>{m.formula}</code></div>}
+                {m?.desc&&<div style={{color:"#cbd5e1"}}>{m.desc}</div>}
+                {key==="projNba3pa"&&<div className="mt-1" style={{color:"#94a3b8"}}>Volume: {bestTier} {p.pos} → {projFGA.toFixed(1)} FGA/game median.</div>}
+                {key==="touchPrior"&&touchPriorPctl!=null&&<div className="mt-1" style={{color:"#94a3b8"}}>Pctl <strong style={{color:"#cbd5e1"}}>{touchPriorPctl}</strong> within draft-eligible cohort (empirical approximation: 30-44% Range).</div>}
+                </div>
+              }>
+                <div className="rounded-lg p-4 text-center cursor-help" style={{background:"#0d1117"}}>
+                  <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#6b7280"}}>{l} <span style={{color:"#475569"}}>ⓘ</span></div>
+                  <div className="text-3xl font-bold" style={{color:c,fontFamily:"'Oswald',sans-serif"}}>{v!=null?fmt(v):"—"}{key==="touchPrior"?"%":""}</div>
+                  {key==="touchPrior"&&touchPriorPctl!=null&&v!=null&&(
+                    <div className="text-xs mt-1" style={{color:"#9ca3af"}}>Pctl <strong style={{color:c}}>{touchPriorPctl}</strong></div>
+                  )}
+                  {v==null&&<div className="text-xs mt-1" style={{color:"#475569"}}>insufficient data</div>}
+                </div>
+              </Tip>
+            );
+          })}
+        </div>
+        <div className="px-3 py-2 rounded-lg text-xs" style={{background:"#0d1117",border:"1px solid #1e293b"}}>
+          <Tip wide content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>Bayesian Beta-Binomial (Berger 2022)</div><div style={{color:"#cbd5e1"}}>Prior: FT%-based touch (μ₀). kappa=200 pseudo-attempts. Volume: {bestTier} {p.pos} → {projFGA.toFixed(1)} FGA/game.</div></div>}>
+            <span style={{color:"#6b7280"}}>{hasMidData
+              ? <>Touch Prior: FT% (<span style={{color:"#8b5cf6"}}>{ft!=null?fmt(ft):"—"}</span>) × 0.18 + Mid% (<span style={{color:"#fbbf24"}}>{fmt(midForPrior)}</span>) × 0.05 + 0.20</>
+              : <>Touch Prior (FT-only): FT% (<span style={{color:"#8b5cf6"}}>{ft!=null?fmt(ft):"—"}</span>) × 0.22 + 0.22 <span style={{color:"#475569"}}>(no midrange data)</span></>
+            } = <span className="font-bold" style={{color:touchPrior>37?"#22c55e":"#fbbf24"}}>{fmt(touchPrior)}%</span> <span style={{color:"#475569"}}>ⓘ</span></span>
+          </Tip>
+        </div>
+      </Sec>
     </div>
   );
   } catch(e) {
@@ -5371,87 +5506,6 @@ function ProjectionTab({p}) {
           );
         })()}
       </Sec>
-
-      {/* Tobias 2026-06-03 v2: rich Three-Layer block at tail of ShootingTab */}
-      {p.shooting && l.jsxs(Ve, { icon: "🎯", title: "NBA 3P Projection — Three Layers", sub: "A three-layer model. Each layer answers a separate question; each carries its own validation. Ranges are realistic spreads from MAE on held-out NBA players.", children: [
-        l.jsxs("div", { className: "rounded-xl p-4 mb-3", style: { background: "#0a0e14", border: "1px solid #22c55e33" }, children: [
-          l.jsxs("div", { className: "flex items-start justify-between mb-2 gap-2", children: [
-            l.jsxs("div", { children: [
-              l.jsx("div", { className: "text-xs font-bold uppercase tracking-widest", style: { color: "#22c55e" }, children: "Layer 1 · Skill" }),
-              l.jsx("div", { className: "text-xs mt-1", style: { color: "#6b7280" }, children: "How well does he shoot the three? (NBA 3P%)" })
-            ]}),
-            p.shooting.touchTier && l.jsx("span", { className: "px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap", style: {
-              background: p.shooting.touchTier === "Elite" || p.shooting.touchTier === "Strong" ? "#22c55e22" : p.shooting.touchTier === "Average" ? "#fbbf2422" : "#ef444422",
-              color: p.shooting.touchTier === "Elite" || p.shooting.touchTier === "Strong" ? "#22c55e" : p.shooting.touchTier === "Average" ? "#fbbf24" : "#ef4444"
-            }, children: "TOUCH: " + p.shooting.touchTier.toUpperCase() })
-          ]}),
-          l.jsxs("div", { className: "flex items-baseline gap-3 mb-3", children: [
-            l.jsx("span", { style: { fontSize: 36, fontWeight: 700, color: "#22c55e", fontFamily: "Oswald, sans-serif" }, children: (p.shooting.skill?.p50?.toFixed(1) ?? "—") + "%" }),
-            p.shooting.skill?.lo != null && p.shooting.skill?.hi != null && l.jsx("span", { style: { fontSize: 13, color: "#9ca3af" }, children: "realistically " + p.shooting.skill.lo.toFixed(1) + " – " + p.shooting.skill.hi.toFixed(1) + "%" })
-          ]}),
-          l.jsxs("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 text-xs leading-relaxed", style: { color: "#9ca3af" }, children: [
-            l.jsxs("div", { children: [ l.jsx("span", { style: { color: "#6b7280" }, children: "Model: " }), "Beta-regression on logit(NBA 3P%) (M1, Berger 2022)" ]}),
-            l.jsxs("div", { children: [ l.jsx("span", { style: { color: "#6b7280" }, children: "Inputs: " }), "College 3P% (Bayesian-shrunk), FT% (touch prior), College 3PAr" ]}),
-            l.jsxs("div", { children: [ l.jsx("span", { style: { color: "#6b7280" }, children: "Validation: " }), "MAE 2.85 pp · r 0.27 on 731 NBA players (≥100 career 3PA, ≥1000 min)" ]}),
-            p.shooting.ftPct != null && l.jsxs("div", { children: [ l.jsx("span", { style: { color: "#6b7280" }, children: "This player: " }), "FT " + (p.shooting.ftPct*100).toFixed(1) + "% · " + Math.round(p.shooting.nNcaa3pa || 0) + " college 3PA · " + (p.shooting.pool || "ncaa") ]})
-          ]}),
-          l.jsxs("div", { className: "text-xs mt-3 pt-3 leading-snug", style: { color: "#6b7280", borderTop: "1px solid #1f2937" }, children: [
-            l.jsx("strong", { style: { color: "#9ca3af" }, children: "Touch Tier" }),
-            " bands historical NBA outcomes by college FT%: Elite (≥ 86%) → 80% reach NBA 3P% ≥ 35%. Strong (78–86%) → 59%. Average (72–78%) → 46%. Weak (< 72%) → 33%."
-          ]})
-        ]}),
-
-        l.jsxs("div", { className: "rounded-xl p-4 mb-3", style: { background: "#0a0e14", border: "1px solid #fbbf2433" }, children: [
-          l.jsxs("div", { className: "flex items-start justify-between mb-2 gap-2", children: [
-            l.jsxs("div", { children: [
-              l.jsx("div", { className: "text-xs font-bold uppercase tracking-widest", style: { color: "#fbbf24" }, children: "Layer 2 · Intent" }),
-              l.jsx("div", { className: "text-xs mt-1", style: { color: "#6b7280" }, children: "How often will he take the three? (NBA 3PAr — share of his shots from 3)" })
-            ]}),
-            p.shooting.intent?.tier && l.jsx("span", { className: "px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap", style: {
-              background: p.shooting.intent.tier === "High" ? "#22c55e22" : p.shooting.intent.tier === "Moderate" ? "#fbbf2422" : "#ef444422",
-              color: p.shooting.intent.tier === "High" ? "#22c55e" : p.shooting.intent.tier === "Moderate" ? "#fbbf24" : "#ef4444"
-            }, children: "INTENT: " + p.shooting.intent.tier.toUpperCase() })
-          ]}),
-          l.jsxs("div", { className: "flex items-baseline gap-3 mb-3", children: [
-            l.jsx("span", { style: { fontSize: 36, fontWeight: 700, color: "#fbbf24", fontFamily: "Oswald, sans-serif" }, children: (p.shooting.intent?.p50?.toFixed(0) ?? "—") + "%" }),
-            p.shooting.intent?.lo != null && p.shooting.intent?.hi != null && l.jsx("span", { style: { fontSize: 13, color: "#9ca3af" }, children: "realistically " + p.shooting.intent.lo.toFixed(0) + " – " + p.shooting.intent.hi.toFixed(0) + "%" })
-          ]}),
-          l.jsxs("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 text-xs leading-relaxed", style: { color: "#9ca3af" }, children: [
-            l.jsxs("div", { children: [ l.jsx("span", { style: { color: "#6b7280" }, children: "Model: " }), "Beta-regression on logit(NBA 3PAr) (M4)" ]}),
-            l.jsxs("div", { children: [ l.jsx("span", { style: { color: "#6b7280" }, children: "Inputs: " }), "College 3PAr + FT% + Skill estimate" ]}),
-            l.jsxs("div", { children: [ l.jsx("span", { style: { color: "#6b7280" }, children: "Validation: " }), "MAE 9.7 pp · r 0.73 — strongest single shooting signal" ]}),
-            l.jsxs("div", { children: [ l.jsx("span", { style: { color: "#6b7280" }, children: "Why separate from Skill: " }), "great shooters can take few threes (Embiid), average shooters can take many (Ingles)" ]})
-          ]}),
-          l.jsxs("div", { className: "text-xs mt-3 pt-3 leading-snug", style: { color: "#6b7280", borderTop: "1px solid #1f2937" }, children: [
-            l.jsx("strong", { style: { color: "#9ca3af" }, children: "Intent Tier:" }),
-            " High (≥ 50%) — volume shooter, efficiency is the question. Moderate (35–50%) — standard wing distribution. Low (< 35%) — rarely shoots from 3, role player who can hit open looks."
-          ]})
-        ]}),
-
-        l.jsxs("div", { className: "rounded-xl p-4", style: { background: "#0a0e14", border: "1px solid #f9731633" }, children: [
-          l.jsxs("div", { className: "mb-2", children: [
-            l.jsx("div", { className: "text-xs font-bold uppercase tracking-widest", style: { color: "#f97316" }, children: "Layer 3 · Volume" }),
-            l.jsx("div", { className: "text-xs mt-1", style: { color: "#6b7280" }, children: "How many 3PA per game? Conditional on which tier he reaches." })
-          ]}),
-          l.jsx("div", { className: "grid grid-cols-2 md:grid-cols-4 gap-2 mb-3", children: [
-            { key: "allStar", label: "If All-Star", color: "#22c55e" },
-            { key: "starter", label: "If Starter", color: "#22c55e" },
-            { key: "rolePlayer", label: "If Role", color: "#fbbf24" },
-            { key: "replacement", label: "If Replacement", color: "#9ca3af" }
-          ].map(t => l.jsxs("div", { key: t.key, className: "rounded p-3", style: { background: "#111827" }, children: [
-            l.jsx("div", { className: "text-xs uppercase tracking-wider", style: { color: t.color }, children: t.label }),
-            l.jsx("div", { className: "text-2xl font-bold mt-1", style: { color: "#e5e7eb", fontFamily: "Oswald, sans-serif" }, children: p.shooting.volume?.[t.key] != null ? p.shooting.volume[t.key].toFixed(1) : "—" }),
-            l.jsx("div", { className: "text-xs", style: { color: "#6b7280" }, children: "3PA / game" })
-          ]})) }),
-          l.jsxs("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 text-xs leading-relaxed", style: { color: "#9ca3af" }, children: [
-            l.jsxs("div", { children: [ l.jsx("span", { style: { color: "#6b7280" }, children: "Not directly projectable: " }), "college 3PA / g has near-zero correlation with NBA 3PA / g (r 0.005)" ]}),
-            l.jsxs("div", { children: [ l.jsx("span", { style: { color: "#6b7280" }, children: "Decomposition: " }), "3PA = 3PAr (Layer 2) × FGA per game" ]}),
-            l.jsxs("div", { children: [ l.jsx("span", { style: { color: "#6b7280" }, children: "FGA source: " }), "empirical median per Tier × Position, 369 NBA players ≥ 5,000 career min (2008–2026)" ]}),
-            l.jsxs("div", { children: [ l.jsx("span", { style: { color: "#6b7280" }, children: "How to read: " }), "each card shows implied volume if he reaches that tier — not which tier (see Projection tab)" ]})
-          ]})
-        ]})
-      ]})}
-
 
       {/* Role Fit & Team Context placeholder removed 2026-05-09 (User: feature is on backlog, no need to advertise it) */}
     </div>
