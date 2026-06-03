@@ -1529,7 +1529,37 @@ function mapProfile(d) {
     dunkR: d.dunk_r ?? d.dunk_rate ?? d.dunkR,
     dunkPct: d.dunk_pct ?? d.dunkPct,
     fta: d.fta, ftm: d.ftm, fga: d.fga,
-    selfCreation: d.creation_score ?? d.self_creation ?? d.box_creation_idx ?? d.self_creation_idx ?? 50,
+    // Tobias 2026-06-03 v15: Self-Adjusted Box Creation (v2)
+    // Self-Adjusted Box Creation: USG × TS × Self_Share + AST_p × Quality, position-weighted.
+    // Falls back to legacy creation_score if PBP shot-creation data is missing.
+    selfCreation: (() => {
+      const legacy = d.creation_score ?? d.self_creation ?? d.box_creation_idx ?? d.self_creation_idx ?? 50;
+      const usg = d.usg ?? d.college_usg;
+      const ts = d.ts ?? d.ts_pct;
+      const astP = d.ast_p ?? d.AST_per ?? 0;
+      const astTov = d.ast_tov ?? d.college_ast_tov ?? 1.0;
+      const sc = d.shotCreation?.overall;
+      const selfPct = sc?.selfPct;
+      const fga = sc?.fga ?? 0;
+      // Need core inputs to compute v2; otherwise fall back
+      if (usg == null || ts == null || selfPct == null || fga < 100) return legacy;
+      const selfShare = selfPct / 100;
+      const sampleFactor = Math.min(1.0, fga / 300);
+      const scoring = (usg * ts / 100) * selfShare;
+      const astQuality = Math.min(2.5, Math.max(0.5, astTov)) / 2.5;
+      const passing = astP * astQuality;
+      const pos = d.pos;
+      let raw;
+      if (pos === 'Playmaker')   raw = 0.4 * scoring + 0.6 * passing;
+      else if (pos === 'Wing')   raw = 0.7 * scoring + 0.3 * passing;
+      else if (pos === 'Big')    raw = 0.8 * scoring + 0.2 * passing;
+      else                        raw = 0.6 * scoring + 0.4 * passing;
+      const composite = raw * sampleFactor;
+      // Map raw composite (~0-30 typical range) to 0-100 percentile-like scale
+      // using empirical anchors derived from the training cohort.
+      const scaled = Math.max(0, Math.min(100, (composite / 25) * 100));
+      return Math.round(scaled);
+    })(),
     selfCreationPct: d.box_creation ?? d.self_creation_pct ?? null,
     boxScoring: d.box_scoring ?? null,
     boxAssist: d.box_assist ?? null,
@@ -5429,7 +5459,7 @@ function ScoutingTab({p, mode="scouting"}) {
     {key:"shootScore",name:"Shooting",value:p.shootScore??0,color:"#22c55e",icon:"🎯"},
     {key:"defScore",name:"Defense",value:p.defScore??0,color:"#3b82f6",icon:"🛡"},
     {key:"funcAth",name:"Athleticism",value:p.funcAth??0,color:"#f97316",icon:"⚡"},
-    {key:"selfCreation",name:"Box Creation",value:p.selfCreation??0,color:"#06b6d4",icon:"✦"},
+    {key:"selfCreation",name:"Box Creation",value:p.selfCreation??0,color:"#06b6d4",icon:"✦",desc:"Self-Adjusted Box Creation (v2). Combines on-ball volume (USG × TS) with the share of shots the player creates himself (PBP-based), plus quality-adjusted passing (AST% × AST/TO ratio). Position-weighted: Playmakers leaning toward passing (60/40), Wings balanced (70/30 scoring), Bigs primarily scoring (80/20). Score is sample-penalized for players under 300 college FGA."},
   ];
 
   // ── Roles ──
