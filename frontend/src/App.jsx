@@ -6084,11 +6084,12 @@ function ScoutingTab({p, mode="scouting"}) {
 // nur für Anthropometric stats (Height, Weight, Wingspan, Standing Reach).
 // Range-Bars: p25 = -1″ vom median (vom Tier), p75 = +1″ (oder ±5 lbs für wt).
 // Grün = ≥ Median, Gelb = unter Median aber innerhalb Korridor, Rot = unter Floor.
-function AnthroTierComparison({p, compTier, setCompTier, realHt, estimatedWs, estimatedWt, standingReach}) {
+function AnthroTierComparison({p, compTier, setCompTier, compPos, setCompPos, realHt, estimatedWs, estimatedWt, standingReach}) {
   const tierData = ANTHRO_TIER_THRESHOLDS[compTier] || ANTHRO_TIER_THRESHOLDS.Replacement;
   // Tobias 2026-05-09: 5-Position-Klassifikation (PG/SG/SF/PF/C) statt 3-Tier.
   // Fallback-Hierarchie: posDetailed → infer aus pos+ht+astP → SF (sicherster Mittelwert).
-  const posDetailed = p.posDetailed || inferDetailedPos(p.pos, p.htIn || realHt, p.astP);
+  const autoPos = p.posDetailed || inferDetailedPos(p.pos, p.htIn || realHt, p.astP);
+  const posDetailed = compPos || autoPos;
   const posRef = tierData[posDetailed] || tierData.SF;
 
   // Metrics — only include sr if we have a value (Combine-only field, not always available)
@@ -6132,8 +6133,8 @@ function AnthroTierComparison({p, compTier, setCompTier, realHt, estimatedWs, es
   return (
     <Sec icon="📏" title={`Anthro vs. NBA ${compTier} (${posDetailed})`}
       sub="How does this player's frame compare to a typical NBA player at the chosen tier? Median values from NBA Combine 2010-2024 (with shoes). Green = above median · Light green = within range · Yellow = below range · Red = critical gap.">
-      <div className="flex items-center gap-3 mb-4">
-        <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Compare:</span>
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Compare tier:</span>
         <div className="flex gap-1">
           {["Replacement","Role Player","Starter","All-Star"].map(tier => (
             <button key={tier} onClick={() => setCompTier(tier)}
@@ -6141,6 +6142,25 @@ function AnthroTierComparison({p, compTier, setCompTier, realHt, estimatedWs, es
               style={{background: compTier===tier ? (TC[tier]||"#f97316") : "#1f2937",
                       color: compTier===tier ? "#000" : "#9ca3af"}}>
               {tier}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="flex items-center gap-3 mb-4">
+        <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Compare position:</span>
+        <div className="flex gap-1">
+          <button onClick={() => setCompPos(null)}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+            style={{background: compPos===null ? "#f97316" : "#1f2937",
+                    color: compPos===null ? "#000" : "#9ca3af"}}>
+            Auto ({autoPos})
+          </button>
+          {["PG","SG","SF","PF","C"].map(pos => (
+            <button key={pos} onClick={() => setCompPos(pos)}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+              style={{background: compPos===pos ? "#f97316" : "#1f2937",
+                      color: compPos===pos ? "#000" : "#9ca3af"}}>
+              {pos}
             </button>
           ))}
         </div>
@@ -6232,6 +6252,8 @@ function BodyTab({p}) {
   // Tobias 2026-05-09: Anthro-Tier-Vergleich (analog Overview Tab vs.NBA-Tier).
   // Default "Starter" — gleicher Anchor wie Overview-Tab.
   const [anthroCompTier, setAnthroCompTier] = useState("Starter");
+  // Tobias 2026-06-03 v12: Body Anthro position selector
+  const [anthroCompPos, setAnthroCompPos] = useState(null);  // null = auto-detect from posDetailed
 
   // ── Fetch combine data on mount ──
   // Tobias 2026-05-06 BUG-FIX: API_BASE.replace("/api","") matchte das
@@ -6724,6 +6746,8 @@ function BodyTab({p}) {
         p={p}
         compTier={anthroCompTier}
         setCompTier={setAnthroCompTier}
+        compPos={anthroCompPos}
+        setCompPos={setAnthroCompPos}
         realHt={realHt}
         estimatedWs={estimatedWs}
         estimatedWt={estimatedWt}
