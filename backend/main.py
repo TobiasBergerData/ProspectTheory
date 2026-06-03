@@ -40,6 +40,43 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
+
+# Tobias 2026-06-03 v2: JSONResponse NaN/Inf cleaner (monkey-patch)
+# Some api_profiles entries (multi-year aggregated rows for older NCAA cohorts)
+# contain NaN or Inf floats stored in SQLite blobs. Python json.dumps with
+# default allow_nan=True writes these, so they end up in the blobs. Starlette's
+# default JSONResponse uses allow_nan=False → ValueError → 500.
+#
+# Strategy: monkey-patch JSONResponse.render to recursively replace NaN/Inf
+# with None before serialization. Works for ALL endpoints without touching
+# the FastAPI() instantiation.
+def _nan_safety_install():
+    import math as _msafe
+    import json as _jsafe
+    from fastapi.responses import JSONResponse as _JR
+
+    def _clean(obj):
+        if isinstance(obj, dict):
+            return {k: _clean(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [_clean(v) for v in obj]
+        if isinstance(obj, float):
+            if _msafe.isnan(obj) or _msafe.isinf(obj):
+                return None
+        return obj
+
+    def _safe_render(self, content):
+        return _jsafe.dumps(
+            _clean(content),
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+
+    _JR.render = _safe_render
+
+_nan_safety_install()
+
 # ═══════════════════════════════════════════════════════════
 # APP CONFIG
 # ═══════════════════════════════════════════════════════════
