@@ -2117,6 +2117,10 @@ function OverviewTab({p, compTier, setCompTier}) {
           const classNum = clsMap[clsRaw] || (p.seasons ? Math.min(4, parseInt(p.seasons)) : null);
           const className = classNum === 1 ? "Freshman" : classNum === 2 ? "Sophomore" :
                             classNum === 3 ? "Junior" : classNum === 4 ? "Senior" : null;
+          // Tobias 2026-06-03: _isIntlSrc + _thresholdCohort derived from the
+          // playerSourceMeta helper (single source of truth, defined at top).
+          // The verdict-block UI uses these to switch threshold/cohort copy.
+          const { isIntl: _isIntlSrc, thresholdCohort: _thresholdCohort } = playerSourceMeta(p);
           const VERDICTS = {
             "Replacement": [
               {min:6, label:"Plays Replacement-level box profile", color:"#22c55e", desc:"Every drafted NBA player reaches Replacement-level — this is the baseline floor, not a forecast."},
@@ -8674,6 +8678,30 @@ const TABS = [
   {id:"projection",label:"Projection",icon:"◆"},
   {id:"riskprofile",label:"Risk Profile",icon:"🎯"},
 ];
+
+
+// playerSourceMeta — single source of truth for player source metadata.
+// All code that needs to know "is this player NCAA or International?" or
+// what threshold cohort to display must call this helper instead of
+// inlining `p.source !== "ncaa"`. Forward-compatible: extend the returned
+// object as new source-dependent logic emerges.
+//
+// Contract:
+//   In : player profile object (may be undefined)
+//   Out: { isIntl: bool, isNcaa: bool, source: "ncaa"|"intl"|<other>,
+//          thresholdCohort: string for verdict-block UI }
+function playerSourceMeta(p) {
+  const src = (p && p.source) ? p.source : "ncaa";
+  const isIntl = src !== "ncaa";
+  return {
+    isIntl,
+    isNcaa: !isIntl,
+    source: src,
+    thresholdCohort: isIntl
+      ? "Intl Bridge Cohort (n≈400, Euroleague/ACB/BBL/FIBA youth)"
+      : "NCAA Pre-Draft 2008–2018 (n≈506 NBA players)",
+  };
+}
 
 export default function App() {
   const [sel,setSel]=useState(null);
