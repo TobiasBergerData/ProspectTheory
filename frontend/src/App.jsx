@@ -3601,14 +3601,34 @@ function ClassScatterAndDev({p}) {
 // ═══════════════════════════════════════════════════════════
 function MindTab({p}) {
   if (!p) return null;
-  // 2026-05-29 — entire Mind tab is PBP-derived; hide for 2026 class.
-  if (isPBPLimited2026(p)) {
-    return (
-      <div className="space-y-6">
-        <PBPNotAvailable title="Mind Tab — Behaviour Under Pressure" icon="🧠"/>
-      </div>
-    );
-  }
+  {/* Tobias 2026-06-03 v9: Mind Tab honest disclaimer banner */}
+  const MindDisclaimer = () => (
+    <div className="rounded-xl p-4 mb-4 text-sm leading-relaxed"
+         style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+      <div className="font-semibold text-gray-100 mb-2">About these metrics</div>
+      <p className="text-gray-300 mb-2">
+        The Mind tab measures behavioural patterns under pressure — clutch shooting deltas,
+        adverse-event response tendencies (Aggressor, Overdriver, Hothead, Passive),
+        stamina drift across halves, and bounceback efficiency after negative streaks.
+        These come from BartTorvik aggregated PBP arrays and cover the full 2025-26 NCAA season.
+      </p>
+      <p className="text-gray-400 text-xs">
+        <strong className="text-gray-300">What they show:</strong> Behavioural fingerprint and stylistic tendencies under stress.
+        <br/>
+        <strong className="text-gray-300">What they do NOT predict:</strong> NBA stardom on their own. Most historical NBA stars
+        (Anthony Edwards, Brunson, Trae Young, Haliburton) scored <em>below-median</em> on the mind composite
+        in their final NCAA season. Mind correlates weakly with NBA peak Wins Added (|r| &lt; 0.10 univariate).
+        Treat this as <strong className="text-gray-200">qualitative behavioural reference</strong>, not a projection.
+        Full methodology and historical validation in <span className="text-gray-200">Research → Mind Framework</span>.
+      </p>
+    </div>
+  );
+
+  /* Tobias 2026-06-03 v9: Mind tab reactivated for 2026, with honest disclaimer */
+
+  // Mind metrics use BartTorvik aggregated PBP arrays — full 2025-26 season coverage,
+
+  // same source as Shot Creation. No partial-season concern.
 
   const le = p.leverageEff ?? null;
 
@@ -3619,6 +3639,7 @@ function MindTab({p}) {
     const tierColor = pct >= 80 ? "#22c55e" : pct >= 60 ? "#86efac" : pct >= 40 ? "#fbbf24" : "#ef4444";
     return (
       <div className="flex flex-col items-center" style={{minWidth:90}}>
+      <MindDisclaimer/>
         <div style={{position:"relative",width:80,height:80}}>
           <svg width={80} height={80} viewBox="0 0 80 80">
             <circle cx={40} cy={40} r={34} fill="none" stroke="#1f2937" strokeWidth={8}/>
@@ -7725,6 +7746,77 @@ function ResearchTab({p}) {
             <li>Cluster thresholds: position-specific zone-volume medians, not global medians.</li>
             <li>Limitations: self-creation captures shot generation but not finishing efficiency or defense; it under-predicts
                 NBA outcomes for off-ball-catch scorers (e.g. Embiid as a Below-SC big who became a Star+ NBA player).</li>
+          </ul>
+        </div>
+      </div>
+
+      {/* Tobias 2026-06-03 v9: Mind Framework Research section */}
+      <div className="rounded-xl p-4 text-sm text-gray-300 leading-relaxed"
+           style={{background:"#0d1117",border:"1px solid #1f2937", marginTop:"1.25rem"}}>
+        <div className="text-base font-semibold text-gray-100 mb-2">Mind Framework</div>
+        <p className="text-sm text-gray-300 leading-relaxed mb-3">
+          The Mind tab measures behavioural patterns under pressure derived from PBP event sequences:
+          clutch shooting deltas, late-clock efficiency, response to adverse streaks (Aggressor / Overdriver /
+          Hothead / Passive z-scores), half-to-half stamina drift, and bounceback eFG after negative runs.
+          All metrics come from BartTorvik aggregated PBP arrays, 2017-18 through 2025-26.
+        </p>
+        <p className="text-sm text-gray-300 leading-relaxed mb-3">
+          Historical validation against NBA peak Wins Added (n=236, draft classes 2018-2022, minimum 200
+          NCAA actions): univariate Pearson correlations are weak (|r| &lt; 0.10 overall). Mind metrics on
+          their own do NOT predict NBA stardom. Several future NBA stars score below-median on the
+          composite. Use these as behavioural reference, not as a projection.
+        </p>
+
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-100 mb-2">Position-specific signals where Mind has some signal</div>
+          <div className="grid grid-cols-1 gap-2 mb-2">
+            <div className="p-2 rounded" style={{background:"#14532d",border:"1px solid #166534"}}>
+              <div className="text-xs font-bold" style={{color:"#86efac"}}>Playmaker — Below-composite cluster</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Star+ rate 44.4% (n=9) vs 0% in Above-cluster</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Trae Young, Jalen Brunson, Tyrese Haliburton, Ja Morant all sit here</div>
+            </div>
+            <div className="p-2 rounded" style={{background:"#1e3a5f",border:"1px solid #1e40af"}}>
+              <div className="text-xs font-bold" style={{color:"#93c5fd"}}>Big — Below-composite cluster</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Star+ rate 18.2% (n=11) vs 0% in Above-cluster</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Stamina-low + non-hothead bigs translate better (Mobley pattern)</div>
+            </div>
+            <div className="p-2 rounded" style={{background:"#451a03",border:"1px solid #7c2d12"}}>
+              <div className="text-xs font-bold" style={{color:"#fdba74"}}>Wing — Above-composite cluster</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Star+ rate 13.9% (n=36) vs 7-8% in Below/Low</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Mild positive signal for wings; weakest position signal overall</div>
+            </div>
+          </div>
+          <p className="text-xs text-gray-400 leading-relaxed">
+            Reading: For Playmakers and Bigs, scoring <em>below</em> the median on the mind composite is
+            paradoxically a stronger NBA outcome predictor than scoring above. The composite likely captures
+            &quot;college-stage effort&quot; that correlates inversely with effortless dominance — top NBA
+            talents face less adverse pressure in NCAA, so their mind indices read more passively. Wings show
+            a small positive signal in the above-median bucket but the difference is modest.
+          </p>
+        </div>
+
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-100 mb-2">Where Mind succeeds: bust filtering</div>
+          <p className="text-xs text-gray-400 leading-relaxed mb-2">
+            The strongest Mind use case is identifying clear NCAA bust patterns. Bottom-quartile composite
+            players (low aggressor, high passive, high stamina effort) cluster heavily on the NBA bust side:
+          </p>
+          <p className="text-[11px] text-gray-500 leading-relaxed">
+            Nathan Knight, DaQuan Jeffries, Jericho Sims, Jaylen Hoard, Sam Merrill, Terry Taylor,
+            Carsen Edwards, Justin Jackson, Omari Spellman — most have negative NBA peak Wins Added.
+          </p>
+        </div>
+
+        <div className="pt-3 mt-3" style={{borderTop:"1px solid #1f2937"}}>
+          <div className="text-xs font-semibold text-gray-300 mb-1">Methodology notes</div>
+          <ul className="text-[11px] text-gray-500 leading-relaxed list-disc pl-4 space-y-1">
+            <li>Source: BartTorvik PBP-derived event sequences, 2017-18 through 2025-26 (9 seasons).</li>
+            <li>Sample: 236 NCAA→NBA players (draft classes 2018-2022, minimum 200 NCAA actions).</li>
+            <li>NBA outcome: peak Wins Added (peak_wa, three-season rolling peak from xRAPM-based modeling).</li>
+            <li>Composite formula: z(aggressor_idx) − z(passive_idx) − 0.5·z(stamina_idx), stratified by position.</li>
+            <li>Star+ definition: peak_wa &gt;= 11.6 (top 10% of historical cohort).</li>
+            <li>Honest limit: composite has only one historical Star+ &quot;hit&quot; (Devin Harris 2018) and many Star+ misses.</li>
+            <li>Best use: bust filtering, behavioural fingerprint, position-comparative reference — not stardom prediction.</li>
           </ul>
         </div>
       </div>
