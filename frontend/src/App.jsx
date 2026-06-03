@@ -7820,6 +7820,121 @@ function ResearchTab({p}) {
           </ul>
         </div>
       </div>
+
+      {/* Tobias 2026-06-03 v10: Combined Insights Research section */}
+      <div className="rounded-xl p-4 text-sm text-gray-300 leading-relaxed"
+           style={{background:"#0d1117",border:"1px solid #1f2937", marginTop:"1.25rem"}}>
+        <div className="text-base font-semibold text-gray-100 mb-2">Combined Insights — Usage Reaction &amp; Cross-Signal Bust Markers</div>
+        <p className="text-sm text-gray-300 leading-relaxed mb-3">
+          This section consolidates the strongest cross-signal patterns found in the 2026-06-03 validation pass.
+          Two threads: (1) Usage Reaction metrics — how a player's shot volume shifts in clutch and how their assist-rate
+          relates to their usage rate; (2) combined bust markers — what happens when Self-Creation, Mind, and Stamina
+          flags align on the same player.
+        </p>
+
+        {/* USAGE REACTION */}
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-100 mb-2">Usage Reaction signals</div>
+          <p className="text-xs text-gray-400 leading-relaxed mb-3">
+            Two derived signals that turn out stronger than most individual Mind metrics:
+          </p>
+          <div className="grid grid-cols-1 gap-2 mb-3">
+            <div className="p-2 rounded" style={{background:"#1e3a5f",border:"1px solid #1e40af"}}>
+              <div className="text-xs font-bold" style={{color:"#93c5fd"}}>Clutch Usage Shift = clutch_fga / normal_fga</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Wing Pearson r = +0.126, Big r = +0.170 vs NBA peak Wins Added (n=236)</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">
+                Wing top-quartile clutch shift: 16.3% Star+ rate vs 4.7% bottom-quartile (+11.6pp).
+                Big top-quartile: 10.0% Star+ vs 0.0% bottom-quartile.
+              </div>
+              <div className="text-[11px] text-gray-500 mt-0.5">
+                Reading: players whose volume rises disproportionately in clutch moments win more NBA value.
+                The behavioural signature of taking the moment when it counts.
+              </div>
+            </div>
+            <div className="p-2 rounded" style={{background:"#14532d",border:"1px solid #166534"}}>
+              <div className="text-xs font-bold" style={{color:"#86efac"}}>AST_p / USG ratio (Passer-Scorer Profile)</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Wing Pearson r = +0.262 vs peak Wins Added — strongest single signal in the Mind+Profile family</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">
+                Wings whose assist percentage is high relative to their usage rate consistently outperform
+                pure volume-scorers in NBA outcomes.
+              </div>
+              <div className="text-[11px] text-gray-500 mt-0.5">
+                Combined reading: the SGA/Brunson archetype — passer in flow, scorer in clutch.
+                Wings who only score and never pass are bust-prone even with elite volume.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* COMBINED BUST MARKERS */}
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-100 mb-2">Combined bust markers — honest results</div>
+          <p className="text-xs text-gray-400 leading-relaxed mb-2">
+            Three independent flags applied to historical drafts 2018-2022 (n=231 NCAA→NBA with full SC + Mind data):
+          </p>
+          <ul className="text-[11px] text-gray-500 leading-relaxed list-disc pl-4 mb-2 space-y-1">
+            <li><span className="text-gray-300">SC bust flag</span>: Self-Creation composite in bottom quartile (Volume-Trap / Pullup-3-Only / Mid-only-Big clusters).</li>
+            <li><span className="text-gray-300">Mind bust flag</span>: Mind composite in bottom quartile (low aggressor + high passive + high stamina drift).</li>
+            <li><span className="text-gray-300">Stamina flag</span>: stamina_idx &gt; 1.10 (more adverse events in 2nd half).</li>
+          </ul>
+          <div className="text-xs text-gray-300 mb-2">Historical bust-rate by flag count:</div>
+          <div className="grid grid-cols-1 gap-1 mb-2 text-[11px]">
+            <div className="text-gray-400"><span style={{color:"#cbd5e1"}}>0 flags</span> &middot; n=116 &middot; bust rate <strong>43.1%</strong> (base rate)</div>
+            <div className="text-gray-400"><span style={{color:"#cbd5e1"}}>1 flag</span> &middot; n=71 &middot; bust rate <strong>54.9%</strong></div>
+            <div className="text-gray-400"><span style={{color:"#cbd5e1"}}>2 flags</span> &middot; n=38 &middot; bust rate <strong>57.9%</strong> (+15pp over base)</div>
+            <div className="text-gray-400"><span style={{color:"#cbd5e1"}}>3 flags</span> &middot; n=6 &middot; bust rate 50.0% (sample too small)</div>
+          </div>
+          <p className="text-xs text-gray-400 leading-relaxed">
+            Reading: naive flag-stacking is honest but not magical. Two flags raise bust probability by ~15 percentage
+            points above the 43% base rate. The components are correlated, so additive scoring overestimates the marginal
+            contribution of each additional flag. Use as one input, not as a binary verdict.
+          </p>
+        </div>
+
+        {/* POSITION-TIER SYNTHESIS */}
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-100 mb-2">Position-tier synthesis</div>
+          <table className="w-full text-xs" style={{borderCollapse:"collapse"}}>
+            <thead>
+              <tr style={{borderBottom:"1px solid #1f2937"}}>
+                <th className="text-left py-1 px-2 text-gray-300">Position</th>
+                <th className="text-left py-1 px-2 text-gray-300">Star marker</th>
+                <th className="text-left py-1 px-2 text-gray-300">Bust marker</th>
+              </tr>
+            </thead>
+            <tbody className="text-gray-400">
+              <tr style={{borderBottom:"1px solid #1f2937"}}>
+                <td className="py-1 px-2 text-gray-200">Wing</td>
+                <td className="py-1 px-2">High AST/USG + positive clutch volume shift + ATR-Workhorse SC cluster</td>
+                <td className="py-1 px-2">Pullup-3 volume + low AST/USG + Mind bottom-quartile</td>
+              </tr>
+              <tr style={{borderBottom:"1px solid #1f2937"}}>
+                <td className="py-1 px-2 text-gray-200">Big</td>
+                <td className="py-1 px-2">Positive clutch volume shift + Mid-range touch + low stamina drift (effortless)</td>
+                <td className="py-1 px-2">Mid-only without ATR + Mind bottom-quartile</td>
+              </tr>
+              <tr>
+                <td className="py-1 px-2 text-gray-200">Playmaker</td>
+                <td className="py-1 px-2">Below-median Mind composite + Aggressor + ATR+TP SC cluster</td>
+                <td className="py-1 px-2">College mid-range volume + TP-only without ATR</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* METHOD AND LIMITS */}
+        <div className="pt-3 mt-3" style={{borderTop:"1px solid #1f2937"}}>
+          <div className="text-xs font-semibold text-gray-300 mb-1">Method and limits</div>
+          <ul className="text-[11px] text-gray-500 leading-relaxed list-disc pl-4 space-y-1">
+            <li>Cohort: 231-236 NCAA→NBA players, drafts 2018-2022, joined across SC + Mind + Profile data.</li>
+            <li>NBA outcome: peak Wins Added (peak_wa).</li>
+            <li>Star+ = top 10% peak_wa; Bust = peak_wa &lt; 0 (negative impact NBA stint).</li>
+            <li>Sample threshold: minimum 200 NCAA actions for Mind, 100 FGA for SC.</li>
+            <li>Limitations: linear combinations only — non-linear interactions not modeled. Wing AST/USG signal might shrink with multivariate control.</li>
+            <li>Honest framing: these are reference patterns for analysts, not deterministic projections.</li>
+          </ul>
+        </div>
+      </div>
     </div>
   );
 }
