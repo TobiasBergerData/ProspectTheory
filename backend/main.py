@@ -44,10 +44,43 @@ from fastapi.responses import FileResponse
 # APP CONFIG
 # ═══════════════════════════════════════════════════════════
 
+
+
+# Tobias 2026-06-03: CleanJSONResponse for NaN/Inf safety
+# Some api_profiles entries (especially multi-year aggregated rows for older
+# NCAA cohorts) contain NaN or Inf floats. Python's json.dumps with default
+# allow_nan=True writes these, so they end up in SQLite blobs. Starlette's
+# default JSONResponse uses allow_nan=False → ValueError on serialize → 500.
+# This response class recursively replaces NaN/Inf with None.
+import math as _math_clean
+import json as _json_clean
+from fastapi.responses import JSONResponse as _BaseJSONResponse
+
+class CleanJSONResponse(_BaseJSONResponse):
+    """Drop-in JSONResponse that converts NaN/Inf floats to null."""
+    def render(self, content):
+        def _clean(obj):
+            if isinstance(obj, dict):
+                return {k: _clean(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [_clean(v) for v in obj]
+            if isinstance(obj, float):
+                if _math_clean.isnan(obj) or _math_clean.isinf(obj):
+                    return None
+            return obj
+        return _json_clean.dumps(
+            _clean(content),
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+
+
 app = FastAPI(
     title="ProspectTheory API",
     description="NBA Draft Intelligence — Player profiles, comparisons, and tier predictions",
-    version="3.0.0",  # canonical identity: player_id PK + slug routing (collision-safe)
+    version="3.0.0",  # canonical identity: player_id PK + slug routing (collision-safe,
+    default_response_class=CleanJSONResponse)
 )
 
 app.add_middleware(
