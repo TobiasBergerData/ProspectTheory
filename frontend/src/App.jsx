@@ -1526,6 +1526,10 @@ function mapProfile(d) {
     creationScore: d.creation_score ?? null,
     // Shot Creation Spectrum (zone-level PBP data)
     shotCreation: d.shotCreation ?? null,
+    // Tobias 2026-06-03: shooting field (Three-Layer block)
+    // Emitted by backend after v10 sprint (PID-keyed Skill/Intent/Volume).
+    // Conditional render lives in ShootingTab: `{p.shooting && ...}`.
+    shooting: d?.shooting ?? null,
     // Leverage-Weighted Efficiency (self-creation-weighted eFG%)
     leverageEff: d.leverageEff ?? null,
     // Offensive Skill Curve (usage scalability + peer curve position)
