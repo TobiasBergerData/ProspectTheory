@@ -7463,6 +7463,166 @@ function ResearchTab({p}) {
         </div>
       </div>
 
+      {/* Tobias 2026-06-03 v16: Badges + Pillars Frameworks */}
+      <div className="rounded-xl p-4 text-sm text-gray-300 leading-relaxed"
+           style={{background:"#0d1117",border:"1px solid #1f2937", marginTop:"1.25rem"}}>
+        <div className="text-base font-semibold text-gray-100 mb-2">Badges Framework</div>
+        <p className="text-sm text-gray-300 leading-relaxed mb-3">
+          Skill Badges flag distinctive statistical patterns in a prospect's profile. Green badges mark strengths,
+          Yellow badges flag swing skills with breakout potential, Red badges signal historical bust patterns.
+          Below: how each badge holds up against NBA outcomes for the n=797 NCAA→NBA cohort (drafts 2010-2022).
+        </p>
+
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-100 mb-2">Single-badge Star+ rate ranking</div>
+          <p className="text-xs text-gray-400 leading-relaxed mb-2">
+            Base Star+ rate in cohort: 10.0%. Numbers below show Star+ lift over base, plus Bust rate reduction.
+          </p>
+          <div className="grid grid-cols-1 gap-1.5 text-[11px]">
+            <div className="grid grid-cols-5 gap-2 text-gray-300 font-semibold border-b border-gray-700 pb-1">
+              <span>Badge</span><span className="text-right">n</span><span className="text-right">Star+%</span><span className="text-right">Bust%</span><span className="text-right">Lift Star+</span>
+            </div>
+            <div className="grid grid-cols-5 gap-2"><span className="text-gray-200">Swiss Army Knife</span><span className="text-right">63</span><span className="text-right text-green-400">20.6%</span><span className="text-right">33.3%</span><span className="text-right text-green-400">+10.6pp ★</span></div>
+            <div className="grid grid-cols-5 gap-2"><span className="text-gray-200">Rim Protector</span><span className="text-right">98</span><span className="text-right text-green-400">17.3%</span><span className="text-right text-green-400">22.4%</span><span className="text-right text-green-400">+7.3pp ★</span></div>
+            <div className="grid grid-cols-5 gap-2"><span className="text-gray-200">High Feel Athlete</span><span className="text-right">158</span><span className="text-right text-green-400">15.8%</span><span className="text-right">36.1%</span><span className="text-right text-green-400">+5.8pp</span></div>
+            <div className="grid grid-cols-5 gap-2"><span className="text-gray-200">Two-Way Wing</span><span className="text-right">43</span><span className="text-right text-green-400">16.3%</span><span className="text-right text-red-400">51.2%</span><span className="text-right text-amber-400">+6.2pp polarising</span></div>
+            <div className="grid grid-cols-5 gap-2"><span className="text-gray-200">Stocks Machine</span><span className="text-right">198</span><span className="text-right">13.1%</span><span className="text-right">33.8%</span><span className="text-right">+3.1pp</span></div>
+            <div className="grid grid-cols-5 gap-2"><span className="text-gray-200">Self-Creator</span><span className="text-right">327</span><span className="text-right">11.3%</span><span className="text-right">44.0%</span><span className="text-right">+1.3pp (weak)</span></div>
+            <div className="grid grid-cols-5 gap-2"><span className="text-gray-200">Elite Shooting</span><span className="text-right">114</span><span className="text-right">9.6%</span><span className="text-right">47.4%</span><span className="text-right text-amber-400">-0.4pp (neutral)</span></div>
+            <div className="grid grid-cols-5 gap-2"><span className="text-gray-200">Young for Class</span><span className="text-right">35</span><span className="text-right text-red-400">2.9%</span><span className="text-right text-red-400">60.0%</span><span className="text-right text-red-400">-7.2pp (ANTI-STAR)</span></div>
+          </div>
+        </div>
+
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-100 mb-2">Multi-badge compositional effect</div>
+          <p className="text-xs text-gray-400 leading-relaxed mb-2">
+            The strongest signal is total green badge count. Six or more green badges historically yields 22%+ Star+ rate, eight badges 43%.
+          </p>
+          <div className="grid grid-cols-1 gap-1 text-[11px] text-gray-400">
+            <div className="grid grid-cols-4 gap-2 text-gray-300 font-semibold border-b border-gray-700 pb-1">
+              <span>Green badges</span><span className="text-right">n</span><span className="text-right">Star+%</span><span className="text-right">Bust%</span>
+            </div>
+            <div className="grid grid-cols-4 gap-2"><span>0-1</span><span className="text-right">390</span><span className="text-right">8.0%</span><span className="text-right">55%</span></div>
+            <div className="grid grid-cols-4 gap-2"><span>2-3</span><span className="text-right">267</span><span className="text-right">9.0%</span><span className="text-right">43%</span></div>
+            <div className="grid grid-cols-4 gap-2"><span>4-5</span><span className="text-right">94</span><span className="text-right">11.7%</span><span className="text-right">31%</span></div>
+            <div className="grid grid-cols-4 gap-2"><span className="text-gray-200">6-7</span><span className="text-right">39</span><span className="text-right text-green-400">23.1%</span><span className="text-right text-green-400">28%</span></div>
+            <div className="grid grid-cols-4 gap-2"><span className="text-gray-200">8</span><span className="text-right">7</span><span className="text-right text-green-400">42.9%</span><span className="text-right">29%</span></div>
+          </div>
+        </div>
+
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-100 mb-2">Top 2-badge combinations</div>
+          <p className="text-xs text-gray-400 leading-relaxed mb-2">
+            Swiss Army Knife combined with a defense-oriented badge is the most reliable Star+ pattern.
+          </p>
+          <ul className="text-[11px] text-gray-400 list-disc pl-4 space-y-0.5">
+            <li>Swiss Army Knife + Two-Way Wing — 33.3% Star+ (n=15)</li>
+            <li>Stocks Machine + Two-Way Wing — 33.3% (n=12)</li>
+            <li>Rim Protector + Swiss Army Knife — 30.8% (n=13)</li>
+            <li>Magnetic Hands + Rim Protector — 30.0% (n=10)</li>
+            <li>Stocks Machine + Swiss Army Knife — 29.4% (n=34, largest sample)</li>
+            <li>Good Defensive Baseline + Swiss Army Knife — 26.1% (n=46)</li>
+          </ul>
+        </div>
+
+        <div className="pt-3 mt-3" style={{borderTop:"1px solid #1f2937"}}>
+          <div className="text-xs font-semibold text-gray-300 mb-1">Honest limitations</div>
+          <ul className="text-[11px] text-gray-500 leading-relaxed list-disc pl-4 space-y-1">
+            <li>Young for Class is empirically an ANTI-star marker (-7.2pp Star+, +13.5pp Bust). The framing as "more runway" is not supported by historical outcomes.</li>
+            <li>Self-Creator badge triggers for 327 historical players but lifts Star+ rate by only 1.3pp — too liberal.</li>
+            <li>Old for Class red flag triggers for 454 historical players (most of cohort) but lifts Bust rate by only 1.9pp — too liberal.</li>
+            <li>Red flags overall are weak Bust predictors (max +6.8pp lift). System has stronger Star+ identification than Bust detection.</li>
+            <li>Multi-major-conference seniors with 6+ badges can be false positives (Gary Clark, Sterling Brown pattern).</li>
+          </ul>
+        </div>
+      </div>
+
+      <div className="rounded-xl p-4 text-sm text-gray-300 leading-relaxed"
+           style={{background:"#0d1117",border:"1px solid #1f2937", marginTop:"1.25rem"}}>
+        <div className="text-base font-semibold text-gray-100 mb-2">Pillars Framework</div>
+        <p className="text-sm text-gray-300 leading-relaxed mb-3">
+          The five Pillars (IQ &amp; Feel, Shooting, Defense, Athleticism, Box Creation) are position-adjusted percentile scores
+          on a 0-100 scale, derived from college statistics. Validation against n=797 NBA outcomes shows that single-pillar
+          scores are weak predictors alone, but position-specific thresholds and multi-pillar combinations carry meaningful signal.
+        </p>
+
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-100 mb-2">Position-specific Star+ markers</div>
+          <p className="text-xs text-gray-400 leading-relaxed mb-2">
+            Each position has one Pillar that strongly differentiates Stars from Busts. The single right pillar at the right position
+            outperforms generic multi-pillar criteria.
+          </p>
+          <div className="grid grid-cols-1 gap-2 mb-2">
+            <div className="p-2 rounded" style={{background:"#14532d",border:"1px solid #166534"}}>
+              <div className="text-xs font-bold" style={{color:"#86efac"}}>Playmaker — Athleticism ≥ 75</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">24.4% Star+ rate (vs PG base 16.1%, lift +8.3pp)</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Damian Lillard, Kemba Walker, John Wall, Ja Morant, De'Aaron Fox, Haliburton, Devin Harris all cleared this</div>
+            </div>
+            <div className="p-2 rounded" style={{background:"#14532d",border:"1px solid #166534"}}>
+              <div className="text-xs font-bold" style={{color:"#86efac"}}>Wing — IQ ≥ 75</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">13.6% Star+ rate (vs Wing base 7.9%, lift +5.7pp)</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Kawhi, Draymond, Anthony Edwards, Donovan Mitchell, Franz Wagner, Pascal Siakam, Mikal Bridges all cleared this</div>
+            </div>
+            <div className="p-2 rounded" style={{background:"#1e3a5f",border:"1px solid #1e40af"}}>
+              <div className="text-xs font-bold" style={{color:"#93c5fd"}}>Big — Defense ≥ 75 AND Athleticism ≥ 70</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">15.6% Star+ rate (vs Big base 13.4%, lift +2.2pp — weaker but stable)</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Embiid, Anthony Davis, KAT, Steven Adams, Walker Kessler, Wendell Carter Jr. all cleared this</div>
+            </div>
+          </div>
+          <p className="text-xs text-gray-400 leading-relaxed">
+            Counter-intuitive: at the PG and Big positions, IQ is a NEGATIVE Star+ marker (-2.3pp for PG, -7.0pp for Big). High-IQ
+            prospects at these positions tend to be hype-driven and historically bust at higher rates. Only Wings show a positive IQ-to-Star linkage.
+          </p>
+        </div>
+
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-100 mb-2">Multi-pillar compositional effect</div>
+          <p className="text-xs text-gray-400 leading-relaxed mb-2">
+            Number of Pillars at or above 75 (top quartile). Four-pillar prospects historically convert to Star+ at 3× the base rate.
+          </p>
+          <div className="grid grid-cols-1 gap-1 text-[11px] text-gray-400">
+            <div className="grid grid-cols-4 gap-2 text-gray-300 font-semibold border-b border-gray-700 pb-1">
+              <span>Pillars ≥75</span><span className="text-right">n</span><span className="text-right">Star+%</span><span className="text-right">Bust%</span>
+            </div>
+            <div className="grid grid-cols-4 gap-2"><span>0</span><span className="text-right">170</span><span className="text-right">11.8%</span><span className="text-right">49%</span></div>
+            <div className="grid grid-cols-4 gap-2"><span className="text-amber-400">1</span><span className="text-right">282</span><span className="text-right text-red-400">6.4%</span><span className="text-right text-red-400">54%</span></div>
+            <div className="grid grid-cols-4 gap-2"><span>2</span><span className="text-right">227</span><span className="text-right">9.3%</span><span className="text-right">41%</span></div>
+            <div className="grid grid-cols-4 gap-2"><span>3</span><span className="text-right">91</span><span className="text-right">14.3%</span><span className="text-right">37%</span></div>
+            <div className="grid grid-cols-4 gap-2"><span className="text-gray-200">4</span><span className="text-right">26</span><span className="text-right text-green-400">30.8%</span><span className="text-right">35%</span></div>
+          </div>
+          <p className="text-xs text-gray-400 leading-relaxed mt-2">
+            Note: 1-pillar specialists Star+ rate is actually LOWER than 0-pillar prospects. Single-trick-pony profiles carry hidden risk —
+            versatile mid-range prospects often translate better than narrow elite ones.
+          </p>
+        </div>
+
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-100 mb-2">Bust-detection: low-pillar combos</div>
+          <ul className="text-[11px] text-gray-400 list-disc pl-4 space-y-0.5">
+            <li>Low Shoot + Low Athleticism (both ≤25) — 54.9% Bust rate (n=82, base 46.5%)</li>
+            <li>Low IQ + Low Shoot — 54.1% Bust (n=85)</li>
+            <li>Low Shoot + Low Defense — 53.3% Bust (n=75)</li>
+            <li>Low IQ + Low Box Creation — 51.6% Bust (n=93)</li>
+          </ul>
+          <p className="text-xs text-gray-400 leading-relaxed mt-2">
+            Pillars are stronger at Star identification than Bust prediction. Max Bust-lift from low-pillar combinations is ~8pp over base,
+            while top Star+ predictors lift 20pp+ over base.
+          </p>
+        </div>
+
+        <div className="pt-3 mt-3" style={{borderTop:"1px solid #1f2937"}}>
+          <div className="text-xs font-semibold text-gray-300 mb-1">Methodology notes</div>
+          <ul className="text-[11px] text-gray-500 leading-relaxed list-disc pl-4 space-y-1">
+            <li>Cohort: n=797 NCAA→NBA players, draft classes 2010-2022.</li>
+            <li>Pillar values are position-adjusted percentiles (0-100) within era-aligned NCAA cohort.</li>
+            <li>NBA outcome: peak Wins Added (3-season rolling peak from xRAPM-based modeling).</li>
+            <li>Star+ threshold: top 10% peak Wins Added. Bust threshold: peak Wins Added &lt; 0.</li>
+            <li>Box Creation Pillar was recalibrated 2026-06-03 to incorporate PBP-based self-creation share (v2 self-adjusted formula).</li>
+            <li>Univariate Pearson r values for individual pillars are all modest (|r| &lt; 0.13). Strength comes from position-specific thresholds and multi-pillar combinations.</li>
+          </ul>
+        </div>
+      </div>
+
       {/* Tobias 2026-06-03 v10: Combined Insights Research section */}
       <div className="rounded-xl p-4 text-sm text-gray-300 leading-relaxed"
            style={{background:"#0d1117",border:"1px solid #1f2937", marginTop:"1.25rem"}}>
