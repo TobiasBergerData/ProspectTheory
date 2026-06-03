@@ -107,8 +107,12 @@ def build_shot_creation(row):
 
     sc = {}
 
-    # Rim (excluding dunks)
-    rim = build_zone(row["rim_made"], row["rim_missed"], row["rim_assisted"])
+    # Rim (ATR = rim + dunks, BT convention)
+    # Tobias 2026-06-03: ATR-merge (BT-convention) rim now includes dunks
+    rim_made_atr = row["rim_made"] + row.get("dunk_made", 0)
+    rim_missed_atr = row["rim_missed"] + row.get("dunk_missed", 0)
+    rim_assisted_atr = row["rim_assisted"] + row.get("dunk_assisted", 0)
+    rim = build_zone(rim_made_atr, rim_missed_atr, rim_assisted_atr)
     if rim:
         sc["rim"] = rim
 

@@ -3001,6 +3001,45 @@ function ShootingTab({p}) {
                       </div>
                       <div className="text-xs leading-relaxed" style={{color:"#9ca3af"}}>{verdictDesc}</div>
                     </div>
+
+                    {/* Tobias 2026-06-03 v8: Compact cluster pill (full theory in Research tab) */}
+                    {(() => {
+                      if (!p.pos) return null;
+                      const atrM = Math.round((scd.rim?.fga ?? 0) * ((scd.rim?.pct ?? 0)/100) * ((scd.rim?.selfPct ?? 0)/100));
+                      const midM = Math.round((scd.mid?.fga ?? 0) * ((scd.mid?.pct ?? 0)/100) * ((scd.mid?.selfPct ?? 0)/100));
+                      const tpM  = Math.round((scd.three?.fga ?? 0) * ((scd.three?.pct ?? 0)/100) * ((scd.three?.selfPct ?? 0)/100));
+                      let cluster, starterPct, comp;
+                      if (p.pos === "Wing") {
+                        const aHi = atrM > 50, tHi = tpM > 6;
+                        if (aHi && tHi)       { cluster = "Volume-Trap"; starterPct = 15.1; comp = "Jaden Ivey / Tony Wroten"; }
+                        else if (aHi)          { cluster = "Rim-Workhorse"; starterPct = 34.8; comp = "SGA / Kawhi / Brunson (college)"; }
+                        else if (tHi)          { cluster = "Pullup-3 Volume"; starterPct = 15.8; comp = "Carsen Edwards / Austin Rivers"; }
+                        else                    { cluster = "Role-Floor"; starterPct = 18.7; comp = "Trey Murphy / Duncan Robinson"; }
+                      } else if (p.pos === "Big") {
+                        const aHi = atrM > 70, mHi = midM > 20;
+                        if (aHi && mHi)       { cluster = "Two-Way Star-Big"; starterPct = 42.6; comp = "Anthony Davis / KAT"; }
+                        else if (aHi)          { cluster = "Rim-Power Big"; starterPct = 38.0; comp = "Jarrett Allen / Sabonis"; }
+                        else if (mHi)          { cluster = "Mid-Range Big"; starterPct = 36.4; comp = "Sabonis / Cousins"; }
+                        else                    { cluster = "Catch-Big Role-Floor"; starterPct = 16.7; comp = "Steven Adams / Zach Collins"; }
+                      } else if (p.pos === "Playmaker") {
+                        const aHi = atrM > 80, tHi = tpM > 20;
+                        if (aHi && tHi)        { cluster = "Star-PG"; starterPct = 47.0; comp = "Lillard / Trae Young / Brunson"; }
+                        else if (aHi)           { cluster = "Iso-Heavy PG"; starterPct = 32.0; comp = "Kemba / Kyrie"; }
+                        else if (tHi)           { cluster = "Pullup PG"; starterPct = 27.3; comp = "Lonzo Ball"; }
+                        else                    { cluster = "Connector PG"; starterPct = 45.0; comp = "Haliburton / Dellavedova"; }
+                      } else { return null; }
+                      const color = starterPct >= 30 ? "#22c55e" : starterPct >= 20 ? "#fbbf24" : "#ef4444";
+                      return (
+                        <div className="mt-3 pt-3 border-t flex flex-wrap items-baseline gap-x-3 gap-y-1" style={{borderColor:"#1e293b"}}>
+                          <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Historical Cluster</span>
+                          <span className="text-sm font-bold" style={{color, fontFamily:"'Oswald',sans-serif"}}>{cluster}</span>
+                          <span className="text-xs" style={{color:"#9ca3af"}}>Starter+ rate: <strong style={{color}}>{starterPct.toFixed(1)}%</strong></span>
+                          <span className="text-xs" style={{color:"#6b7280"}}>·</span>
+                          <span className="text-xs" style={{color:"#cbd5e1"}}>Comp: {comp}</span>
+                          <span className="text-[10px] ml-auto" style={{color:"#475569"}}>See <span style={{color:"#94a3b8"}}>Research → Self-Creation Framework</span></span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })()}
@@ -7555,6 +7594,140 @@ function ResearchTab({p}) {
         “Scoring Wing”). This is a research aid for draft strategy by player type, not a
         player-specific projection.
       </p>
+    
+
+      {/* Tobias 2026-06-03 v8: Self-Creation Research Framework section */}
+      {/* Self-Creation Framework — position-specific quadrants */}
+      <div className="rounded-xl p-4 text-sm text-gray-300 leading-relaxed"
+           style={{background:"#0d1117",border:"1px solid #1f2937", marginTop: "1.25rem"}}>
+        <div className="text-base font-semibold text-gray-100 mb-2">Self-Creation Framework</div>
+        <p className="text-sm text-gray-300 leading-relaxed mb-3">
+          The Shot Creation Spectrum on every player profile shows how a prospect generates his offense
+          by zone — at the rim (including dunks, BartTorvik convention), in mid-range, and from three.
+          This framework summarizes how those zone distributions translate to NBA outcomes,
+          based on n=556 NCAA prospects from the 2010-2022 draft cohorts who reached the NBA.
+        </p>
+        <p className="text-sm text-gray-300 leading-relaxed mb-4">
+          Each position uses different cluster axes because what predicts NBA value differs
+          by archetype. Wings are split by rim creation × pullup-3 volume; bigs by rim creation × mid-range touch;
+          playmakers by rim creation × pullup-3 volume. Median splits are taken within position to ensure
+          each cluster has comparable sample sizes.
+        </p>
+
+        {/* WING QUADRANT */}
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-100 mb-2">Wing: ATR × Pullup-3 (n=371)</div>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <div className="p-2 rounded" style={{background:"#451a1a",border:"1px solid #7f1d1d"}}>
+              <div className="text-xs font-bold" style={{color:"#fca5a5"}}>Volume-Trap (Both High)</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Starter+ 15.1% · Bust 64%</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Jaden Ivey, Tony Wroten, Austin Rivers</div>
+            </div>
+            <div className="p-2 rounded" style={{background:"#451a03",border:"1px solid #7c2d12"}}>
+              <div className="text-xs font-bold" style={{color:"#fdba74"}}>Pullup-3 Volume (Low ATR, High TP)</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Starter+ 15.8% · Bust 59%</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Carsen Edwards, Dwayne Bacon</div>
+            </div>
+            <div className="p-2 rounded" style={{background:"#14532d",border:"1px solid #166534"}}>
+              <div className="text-xs font-bold" style={{color:"#86efac"}}>Rim-Workhorse (High ATR, Low TP)</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Starter+ 34.8% · Bust 38%</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">SGA, Kawhi, Brunson, Tatum (college)</div>
+            </div>
+            <div className="p-2 rounded" style={{background:"#1f2937",border:"1px solid #374151"}}>
+              <div className="text-xs font-bold" style={{color:"#9ca3af"}}>Role-Floor (Both Low)</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Starter+ 18.7% · Bust 60%</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Trey Murphy III, Duncan Robinson</div>
+            </div>
+          </div>
+          <p className="text-xs text-gray-400 leading-relaxed">
+            Reading: Wings who concentrate their self-creation at the rim — without large pullup-3 volume —
+            have nearly double the Starter+ rate of any other cluster. NCAA pullup-3 volume is historically
+            a bust marker: development of NBA pullup range happens after the draft. High-volume two-zone wings
+            ("Volume-Trap") show the lowest Starter+ rate of any wing cluster.
+          </p>
+        </div>
+
+        {/* BIG CLUSTER */}
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-100 mb-2">Big: ATR × Mid-Range (n=92)</div>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <div className="p-2 rounded" style={{background:"#14532d",border:"1px solid #166534"}}>
+              <div className="text-xs font-bold" style={{color:"#86efac"}}>Two-Way Star-Big (ATR + Mid)</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Starter+ 42.6% · Star+ 14.6%</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Anthony Davis, Karl-Anthony Towns</div>
+            </div>
+            <div className="p-2 rounded" style={{background:"#1e3a5f",border:"1px solid #1e40af"}}>
+              <div className="text-xs font-bold" style={{color:"#93c5fd"}}>Rim-Power Big (ATR only)</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Starter+ 38.0%</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Jarrett Allen, Domantas Sabonis</div>
+            </div>
+            <div className="p-2 rounded" style={{background:"#451a03",border:"1px solid #7c2d12"}}>
+              <div className="text-xs font-bold" style={{color:"#fdba74"}}>Mid-Range Big (Mid only)</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Starter+ 36.4%</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">DeMarcus Cousins, Sabonis</div>
+            </div>
+            <div className="p-2 rounded" style={{background:"#1f2937",border:"1px solid #374151"}}>
+              <div className="text-xs font-bold" style={{color:"#9ca3af"}}>Catch-Big Role-Floor</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Starter+ 16.7% (but 41.2% in Below-Composite tier)</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Steven Adams, Zach Collins, Joel Embiid</div>
+            </div>
+          </div>
+          <p className="text-xs text-gray-400 leading-relaxed">
+            Reading: Rim creation (+25.9pp) is the strongest single position-zone signal in the entire framework.
+            Above-median rim self-makes more than doubles Starter+ rate for bigs.
+            Important false-negative: the Catch-Big Role-Floor cluster includes Joel Embiid — bigs with low NCAA self-creation
+            but elite efficiency and defense can outperform the framework. Read this signal alongside finishing
+            efficiency, defensive metrics, and anthro.
+          </p>
+        </div>
+
+        {/* PLAYMAKER CLUSTER */}
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-100 mb-2">Playmaker: ATR × Pullup-3 (n=92)</div>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <div className="p-2 rounded" style={{background:"#14532d",border:"1px solid #166534"}}>
+              <div className="text-xs font-bold" style={{color:"#86efac"}}>Star-PG (Both High)</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Starter+ 47% · Star+ 17%</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Damian Lillard, Trae Young, Jalen Brunson</div>
+            </div>
+            <div className="p-2 rounded" style={{background:"#14532d",border:"1px solid #166534"}}>
+              <div className="text-xs font-bold" style={{color:"#86efac"}}>Connector PG (Both Low)</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Starter+ 45% · Role 27%</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Tyrese Haliburton, Matthew Dellavedova</div>
+            </div>
+            <div className="p-2 rounded" style={{background:"#451a03",border:"1px solid #7c2d12"}}>
+              <div className="text-xs font-bold" style={{color:"#fdba74"}}>Pullup PG (Low ATR, High TP)</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Starter+ 27.3%</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Lonzo Ball, Davion Mitchell</div>
+            </div>
+            <div className="p-2 rounded" style={{background:"#1f2937",border:"1px solid #374151"}}>
+              <div className="text-xs font-bold" style={{color:"#9ca3af"}}>Iso-Heavy PG (High ATR, Low TP)</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Starter+ 32%</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Kemba Walker, Kyrie Irving</div>
+            </div>
+          </div>
+          <p className="text-xs text-gray-400 leading-relaxed">
+            Reading: Playmakers diverge — Star-PG and Connector-PG both reach Starter+ above 45%, but for opposite reasons.
+            Star-PGs are scoring threats with both rim and pullup volume; Connector-PGs win on vision and team play
+            without dominating any shot zone. Pullup-only PGs are the riskiest cluster (Lonzo Ball pattern).
+          </p>
+        </div>
+
+        {/* METHODOLOGY FOOTNOTE */}
+        <div className="pt-3 mt-3" style={{borderTop:"1px solid #1f2937"}}>
+          <div className="text-xs font-semibold text-gray-300 mb-1">Methodology notes</div>
+          <ul className="text-[11px] text-gray-500 leading-relaxed list-disc pl-4 space-y-1">
+            <li>Source: BartTorvik aggregated PBP player-stat arrays per season (2008-2026), zone breakdown: rim, mid, three, dunk.</li>
+            <li>ATR convention: rim and dunks are merged into one At-The-Rim zone (BartTorvik standard).</li>
+            <li>Sample filter: minimum 100 total FGA per player-season to exclude small-sample noise.</li>
+            <li>NBA outcome: peak Wins Added (peak_wa, a three-season rolling peak from xRAPM-based modeling).</li>
+            <li>Tier bins: Star+ = top 10% peak_wa, Starter+ = top 25%, Role = 25-50%, Bust/Bench = below median.</li>
+            <li>Cluster thresholds: position-specific zone-volume medians, not global medians.</li>
+            <li>Limitations: self-creation captures shot generation but not finishing efficiency or defense; it under-predicts
+                NBA outcomes for off-ball-catch scorers (e.g. Embiid as a Below-SC big who became a Star+ NBA player).</li>
+          </ul>
+        </div>
+      </div>
     </div>
   );
 }
@@ -9358,9 +9531,4 @@ export default function App() {
           </>
         )}
       </main>
-      <footer className="mt-12 py-6 text-center text-xs" style={{color:"#374151",borderTop:"1px solid #111827"}}>
-        <span style={{color:"#6b7280"}}>ProspectTheory</span> · NBA Draft Intelligence · Data: BartTorvik, RealGM, NBA API, Draft Combine, Databallr
-      </footer>
-    </div>
-  );
-}
+      <footer className="mt-12 py-6 text-center text-xs" style={{color:"#374151"
