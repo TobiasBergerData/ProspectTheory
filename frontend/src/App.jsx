@@ -377,7 +377,6 @@ const BADGE_DEFS = {
   "Self-Creator":           { cat:"green", rule:"Box Creation Percentile > 75",             desc:"Elite offensive creator. High scoring efficiency at volume + generates scoring for teammates. Box Creation = USG×TS + Assist Creation." },
   "Swiss Army Knife":       { cat:"green", rule:"Role Versatility > 75 & 4+ roles > 50", desc:"Elite multi-role utility. Can credibly play 4+ distinct NBA roles. Coaches never have to take this player off the floor — fits every lineup." },
   "Young for Class":        { cat:"green", rule:"Age < expected for class year",         desc:"Younger than classmates. A 17-year-old Freshman, 19-year-old Junior, or any player significantly below the typical age for their class year. More development runway than peers at the same stage." },
-  "Scoring Playmaker":    { cat:"green", rule:"Playmaker & USG>25 & TS%>55",         desc:"Dual-threat point guard. Scores efficiently at high volume while maintaining playmaking. The most coveted archetype in modern NBA." },
   "Possession Demon":       { cat:"green", rule:"All 4 CFFR Factors positive (min ≥ 55) & mean ≥ 70", desc:"Helps on all four possession dimensions — shoots efficiently (eFG), protects the ball (TO), generates extra possessions (OREB), and draws fouls (FTR). Rare composite of value-per-possession. Role-context-adjusted via CFFR z-scores." },
 
   // ── YELLOW — Potential / Swing skills ──
@@ -404,6 +403,19 @@ const BADGE_DEFS = {
   "Passive Defender":       { cat:"red",   rule:"STL%+BLK%<2.5 & PFR<2.5",            desc:"Low stocks AND low fouls = not engaging defensively. This player avoids contact on both ends — no steals, no blocks, no fouls. At the NBA level, passive defenders get targeted in pick-and-roll and isolation." },
   "Old for Class":          { cat:"red",   rule:"Age > 22.5",                          desc:"Older than typical draft prospect. Development runway is shorter; what you see is closer to the ceiling." },
   "Turnover Prone":         { cat:"red",   rule:"TO% > 25",                            desc:"Excessive turnovers at any position. Ball security is a fundamental NBA requirement that doesn't improve easily." },
+
+
+  // /* Tobias 2026-06-03 v14: badge tooltip fix — missing backend badges added */
+  // ── Backend-only green badges (no UI tooltip prior to this patch) ──
+  "Elite Shooting":         { cat:"green", rule:"role_spacer>85 & 3P%>36 (or FT>82 intl)",  desc:"Elite spot-up shooter. Top-percentile spacing role plus efficient three-point conversion. Forces defensive close-outs that bend NBA defenses." },
+  "Floor General":          { cat:"green", rule:"PM/Wing & playmaker>70 & AST%>20 & A/TO>1.8", desc:"Reliable primary or secondary creator with positive decision-making. High assist rate paired with low turnovers signals NBA-ready playmaking." },
+  "Passing Hub":            { cat:"green", rule:"Big & AST%>15",                            desc:"Rare distributing big. Connects offense from the elbow or top of the key. Becomes a half-court engine in 5-out lineups." },
+  "High Feel":              { cat:"green", rule:"feel_score>75",                            desc:"Elite basketball IQ in the box score: efficient touches, low turnovers, smart shot selection. Translates to NBA pace and complexity." },
+  "High Feel Athlete":      { cat:"green", rule:"func_ath>75 & feel>60",                    desc:"Functional athletic profile combined with above-average feel. Tools plus IQ — the most common shared trait among All-Star prospects." },
+  "Stocks Machine":         { cat:"green", rule:"STL% + BLK% > 6.0",                        desc:"High-event defender. Generates extra possessions through deflections and rim contests. The defensive analogue of a self-creator." },
+  "Two-Way Wing":           { cat:"green", rule:"Wing & STL%>2.5 & spacer>65",             desc:"Wing with both defensive activity and floor-spacing range. The most coveted lineup-flex archetype in the modern NBA." },
+  "Magnetic Hands":         { cat:"green", rule:"ORB%>12 & DRB%>25",                        desc:"Elite rebounding profile on both ends. Extends possessions and ends them — a quiet but durable NBA edge." },
+  "Transition Terror":      { cat:"green", rule:"G/W & STL%>2.5 & DunkRate>8 (or 2P%>55 fallback)", desc:"Generates and finishes in transition. High steal rate fueling fast breaks plus efficient open-floor scoring. Hard to scheme against." },
   "High Maintenance":       { cat:"red",   rule:"CFFR < 45 (red zone of Net Possession Value)", desc:"Drains team possessions overall. Net Possession Value is in the red zone — at least one Four Factor (eFG / TO / OREB / FTR) is well below role expectation, and the composite signals he hurts the team's possession economy more than he helps." },
 };
 
