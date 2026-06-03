@@ -8698,7 +8698,6 @@ const TABS = [
   {id:"scouting",label:"Scouting",icon:"⭐"},
   {id:"roles",label:"Roles & Archetypes",icon:"🧬"},
   {id:"comps",label:"Comps",icon:"⇄"},
-  {id:"devtrajectory",label:"Development",icon:"📈"},
   {id:"projection",label:"Projection",icon:"◆"},
   {id:"riskprofile",label:"Risk Profile",icon:"🎯"},
 ];
