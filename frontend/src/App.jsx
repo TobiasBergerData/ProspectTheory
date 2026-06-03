@@ -2481,6 +2481,240 @@ function ShootingTab({p}) {
 
   return (
     <div className="space-y-5">
+<Sec icon="🏀" title="3.5 Level Scoring" sub="Accuracy, volume (made-att), and shot diet per zone">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
+          {/* ══ COURT ══ */}
+          <div className="lg:col-span-3 mx-auto w-full" style={{maxWidth:580}}>
+            {useSimplifiedCourt ? (
+              /* ── SIMPLIFIED COURT: 2P / 3P / FT ── */
+              <svg viewBox="0 0 580 460" className="w-full" style={{minHeight:360}}>
+                <rect x="0" y="0" width="580" height="460" rx="12" fill="#0d1117"/>
+                <line x1="15" y1="15" x2="565" y2="15" stroke="#1f2937" strokeWidth="2.5"/>
+                <path d="M 62 15 L 62 110 A 235 235 0 0 0 518 110 L 518 15" fill="none" stroke="#3b82f644" strokeWidth="2.5"/>
+                <rect x="175" y="15" width="230" height="250" fill="none" stroke="#1f2937" strokeWidth="2" rx="3"/>
+                <circle cx="290" cy="265" r="78" fill="none" stroke="#1f293744" strokeWidth="1.5"/>
+                <line x1="175" y1="265" x2="405" y2="265" stroke="#8b5cf644" strokeWidth="2" strokeDasharray="8,4"/>
+                <circle cx="290" cy="50" r="22" fill="none" stroke="#ef444466" strokeWidth="2.5"/>
+                <line x1="266" y1="25" x2="314" y2="25" stroke="#6b7280" strokeWidth="4"/>
+                {/* 2-POINT (inside arc) */}
+                <g>
+                  <text x="290" y="80" textAnchor="middle" fill="#f97316" style={{fontSize:16,fontWeight:"bold"}}>2-POINT</text>
+                  <text x="290" y="115" textAnchor="middle" fill={sc(twoPct,"2pt")} style={{fontSize:32,fontWeight:"bold"}}>{twoPct!=null?`${fmt(twoPct)}%`:"—"}</text>
+                  {twoPMade!=null&&twoPA!=null&&<text x="290" y="138" textAnchor="middle" fill="#9ca3af" style={{fontSize:13}}>{twoPMade}-{twoPA} FGA</text>}
+                </g>
+                {/* FREE THROW */}
+                <g>
+                  <text x="290" y="210" textAnchor="middle" fill="#8b5cf6" style={{fontSize:13,fontWeight:"bold"}}>FREE THROW</text>
+                  <text x="290" y="240" textAnchor="middle" fill={sc(ft,"ft")} style={{fontSize:24,fontWeight:"bold"}}>{ft!=null?`${fmt(ft)}%`:"—"}</text>
+                  {ftMade!=null&&dietFta!=null&&<text x="290" y="260" textAnchor="middle" fill="#9ca3af" style={{fontSize:12}}>{ftMade}-{dietFta} FTA{dietFta!==totalFta?" (est)":""}</text>}
+                </g>
+                {/* 3-POINT (outside arc) */}
+                <g opacity={tp!=null?1:0.3}>
+                  <text x="290" y="355" textAnchor="middle" fill="#3b82f6" style={{fontSize:16,fontWeight:"bold"}}>3-POINT</text>
+                  <text x="290" y="390" textAnchor="middle" fill={sc(tp,"3pt")} style={{fontSize:32,fontWeight:"bold"}}>{tp!=null?`${fmt(tp)}%`:"—"}</text>
+                  {threePMade!=null&&threePA!=null&&<text x="290" y="413" textAnchor="middle" fill="#9ca3af" style={{fontSize:13}}>{threePMade}-{threePA} 3PA</text>}
+                </g>
+                {/* TS% — rechte untere Ecke, Gesamteffizienz */}
+                <g opacity={ts!=null?1:0.3}>
+                  <text x="490" y="355" textAnchor="middle" fill="#a78bfa" style={{fontSize:13,fontWeight:"bold"}}>TS%</text>
+                  <text x="490" y="385" textAnchor="middle" fill={sc(ts,"ts")} style={{fontSize:24,fontWeight:"bold"}}>{ts!=null?`${fmt(ts)}%`:"—"}</text>
+                  <text x="490" y="403" textAnchor="middle" fill="#6b7280" style={{fontSize:10}}>overall</text>
+                </g>
+              </svg>
+            ) : (
+              /* ── FULL COURT: @Rim / Dunks / Mid / FT / 3P ── */
+              <svg viewBox="0 0 580 460" className="w-full" style={{minHeight:360}}>
+                <rect x="0" y="0" width="580" height="460" rx="12" fill="#0d1117"/>
+                <line x1="15" y1="15" x2="565" y2="15" stroke="#1f2937" strokeWidth="2.5"/>
+                <path d="M 62 15 L 62 110 A 235 235 0 0 0 518 110 L 518 15" fill="none" stroke="#3b82f644" strokeWidth="2.5"/>
+                <rect x="175" y="15" width="230" height="250" fill="none" stroke="#1f2937" strokeWidth="2" rx="3"/>
+                <circle cx="290" cy="265" r="78" fill="none" stroke="#1f293744" strokeWidth="1.5"/>
+                <line x1="175" y1="265" x2="405" y2="265" stroke="#8b5cf644" strokeWidth="2" strokeDasharray="8,4"/>
+                <circle cx="290" cy="50" r="22" fill="none" stroke="#ef444466" strokeWidth="2.5"/>
+                <line x1="266" y1="25" x2="314" y2="25" stroke="#6b7280" strokeWidth="4"/>
+                {/* @RIM */}
+                <g opacity={hasRim?1:0.3}>
+                  <text x="155" y="42" textAnchor="middle" fill="#f97316" style={{fontSize:12,fontWeight:"bold"}}>@RIM</text>
+                  <text x="155" y="68" textAnchor="middle" fill={sc(rimPct,"rim")} style={{fontSize:22,fontWeight:"bold"}}>{rimPct!=null?`${fmt(rimPct)}%`:"N/A"}</text>
+                  {rimAtt!=null&&<text x="155" y="86" textAnchor="middle" fill="#9ca3af" style={{fontSize:11}}>{zoneMade(rimF,rimPct)||"?"}-{rimAtt} FGA</text>}
+                </g>
+                {/* DUNKS */}
+                <g opacity={hasDunk?1:0.3}>
+                  <text x="415" y="42" textAnchor="middle" fill="#ef4444" style={{fontSize:12,fontWeight:"bold"}}>DUNKS</text>
+                  <text x="415" y="68" textAnchor="middle" fill={dunkPct!=null?sc(dunkPct,"rim"):"#e5e7eb"} style={{fontSize:20,fontWeight:"bold"}}>{dunkPct!=null?`${fmt(dunkPct)}%`:(hasDunk?`${fmt(dunkR)}% freq`:"N/A")}</text>
+                  {dunkAttAuthoritative!=null&&<text x="415" y="86" textAnchor="middle" fill="#9ca3af" style={{fontSize:11}}>{dunkAttAuthoritative} att.</text>}
+                </g>
+                {/* MID */}
+                <g opacity={hasMid?1:0.3}>
+                  <text x="95" y="172" textAnchor="middle" fill="#fbbf24" style={{fontSize:12,fontWeight:"bold"}}>MID</text>
+                  <text x="95" y="198" textAnchor="middle" fill={sc(midPct,"mid")} style={{fontSize:22,fontWeight:"bold"}}>{midPct!=null?`${fmt(midPct)}%`:"N/A"}</text>
+                  {midAtt!=null&&<text x="95" y="216" textAnchor="middle" fill="#9ca3af" style={{fontSize:11}}>{zoneMade(midF,midPct)||"?"}-{midAtt} FGA</text>}
+                </g>
+                {/* FREE THROW */}
+                <g>
+                  <text x="290" y="228" textAnchor="middle" fill="#8b5cf6" style={{fontSize:13,fontWeight:"bold"}}>FREE THROW</text>
+                  <text x="290" y="256" textAnchor="middle" fill={sc(ft,"ft")} style={{fontSize:24,fontWeight:"bold"}}>{ft!=null?`${fmt(ft)}%`:"—"}</text>
+                  {ftaPerGame!=null&&<text x="290" y="274" textAnchor="middle" fill="#9ca3af" style={{fontSize:11}}>{fmt(ftaPerGame,1)} FTA/G {totalFta!=null?`(${totalFta} total)`:""}</text>}
+                  {ftaPerGame==null&&<text x="290" y="274" textAnchor="middle" fill="#6b7280" style={{fontSize:11}}>FTR: {ftr!=null?fmt(ftr):"—"}</text>}
+                </g>
+                {/* 3-POINT */}
+                <g opacity={tp!=null?1:0.3}>
+                  <text x="290" y="355" textAnchor="middle" fill="#3b82f6" style={{fontSize:16,fontWeight:"bold"}}>3-POINT</text>
+                  <text x="290" y="387" textAnchor="middle" fill={sc(tp,"3pt")} style={{fontSize:30,fontWeight:"bold"}}>{tp!=null?`${fmt(tp)}%`:"—"}</text>
+                  {threeAtt!=null&&<text x="290" y="407" textAnchor="middle" fill="#9ca3af" style={{fontSize:12}}>{zoneMade(threeF,tp)||"?"}-{threeAtt} 3PA</text>}
+                </g>
+                {/* TS% — rechte untere Ecke, Gesamteffizienz neben 3PT (Tobias 2026-05-06) */}
+                <g opacity={ts!=null?1:0.3}>
+                  <text x="490" y="355" textAnchor="middle" fill="#a78bfa" style={{fontSize:13,fontWeight:"bold"}}>TS%</text>
+                  <text x="490" y="385" textAnchor="middle" fill={sc(ts,"ts")} style={{fontSize:24,fontWeight:"bold"}}>{ts!=null?`${fmt(ts)}%`:"—"}</text>
+                  <text x="490" y="403" textAnchor="middle" fill="#6b7280" style={{fontSize:10}}>overall</text>
+                </g>
+              </svg>
+            )}
+          </div>
+
+          {/* ══ SHOT DIET ══ */}
+          <div className="lg:col-span-2">
+            <div className="text-xs uppercase tracking-wider mb-2 font-semibold" style={{color:"#6b7280"}}>Shot Diet (% of all shots · FGA+FTA)</div>
+            {estTotalShots > 0 ? (
+              <div className="space-y-3">
+                {useSimplifiedCourt ? (
+                  /* Simplified: 2P / 3P / FT */
+                  <>
+                    <DietBar label="2-Point" color="#f97316" pctOfTotal={twoPctOfTotal}/>
+                    <DietBar label="3-Point" color="#3b82f6" pctOfTotal={threePctOfTotal}/>
+                    <DietBar label="Free Throws" color="#8b5cf6" pctOfTotal={ftPctOfTotal}/>
+                  </>
+                ) : (
+                  /* Full: Rim(+dunks) / Mid / 3P / FT */
+                  <>
+                    {rimPctOfTotal != null && (
+                      <div>
+                        <div className="flex justify-between items-baseline mb-1">
+                          <span className="text-sm font-semibold" style={{color:"#f97316"}}>@Rim <span style={{color:"#ef4444",fontSize:11}}>(incl. {dunkPctOfTotal!=null?`${fmt(dunkPctOfTotal,0)}%`:""} dunks)</span></span>
+                          <span className="text-sm font-bold" style={{color:"#e5e7eb"}}>{fmt(rimPctOfTotal,1)}% of shots</span>
+                        </div>
+                        <div className="h-10 rounded-lg overflow-hidden relative w-full" style={{background:"#1f2937"}}>
+                          <div className="absolute top-0 bottom-0 rounded-l-lg" style={{left:0,width:`${rimPctOfTotal}%`,background:"linear-gradient(90deg,#f9731644,#f97316cc)"}}/>
+                          {dunkPctOfTotal!=null&&<div className="absolute top-0 bottom-0 rounded-l-lg" style={{left:0,width:`${dunkPctOfTotal}%`,background:"linear-gradient(90deg,#ef444488,#ef4444cc)"}}/>}
+                        </div>
+                      </div>
+                    )}
+                    <DietBar label="Mid-Range" color="#fbbf24" pctOfTotal={midPctOfTotal}/>
+                    <DietBar label="3-Point" color="#3b82f6" pctOfTotal={threePctOfTotal}/>
+                    <DietBar label="Free Throws" color="#8b5cf6" pctOfTotal={ftPctOfTotal}/>
+                  </>
+                )}
+                <div className="text-xs mt-1" style={{color:"#4b5563"}}>{estTotalShots > 0 ? `${estTotalShots} total shots` : "Shot volume unknown"}{estTotalShots > 0 && useSimplifiedCourt ? " (estimated)" : estTotalShots > 0 ? ` (${totalFga||"?"} FGA + ${totalFta||"?"} FTA)` : ""}</div>
+              </div>
+            ) : (
+              <div className="py-6 text-center rounded-lg" style={{background:"#0d1117",color:"#6b7280"}}>
+                <div className="text-sm mb-1">No shot distribution data</div>
+              </div>
+            )}
+          </div>
+        </div>
+      </Sec>
+      {/* Tobias 2026-06-03 v3-jsx: ShootingTab layout (Shot Chart top, plain-English Three-Layer) */}
+      {p.shooting && (
+        <Sec icon="🎯" title="NBA 3P Projection — Three Layers" sub="A three-layer model. Each layer answers a separate question. Validation reports typical miss (how far the model is usually off) and fit strength r (1.0 = perfect prediction, 0 = random guess). Ranges below are realistic spreads built from that typical miss.">
+
+          {/* Layer 1 — SKILL */}
+          <div className="rounded-xl p-4 mb-3" style={{background:"#0a0e14", border:"1px solid #22c55e33"}}>
+            <div className="flex items-start justify-between mb-2 gap-2">
+              <div>
+                <div className="text-xs font-bold uppercase tracking-widest" style={{color:"#22c55e"}}>Layer 1 · Skill</div>
+                <div className="text-xs mt-1" style={{color:"#6b7280"}}>How well does he shoot the three? (projected NBA 3P%)</div>
+              </div>
+              {p.shooting.touchTier && (
+                <span className="px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap" style={{
+                  background: (p.shooting.touchTier === "Elite" || p.shooting.touchTier === "Strong") ? "#22c55e22" : p.shooting.touchTier === "Average" ? "#fbbf2422" : "#ef444422",
+                  color: (p.shooting.touchTier === "Elite" || p.shooting.touchTier === "Strong") ? "#22c55e" : p.shooting.touchTier === "Average" ? "#fbbf24" : "#ef4444"
+                }}>TOUCH: {p.shooting.touchTier.toUpperCase()}</span>
+              )}
+            </div>
+            <div className="flex items-baseline gap-3 mb-3">
+              <span style={{fontSize:36, fontWeight:700, color:"#22c55e", fontFamily:"Oswald, sans-serif"}}>{p.shooting.skill?.p50?.toFixed(1) ?? "—"}%</span>
+              {p.shooting.skill?.lo != null && p.shooting.skill?.hi != null && (
+                <span style={{fontSize:13, color:"#9ca3af"}}>realistically {p.shooting.skill.lo.toFixed(1)} – {p.shooting.skill.hi.toFixed(1)}%</span>
+              )}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 text-xs leading-relaxed" style={{color:"#9ca3af"}}>
+              <div><span style={{color:"#6b7280"}}>Model: </span>Beta-regression on the NBA 3P% (a model that treats percentages cleanly).</div>
+              <div><span style={{color:"#6b7280"}}>Inputs: </span>College 3P% (regressed toward league mean for small samples), FT% (touch prior), College 3PAr.</div>
+              <div><span style={{color:"#6b7280"}}>How accurate: </span>Typical miss ±2.85 pp on 731 NBA shooters — when the model says 35%, reality is usually 32–38%.</div>
+              <div><span style={{color:"#6b7280"}}>Fit strength: </span>r = 0.27 (0 = random, 1.0 = perfect). Modest, because college shooting noise translates imperfectly.</div>
+              {p.shooting.ftPct != null && (
+                <div className="md:col-span-2 pt-1"><span style={{color:"#6b7280"}}>This player: </span>FT {(p.shooting.ftPct*100).toFixed(1)}% · {Math.round(p.shooting.nNcaa3pa || 0)} college 3PA · {p.shooting.pool || "ncaa"}</div>
+              )}
+            </div>
+            <div className="text-xs mt-3 pt-3 leading-snug" style={{color:"#6b7280", borderTop:"1px solid #1f2937"}}>
+              <strong style={{color:"#9ca3af"}}>Touch Tier</strong> reads the FT% signal: Elite (≥ 86%) → 80% of those players hit NBA 3P% ≥ 35%. Strong (78–86%) → 59%. Average (72–78%) → 46%. Weak (&lt; 72%) → 33%.
+            </div>
+          </div>
+
+          {/* Layer 2 — INTENT */}
+          <div className="rounded-xl p-4 mb-3" style={{background:"#0a0e14", border:"1px solid #fbbf2433"}}>
+            <div className="flex items-start justify-between mb-2 gap-2">
+              <div>
+                <div className="text-xs font-bold uppercase tracking-widest" style={{color:"#fbbf24"}}>Layer 2 · Intent</div>
+                <div className="text-xs mt-1" style={{color:"#6b7280"}}>How often will he take the three? (NBA 3PAr — share of his shots from beyond the arc)</div>
+              </div>
+              {p.shooting.intent?.tier && (
+                <span className="px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap" style={{
+                  background: p.shooting.intent.tier === "High" ? "#22c55e22" : p.shooting.intent.tier === "Moderate" ? "#fbbf2422" : "#ef444422",
+                  color: p.shooting.intent.tier === "High" ? "#22c55e" : p.shooting.intent.tier === "Moderate" ? "#fbbf24" : "#ef4444"
+                }}>INTENT: {p.shooting.intent.tier.toUpperCase()}</span>
+              )}
+            </div>
+            <div className="flex items-baseline gap-3 mb-3">
+              <span style={{fontSize:36, fontWeight:700, color:"#fbbf24", fontFamily:"Oswald, sans-serif"}}>{p.shooting.intent?.p50?.toFixed(0) ?? "—"}%</span>
+              {p.shooting.intent?.lo != null && p.shooting.intent?.hi != null && (
+                <span style={{fontSize:13, color:"#9ca3af"}}>realistically {p.shooting.intent.lo.toFixed(0)} – {p.shooting.intent.hi.toFixed(0)}%</span>
+              )}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 text-xs leading-relaxed" style={{color:"#9ca3af"}}>
+              <div><span style={{color:"#6b7280"}}>Model: </span>Beta-regression on the NBA 3PAr.</div>
+              <div><span style={{color:"#6b7280"}}>Inputs: </span>College 3PAr + FT% + the Skill estimate from Layer 1.</div>
+              <div><span style={{color:"#6b7280"}}>How accurate: </span>Typical miss ±9.7 pp — when the model says 40%, reality is usually 30–50%.</div>
+              <div><span style={{color:"#6b7280"}}>Fit strength: </span>r = 0.73 — strong (closer to 1.0 = closer to a perfect prediction).</div>
+              <div className="md:col-span-2 pt-1"><span style={{color:"#6b7280"}}>Why separate from Skill: </span>great shooters can take few threes (Joel Embiid). Average shooters can take many (Joe Ingles). The two signals diverge in NBA roles.</div>
+            </div>
+            <div className="text-xs mt-3 pt-3 leading-snug" style={{color:"#6b7280", borderTop:"1px solid #1f2937"}}>
+              <strong style={{color:"#9ca3af"}}>Intent Tier:</strong> High (≥ 50%) → volume shooter, efficiency is the real question. Moderate (35–50%) → standard wing distribution. Low (&lt; 35%) → rarely shoots from 3, a role player who hits open looks.
+            </div>
+          </div>
+
+          {/* Layer 3 — VOLUME */}
+          <div className="rounded-xl p-4" style={{background:"#0a0e14", border:"1px solid #f9731633"}}>
+            <div className="mb-3">
+              <div className="text-xs font-bold uppercase tracking-widest" style={{color:"#f97316"}}>Layer 3 · Volume</div>
+              <div className="text-xs mt-1" style={{color:"#6b7280"}}>How many 3PA per game? Volume is a role function, not a talent function — so we show it CONDITIONAL on which tier he reaches.</div>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+              {[
+                {key:"allStar",     label:"If All-Star",     color:"#22c55e"},
+                {key:"starter",     label:"If Starter",      color:"#22c55e"},
+                {key:"rolePlayer",  label:"If Role",         color:"#fbbf24"},
+                {key:"replacement", label:"If Replacement",  color:"#9ca3af"}
+              ].map(t => (
+                <div key={t.key} className="rounded p-3" style={{background:"#111827"}}>
+                  <div className="text-xs uppercase tracking-wider" style={{color:t.color}}>{t.label}</div>
+                  <div className="text-2xl font-bold mt-1" style={{color:"#e5e7eb", fontFamily:"Oswald, sans-serif"}}>{p.shooting.volume?.[t.key] != null ? p.shooting.volume[t.key].toFixed(1) : "—"}</div>
+                  <div className="text-xs" style={{color:"#6b7280"}}>3PA / game</div>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 text-xs leading-relaxed" style={{color:"#9ca3af"}}>
+              <div><span style={{color:"#6b7280"}}>Why no single number: </span>college 3PA/g basically does NOT predict NBA 3PA/g (fit strength r = 0.005 — essentially random).</div>
+              <div><span style={{color:"#6b7280"}}>How we get the numbers: </span>3PA = 3PAr (Layer 2) × FGA per game. FGA per game depends on Tier × Position.</div>
+              <div><span style={{color:"#6b7280"}}>FGA source: </span>empirical median per Tier × Position, drawn from 369 NBA players with ≥ 5,000 career minutes (2008–2026).</div>
+              <div><span style={{color:"#6b7280"}}>How to read: </span>each card is the implied volume IF he reaches that tier — not a prediction of which tier (see Projection tab).</div>
+            </div>
+          </div>
+        </Sec>
+      )}
+
       {/* Tobias 2026-06-02: 3-Layer Shooting Projection explainer (Skill / Intent / Volume). */}
       <div className="rounded-2xl p-5 mb-4" style={{background:"linear-gradient(135deg,#0d1117,#111827)", border:"1px solid #1f2937"}}>
         <h3 className="text-base font-bold text-gray-100 mb-2">How 3P Projection Works — Three Layers</h3>
@@ -2639,140 +2873,7 @@ function ShootingTab({p}) {
         </div>
       )}
 
-      <Sec icon="🏀" title="3.5 Level Scoring" sub="Accuracy, volume (made-att), and shot diet per zone">
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
-          {/* ══ COURT ══ */}
-          <div className="lg:col-span-3 mx-auto w-full" style={{maxWidth:580}}>
-            {useSimplifiedCourt ? (
-              /* ── SIMPLIFIED COURT: 2P / 3P / FT ── */
-              <svg viewBox="0 0 580 460" className="w-full" style={{minHeight:360}}>
-                <rect x="0" y="0" width="580" height="460" rx="12" fill="#0d1117"/>
-                <line x1="15" y1="15" x2="565" y2="15" stroke="#1f2937" strokeWidth="2.5"/>
-                <path d="M 62 15 L 62 110 A 235 235 0 0 0 518 110 L 518 15" fill="none" stroke="#3b82f644" strokeWidth="2.5"/>
-                <rect x="175" y="15" width="230" height="250" fill="none" stroke="#1f2937" strokeWidth="2" rx="3"/>
-                <circle cx="290" cy="265" r="78" fill="none" stroke="#1f293744" strokeWidth="1.5"/>
-                <line x1="175" y1="265" x2="405" y2="265" stroke="#8b5cf644" strokeWidth="2" strokeDasharray="8,4"/>
-                <circle cx="290" cy="50" r="22" fill="none" stroke="#ef444466" strokeWidth="2.5"/>
-                <line x1="266" y1="25" x2="314" y2="25" stroke="#6b7280" strokeWidth="4"/>
-                {/* 2-POINT (inside arc) */}
-                <g>
-                  <text x="290" y="80" textAnchor="middle" fill="#f97316" style={{fontSize:16,fontWeight:"bold"}}>2-POINT</text>
-                  <text x="290" y="115" textAnchor="middle" fill={sc(twoPct,"2pt")} style={{fontSize:32,fontWeight:"bold"}}>{twoPct!=null?`${fmt(twoPct)}%`:"—"}</text>
-                  {twoPMade!=null&&twoPA!=null&&<text x="290" y="138" textAnchor="middle" fill="#9ca3af" style={{fontSize:13}}>{twoPMade}-{twoPA} FGA</text>}
-                </g>
-                {/* FREE THROW */}
-                <g>
-                  <text x="290" y="210" textAnchor="middle" fill="#8b5cf6" style={{fontSize:13,fontWeight:"bold"}}>FREE THROW</text>
-                  <text x="290" y="240" textAnchor="middle" fill={sc(ft,"ft")} style={{fontSize:24,fontWeight:"bold"}}>{ft!=null?`${fmt(ft)}%`:"—"}</text>
-                  {ftMade!=null&&dietFta!=null&&<text x="290" y="260" textAnchor="middle" fill="#9ca3af" style={{fontSize:12}}>{ftMade}-{dietFta} FTA{dietFta!==totalFta?" (est)":""}</text>}
-                </g>
-                {/* 3-POINT (outside arc) */}
-                <g opacity={tp!=null?1:0.3}>
-                  <text x="290" y="355" textAnchor="middle" fill="#3b82f6" style={{fontSize:16,fontWeight:"bold"}}>3-POINT</text>
-                  <text x="290" y="390" textAnchor="middle" fill={sc(tp,"3pt")} style={{fontSize:32,fontWeight:"bold"}}>{tp!=null?`${fmt(tp)}%`:"—"}</text>
-                  {threePMade!=null&&threePA!=null&&<text x="290" y="413" textAnchor="middle" fill="#9ca3af" style={{fontSize:13}}>{threePMade}-{threePA} 3PA</text>}
-                </g>
-                {/* TS% — rechte untere Ecke, Gesamteffizienz */}
-                <g opacity={ts!=null?1:0.3}>
-                  <text x="490" y="355" textAnchor="middle" fill="#a78bfa" style={{fontSize:13,fontWeight:"bold"}}>TS%</text>
-                  <text x="490" y="385" textAnchor="middle" fill={sc(ts,"ts")} style={{fontSize:24,fontWeight:"bold"}}>{ts!=null?`${fmt(ts)}%`:"—"}</text>
-                  <text x="490" y="403" textAnchor="middle" fill="#6b7280" style={{fontSize:10}}>overall</text>
-                </g>
-              </svg>
-            ) : (
-              /* ── FULL COURT: @Rim / Dunks / Mid / FT / 3P ── */
-              <svg viewBox="0 0 580 460" className="w-full" style={{minHeight:360}}>
-                <rect x="0" y="0" width="580" height="460" rx="12" fill="#0d1117"/>
-                <line x1="15" y1="15" x2="565" y2="15" stroke="#1f2937" strokeWidth="2.5"/>
-                <path d="M 62 15 L 62 110 A 235 235 0 0 0 518 110 L 518 15" fill="none" stroke="#3b82f644" strokeWidth="2.5"/>
-                <rect x="175" y="15" width="230" height="250" fill="none" stroke="#1f2937" strokeWidth="2" rx="3"/>
-                <circle cx="290" cy="265" r="78" fill="none" stroke="#1f293744" strokeWidth="1.5"/>
-                <line x1="175" y1="265" x2="405" y2="265" stroke="#8b5cf644" strokeWidth="2" strokeDasharray="8,4"/>
-                <circle cx="290" cy="50" r="22" fill="none" stroke="#ef444466" strokeWidth="2.5"/>
-                <line x1="266" y1="25" x2="314" y2="25" stroke="#6b7280" strokeWidth="4"/>
-                {/* @RIM */}
-                <g opacity={hasRim?1:0.3}>
-                  <text x="155" y="42" textAnchor="middle" fill="#f97316" style={{fontSize:12,fontWeight:"bold"}}>@RIM</text>
-                  <text x="155" y="68" textAnchor="middle" fill={sc(rimPct,"rim")} style={{fontSize:22,fontWeight:"bold"}}>{rimPct!=null?`${fmt(rimPct)}%`:"N/A"}</text>
-                  {rimAtt!=null&&<text x="155" y="86" textAnchor="middle" fill="#9ca3af" style={{fontSize:11}}>{zoneMade(rimF,rimPct)||"?"}-{rimAtt} FGA</text>}
-                </g>
-                {/* DUNKS */}
-                <g opacity={hasDunk?1:0.3}>
-                  <text x="415" y="42" textAnchor="middle" fill="#ef4444" style={{fontSize:12,fontWeight:"bold"}}>DUNKS</text>
-                  <text x="415" y="68" textAnchor="middle" fill={dunkPct!=null?sc(dunkPct,"rim"):"#e5e7eb"} style={{fontSize:20,fontWeight:"bold"}}>{dunkPct!=null?`${fmt(dunkPct)}%`:(hasDunk?`${fmt(dunkR)}% freq`:"N/A")}</text>
-                  {dunkAttAuthoritative!=null&&<text x="415" y="86" textAnchor="middle" fill="#9ca3af" style={{fontSize:11}}>{dunkAttAuthoritative} att.</text>}
-                </g>
-                {/* MID */}
-                <g opacity={hasMid?1:0.3}>
-                  <text x="95" y="172" textAnchor="middle" fill="#fbbf24" style={{fontSize:12,fontWeight:"bold"}}>MID</text>
-                  <text x="95" y="198" textAnchor="middle" fill={sc(midPct,"mid")} style={{fontSize:22,fontWeight:"bold"}}>{midPct!=null?`${fmt(midPct)}%`:"N/A"}</text>
-                  {midAtt!=null&&<text x="95" y="216" textAnchor="middle" fill="#9ca3af" style={{fontSize:11}}>{zoneMade(midF,midPct)||"?"}-{midAtt} FGA</text>}
-                </g>
-                {/* FREE THROW */}
-                <g>
-                  <text x="290" y="228" textAnchor="middle" fill="#8b5cf6" style={{fontSize:13,fontWeight:"bold"}}>FREE THROW</text>
-                  <text x="290" y="256" textAnchor="middle" fill={sc(ft,"ft")} style={{fontSize:24,fontWeight:"bold"}}>{ft!=null?`${fmt(ft)}%`:"—"}</text>
-                  {ftaPerGame!=null&&<text x="290" y="274" textAnchor="middle" fill="#9ca3af" style={{fontSize:11}}>{fmt(ftaPerGame,1)} FTA/G {totalFta!=null?`(${totalFta} total)`:""}</text>}
-                  {ftaPerGame==null&&<text x="290" y="274" textAnchor="middle" fill="#6b7280" style={{fontSize:11}}>FTR: {ftr!=null?fmt(ftr):"—"}</text>}
-                </g>
-                {/* 3-POINT */}
-                <g opacity={tp!=null?1:0.3}>
-                  <text x="290" y="355" textAnchor="middle" fill="#3b82f6" style={{fontSize:16,fontWeight:"bold"}}>3-POINT</text>
-                  <text x="290" y="387" textAnchor="middle" fill={sc(tp,"3pt")} style={{fontSize:30,fontWeight:"bold"}}>{tp!=null?`${fmt(tp)}%`:"—"}</text>
-                  {threeAtt!=null&&<text x="290" y="407" textAnchor="middle" fill="#9ca3af" style={{fontSize:12}}>{zoneMade(threeF,tp)||"?"}-{threeAtt} 3PA</text>}
-                </g>
-                {/* TS% — rechte untere Ecke, Gesamteffizienz neben 3PT (Tobias 2026-05-06) */}
-                <g opacity={ts!=null?1:0.3}>
-                  <text x="490" y="355" textAnchor="middle" fill="#a78bfa" style={{fontSize:13,fontWeight:"bold"}}>TS%</text>
-                  <text x="490" y="385" textAnchor="middle" fill={sc(ts,"ts")} style={{fontSize:24,fontWeight:"bold"}}>{ts!=null?`${fmt(ts)}%`:"—"}</text>
-                  <text x="490" y="403" textAnchor="middle" fill="#6b7280" style={{fontSize:10}}>overall</text>
-                </g>
-              </svg>
-            )}
-          </div>
-
-          {/* ══ SHOT DIET ══ */}
-          <div className="lg:col-span-2">
-            <div className="text-xs uppercase tracking-wider mb-2 font-semibold" style={{color:"#6b7280"}}>Shot Diet (% of all shots · FGA+FTA)</div>
-            {estTotalShots > 0 ? (
-              <div className="space-y-3">
-                {useSimplifiedCourt ? (
-                  /* Simplified: 2P / 3P / FT */
-                  <>
-                    <DietBar label="2-Point" color="#f97316" pctOfTotal={twoPctOfTotal}/>
-                    <DietBar label="3-Point" color="#3b82f6" pctOfTotal={threePctOfTotal}/>
-                    <DietBar label="Free Throws" color="#8b5cf6" pctOfTotal={ftPctOfTotal}/>
-                  </>
-                ) : (
-                  /* Full: Rim(+dunks) / Mid / 3P / FT */
-                  <>
-                    {rimPctOfTotal != null && (
-                      <div>
-                        <div className="flex justify-between items-baseline mb-1">
-                          <span className="text-sm font-semibold" style={{color:"#f97316"}}>@Rim <span style={{color:"#ef4444",fontSize:11}}>(incl. {dunkPctOfTotal!=null?`${fmt(dunkPctOfTotal,0)}%`:""} dunks)</span></span>
-                          <span className="text-sm font-bold" style={{color:"#e5e7eb"}}>{fmt(rimPctOfTotal,1)}% of shots</span>
-                        </div>
-                        <div className="h-10 rounded-lg overflow-hidden relative w-full" style={{background:"#1f2937"}}>
-                          <div className="absolute top-0 bottom-0 rounded-l-lg" style={{left:0,width:`${rimPctOfTotal}%`,background:"linear-gradient(90deg,#f9731644,#f97316cc)"}}/>
-                          {dunkPctOfTotal!=null&&<div className="absolute top-0 bottom-0 rounded-l-lg" style={{left:0,width:`${dunkPctOfTotal}%`,background:"linear-gradient(90deg,#ef444488,#ef4444cc)"}}/>}
-                        </div>
-                      </div>
-                    )}
-                    <DietBar label="Mid-Range" color="#fbbf24" pctOfTotal={midPctOfTotal}/>
-                    <DietBar label="3-Point" color="#3b82f6" pctOfTotal={threePctOfTotal}/>
-                    <DietBar label="Free Throws" color="#8b5cf6" pctOfTotal={ftPctOfTotal}/>
-                  </>
-                )}
-                <div className="text-xs mt-1" style={{color:"#4b5563"}}>{estTotalShots > 0 ? `${estTotalShots} total shots` : "Shot volume unknown"}{estTotalShots > 0 && useSimplifiedCourt ? " (estimated)" : estTotalShots > 0 ? ` (${totalFga||"?"} FGA + ${totalFta||"?"} FTA)` : ""}</div>
-              </div>
-            ) : (
-              <div className="py-6 text-center rounded-lg" style={{background:"#0d1117",color:"#6b7280"}}>
-                <div className="text-sm mb-1">No shot distribution data</div>
-              </div>
-            )}
-          </div>
-        </div>
-      </Sec>
+      
 
       {/* ═══ SHOT CREATION SPECTRUM ═══ */}
       {p.shotCreation && p.shotCreation.overall && p.shotCreation.overall.fga >= 30 && (() => {
@@ -2932,45 +3033,7 @@ function ShootingTab({p}) {
       })()}
 
       {/* ═══ NBA SHOOTING PROJECTION ═══ */}
-      <Sec icon="🔮" title="NBA Shooting Projection" sub={isIntl||useSimplifiedCourt?"How well does he project to shoot in the NBA? Dissertation Stage 1 shrinks his pre-draft 3P% against the NCAA league-wide distribution — small 3PA samples are pulled toward the league median; Stage 2 (M1) translates FT% and the 3P-Estimate into an NBA 3P%. Intl variant has no 2-point-jumper data, so the 2PJ% term drops out.":"How well does he project to shoot in the NBA? Dissertation Stage 1 shrinks his pre-draft 3P% against the NCAA league-wide distribution (small 3PA samples regress strongly toward the league median); Stage 2 (M1) translates FT% + 2PJ% + 3P-Estimate into an NBA 3P%; Stage 3 (M4) projects role-independent 3PAr (3PA/FGA) from the same inputs. All coefficients fitted on the resolved holdout, none hand-tuned."}>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-          {[
-            ["projNba3p","Proj. 3P%", projNba3p, projNba3p!=null?(projNba3p>36?"#22c55e":projNba3p>32?"#fbbf24":"#ef4444"):"#6b7280"],
-            ["projNba3pa","Proj. 3PA/G", projNba3pa, projNba3pa!=null?(projNba3pa>5?"#3b82f6":"#6b7280"):"#6b7280"],
-            ["projNba3par","Proj. 3PAr", proj3PAr, proj3PAr!=null?(proj3PAr>30?"#3b82f6":"#6b7280"):"#6b7280"],
-            ["touchPrior","Touch Prior", touchPrior, touchPrior>37?"#22c55e":touchPrior>34?"#fbbf24":"#ef4444"],
-          ].map(([key,l,v,c])=>{
-            const m=METHODS[key]||METHODS.touchPrior;
-            return (
-              <Tip key={key} wide content={
-                <div><div className="font-bold mb-1" style={{color:"#f97316"}}>{m?.name||l}</div>
-                {m?.formula&&<div className="mb-1"><span style={{color:"#94a3b8"}}>Formula:</span><br/><code className="text-xs" style={{color:"#7dd3fc"}}>{m.formula}</code></div>}
-                {m?.desc&&<div style={{color:"#cbd5e1"}}>{m.desc}</div>}
-                {key==="projNba3pa"&&<div className="mt-1" style={{color:"#94a3b8"}}>Volume: {bestTier} {p.pos} → {projFGA.toFixed(1)} FGA/game median.</div>}
-                {key==="touchPrior"&&touchPriorPctl!=null&&<div className="mt-1" style={{color:"#94a3b8"}}>Pctl <strong style={{color:"#cbd5e1"}}>{touchPriorPctl}</strong> within draft-eligible cohort (empirical approximation: 30-44% Range).</div>}
-                </div>
-              }>
-                <div className="rounded-lg p-4 text-center cursor-help" style={{background:"#0d1117"}}>
-                  <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#6b7280"}}>{l} <span style={{color:"#475569"}}>ⓘ</span></div>
-                  <div className="text-3xl font-bold" style={{color:c,fontFamily:"'Oswald',sans-serif"}}>{v!=null?fmt(v):"—"}{key==="touchPrior"?"%":""}</div>
-                  {key==="touchPrior"&&touchPriorPctl!=null&&v!=null&&(
-                    <div className="text-xs mt-1" style={{color:"#9ca3af"}}>Pctl <strong style={{color:c}}>{touchPriorPctl}</strong></div>
-                  )}
-                  {v==null&&<div className="text-xs mt-1" style={{color:"#475569"}}>insufficient data</div>}
-                </div>
-              </Tip>
-            );
-          })}
-        </div>
-        <div className="px-3 py-2 rounded-lg text-xs" style={{background:"#0d1117",border:"1px solid #1e293b"}}>
-          <Tip wide content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>Bayesian Beta-Binomial (Berger 2022)</div><div style={{color:"#cbd5e1"}}>Prior: FT%-based touch (μ₀). kappa=200 pseudo-attempts. Volume: {bestTier} {p.pos} → {projFGA.toFixed(1)} FGA/game.</div></div>}>
-            <span style={{color:"#6b7280"}}>{hasMidData
-              ? <>Touch Prior: FT% (<span style={{color:"#8b5cf6"}}>{ft!=null?fmt(ft):"—"}</span>) × 0.18 + Mid% (<span style={{color:"#fbbf24"}}>{fmt(midForPrior)}</span>) × 0.05 + 0.20</>
-              : <>Touch Prior (FT-only): FT% (<span style={{color:"#8b5cf6"}}>{ft!=null?fmt(ft):"—"}</span>) × 0.22 + 0.22 <span style={{color:"#475569"}}>(no midrange data)</span></>
-            } = <span className="font-bold" style={{color:touchPrior>37?"#22c55e":"#fbbf24"}}>{fmt(touchPrior)}%</span> <span style={{color:"#475569"}}>ⓘ</span></span>
-          </Tip>
-        </div>
-      </Sec>
+      
     </div>
   );
   } catch(e) {
