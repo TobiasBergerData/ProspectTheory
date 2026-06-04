@@ -1538,7 +1538,12 @@ function mapProfile(d) {
       const usg = d.usg ?? d.college_usg;
       const ts = d.ts ?? d.ts_pct;
       const astP = d.ast_p ?? d.AST_per ?? 0;
-      const astTov = d.ast_tov ?? d.college_ast_tov ?? 1.0;
+      /* Tobias 2026-06-04 v19: ast_tov-derive + Self-Created Offense rename */
+      // ast_tov derivation: fall back to ast_p/to_p ratio when API omits ast_tov.
+      // Previously defaulted to 1.0 → astQuality=0.40 → all players got flat passing credit.
+      const _astTovRaw = d.ast_tov ?? d.college_ast_tov;
+      const _astTovDerived = (d.ast_p && d.to_p > 0) ? d.ast_p / d.to_p : 1.0;
+      const astTov = _astTovRaw ?? _astTovDerived;
       const sc = d.shotCreation?.overall;
       const selfPct = sc?.selfPct;
       const fga = sc?.fga ?? 0;
@@ -5470,7 +5475,7 @@ function ScoutingTab({p, mode="scouting"}) {
     {key:"shootScore",name:"Shooting",value:p.shootScore??0,color:"#22c55e",icon:"🎯"},
     {key:"defScore",name:"Defense",value:p.defScore??0,color:"#3b82f6",icon:"🛡"},
     {key:"funcAth",name:"Athleticism",value:p.funcAth??0,color:"#f97316",icon:"⚡"},
-    {key:"selfCreation",name:"Box Creation",value:p.selfCreation??0,color:"#06b6d4",icon:"✦",desc:"Self-Adjusted Box Creation (v2). Combines on-ball volume (USG × TS) with the share of shots the player creates himself (PBP-based), plus quality-adjusted passing (AST% × AST/TO ratio). Position-weighted: Playmakers leaning toward passing (60/40), Wings balanced (70/30 scoring), Bigs primarily scoring (80/20). Score is sample-penalized for players under 300 college FGA."},
+    {key:"selfCreation",name:"Self-Created Offense",value:p.selfCreation??0,color:"#06b6d4",icon:"✦",desc:"Self-Adjusted On-Ball Creation v2 — NOT classical Ben Taylor Box Creation. Measures HOW MUCH offense a player produces himself (not assisted) and HOW WELL he distributes when he passes.\n\nINPUTS (PBP-tracked):\n  • Scoring component  =  USG × TS × Self-Share\n       └ USG: how many of the team's possessions he uses\n       └ TS: how efficiently he converts them\n       └ Self-Share: % of his shots NOT assisted (PBP)\n  • Passing component  =  AST% × Quality\n       └ AST%: how often he creates for others\n       └ Quality: AST/TO ratio (clamped 0.5–2.5, normalized to 0–1)\n\nPOSITION-WEIGHTING (composite):\n  • Playmakers: 40% scoring + 60% passing\n  • Wings:      70% scoring + 30% passing\n  • Bigs:       80% scoring + 20% passing\n\nSAMPLE PENALTY: full credit at 300+ FGA, proportionally reduced below.\n\nNOTE: A high score means the player MANUFACTURES his own offense. It is NOT a measure of total scoring volume — a high-volume catch-and-shoot wing will score LOWER than a moderate-volume off-dribble creator."},
   ];
 
   // ── Roles ──
