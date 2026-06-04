@@ -6755,6 +6755,32 @@ function CompsTab({p}) {
   // Das ist methodisch ehrlich: niemand ist "97% identisch" — das wäre Marketing-Spin.
   const simColor = (s) => s > 70 ? "#22c55e" : s > 55 ? "#86efac" : s > 40 ? "#3b82f6" : s > 25 ? "#fbbf24" : "#ef4444";
 
+  /* Tobias 2026-06-04 v27: Comps audit — honest dimensions + per-comp breakdown */
+  // Per-comp stat-by-stat breakdown: which dimensions are close, which diverge.
+  // Uses the 8 displayed stats so it directly maps to what the user sees.
+  const STAT_DIMS = [
+    {key:"bpm",   label:"BPM",   threshold:2.5,  divThreshold:6,   format:(v)=>fmt(v)},
+    {key:"usg",   label:"USG%",  threshold:3,    divThreshold:8,   format:(v)=>fmt(v)+"%"},
+    {key:"ts",    label:"TS%",   threshold:2,    divThreshold:6,   format:(v)=>fmt(v)+"%"},
+    {key:"astP",  label:"AST%",  threshold:3,    divThreshold:10,  format:(v)=>fmt(v)+"%"},
+    {key:"stlP",  label:"STL%",  threshold:0.5,  divThreshold:1.5, format:(v)=>fmt(v)+"%"},
+    {key:"blkP",  label:"BLK%",  threshold:0.5,  divThreshold:2,   format:(v)=>fmt(v)+"%"},
+    {key:"tp",    label:"3P%",   threshold:3,    divThreshold:8,   format:(v)=>fmt(v)+"%"},
+    {key:"ft",    label:"FT%",   threshold:4,    divThreshold:12,  format:(v)=>fmt(v)+"%"},
+  ];
+  const compBreakdown = (comp) => {
+    const strengths = [];
+    const diffs = [];
+    STAT_DIMS.forEach(dim => {
+      const pv = p[dim.key], cv = comp[dim.key];
+      if (pv == null || cv == null) return;
+      const delta = Math.abs(pv - cv);
+      if (delta <= dim.threshold) strengths.push({label:dim.label, delta:delta.toFixed(1), p:dim.format(pv), c:dim.format(cv)});
+      else if (delta >= dim.divThreshold) diffs.push({label:dim.label, delta:delta.toFixed(1), p:dim.format(pv), c:dim.format(cv)});
+    });
+    return {strengths, diffs};
+  };
+
   // Tobias 2026-05-06: Shooting-Pct-Färbung wie im Shooting-Tab Court.
   // Konsistente Skalen: TS%, FT%, 3P% mit standard NBA-Schwellen.
   const tsColor = (v) => v == null ? "#9ca3af" : v >= 60 ? "#22c55e" : v >= 55 ? "#86efac" : v >= 50 ? "#fbbf24" : "#ef4444";
@@ -6781,7 +6807,7 @@ function CompsTab({p}) {
       )}
 
       {/* ── STATISTICAL COMPS TABLE ── */}
-      <Sec icon="📊" title="Statistical Comps" sub="Nearest-neighbor matches based on what THIS prospect looked like before the NBA — measured across 8 dimensions (BPM, USG%, TS%, AST%, STL%, BLK%, 3P%, FT%) using era-adjusted percentiles. 'Reached Tier' = the comp's verified NBA outcome (or our model's projection for current prospects).">
+      <Sec icon="📊" title="Statistical Comps" sub="Weighted cosine similarity across 16 era-adjusted dimensions: 12 core stats (BPM, USG%, TS%, AST%, TO%, ORB%, DRB%, STL%, BLK%, 3P%, FT%, FTR) plus 4 shot-profile frequencies (3PA, Rim, Mid, Dunk). The 8 columns shown are the most pod-relevant — the full match calculation uses all 16. Reached Tier = the comp's verified NBA outcome (Star/All-Star/Starter/Role/Replacement/Bust) or the model's projection for current prospects.">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -6829,10 +6855,12 @@ function CompsTab({p}) {
                     <td className="px-2" style={{color:"#6b7280"}}>{c.pos}</td>
                     <td className="px-2">
                       <Tip content={
-                        <div style={{maxWidth:240}}>
+                        <div style={{maxWidth:280}}>
                           <div className="font-bold mb-1" style={{color:simColor(sim||0)}}>Match: {sim}%</div>
-                          {c.rawSim != null && <div className="text-xs" style={{color:"#94a3b8"}}>Absolute similarity (z-distance scale): <strong style={{color:"#cbd5e1"}}>{c.rawSim}%</strong></div>}
-                          <div className="text-xs mt-1" style={{color:"#9ca3af"}}>The displayed % is rescaled within this comp pool (top → 95%, bottom → 50%) for differentiation. Absolute scale rarely exceeds ~50% for unique prospects.</div>
+                          {c.rawSim != null && <div className="text-xs" style={{color:"#94a3b8"}}>Absolute cosine similarity (z-distance scale): <strong style={{color:"#cbd5e1"}}>{c.rawSim}%</strong></div>}
+                          <div className="text-xs mt-1" style={{color:"#9ca3af"}}>The displayed % is rescaled within this comp pool (top → 95%, bottom → 50%) for differentiation.</div>
+                          <div className="text-xs mt-2" style={{color:"#fbbf24"}}><strong>Reality calibration:</strong> NBA prospects are unique. 30-50% absolute similarity IS a strong match for high-volatility prospects. Boozer/Flagg/Dybantsa\'s top comps land in this range.</div>
+                          <div className="text-xs mt-2" style={{color:"#9ca3af"}}>Computed via weighted cosine similarity across 16 era-adjusted dimensions (see Sec sub-title for full list).</div>
                         </div>
                       }>
                         <div className="flex items-center gap-1 cursor-help">
@@ -6851,7 +6879,49 @@ function CompsTab({p}) {
                     <td className="px-2">{fmt(c.blkP)}</td>
                     <td className="px-2" style={{color:tpColor(c.tp)}}>{fmt(c.tp)}</td>
                     <td className="px-2" style={{color:ftColor(c.ft)}}>{fmt(c.ft)}</td>
-                    <td className="px-2"><TierBadge tier={c.tier}/></td>
+                    <td className="px-2">
+                      <div className="flex flex-col gap-1">
+                        <TierBadge tier={c.tier}/>
+                        {(() => {
+                          const {strengths, diffs} = compBreakdown(c);
+                          if (strengths.length === 0 && diffs.length === 0) return null;
+                          return (
+                            <Tip content={
+                              <div style={{maxWidth:260}}>
+                                {strengths.length > 0 && (
+                                  <div className="mb-2">
+                                    <div className="text-xs font-bold mb-1" style={{color:"#22c55e"}}>STRONG MATCH ({strengths.length})</div>
+                                    {strengths.map((s,i) => (
+                                      <div key={i} className="text-xs" style={{color:"#cbd5e1"}}>
+                                        <span style={{color:"#86efac"}}>{s.label}</span>: {s.p} ↔ {s.c} <span style={{color:"#475569"}}>(Δ {s.delta})</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                {diffs.length > 0 && (
+                                  <div>
+                                    <div className="text-xs font-bold mb-1" style={{color:"#ef4444"}}>DIVERGES ({diffs.length})</div>
+                                    {diffs.map((d,i) => (
+                                      <div key={i} className="text-xs" style={{color:"#cbd5e1"}}>
+                                        <span style={{color:"#fca5a5"}}>{d.label}</span>: {d.p} ↔ {d.c} <span style={{color:"#475569"}}>(Δ {d.delta})</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                {strengths.length === 0 && (
+                                  <div className="text-xs mt-2" style={{color:"#fbbf24"}}>No strong dimension matches in the 8 visible stats — high-similarity score is driven by the other 8 backend dimensions (shot profile, etc.).</div>
+                                )}
+                              </div>
+                            }>
+                              <div className="text-[10px] flex gap-1.5 cursor-help">
+                                {strengths.length > 0 && <span style={{color:"#22c55e",fontWeight:600}}>★{strengths.length}</span>}
+                                {diffs.length > 0 && <span style={{color:"#ef4444",fontWeight:600}}>⚠{diffs.length}</span>}
+                              </div>
+                            </Tip>
+                          );
+                        })()}
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
