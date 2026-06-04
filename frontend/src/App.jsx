@@ -2366,7 +2366,17 @@ function ShootingTab({p}) {
   const rimPct = normPct(p.rimPct), midPct = normPct(p.midPct), tp = normPct(p.tp), ft = normPct(p.ft);
   const efg = normPct(p.efg), ftr = norm(p.ftr), ts = normPct(p.ts);
   const twoPct = normPct(p.twoPct);
-  const rimF = norm(p.rimF), midF = norm(p.midF), threeF = norm(p.threeF), dunkR = norm(p.dunkR);
+  /* Tobias 2026-06-04 v18: shot-frequency fields use pct-safe norm */
+  // rim_f, mid_f, three_f, dunk_r are stored as percentages (0-100), never as ratios.
+  // Standard norm() incorrectly auto-converts values <1 into 100x percentages
+  // (intended for fields like rim_pct = 0.58). Use pct-safe normalizer instead.
+  const normPctSafe = (v) => {
+    if (v == null || v === "" || v === "—") return null;
+    const n = Number(v);
+    if (isNaN(n)) return null;
+    return Math.round(n * 10) / 10;
+  };
+  const rimF = normPctSafe(p.rimF), midF = normPctSafe(p.midF), threeF = normPctSafe(p.threeF), dunkR = normPctSafe(p.dunkR);
   const dunkPct = normPct(p.dunkPct);
   const hasRim = rimF != null && rimF > 0, hasMid = midF != null && midF > 0;
   const hasDunk = dunkR != null && dunkR > 0, hasTracking = hasRim || hasMid;
