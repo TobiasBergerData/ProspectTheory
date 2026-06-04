@@ -5815,20 +5815,53 @@ function ScoutingTab({p, mode="scouting"}) {
       {/* ── ARCHETYPE — formulas + secondary/tertiary + versatility ── */}
       <Sec icon="🏷" title="NBA Archetype Fit" sub="What NBA role does this prospect project into? PRIMARY is his best-fit archetype (assigned from his dominant role scores). 2ND/3RD are alternative fits within his position. Within each position, cards are sorted left → right by how OFTEN that archetype actually appears in real basketball (common → rare). Rarity is measured across 46k player-seasons — so you can see if a prospect projects into a common role-player template or an unusually scarce profile.">
         {/* Role Versatility — prominent */}
-        {p.roleVersatility != null && (
-          <div className="flex items-center gap-4 mb-4 p-3 rounded-lg" style={{background:"#0d111788",border:"1px solid #1f2937"}}>
-            <Tip content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>Role Versatility</div><div style={{color:"#cbd5e1"}}>Count of roles where z-score ≥ +0.5, normalized to 0-100. Higher = more lineup flexibility. 80+ = Swiss Army Knife territory.</div></div>}>
-              <div className="cursor-help">
-                <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Role Versatility <span style={{color:"#475569"}}>ⓘ</span></span>
-                <div className="text-2xl font-bold" style={{color:p.roleVersatility>70?"#22c55e":p.roleVersatility>45?"#fbbf24":"#6b7280",fontFamily:"'Oswald',sans-serif"}}>{Math.round(p.roleVersatility)}/100</div>
-              </div>
-            </Tip>
-            <div className="flex-1 h-3 rounded-full overflow-hidden" style={{background:"#1f2937"}}>
-              <div className="h-full rounded-full" style={{width:`${Math.min(100,p.roleVersatility)}%`,background:`linear-gradient(90deg,#f9731688,${p.roleVersatility>70?"#22c55e":"#f97316"})`}}/>
-            </div>
-            <div className="text-xs" style={{color:"#4b5563"}}>{p.roleVersatility>75?"Swiss Army Knife":p.roleVersatility>55?"Multi-Role":p.roleVersatility>35?"Specialist":"One-Dimensional"}</div>
+        {(() => {
+  /* Tobias 2026-06-04 v24: Versatility = strict count of roles with z >= +1.0 */
+  // Client-side recompute: count of roles where z >= +1.0 (Pctl >= 84).
+  // 13-role layout (event = role_zone via v23). Split by Off/Def/Hyb.
+  const OFF_ROLES = ["scorer","playmaker","spacer","driver","crasher"];
+  const DEF_ROLES = ["onball","switchPot","rimProt","zone"];
+  const HYB_ROLES = ["connector","helio","rebounder","microSpacer"];
+  const isImpact = (key) => {
+    const v = rr[key];
+    if (v == null) return false;
+    return roleToZ(v) >= 1.0;
+  };
+  const nOff = OFF_ROLES.filter(isImpact).length;
+  const nDef = DEF_ROLES.filter(isImpact).length;
+  const nHyb = HYB_ROLES.filter(isImpact).length;
+  const nTotal = nOff + nDef + nHyb;
+  const tierLabel = nTotal >= 8 ? "Swiss Army Knife"
+                  : nTotal >= 5 ? "Multi-Role"
+                  : nTotal >= 3 ? "Specialist"
+                  :                "One-Dimensional";
+  const tierColor = nTotal >= 8 ? "#22c55e"
+                  : nTotal >= 5 ? "#86efac"
+                  : nTotal >= 3 ? "#fbbf24"
+                  :                "#6b7280";
+  return (
+    <div className="mb-4 p-3 rounded-lg" style={{background:"#0d111788",border:"1px solid #1f2937"}}>
+      <div className="flex items-center gap-4">
+        <Tip content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>Role Versatility</div><div style={{color:"#cbd5e1"}}>Strict count of roles where the player is at <strong>z &ge; +1.0&sigma;</strong> (top 16% of his position peers — &quot;Impact&quot; tier). Higher count = more lineup flexibility. Historical analysis: Wings with &ge;7 hits had +14pp Star+ lift vs base; Bigs with &ge;7 hits hit 50% Starter+ rate.</div><div style={{color:"#9ca3af",marginTop:6,fontSize:11}}>Computed client-side from the 13 role inferences. Off=5 max, Def=4 max, Hyb=4 max.</div></div>}>
+          <div className="cursor-help">
+            <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Versatility <span style={{color:"#475569"}}>&#9432;</span></span>
+            <div className="text-2xl font-bold" style={{color:tierColor,fontFamily:"'Oswald',sans-serif"}}>{nTotal}/13</div>
           </div>
-        )}
+        </Tip>
+        <div className="flex-1 h-3 rounded-full overflow-hidden" style={{background:"#1f2937"}}>
+          <div className="h-full rounded-full" style={{width:`${Math.min(100, nTotal*8)}%`,background:`linear-gradient(90deg,#f9731688,${tierColor})`}}/>
+        </div>
+        <div className="text-xs" style={{color:tierColor}}>{tierLabel}</div>
+      </div>
+      <div className="flex items-center gap-4 mt-2 text-[11px]" style={{color:"#94a3b8"}}>
+        <span><span style={{color:"#f97316",fontWeight:600}}>Off</span> {nOff}/5</span>
+        <span><span style={{color:"#3b82f6",fontWeight:600}}>Def</span> {nDef}/4</span>
+        <span><span style={{color:"#8b5cf6",fontWeight:600}}>Hyb</span> {nHyb}/4</span>
+        <span style={{color:"#475569",marginLeft:"auto"}}>roles with z &ge; +1.0&sigma;</span>
+      </div>
+    </div>
+  );
+})()}
         {/* Orange-only archetype system: rank distinction via weight/opacity, not color.
             Tobias 2026-05-08: split flat grid into 3 position sub-grids (Playmaker/Wing/Big),
             each sorted left→right by value (Non-Specialized → Role Player → Specialist → Creator/Anchor). */}
