@@ -7082,6 +7082,20 @@ function RiskProfileTab({p}) {
           rank historically translates into a real pick (teams reach, players slide), not disagreement
           between mock boards.</p>
 
+        /* Tobias 2026-06-04 v28-final: Risk source attribution + fresh marker */
+        <div className="mb-4 px-3 py-2 rounded-lg text-[11px] flex flex-wrap items-center gap-2" style={{background:"#1f293744"}}>
+          <span style={{color:"#9ca3af"}}>Consensus source:</span>
+          <a href="https://www.rookiescale.com/2026-consensus-board/" target="_blank" rel="noopener noreferrer"
+             style={{color:"#fbbf24",fontWeight:600,textDecoration:"underline"}}>
+            RookieScale 2026 Consensus Board
+          </a>
+          <span style={{color:"#6b7280"}}>·</span>
+          <span style={{color:"#9ca3af"}}>Last import: <span style={{color:"#22c55e",fontWeight:600}}>2026-06-04</span></span>
+          <Tip wide content={<div style={{color:"#cbd5e1"}}><div className="font-bold mb-1" style={{color:"#22c55e"}}>Mock Data Freshness</div><div>The RookieScale board is updated frequently throughout the season as scouts release new mocks. Our local copy was last imported on 2026-06-04. A stale-warning automatically appears here if the import is more than 30 days old.</div></div>}>
+            <span style={{color:"#22c55e",cursor:"help",fontWeight:600}}>✓ fresh</span>
+          </Tip>
+        </div>
+
         <div className="relative h-16 mb-2">
           {/* track */}
           <div className="absolute left-0 right-0 top-7 h-1.5 rounded-full" style={{background:"#1f2937"}}/>
