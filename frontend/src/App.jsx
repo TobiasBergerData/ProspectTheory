@@ -5784,38 +5784,8 @@ function ScoutingTab({p, mode="scouting"}) {
       {mode === "roles" && (<>
       {/* ── ROLE INFERENCE MATRIX — hoverable with inputs ── */}
       <Sec icon="📊" title="Role Inference Matrix" sub="13 NBA roles, each scored against position peers. The z-score tells you how far this prospect stands above or below the average peer in that role. +2.0σ = Elite (top ~2%), +1.0σ = Impact, −1.0σ or lower = Liability. Hover any role to see the statistical inputs feeding it.">
-        {roleGroups.map(grp=>(
-          <div key={grp.label} className="mb-5">
-            <div className="text-xs uppercase tracking-widest font-bold mb-2" style={{color:grp.color}}>{grp.label}</div>
-            <div className="grid grid-cols-5 gap-2">
-              {grp.roles.map(key=>{
-                const info = ROLE_INFO[key]||{};
-                const z = roleToZ(rr[key]);
-                return (
-                  <Tip key={key} content={
-                    <div>
-                      <div className="font-bold mb-1" style={{color:zColor(z)}}>{info.name||key}: {z>0?"+":""}{z} σ</div>
-                      <div className="mb-1"><span style={{color:"#94a3b8"}}>Inputs:</span> <span style={{color:"#7dd3fc"}}>{info.inputs||"—"}</span></div>
-                      <div style={{color:"#cbd5e1"}}>{info.desc||""}</div>
-                    </div>
-                  }>
-                    <div className="rounded-lg p-3 text-center cursor-help" style={{background:zBg(z),border:`1px solid ${zColor(z)}22`}}>
-                      <div className="text-xs mb-1 truncate" style={{color:"#9ca3af"}}>{info.name||key} <span style={{color:"#475569"}}>ⓘ</span></div>
-                      <div className="font-bold font-mono text-lg" style={{color:zColor(z),fontFamily:"'Oswald',sans-serif"}}>{z>0?"+":""}{z}</div>
-                      <div className="text-xs" style={{color:zColor(z),opacity:0.7}}>{zLabel(z)}</div>
-                    </div>
-                  </Tip>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </Sec>
-
-      {/* ── ARCHETYPE — formulas + secondary/tertiary + versatility ── */}
-      <Sec icon="🏷" title="NBA Archetype Fit" sub="What NBA role does this prospect project into? PRIMARY is his best-fit archetype (assigned from his dominant role scores). 2ND/3RD are alternative fits within his position. Within each position, cards are sorted left → right by how OFTEN that archetype actually appears in real basketball (common → rare). Rarity is measured across 46k player-seasons — so you can see if a prospect projects into a common role-player template or an unusually scarce profile.">
-        {/* Role Versatility — prominent */}
         {(() => {
+  /* Tobias 2026-06-04 v25: Versatility moved into Role Matrix box + larger counts */
   /* Tobias 2026-06-04 v24: Versatility = strict count of roles with z >= +1.0 */
   // Client-side recompute: count of roles where z >= +1.0 (Pctl >= 84).
   // 13-role layout (event = role_zone via v23). Split by Off/Def/Hyb.
@@ -5853,15 +5823,47 @@ function ScoutingTab({p, mode="scouting"}) {
         </div>
         <div className="text-xs" style={{color:tierColor}}>{tierLabel}</div>
       </div>
-      <div className="flex items-center gap-4 mt-2 text-[11px]" style={{color:"#94a3b8"}}>
-        <span><span style={{color:"#f97316",fontWeight:600}}>Off</span> {nOff}/5</span>
-        <span><span style={{color:"#3b82f6",fontWeight:600}}>Def</span> {nDef}/4</span>
-        <span><span style={{color:"#8b5cf6",fontWeight:600}}>Hyb</span> {nHyb}/4</span>
+      <div className="flex items-center gap-5 mt-3 text-sm" style={{color:"#94a3b8"}}>
+        <span><span style={{color:"#f97316",fontWeight:700}}>Off</span> <span style={{fontWeight:700,fontFamily:"'Oswald',sans-serif"}}>{nOff}/5</span></span>
+        <span><span style={{color:"#3b82f6",fontWeight:700}}>Def</span> <span style={{fontWeight:700,fontFamily:"'Oswald',sans-serif"}}>{nDef}/4</span></span>
+        <span><span style={{color:"#8b5cf6",fontWeight:700}}>Hyb</span> <span style={{fontWeight:700,fontFamily:"'Oswald',sans-serif"}}>{nHyb}/4</span></span>
         <span style={{color:"#475569",marginLeft:"auto"}}>roles with z &ge; +1.0&sigma;</span>
       </div>
     </div>
   );
 })()}
+        {roleGroups.map(grp=>(
+          <div key={grp.label} className="mb-5">
+            <div className="text-xs uppercase tracking-widest font-bold mb-2" style={{color:grp.color}}>{grp.label}</div>
+            <div className="grid grid-cols-5 gap-2">
+              {grp.roles.map(key=>{
+                const info = ROLE_INFO[key]||{};
+                const z = roleToZ(rr[key]);
+                return (
+                  <Tip key={key} content={
+                    <div>
+                      <div className="font-bold mb-1" style={{color:zColor(z)}}>{info.name||key}: {z>0?"+":""}{z} σ</div>
+                      <div className="mb-1"><span style={{color:"#94a3b8"}}>Inputs:</span> <span style={{color:"#7dd3fc"}}>{info.inputs||"—"}</span></div>
+                      <div style={{color:"#cbd5e1"}}>{info.desc||""}</div>
+                    </div>
+                  }>
+                    <div className="rounded-lg p-3 text-center cursor-help" style={{background:zBg(z),border:`1px solid ${zColor(z)}22`}}>
+                      <div className="text-xs mb-1 truncate" style={{color:"#9ca3af"}}>{info.name||key} <span style={{color:"#475569"}}>ⓘ</span></div>
+                      <div className="font-bold font-mono text-lg" style={{color:zColor(z),fontFamily:"'Oswald',sans-serif"}}>{z>0?"+":""}{z}</div>
+                      <div className="text-xs" style={{color:zColor(z),opacity:0.7}}>{zLabel(z)}</div>
+                    </div>
+                  </Tip>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </Sec>
+
+      {/* ── ARCHETYPE — formulas + secondary/tertiary + versatility ── */}
+      <Sec icon="🏷" title="NBA Archetype Fit" sub="What NBA role does this prospect project into? PRIMARY is his best-fit archetype (assigned from his dominant role scores). 2ND/3RD are alternative fits within his position. Within each position, cards are sorted left → right by how OFTEN that archetype actually appears in real basketball (common → rare). Rarity is measured across 46k player-seasons — so you can see if a prospect projects into a common role-player template or an unusually scarce profile.">
+        {/* Role Versatility — prominent */}
+        
         {/* Orange-only archetype system: rank distinction via weight/opacity, not color.
             Tobias 2026-05-08: split flat grid into 3 position sub-grids (Playmaker/Wing/Big),
             each sorted left→right by value (Non-Specialized → Role Player → Specialist → Creator/Anchor). */}
