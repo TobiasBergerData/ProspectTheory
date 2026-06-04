@@ -5505,16 +5505,14 @@ function ScoutingTab({p, mode="scouting"}) {
                  desc:"Multi-position versatility. Backend formula: pctl_by_pos(STL + BLK). Position-aware. The sum of stocks ranks players against their position peers — guards with both blocks and steals stand out, bigs with steals on top of blocks rise."},
     rimProt:    {name:"Rim Protect",       cat:"Defensive", inputs:"BLK%, DRB%",
                  desc:"Paint anchor. Backend formula: 0.70 × p_BLK + 0.30 × p_DRB. Position-aware. Block volume dominates; defensive boards as supporting indicator. Height is NOT separately weighted (different from older docs)."},
-    zone:       {name:"Zone Pressure",     cat:"Defensive", inputs:"STL%, BLK%, DRB%",
-                 desc:"Defensive activity composite. Backend formula: 0.40 × p_STL + 0.30 × p_BLK + 0.30 × p_DRB. Position-aware. The chaos profile — generates events through hands (steals) and shot contests (blocks) plus possession ending (defensive boards). Distinct from Stocks Machine badge (simple threshold trigger)."},
-
+    // Tobias 2026-06-04 v23: Event Creator removed (offensive overlap with Creation), Zone Pressure renamed to Event Creator
+    zone:       {name:"Event Creator",      cat:"Defensive", inputs:"STL%, BLK%, DRB%",
+                 desc:"Defensive event creator. Backend formula: 0.40 × p_STL + 0.30 × p_BLK + 0.30 × p_DRB. Position-aware percentile composite. Generates extra possessions through hands (steals) and shot contests (blocks), plus closes possessions on the defensive glass. Distinct from Stocks Machine badge (simple threshold trigger) and from the Creation pillar (which measures OFFENSIVE event creation)."},
     // ── HYBRID (5) ─────────────────────────────────────────────────────
     connector:  {name:"Connector",         cat:"Hybrid",    inputs:"AST%, Spacer score, Defense score",
                  desc:"Glue-guy composite. Backend formula: 0.40 × p_AST + 0.30 × role_spacer + 0.30 × def_score. Position-aware. Combines passing with shooting gravity and defensive contribution — the player who connects everything without dominating the ball."},
     helio:      {name:"Helio-Scorer",      cat:"Hybrid",    inputs:"Scorer score, USG%, AST%",
                  desc:"Ball-dominant scoring engine. Backend formula: 0.50 × role_scorer + 0.30 × p_USG + 0.20 × p_AST. Position-aware. Leverages the volume × efficiency scoring component, amplified by usage and supported by playmaking presence — the offensive sun the team revolves around."},
-    event:      {name:"Event Creator",     cat:"Hybrid",    inputs:"Self-Created Offense, AST%, FTr",
-                 desc:"Iso + playmaking dual threat. Backend formula: 0.40 × self_creation_idx + 0.30 × p_AST + 0.30 × p_FTR. Position-aware. The player who manufactures scoring opportunities through dribble penetration and creates for teammates while drawing fouls. Distinct from defensive Stocks Machine badge — Event Creator is offensive event generation."},
     rebounder:  {name:"Rebounder",         cat:"Hybrid",    inputs:"ORB%, DRB%",
                  desc:"Two-way board control. Backend formula: 0.40 × p_ORB + 0.60 × p_DRB. Position-aware. Defensive boards primary, offensive boards secondary. Hybrid because the role spans both ends — different from Crasher which weights ORB heavier."},
     microSpacer:{name:"Micro-Spacer",      cat:"Hybrid",    inputs:"3P%, FT%, Defense score",
@@ -5524,7 +5522,7 @@ function ScoutingTab({p, mode="scouting"}) {
   const roleGroups = [
     {label:"Offensive",color:"#f97316",roles:["scorer","playmaker","spacer","driver","crasher"]},
     {label:"Defensive",color:"#3b82f6",roles:["onball","switchPot","rimProt","zone"]},  // 14-role layout: rebounder moved to Hybrid  // event moved here, rebounder moved to Hybrid
-    {label:"Hybrid",color:"#8b5cf6",roles:["connector","helio","event","rebounder","microSpacer"]},  // event + zone restored, rebounder included  // event moved to Defensive, zone removed (Driver overlap), rebounder added
+    {label:"Hybrid",color:"#8b5cf6",roles:["connector","helio","rebounder","microSpacer"]}  // event removed (offensive overlap with Creation pillar),  // event + zone restored, rebounder included  // event moved to Defensive, zone removed (Driver overlap), rebounder added
   ];
 
   // ── Archetype ──
@@ -5785,7 +5783,7 @@ function ScoutingTab({p, mode="scouting"}) {
 
       {mode === "roles" && (<>
       {/* ── ROLE INFERENCE MATRIX — hoverable with inputs ── */}
-      <Sec icon="📊" title="Role Inference Matrix" sub="14 NBA roles, each scored against position peers. The z-score tells you how far this prospect stands above or below the average peer in that role. +2.0σ = Elite (top ~2%), +1.0σ = Impact, −1.0σ or lower = Liability. Hover any role to see the statistical inputs feeding it.">
+      <Sec icon="📊" title="Role Inference Matrix" sub="13 NBA roles, each scored against position peers. The z-score tells you how far this prospect stands above or below the average peer in that role. +2.0σ = Elite (top ~2%), +1.0σ = Impact, −1.0σ or lower = Liability. Hover any role to see the statistical inputs feeding it.">
         {roleGroups.map(grp=>(
           <div key={grp.label} className="mb-5">
             <div className="text-xs uppercase tracking-widest font-bold mb-2" style={{color:grp.color}}>{grp.label}</div>
