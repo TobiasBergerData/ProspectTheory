@@ -5481,27 +5481,47 @@ function ScoutingTab({p, mode="scouting"}) {
 
   // ── Roles ──
   const rr = p.roles || {};
+  // Tobias 2026-06-04 v21: 13-role layout + accurate English tooltips
+  // All tooltips updated 2026-06-04 to match real backend formulas in 10_composite_scores.py:500-573.
+  // Layout: 5 Offensive, 4 Defensive, 4 Hybrid = 13 roles. Zone Pressure removed (redundant with Driver).
   const ROLE_INFO = {
-    scorer:     {name:"Scorer",      cat:"Offensive", inputs:"PTS/36, USG%, TS%, eFG%",                desc:"Volume scoring ability. Weights production × efficiency."},
-    playmaker:  {name:"Playmaker",   cat:"Offensive", inputs:"AST%, AST/TO, USG%, Feel Score",         desc:"Creates for others. Passing vision and decision-making under pressure."},
-    spacer:     {name:"Spacer",      cat:"Offensive", inputs:"3P%, 3PAr, FT%, three_frequency",        desc:"Floor spacing gravity. Draws defenders beyond the arc."},
-    driver:     {name:"Driver",      cat:"Offensive", inputs:"Rim%, FTR, USG%, Dunk Rate*",          desc:"Rim pressure via drives. Creates contact and free throws. *Dunk Rate unavailable for internationals — FTR weighted higher as proxy."},
-    crasher:    {name:"Crasher",     cat:"Offensive", inputs:"ORB%, Dunk Rate, FTR, Func Ath",         desc:"Offensive rebounds and put-backs. Second-chance creation."},
-    onball:     {name:"On-Ball D",   cat:"Defensive", inputs:"STL%, DBPM, Height (size proxy)",      desc:"Perimeter defense. Ball pressure and steal ability. No direct lateral quickness data available — STL% and DBPM serve as proxies."},
-    switchPot:  {name:"Switch Pot.", cat:"Defensive", inputs:"Height, STL%, BLK%, Wingspan",           desc:"Can defend multiple positions in switching schemes."},
-    rimProt:    {name:"Rim Protect", cat:"Defensive", inputs:"BLK%, DBPM, Height, DRB%",              desc:"Shot-blocking and rim deterrence. Anchors paint defense."},
-    rebounder:  {name:"Rebounder",   cat:"Defensive", inputs:"DRB%, ORB%, Height, Func Ath",          desc:"Board control on both ends. Ends possessions and starts breaks."},
-    connector:  {name:"Connector",   cat:"Hybrid",    inputs:"AST/TO>2, DBPM>0, USG%<18",             desc:"Glue guy. Connects offense without mistakes, contributes defensively."},
-    helio:      {name:"Helio-Scorer",cat:"Hybrid",    inputs:"USG%>28, PTS/36>18, TS%>55",            desc:"Ball-dominant scoring engine. Offense revolves around this player."},
-    event:      {name:"Event Creator",cat:"Hybrid",   inputs:"Box Creation Pctl>70, AST%>20, USG%>25",desc:"Creates scoring opportunities from nothing. Iso + playmaking dual threat."},
-    zone:       {name:"Zone Pressure",cat:"Hybrid",   inputs:"STL%>2.5, BLK%>1.5, Func Ath>70",      desc:"Defensive chaos agent. Forces turnovers and blocks in multiple zones."},
-    microSpacer:{name:"Micro-Spacer",cat:"Hybrid",    inputs:"3P%>35, USG%<16, DBPM>0",               desc:"Low-usage spacer who contributes defensively. 3&D role player archetype."},
+    // ── OFFENSIVE (5) ───────────────────────────────────────────────────
+    scorer:     {name:"Scorer",            cat:"Offensive", inputs:"USG%, PTS/G, FTr",
+                 desc:"Volume scoring driver. Backend formula: USG × 0.50 + PTS × 0.30 + FTR × 0.20. Note: efficiency (TS%) is NOT weighted here — see Helio-Scorer for usage × efficiency."},
+    playmaker:  {name:"Playmaker",         cat:"Offensive", inputs:"AST%, USG%, AST/TO",
+                 desc:"Creates for others. Backend formula: AST% × 0.60 + USG × 0.20 + AST/TO × 0.20. Heavy weight on assist rate, with usage context and decision quality."},
+    spacer:     {name:"Spacer",            cat:"Offensive", inputs:"3P%, 3PAr, FT%",
+                 desc:"Floor-spacing gravity. Backend formula: 3P% × 0.40 + 3PAr × 0.40 + FT% × 0.20. Three-point accuracy × volume, with FT% as a touch indicator."},
+    driver:     {name:"Driver",            cat:"Offensive", inputs:"Rim Frequency, FTr, Dunk Rate",
+                 desc:"Rim-attack profile. Backend formula: Rim_Freq × 0.35 + FTR × 0.35 + Dunk_Rate × 0.30. High share of shots at the rim, foul-drawing, and above-the-rim finishing."},
+    crasher:    {name:"Crasher",           cat:"Offensive", inputs:"ORB%, Dunk Rate, Rim Frequency",
+                 desc:"Offensive glass and put-backs. Backend formula: ORB% × 0.50 + Dunk_Rate × 0.30 + Rim_Freq × 0.20. Second-chance creation through hustle and finishing through contact."},
+
+    // ── DEFENSIVE (4) ───────────────────────────────────────────────────
+    onball:     {name:"On-Ball Pressure",  cat:"Defensive", inputs:"STL%, Foul Rate (inverted), Height bonus, Position bonus",
+                 desc:"Perimeter ball pressure. Backend formula: STL% × 0.50 + (low-PFR) × 0.30 + Height_bonus + Pos_bonus. Foul Rate (PFR) is INVERTED — fewer fouls = better. Height bonus +10 for players ≤6\'6 (smaller defenders expected on-ball), position bonus +5 for Playmakers. DBPM is NOT used (despite older labels)."},
+    switchPot:  {name:"Switch Pot.",       cat:"Defensive", inputs:"STL%, BLK%, Height bonus (6\'4-6\'10), Foul Rate (inverted)",
+                 desc:"Multi-position versatility. Backend formula: STL% × 0.30 + BLK% × 0.20 + Height_bonus + (low-PFR) × 0.20. Height bonus +15 if ht is 6\'4-6\'10 (switch-friendly range), +5 otherwise. Wingspan is NOT separately measured — height bonus is the size proxy."},
+    rimProt:    {name:"Rim Protect",       cat:"Defensive", inputs:"BLK%, Height, DRB%",
+                 desc:"Paint anchor. Backend formula: BLK% × 0.60 + Height × 0.20 + DRB% × 0.20. Block volume is the dominant input. Deters drives and ends opponent possessions."},
+    event:      {name:"Event Creator",     cat:"Defensive", inputs:"STL%, BLK%, Foul Rate (inverted), DRB%",
+                 desc:"Defensive event generator. Backend formula: STL% × 0.35 + BLK% × 0.35 + (low-PFR) × 0.15 + DRB% × 0.15. High stocks (steals + blocks) while staying out of foul trouble plus defensive boards. Distinct from Stocks Machine badge (simple threshold trigger) — this is a position-relative percentile composite."},
+
+    // ── HYBRID (4) ──────────────────────────────────────────────────────
+    connector:  {name:"Connector",         cat:"Hybrid",    inputs:"AST/TO, AST%, STL%, DRB%, Low USG",
+                 desc:"Glue-guy archetype. Backend formula: AST/TO × 0.30 + AST% × 0.20 + STL% × 0.15 + DRB% × 0.15 + (100−USG) × 0.20. Rewards decision quality and defensive activity at LOW usage — the player who helps without hogging possessions."},
+    helio:      {name:"Helio-Scorer",      cat:"Hybrid",    inputs:"USG%, TS%, PTS/G, FTr",
+                 desc:"Volume × efficiency scoring hub. Backend formula: USG × 0.40 + TS% × 0.25 + PTS × 0.20 + FTR × 0.15. The offensive sun the team revolves around — high usage at high efficiency. TS% is weighted here (unlike Scorer)."},
+    rebounder:  {name:"Rebounder",         cat:"Hybrid",    inputs:"DRB%, ORB%, Height",
+                 desc:"Two-way board control. Backend formula: DRB% × 0.50 + ORB% × 0.30 + Height × 0.20. Defensive boards as primary, offensive boards as secondary, size as multiplier. Hybrid because it spans both ends of the floor."},
+    microSpacer:{name:"Micro-Spacer",      cat:"Hybrid",    inputs:"3P%, 3PAr, FT%, Low USG",
+                 desc:"Off-ball three-point specialist. Backend formula: 3P% × 0.35 + 3PAr × 0.35 + FT% × 0.20 + (100−USG) × 0.10. Same shooting inputs as Spacer plus a LOW usage bonus. The pure floor-spacer role-player without on-ball duties. Note: DBPM is NOT used (no defensive input despite older 3&D-style labels)."},
   };
 
   const roleGroups = [
     {label:"Offensive",color:"#f97316",roles:["scorer","playmaker","spacer","driver","crasher"]},
-    {label:"Defensive",color:"#3b82f6",roles:["onball","switchPot","rimProt","rebounder"]},
-    {label:"Hybrid",color:"#8b5cf6",roles:["connector","helio","event","zone","microSpacer"]},
+    {label:"Defensive",color:"#3b82f6",roles:["onball","switchPot","rimProt","event"]},  // event moved here, rebounder moved to Hybrid
+    {label:"Hybrid",color:"#8b5cf6",roles:["connector","helio","rebounder","microSpacer"]},  // event moved to Defensive, zone removed (Driver overlap), rebounder added
   ];
 
   // ── Archetype ──
@@ -5762,7 +5782,7 @@ function ScoutingTab({p, mode="scouting"}) {
 
       {mode === "roles" && (<>
       {/* ── ROLE INFERENCE MATRIX — hoverable with inputs ── */}
-      <Sec icon="📊" title="Role Inference Matrix" sub="14 NBA roles, each scored against position peers. The z-score tells you how far this prospect stands above or below the average peer in that role. +2.0σ = Elite (top ~2%), +1.0σ = Impact, −1.0σ or lower = Liability. Hover any role to see the statistical inputs feeding it.">
+      <Sec icon="📊" title="Role Inference Matrix" sub="13 NBA roles, each scored against position peers. The z-score tells you how far this prospect stands above or below the average peer in that role. +2.0σ = Elite (top ~2%), +1.0σ = Impact, −1.0σ or lower = Liability. Hover any role to see the statistical inputs feeding it.">
         {roleGroups.map(grp=>(
           <div key={grp.label} className="mb-5">
             <div className="text-xs uppercase tracking-widest font-bold mb-2" style={{color:grp.color}}>{grp.label}</div>
