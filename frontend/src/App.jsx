@@ -416,7 +416,7 @@ const BADGE_DEFS = {
   "Two-Way Wing":           { cat:"green", rule:"Wing & STL%>2.5 & spacer>65",             desc:"Wing with both defensive activity and floor-spacing range. The most coveted lineup-flex archetype in the modern NBA." },
   "Magnetic Hands":         { cat:"green", rule:"ORB%>12 & DRB%>25",                        desc:"Elite rebounding profile on both ends. Extends possessions and ends them — a quiet but durable NBA edge." },
   "Transition Terror":      { cat:"green", rule:"G/W & STL%>2.5 & DunkRate>8 (or 2P%>55 fallback)", desc:"Generates and finishes in transition. High steal rate fueling fast breaks plus efficient open-floor scoring. Hard to scheme against." },
-  "High Maintenance":       { cat:"red",   rule:"CFFR < 45 (red zone of Net Possession Value)", desc:"Drains team possessions overall. Net Possession Value is in the red zone — at least one Four Factor (eFG / TO / OREB / FTR) is well below role expectation, and the composite signals he hurts the team's possession economy more than he helps." },
+  "High Maintenance":       { cat:"red",   rule:"CFFR < 40 (deep red zone of Net Possession Value)", desc:"Drains team possessions at a level rarely seen in NBA contributors. Net Possession Value is in the bottom ~8% of college players — multiple Four Factors (eFG / TO / OREB / FTR) are well below role expectation. Historical bust rate at this threshold is ~54% vs ~47% base." },
 };
 
 // ── Position group for badge logic (consistent with resolvePosition) ──
@@ -778,7 +778,8 @@ function computeBadges(p) {
   // High Maintenance — CFFR in der roten Zone des Net Possession Value (Tobias 2026-06-01).
   // Spiegel-Badge zu Possession Demon: drainiert Possessions mehr als er hilft.
   // TODO Migrationspfad: nach Backend (10c_ml_calibration) beim nächsten 10c-Rerun.
-  if (p.cffr != null && p.cffr < 45)                                 red.push("High Maintenance");
+  // Tobias 2026-06-03 v16: HM threshold tightened from <45 to <40
+  if (p.cffr != null && p.cffr < 40)                                 red.push("High Maintenance");
 
   return { green, yellow, red };
 }
