@@ -9105,7 +9105,9 @@ const TABS = [
   {id:"roles",label:"Roles & Archetypes",icon:"🧬"},
   {id:"comps",label:"Comps",icon:"⇄"},
   {id:"projection",label:"Projection",icon:"◆"},
-  {id:"riskprofile",label:"Risk Profile",icon:"🎯"},
+  // Tobias 2026-06-04: Risk Profile Tab parked → see BACKLOG_RISK_TAB_PARKED.md
+  // RiskProfileTab function + riskProfile data plumbing remain in code for clean re-enable.
+  // {id:"riskprofile",label:"Risk Profile",icon:"🎯"},
 ];
 
 
@@ -9739,7 +9741,8 @@ export default function App() {
             {tab==="comps"&&<CompsTab p={p}/>}
             {tab==="devtrajectory"&&<DevTrajectoryTab p={p}/>}
             {tab==="projection"&&<ProjectionTab p={p}/>}
-            {tab==="riskprofile"&&<RiskProfileTab p={p}/>}
+            {/* Tobias 2026-06-04: Risk Profile Tab parked (BACKLOG_RISK_TAB_PARKED.md) */}
+            {/* {tab==="riskprofile"&&<RiskProfileTab p={p}/>} */}
           </>
         )}
       </main>
