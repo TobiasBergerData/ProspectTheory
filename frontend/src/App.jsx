@@ -289,10 +289,11 @@ const METHODS = {
     formula: "(pctl(STL%) × 0.35 + pctl(BLK%) × 0.35 + pctl(DBPM) × 0.30) × Intl_Adj",
     desc: "Position-weighted defensive value. International players get a 1.15× uplift as FIBA rules and pace suppress raw defensive stats. Stocks threshold bonus for dual-threat defenders.",
   },
+  // Tobias 2026-06-04 v20: METHODS dict for Creation
   selfCreation: {
-    name: "Box Creation",
-    formula: "pctl(USG% × TS%) within position group",
-    desc: "Efficient volume scoring: how much offense does a player create at what efficiency? High USG × high TS = elite shot-creator. Works for both NCAA and international players. Position-percentiled (0-100).",
+    name: "Creation",
+    formula: "Self-Created Scoring = USG × TS × Self-Share  +  Passing Creation = AST% × clamp(AST/TO, 0.5, 2.5) ÷ 2.5\nComposite (position-weighted): PG 40/60, Wing 70/30, Big 80/20  ·  sample-penalized below 300 FGA",
+    desc: "Total offensive creation — both for himself and for teammates. v2 methodology, not classical Ben Taylor Box Creation.\n\nTWO COMPONENTS:\n\n• Self-Created Scoring (USG × TS × Self-Share): on-ball volume × efficiency × the share of his shots that are NOT assisted (PBP-tracked).\n\n• Passing Creation (AST% × Quality): assist rate, weighted by AST/TO ratio so that high-turnover passers are penalized.\n\nPosition-weighting reflects role expectations: Playmakers lean passing-heavy (40/60), Wings are balanced toward scoring (70/30), Bigs are primarily scorers (80/20). A sample-size penalty applies below 300 college FGA.\n\nHigh score requires PRODUCTION the player generates himself — either as a self-created shooter or as a primary passer. A high-volume catch-and-shoot wing will score LOWER than a moderate-volume off-dribble creator with strong passing.",
   },
   overall: {
     name: "Overall Production Rating",
