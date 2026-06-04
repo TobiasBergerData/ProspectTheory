@@ -5534,52 +5534,97 @@ function ScoutingTab({p, mode="scouting"}) {
   // are objectively harder to find — that's a useful scouting signal without making
   // normative claims about which archetype is "more valuable".
   const archetype = p.archetype || "Unknown";
+  // Tobias 2026-06-04 v26: Archetype audit — real 10c formulas + current freq + NBA outcomes
+  // All trigger formulas verified against 10c_ml_calibration.py:3592-3653 (assign_archetypes_multi).
+  // freqPct = % within position-pool from current 44.7k profile dataset.
+  // outcome = historical NBA stats for drafts 2010-2022 (HoF-collisions excluded, n=historical sample).
+  // "Defender" in any trigger formula refers to def_score PILLAR (0.35×STL+0.35×BLK+0.30×DRB), not a Role Inference.
   const ARCH_MAP = {
-    // === PLAYMAKER (n=12,089) ===
-    "Non-Specialized Playmaker": {desc:"Versatile guard without a dominant skill. Jack-of-all-trades backcourt piece.",color:"#8b5cf6",
-      pos:["Playmaker"],formula:"Default (no role >70)",roles:["Scorer","Playmaker","Spacer"], freqPct:52.8},
-    "Scoring Playmaker": {desc:"Dual-threat point guard. Scores at high volume while maintaining playmaking.",color:"#fbbf24",
-      pos:["Playmaker"],formula:"Scorer>70 + Playmaker>55",roles:["Scorer","Playmaker","Event Creator"], freqPct:19.5},
-    "Spacing Guard":      {desc:"Off-ball scoring guard. Elite spacing with catch-and-shoot gravity.",color:"#22c55e",
-      pos:["Playmaker"],formula:"Spacer>70",roles:["Spacer","Scorer","Micro-Spacer"], freqPct:15.5},
-    "Defensive Guard":     {desc:"Perimeter lockdown specialist. Ball pressure and steal ability define his value.",color:"#3b82f6",
-      pos:["Playmaker"],formula:"Defender>70",roles:["On-Ball D","Connector","Zone Pressure"], freqPct:7.9},
-    "Floor General":       {desc:"Lead playmaker who creates for others. Elite AST/TO and half-court orchestration.",color:"#f97316",
-      pos:["Playmaker"],formula:"Playmaker>75",roles:["Playmaker","Connector","Event Creator"], freqPct:4.3},
+    // ═══ PLAYMAKER (n_pos=4,439) ═══
+    "Scoring Playmaker": {desc:"Dual-threat point guard. Scores at high volume while maintaining playmaking. Most common PG archetype in modern NBA.",color:"#fbbf24",
+      pos:["Playmaker"],formula:"role_scorer >70 AND role_playmaker >55",roles:["Scorer","Playmaker","Event Creator"],
+      freqPct:38.6, outcome:"n=107 · Star+ 15.9% · Bust 43.0% · meanWA +4.4",
+      examples:"Damian Lillard (37), Kemba Walker (29), Tyrese Haliburton (24)"},
+    "Non-Specialized Playmaker": {desc:"Versatile guard without a dominant skill. Jack-of-all-trades backcourt piece — needs role context to thrive.",color:"#8b5cf6",
+      pos:["Playmaker"],formula:"Default (no trigger met)",roles:["Scorer","Playmaker","Spacer"],
+      freqPct:31.6, outcome:"n=5 · sample too small for robust outcomes",
+      examples:"—"},
+    "Floor General":  {desc:"Lead playmaker who creates for others. Elite AST/TO and half-court orchestration.",color:"#f97316",
+      pos:["Playmaker"],formula:"role_playmaker >75",roles:["Playmaker","Connector","Event Creator"],
+      freqPct:11.4, outcome:"n=1 · sample too small",
+      examples:"—"},
+    "Spacing Guard":  {desc:"Off-ball scoring guard. Elite spacing with catch-and-shoot gravity.",color:"#22c55e",
+      pos:["Playmaker"],formula:"role_spacer >70",roles:["Spacer","Scorer","Micro-Spacer"],
+      freqPct:9.4, outcome:"n=0 historical (rare archetype)",
+      examples:"—"},
+    "Defensive Guard":{desc:"Perimeter lockdown specialist. Ball pressure and steal ability define his value.",color:"#3b82f6",
+      pos:["Playmaker"],formula:"def_score PILLAR >70 (NOT a single Role Inference — composite of STL+BLK+DRB)",roles:["On-Ball Pressure","Connector","Event Creator"],
+      freqPct:5.9, outcome:"n=1 · sample too small",
+      examples:"—"},
 
-    // === WING (n=26,838) ===
-    "Non-Specialized Wing":      {desc:"Multi-tool forward without a dominant skill. Fits many lineups.",color:"#a78bfa",
-      pos:["Wing"],formula:"Default (no role >65)",roles:["Connector","Switch Pot.","Spacer"], freqPct:44.2},
-    "Scoring Wing":        {desc:"Pure scorer without elite creation. Efficient finisher who needs structure.",color:"#ef4444",
-      pos:["Wing"],formula:"Scorer>75",roles:["Scorer","Driver","Spacer"], freqPct:21.1},
-    "Defensive Wing":      {desc:"Elite wing defender. Versatile stopper who guards multiple positions.",color:"#06b6d4",
-      pos:["Wing"],formula:"Defender>65",roles:["On-Ball D","Switch Pot.","Zone Pressure"], freqPct:11.1},
-    "Point Forward":       {desc:"Oversized playmaker. Creates mismatches with size + passing vision.",color:"#10b981",
-      pos:["Wing","Big"],formula:"Playmaker>65",roles:["Playmaker","Connector","Driver"], freqPct:11.1},
-    "Slashing Wing":       {desc:"Attacks the rim with explosiveness. Transition weapon and paint-pressure.",color:"#f43f5e",
-      pos:["Wing"],formula:"Driver>70",roles:["Driver","Crasher","On-Ball D"], freqPct:5.9},
-    "Initiator Wing":        {desc:"Creates own offense off the dribble. Self-creation specialist with high usage.",color:"#fb923c",
-      pos:["Wing","Playmaker"],formula:"Scorer>70 + Playmaker>55 + USG>26",roles:["Scorer","Driver","Helio-Scorer"], freqPct:4.0},
-    "3-and-D Wing":        {desc:"Shoot and defend — the modern NBA's most coveted role-player template.",color:"#3b82f6",
-      pos:["Wing"],formula:"Spacer>65 + Defender>65",roles:["Spacer","On-Ball D","Micro-Spacer"], freqPct:2.6},
+    // ═══ WING (n_pos=35,340) ═══
+    "Non-Specialized Wing": {desc:"Multi-tool forward without a dominant skill. Fits many lineups but rarely a Star — high Bust-Risk in this bucket.",color:"#a78bfa",
+      pos:["Wing"],formula:"Default (no trigger met)",roles:["Connector","Switch Pot.","Spacer"],
+      freqPct:34.9, outcome:"n=54 · Star+ 3.7% · Bust 61.1% · meanWA +1.2",
+      examples:"Josh Smith (25), Mark Jackson (16), Kevin Johnson (11)"},
+    "Scoring Wing":   {desc:"Pure scorer without elite creation. Efficient finisher who needs structure to function at high level.",color:"#ef4444",
+      pos:["Wing"],formula:"role_scorer >75",roles:["Scorer","Driver","Spacer"],
+      freqPct:16.3, outcome:"n=232 · Star+ 8.6% · Bust 48.3% · meanWA +2.7",
+      examples:"Jayson Tatum (35), Donovan Mitchell (25), Devin Booker (25)"},
+    "Point Forward":  {desc:"Oversized playmaker. Creates mismatches with size + passing vision.",color:"#10b981",
+      pos:["Wing","Big"],formula:"role_playmaker >65",roles:["Playmaker","Connector","Driver"],
+      freqPct:8.5, outcome:"n=22 · Star+ 4.5% · Bust 50.0% · meanWA +1.5",
+      examples:"Zach LaVine (14), Deni Avdija (10), De\'Anthony Melton (8)"},
+    "Defensive Wing": {desc:"Elite wing defender. Versatile stopper who guards multiple positions.",color:"#06b6d4",
+      pos:["Wing"],formula:"def_score PILLAR >65 (composite of STL+BLK+DRB)",roles:["On-Ball Pressure","Switch Pot.","Event Creator"],
+      freqPct:7.8, outcome:"n=23 · Star+ 0.0% · Bust 52.2% · meanWA +0.9",
+      examples:"Earl Watson (10), Tre Jones (9), Larry Johnson (6)"},
+    "Slashing Wing":  {desc:"Attacks the rim with explosiveness. Transition weapon and paint-pressure.",color:"#f43f5e",
+      pos:["Wing"],formula:"role_driver >70",roles:["Driver","Crasher","On-Ball Pressure"],
+      freqPct:4.6, outcome:"n=9 · Star+ 0.0% · Bust 55.6% · meanWA +1.0",
+      examples:"Bobby Jackson (7), Eric Williams (5), James Johnson (4)"},
+    "Initiator Wing": {desc:"Creates own offense off the dribble. Self-creation specialist with high usage. Rare archetype but historically extremely valuable.",color:"#fb923c",
+      pos:["Wing","Playmaker"],formula:"role_scorer >70 AND role_playmaker >55 AND college_usg >26",roles:["Scorer","Driver","Helio-Scorer"],
+      freqPct:3.2, outcome:"n=105 · Star+ 9.5% · Bust 54.3% · meanWA +2.6  ★ Star-cluster",
+      examples:"Paul George (34), Draymond Green (28), Kawhi Leonard (27)"},
+    "3-and-D Wing":   {desc:"Shoot and defend — the modern NBA\'s most coveted role-player template (when it works).",color:"#3b82f6",
+      pos:["Wing"],formula:"role_spacer >65 AND def_score PILLAR >65",roles:["Spacer","On-Ball Pressure","Micro-Spacer"],
+      freqPct:1.7, outcome:"n=9 · Star+ 0.0% · Bust 66.7% · meanWA +0.6  ⚠ historisch schwach",
+      examples:"Kevin Porter Jr. (7), Matisse Thybulle (3), Isaac Bonga (2)"},
 
-    // === BIG (n=5,866) ===
-    "Non-Specialized Big":          {desc:"Well-rounded center without a standout skill. Does a bit of everything.",color:"#60a5fa",
-      pos:["Big"],formula:"Default (no role >65)",roles:["Rim Protect","Rebounder","Switch Pot."], freqPct:31.5},
-    "Stretch Big":         {desc:"Shooting big who spaces the floor. Gravity from the 5 position.",color:"#22c55e",
-      pos:["Big"],formula:"Spacer>65",roles:["Spacer","Rim Protect","Rebounder"], freqPct:21.3},
-    "Rim Protector":       {desc:"Elite shot-blocker. Deters drives and alters shots. Anchors paint defense.",color:"#3b82f6",
-      pos:["Big"],formula:"Rim Protect>75",roles:["Rim Protect","Rebounder","Switch Pot."], freqPct:13.1},
-    "Short Roll Playmaker":{desc:"Decision-making big in the short roll. Drives and passes from the elbow/FT line area.",color:"#f59e0b",
-      pos:["Big"],formula:"Driver>55 + Playmaker>55",roles:["Driver","Playmaker","Connector"], freqPct:10.2},
-    "Passing Hub":       {desc:"Playmaking big — Jokic/Draymond archetype. Creates from post/elbow with vision.",color:"#fbbf24",
-      pos:["Big"],formula:"Playmaker>55",roles:["Playmaker","Connector","Driver"], freqPct:9.1},
-    "Glass Cleaner":       {desc:"Dominant rebounder. Controls both boards and creates second chances.",color:"#f97316",
-      pos:["Big"],formula:"Rebounder>65",roles:["Rebounder","Crasher","Rim Protect"], freqPct:8.3},
-    "Stretch Rim Protector":{desc:"Unicorn big — protects the rim AND stretches the floor. Extreme roster flexibility.",color:"#10b981",
-      pos:["Big"],formula:"Rim Protect>75 + Spacer>65",roles:["Rim Protect","Spacer","Rebounder"], freqPct:3.4},
-    "Scoring Big":         {desc:"Offense-first big. Post scoring, face-up game, or finishing at the rim.",color:"#ef4444",
-      pos:["Big"],formula:"Scorer>65",roles:["Scorer","Crasher","Driver"], freqPct:3.2},
+    // ═══ BIG (n_pos=5,014) ═══
+    "Non-Specialized Big": {desc:"Well-rounded center without a standout skill. Does a bit of everything but rarely dominant.",color:"#60a5fa",
+      pos:["Big"],formula:"Default (no trigger met)",roles:["Rim Protect","Rebounder","Switch Pot."],
+      freqPct:25.9, outcome:"n=6 · sample too small",
+      examples:"Mark Jackson (16), James Johnson (4), Ryan Gomes (0)"},
+    "Stretch Big":    {desc:"Shooting big who spaces the floor. Gravity from the 5 position — but historically mid-tier value.",color:"#22c55e",
+      pos:["Big"],formula:"role_spacer >65",roles:["Spacer","Rim Protect","Rebounder"],
+      freqPct:16.9, outcome:"n=26 · Star+ 3.8% · Bust 57.7% · meanWA +1.7",
+      examples:"Lauri Markkanen (15), Nikola Mirotic (10), Davis Bertans (8)"},
+    "Rim Protector":  {desc:"Elite shot-blocker. Deters drives and alters shots. Anchors paint defense — strong Star+ tier historically.",color:"#3b82f6",
+      pos:["Big"],formula:"role_rim_protect >75",roles:["Rim Protect","Rebounder","Switch Pot."],
+      freqPct:10.5, outcome:"n=30 · Star+ 20.0% · Bust 26.7% · meanWA +6.2  ★",
+      examples:"Rudy Gobert (31), Anthony Mason (24), Andre Drummond (20)"},
+    "Passing Hub":    {desc:"Playmaking big — Jokic/Draymond archetype. Creates from post/elbow with vision.",color:"#fbbf24",
+      pos:["Big"],formula:"role_playmaker >55",roles:["Playmaker","Connector","Driver"],
+      freqPct:7.0, outcome:"n=4 · sample too small",
+      examples:"—"},
+    "Glass Cleaner":  {desc:"Dominant rebounder. Controls both boards and creates second chances. Historically high Bust-Rate.",color:"#f97316",
+      pos:["Big"],formula:"role_rebounder >65",roles:["Rebounder","Crasher","Rim Protect"],
+      freqPct:6.4, outcome:"n=9 · Star+ 11.1% · Bust 66.7% · meanWA +1.8  ⚠",
+      examples:"Jarrett Allen (23), Ante Zizic (2), Willy Hernangomez (2)"},
+    "Short Roll Playmaker": {desc:"Decision-making big in the short roll. Drives and passes from the elbow / FT line area.",color:"#f59e0b",
+      pos:["Big"],formula:"role_driver >55 AND role_playmaker >55",roles:["Driver","Playmaker","Connector"],
+      freqPct:6.2, outcome:"n=10 · Star+ 0.0% · Bust 20.0% · meanWA +3.0  ✓ Role-Player-safe",
+      examples:"Jakob Poeltl (12), Cody Zeller (5), Tim Thomas (5)"},
+    "Stretch Rim Protector": {desc:"Unicorn big — protects the rim AND stretches the floor. Extreme roster flexibility. THE best Big archetype historically.",color:"#10b981",
+      pos:["Big"],formula:"role_rim_protect >75 AND role_spacer >65",roles:["Rim Protect","Spacer","Rebounder"],
+      freqPct:2.5, outcome:"n=25 · Star+ 28.0% · Bust 12.0% · meanWA +10.0  ★★★",
+      examples:"Joel Embiid (36), Anthony Davis (35), Karl-Anthony Towns (29)"},
+    "Scoring Big":    {desc:"Offense-first big. Post scoring, face-up game, or finishing at the rim.",color:"#ef4444",
+      pos:["Big"],formula:"role_scorer >65",roles:["Scorer","Crasher","Driver"],
+      freqPct:2.3, outcome:"n=1 · sample too small",
+      examples:"—"},
   };
   const allArchetypes = Object.entries(ARCH_MAP);
   // Pipeline-triggered archetypes (from 10c assign_archetypes_multi)
@@ -5888,6 +5933,8 @@ function ScoutingTab({p, mode="scouting"}) {
                   {info.formula&&<div className="mb-1"><span style={{color:"#94a3b8"}}>Formula:</span> <code className="text-xs" style={{color:"#7dd3fc"}}>{info.formula}</code></div>}
                   {info.freqPct != null && <div className="mb-1"><span style={{color:"#94a3b8"}}>Frequency:</span> <span style={{color: freqColor(info.freqPct)}}>{info.freqPct}% of {(info.pos||["Wing"])[0]}s</span> <span style={{color:"#475569"}}>({freqLabel(info.freqPct)})</span></div>}
                   {ARCHETYPE_TIER[name] && <div className="mb-1"><span style={{color:"#94a3b8"}}>Typical NBA value (n={ARCHETYPE_TIER[name].n}):</span> <span style={{color:TC[ARCHETYPE_TIER[name].ceiling]}}>{ARCHETYPE_TIER[name].ceiling} ceiling</span> <span style={{color:"#475569"}}>· {ARCHETYPE_TIER[name].starterPlus}% Starter+, {ARCHETYPE_TIER[name].allstarPlus}% All-Star+</span></div>}
+                  {info.outcome && <div className="mb-1"><span style={{color:"#94a3b8"}}>NBA outcome:</span> <span style={{color:"#7dd3fc"}}>{info.outcome}</span></div>}
+                  {info.examples && info.examples !== "—" && <div className="mb-1"><span style={{color:"#94a3b8"}}>Examples:</span> <span style={{color:"#fbbf24"}}>{info.examples}</span></div>}
                   {info.roles&&<div><span style={{color:"#94a3b8"}}>Key roles:</span> <span style={{color:"#f97316"}}>{info.roles.join(", ")}</span></div>}
                   {info.pos&&<div className="mt-1"><span style={{color:"#94a3b8"}}>Positions:</span> <span style={{color:posMatch?"#86efac":"#fca5a5"}}>{info.pos.join(", ")}{posMatch?"":" ⚠ mismatch"}</span></div>}
                   {isTriggered && !isRanked && <div className="mt-1 text-xs" style={{color:"#fb923c"}}>✓ Triggered by pipeline thresholds</div>}
