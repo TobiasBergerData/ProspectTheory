@@ -9175,9 +9175,10 @@ const TABS = [
   {id:"roles",label:"Roles & Archetypes",icon:"🧬"},
   {id:"comps",label:"Comps",icon:"⇄"},
   {id:"projection",label:"Projection",icon:"◆"},
-  // Tobias 2026-06-04: Risk Profile Tab parked → see BACKLOG_RISK_TAB_PARKED.md
-  // RiskProfileTab function + riskProfile data plumbing remain in code for clean re-enable.
-  // {id:"riskprofile",label:"Risk Profile",icon:"🎯"},
+  // Tobias 2026-06-04 (Sprint-2): Risk Profile Tab re-enabled after Pipeline
+  // Re-Run mit rank-in-class merit_slot + qcut-fix. 15.9-Cap-Cluster ist
+  // jetzt aufgelöst, Steal/Bust-Gap rechnet sauber gegen merit + market.
+  {id:"riskprofile",label:"Risk Profile",icon:"🎯"},
 ];
 
 
@@ -9811,8 +9812,8 @@ export default function App() {
             {tab==="comps"&&<CompsTab p={p}/>}
             {tab==="devtrajectory"&&<DevTrajectoryTab p={p}/>}
             {tab==="projection"&&<ProjectionTab p={p}/>}
-            {/* Tobias 2026-06-04: Risk Profile Tab parked (BACKLOG_RISK_TAB_PARKED.md) */}
-            {/* {tab==="riskprofile"&&<RiskProfileTab p={p}/>} */}
+            {/* Tobias 2026-06-04 (Sprint-2): Risk Profile Tab re-enabled — siehe TABS-Eintrag */}
+            {tab==="riskprofile"&&<RiskProfileTab p={p}/>}
           </>
         )}
       </main>
