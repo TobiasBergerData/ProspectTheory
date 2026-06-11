@@ -69,6 +69,7 @@ INJECT_STEPS=(
   "inject_nba_role.py"                 # NBA-Rollen-Projektion (pre→post + Floor)
   "inject_added_wins.py"               # Added Wins (P(NBA) × E[AW|NBA])
   "inject_shooting_m1.py"              # Diss-M1 Shooting (Berger 2022, EB+Beta-Reg)
+  "inject_position_overrides.py"       # Manual Scout-driven Position-Fixes (Boozer=Wing)
 )
 
 STEP=3
@@ -83,7 +84,7 @@ for script in "${INJECT_STEPS[@]}"; do
 done
 
 # ─── Build-Validation ───
-log_step "BUILD COMPLETE — Validation"
+log_step "BUILD COMPLETE — Validation (Step 14/14)"
 if [[ ! -f "data/processed/prospecttheory.db" ]]; then
   echo "[build.sh] FATAL: prospecttheory.db not created — build pipeline broken"
   exit 1
