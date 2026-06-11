@@ -416,21 +416,80 @@ def get_search_index() -> list:
 
 
 def find_player(ident: str) -> tuple:
-    """SQLite-basiert. 3-stage resolution: player_id -> slug -> name (lower)."""
+    """SQLite-basiert. Mehrstufige Resolution:
+      1) Exact: player_id → slug → name_lower
+      2) Slug-Prefix-Fallback (NEU 2026-06-04, Tobias): wenn Stage 1 leer und ident
+         wie ein Slug-Präfix aussieht (lowercase + hyphens), suche `slug LIKE 'ident-%'`.
+         Bei mehreren Treffern gewinnt der neueste entry_year (frischester Prospect).
+
+    Warum Prefix-Fallback?
+      Frontend, Sitemap und externe Links nutzen historisch unterschiedliche Slug-
+      Präzisionen (z.B. 'cameron-boozer' vs canonical 'cameron-boozer-duke-26').
+      Backend ist die einzige Stelle die OHNE Frontend-Kenntnis robust gegen
+      Slug-Verkürzungen sein kann. Statt 404 → canonical Profile zurückliefern.
+      Frontend kann via response.slug die URL auf canonical replaceState aktualisieren.
+    """
     if not ident:
         return None, None
     _ensure_db_present()
     pid_candidate = ident.replace("%3A", ":")
     nl = ident.strip().lower()
-    # Eine SQL-query mit OR – SQLite waehlt den richtigen Index automatisch.
+
+    # ── Stage 1: exact match (player_id | slug | name_lower) ──
     row = _db().execute(
         "SELECT player_id, data FROM profiles "
         "WHERE player_id=? OR slug=? OR name_lower=? LIMIT 1",
         (pid_candidate, ident, nl),
     ).fetchone()
-    if row is None:
+    if row is not None:
+        return row[0], (_decompress_blob(row[1]) or {})
+
+    # ── Stage 2: slug-prefix fallback ──
+    # Trigger nur wenn ident slug-shaped ist (lowercase + hyphens, kein space/colon).
+    # Schützt gegen False-Positive bei Name-Lookups wie "Cameron Boozer".
+    is_slug_shaped = (
+        ident
+        and ident == ident.lower()
+        and " " not in ident
+        and ":" not in ident
+        and "-" in ident
+    )
+    if not is_slug_shaped:
         return None, None
-    return row[0], (_decompress_blob(row[1]) or {})
+
+    # profiles-Table hat KEINE entry_year column (nur player_id, slug, name,
+    # name_lower, data). Daher: kleine Kandidaten-Liste holen (slug DESC = oft
+    # frischestes Jahr-Suffix zuerst, z.B. '-26' > '-21'), dann data parsen
+    # um echte yr/entry_year aus dem Profile-Blob zu lesen. Bei <=20 Kandidaten
+    # vernachlässigbarer Overhead (Prefix-Match ist seltener Edge-Case).
+    rows = _db().execute(
+        "SELECT player_id, data FROM profiles "
+        "WHERE slug LIKE ? "
+        "ORDER BY slug DESC "
+        "LIMIT 20",
+        (f"{ident}-%",),
+    ).fetchall()
+    if not rows:
+        return None, None
+
+    # Wähle Kandidat mit höchstem yr (Profile-Field, von 10_composite_scores
+    # gesetzt). Bei ties: erster nach slug DESC gewinnt.
+    best_pid, best_profile, best_yr = None, None, float("-inf")
+    for pid, data_blob in rows:
+        prof = _decompress_blob(data_blob) or {}
+        try:
+            yr = float(prof.get("yr") or prof.get("draftYear") or 0)
+        except (TypeError, ValueError):
+            yr = 0
+        if yr > best_yr:
+            best_yr = yr
+            best_pid = pid
+            best_profile = prof
+    if best_pid is None:
+        # Fallback (alle ohne yr): nehme ersten nach slug DESC
+        best_pid, first_blob = rows[0]
+        best_profile = _decompress_blob(first_blob) or {}
+    return best_pid, best_profile
 
 
 def _identity_fields(pid: str, profile: dict) -> dict:
