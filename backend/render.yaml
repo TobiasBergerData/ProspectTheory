@@ -1,0 +1,20 @@
+# =============================================================================
+# DEPRECATED — Diese Datei ist nicht mehr Source-of-Truth.
+# =============================================================================
+#
+# Ab 2026-06-11 ist die maßgebliche Spec im Repo-Root:
+#   prospecttheory-web/render.yaml
+#
+# Und die Build-Pipeline-Steps in:
+#   prospecttheory-web/backend/build.sh
+#
+# Diese Datei bleibt nur als Doku-Stub, damit alte Dokumentations-Links
+# (z.B. in ARCHITECTURE.md) nicht ins Leere zeigen. Bei nächster Touch:
+# komplett löschen, sobald keine Referenzen mehr darauf zeigen.
+#
+# Warum verschoben:
+#   - Render-Blueprints erwarten render.yaml im Repo-Root, nicht im Subdir
+#   - Build-Pipeline (12 Steps) in build.sh statt im UI-Feld → versioniert,
+#     PR-reviewbar, fail-fast
+#   - Konsolidierte Deploy-Architektur, kein UI/File-Drift mehr
+# =============================================================================
