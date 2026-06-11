@@ -3920,15 +3920,53 @@ function MindTab({p}) {
             return "Predominantly assisted finisher";
           })();
 
+          // Tobias 2026-06-04 (Sprint-1): Verdict-Thresholds + Sample-Size Filter
+          //
+          // Pre-existing condition (entdeckt im Pod-Audit 2026-06-04):
+          //   Mikel Brown Jr. erhielt "★★★ Self-Sufficient Star Profile" weil
+          //   clutch_wp.delta_efg = +5.3pp den +5-Threshold ÜBERSCHRITT — bei nur
+          //   n=8 clutch-attempts. Ein einzelner getroffener Shot kann bei diesem
+          //   Sample den Schwellenwert pushen → false-positive Star-Label.
+          //
+          // Architektur:
+          //   Zentrale PRESSURE_THRESHOLDS Konstante mit { delta, n_min } pro
+          //   Metrik. Single source of truth — wenn man künftig die Filter
+          //   verschärfen will, ein Patch reicht (statt 3+ verstreute Stellen).
+          //
+          // n_min Begründung (statistisch):
+          //   - clutch_wp.fga    n_min=15  → delta von ±5pp braucht ~15 Versuche
+          //                                  um aus reinem Rausch zu treten
+          //   - late_clock.fga   n_min=25  → -10pp ist gut detektierbar ab ~25
+          //                                  attempts (Effekt typisch persistent)
+          //   - clutch_time.fga  n_min=12  → kleineres Volumen, akzeptabel mit 12
+          //   (Diese Schwellen basieren auf Beobachtung: ~5%-Effekt detektierbar
+          //   bei n≥15 für FG-Distributions mit σ≈12pp/√n.)
+          const PRESSURE_THRESHOLDS = {
+            clt_strong:    { delta: +5,   n_min: 15, metric: "clutch_wp"  },
+            clt_drop:      { delta: -8,   n_min: 15, metric: "clutch_wp"  },
+            late_clock_bad:{ delta: -10,  n_min: 25, metric: "late_clock" },
+          };
+
+          // hasReliablePressure(t): true wenn delta AND sample-size beide
+          // erfüllt sind. Falls n_min unterschritten → return false statt true.
+          const hasReliablePressure = (cfg) => {
+            const block = p.mindMetrics?.[cfg.metric];
+            if (!block || block.delta_efg == null || block.fga == null) return false;
+            if (block.fga < cfg.n_min) return false;
+            return cfg.delta >= 0
+              ? block.delta_efg > cfg.delta
+              : block.delta_efg < cfg.delta;
+          };
+
           // Verdict logic — combine signals
           const verdict = (() => {
             const heavy = overallSelfPct != null && overallSelfPct >= 50;
             const lite = overallSelfPct != null && overallSelfPct < 40;
             const efficientHard = diffPrem != null && diffPrem > -2;
             const inefficientHard = diffPrem != null && diffPrem < -8;
-            const cltDrop = p.mindMetrics?.clutch_wp?.delta_efg != null && p.mindMetrics.clutch_wp.delta_efg < -8;
-            const cltStrong = p.mindMetrics?.clutch_wp?.delta_efg != null && p.mindMetrics.clutch_wp.delta_efg > 5;
-            const lateClockBad = p.mindMetrics?.late_clock?.delta_efg != null && p.mindMetrics.late_clock.delta_efg < -10;
+            const cltStrong    = hasReliablePressure(PRESSURE_THRESHOLDS.clt_strong);
+            const cltDrop      = hasReliablePressure(PRESSURE_THRESHOLDS.clt_drop);
+            const lateClockBad = hasReliablePressure(PRESSURE_THRESHOLDS.late_clock_bad);
 
             if (heavy && efficientHard && cltStrong) return {
               label: "Self-Sufficient Star Profile", color: "#22c55e",
