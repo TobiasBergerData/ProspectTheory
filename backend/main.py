@@ -383,6 +383,18 @@ class _SqliteStatCompsDict:
         return _db().execute("SELECT 1 FROM stat_comps WHERE player_id=? LIMIT 1", (pid,)).fetchone() is not None
     def __len__(self):
         return _db().execute("SELECT COUNT(*) FROM stat_comps").fetchone()[0]
+    # Tobias 2026-06-12: Iteration-Methoden fuer Endpoints die alle Entries
+    # streamen (z.B. anthro_comps fallback wenn kein pre-computed Match).
+    # Vorsicht — full table scan, nicht in hot paths nutzen.
+    def items(self):
+        for row in _db().execute("SELECT player_id, data FROM stat_comps"):
+            yield row[0], (_decompress_blob(row[1]) or {})
+    def values(self):
+        for _pid, entry in self.items():
+            yield entry
+    def keys(self):
+        for row in _db().execute("SELECT player_id FROM stat_comps"):
+            yield row[0]
 
 
 class _SqliteAnthroCompsDict:
@@ -398,6 +410,20 @@ class _SqliteAnthroCompsDict:
         return _db().execute("SELECT 1 FROM anthro_comps WHERE player_id=? LIMIT 1", (pid,)).fetchone() is not None
     def __len__(self):
         return _db().execute("SELECT COUNT(*) FROM anthro_comps").fetchone()[0]
+    # Tobias 2026-06-12: Iteration-Methoden — analog zu _SqliteProfilesDict.
+    # Wird in route_anthro_comps Z.969+976 fuer den Fallback-Pfad (live-comp-
+    # berechnung wenn kein pre-computed Eintrag existiert) benoetigt.
+    # Vorsicht — full table scan ueber ~35k Entries, kann auf Free-Tier
+    # 5-30s dauern; langfristig in eigenen Endpoint extrahieren mit Index.
+    def items(self):
+        for row in _db().execute("SELECT player_id, data FROM anthro_comps"):
+            yield row[0], (_decompress_blob(row[1]) or {})
+    def values(self):
+        for _pid, entry in self.items():
+            yield entry
+    def keys(self):
+        for row in _db().execute("SELECT player_id FROM anthro_comps"):
+            yield row[0]
 
 
 def get_search_index() -> list:
