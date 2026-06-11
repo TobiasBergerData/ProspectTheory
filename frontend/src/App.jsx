@@ -345,22 +345,32 @@ const METHODS = {
 // ═══════════════════════════════════════════════════════════
 // BADGE DEFINITIONS (Expanded — 40+ badges with International & Youth Engine)
 // ═══════════════════════════════════════════════════════════
+// BADGE_DEFS — Single Source of Truth for badge tooltips (display layer).
+//
+// Tobias 2026-06-04 (Sprint-1): Konsolidiert. Bis hierhin gab es 9 Duplikate
+// (z.B. "Elite Shooting", "High Feel", "Stocks Machine"), wo die spätere
+// Backend-Pipeline-rule-Definition (10c) die frühere Frontend-Definition
+// stumm überschrieb (JavaScript last-write-wins). Resultat: Tooltip zeigte
+// rule X, aber Badge triggerte rule Y im Backend. Pro Badge ist jetzt EINE
+// canonical Definition aktiv.
+//
+// Architektur — zwei Compute-Quellen liefern Badge-Namen:
+//   (a) FRONTEND-COMPUTED: tmp_/compute-Funktion (this file, Z. ~665+),
+//       rule = die in der Funktion enkodierte Schwellenwerte
+//   (b) BACKEND-COMPUTED:  10c_ml_calibration.py Pipeline, rule = wie in
+//       der Pipeline definiert (canonical, da die "echte" Quelle)
+// Bei Konflikt gewinnt die Backend-rule, weil das Backend die Badges
+// tatsächlich vergibt (Frontend-compute ist Fallback für Spieler ohne
+// Backend-Badges). Frontend-only rules (z.B. "Modern Rim Anchor", die
+// nicht im Backend definiert sind) bleiben mit ihrer Frontend-rule.
 const BADGE_DEFS = {
   // ── YELLOW — Shot profile / style tags (neither good nor bad) ──
   "Moreyballer":            { cat:"yellow", rule:"≥75% of shots from rim + 3P + FTs",   desc:"Shot distribution is heavily skewed toward high-value zones (rim, 3P, free throws) with minimal mid-range. Named after former Rockets GM Daryl Morey who popularized this approach. This reflects shot selection only — not skill level." },
-  // ── GREEN — Elite NBA-scalable skills ──
-  "Elite Shooting":         { cat:"green", rule:"3P%>40 & 3P_Freq>30% & FT%>85",       desc:"Top-tier shooting across both lines + elite volume. Most translatable skill in modern NBA. Berger (2022): FT% is the #1 predictor." },
-  "Floor General":          { cat:"green", rule:"(G/W) AST/TO>2.2 & AST%>25",          desc:"Elite decision-making with vision. Creates for others without turnovers — the rarest guard/wing skill." },
-  "Two-Way Wing":           { cat:"green", rule:"(W) 3P%>35 & (STL%>2.2 OR DBPM>2.0)",desc:"Shooting + perimeter defense. Most coveted role player archetype in modern NBA. Immediate starter value." },
+  // ── GREEN — Frontend-only badges (no backend pipeline counterpart) ──
   "Modern Rim Anchor":      { cat:"green", rule:"(B) BLK%>4.0 & DBPM>2.5",            desc:"Elite rim protection with overall defensive impact. Anchors a top-10 defense by itself." },
-  "Passing Hub":              { cat:"green", rule:"(B) AST%>18 & AST/TO>1.2",            desc:"Playmaking big — Jokic/Draymond archetype. Creates from the post/elbow with low turnovers. Extremely rare." },
-  "Stocks Machine":         { cat:"green", rule:"(STL%+BLK%)>4.8",                     desc:"Defensive disruption at both perimeter and rim. Historically rare combination that warps opposing offense." },
-  "Magnetic Hands":         { cat:"green", rule:"ORB%>12 & DRB%>25",                   desc:"Elite rebounder on both ends of the floor. Offensive rebounds create second chances, defensive boards start transition. This player dominates the glass." },
   "Versatile Stopper":      { cat:"green", rule:"(W/B) Ht>=6'7\" & STL%>1.6 & BLK%>1.8",desc:"Length + perimeter + rim. Can guard 1-through-5 in switching schemes. Premium defensive versatility." },
-  "Transition Terror":      { cat:"green", rule:"(G/W) STL%>2.5 & Dunk%>60th pctl",   desc:"Creates fast breaks via steals and finishes above the rim. Free points in transition. Fallback: STL%>2.8 & 2P%>55 (for intl without dunk data)." },
   "FT Grifter":             { cat:"green", rule:"FTr>45 & (Rim%>40th pctl OR USG%>24)",desc:"Elite at drawing fouls through contact. Free throws = free points. High FTr at volume is extremely valuable." },
   "Efficient High Usage":   { cat:"green", rule:"USG>28 & TO%<12 & TS%>58",            desc:"Handles elite volume without efficiency collapse. The 'carry' badge — this player IS the offense." },
-  "High Feel Athlete":      { cat:"green", rule:"Feel>75 & Func Ath>75",               desc:"Rarest badge — elite IQ + elite athleticism. Almost always translates to NBA." },
   "Lurking Elite":          { cat:"green", rule:"USG%<20 & BPM>7.0 & TS%>62",          desc:"The Haliburton-Effect: Massively underutilized talent. Low usage masks star-level production. Efficiency explodes in a larger NBA role." },
   "Analytics Darling":      { cat:"green", rule:"BPM>8.0 & TS%>60 & USG%<22",          desc:"Maximum efficiency at moderate volume — the analytics dream. Statistical impact far exceeds perception." },
   "Efficiency Monster":     { cat:"green", rule:"eFG%>60 & AST/TO>2.0 & STL%>2.0",    desc:"Elite efficiency + elite decision-making + defensive activity. Multi-pillar excellence that guarantees NBA value." },
@@ -371,8 +381,11 @@ const BADGE_DEFS = {
   "International Prodigy":  { cat:"green", rule:"Age < Avg-1.5yr & EFF top 10 pctl",   desc:"1.5+ years younger than tournament peers while statistically dominating. Historically the strongest predictor of NBA stardom. Precociousness multiplier: 1.5x risk reduction.", icon:"globe" },
   "Pro-Ready Teen":         { cat:"green", rule:"Pro League & Age<19 & BPM>2.0",       desc:"Positive impact as a teenager in a professional men's league (ACB, EuroLeague, BBL). Physically and mentally NBA-ready before most prospects enter college.", icon:"globe" },
 
-  // ── GREEN — Server-generated (10c pipeline) ──
-  "High Feel":                { cat:"green", rule:"Feel Score > 80",                     desc:"Elite basketball IQ. Reads the game ahead of the play — AST/TO ratio, USG efficiency, and BPM all signal processing speed beyond peers." },
+  // ── GREEN — Server-generated, no Frontend-side duplicates ──
+  // "High Feel" lebt jetzt unten im Backend-canonical Block (rule:feel_score>75)
+  // — die alte Definition hier wurde 2026-06-04 entfernt (war "Feel Score > 80",
+  // konfligierte mit der Backend-rule und wurde durch JavaScript last-write-wins
+  // ohnehin stumm überschrieben).
   "Good Defensive Baseline":       { cat:"green", rule:"Def Score > 80",                      desc:"Defensive engine. Elite combination of rim protection, steal rate, and DBPM. Anchors team defense and dictates opponent shot quality." },
   "Rim Protector":          { cat:"green", rule:"BLK% > 5.0 & Height ≥ 6'10\"",       desc:"Elite shot-blocking big. Deters drives and alters shots. The most impactful single defensive skill in basketball." },
   "Self-Creator":           { cat:"green", rule:"Box Creation Percentile > 75",             desc:"Elite offensive creator. High scoring efficiency at volume + generates scoring for teammates. Box Creation = USG×TS + Assist Creation." },
@@ -406,8 +419,10 @@ const BADGE_DEFS = {
   "Turnover Prone":         { cat:"red",   rule:"TO% > 25",                            desc:"Excessive turnovers at any position. Ball security is a fundamental NBA requirement that doesn't improve easily." },
 
 
-  // /* Tobias 2026-06-03 v14: badge tooltip fix — missing backend badges added */
-  // ── Backend-only green badges (no UI tooltip prior to this patch) ──
+  // ── GREEN — Backend-canonical (10c pipeline rules) ─────────────────────
+  // These badges are emitted by 10c_ml_calibration.py. Their `rule` strings
+  // reflect the actual backend thresholds (verified 2026-06-04). Previously
+  // duplicated in two places with conflicting rules; consolidated here.
   "Elite Shooting":         { cat:"green", rule:"role_spacer>85 & 3P%>36 (or FT>82 intl)",  desc:"Elite spot-up shooter. Top-percentile spacing role plus efficient three-point conversion. Forces defensive close-outs that bend NBA defenses." },
   "Floor General":          { cat:"green", rule:"PM/Wing & playmaker>70 & AST%>20 & A/TO>1.8", desc:"Reliable primary or secondary creator with positive decision-making. High assist rate paired with low turnovers signals NBA-ready playmaking." },
   "Passing Hub":            { cat:"green", rule:"Big & AST%>15",                            desc:"Rare distributing big. Connects offense from the elbow or top of the key. Becomes a half-court engine in 5-out lineups." },
