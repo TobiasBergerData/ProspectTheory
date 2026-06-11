@@ -1,0 +1,30 @@
+name: Keep Render Warm
+
+# Render Free Tier sleeps after 15 minutes of inactivity.
+# This workflow pings /api/health every 14 minutes to prevent cold-starts.
+# Cost: GitHub Actions Free Tier (~2000 min/month for private repos, unlimited for public).
+# Each run is ~10 seconds, so ~100 runs/day = ~17 min/day = under quota.
+
+on:
+  schedule:
+    - cron: '*/14 * * * *'
+  workflow_dispatch:  # allow manual trigger
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping API health endpoint
+        run: |
+          echo "Pinging API at $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          for i in 1 2 3; do
+            response=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 https://api.prospecttheory.io/api/health || echo "000")
+            echo "Attempt $i: HTTP $response"
+            if [ "$response" = "200" ]; then
+              echo "✓ API warm and responsive"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "⚠ API did not respond with 200 after 3 attempts — Render may be down"
+          exit 0  # don't fail the workflow, just log

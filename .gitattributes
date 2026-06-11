@@ -1,0 +1,10 @@
+# Tobias 2026-05-05: Build-on-Deploy → DB ist NICHT mehr im Repo.
+# Alle Source-JSONs sind <90 MB (api_profiles.json gesplittet in parts).
+# Kein Git LFS noetig fuer DB oder JSONs. Bandwidth-Limit-frei.
+# Render baut die DB beim Deploy via build_db.py.
+
+# Falls einzelne JSONs doch >90 MB werden: hier wieder LFS aktivieren.
+# Aktuell: keine LFS-Tracker mehr aktiv.
+
+# Behalten als Sicherheit fuer DB-Snapshots (Backup-Branch nutzt ggf. noch LFS)
+*.db filter=lfs diff=lfs merge=lfs -text

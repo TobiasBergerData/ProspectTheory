@@ -1,0 +1,28 @@
+node_modules/
+# Large JSON files — tracked as .json.gz instead
+backend/data/processed/api_profiles.json
+backend/data/processed/api_stat_comps.json
+backend/data/processed/api_anthro_comps.json
+# SQLite DBs — werden auf Render aus den JSONs gebaut, NICHT ins Repo
+backend/data/processed/*.db
+backend/data/processed/*.db-shm
+backend/data/processed/*.db-wal
+# Pycache
+__pycache__/
+*.pyc
+
+# === Linux/FUSE-Tempdateien (von Cowork-Sandbox-Mounts) ===
+# Tobias 2026-05-08: Cowork mountet Workspace via FUSE — bei laufendem Mount
+# entstehen .fuse_hidden* Tempfiles (unlinked-but-still-open). Sollen NIE ins Repo.
+**/.fuse_hidden*
+
+# === Frontend-Build-Output ===
+frontend/dist/
+
+# === Backups ===
+*.bak
+*.bak2
+backend/prospecttheory.db
+
+# Backup files from rescue scripts
+frontend/src/*.bak*
