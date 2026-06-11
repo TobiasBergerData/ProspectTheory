@@ -4224,7 +4224,17 @@ function MindTab({p}) {
         // type: "neutral" → high oder low können beide Bedeutung haben
         // type: "adverse" → high = bad (mehr TOs/Fouls)
         // type: "positive" → high = good (Bounceback eFG)
-        const TendBar = ({label, sub, m, type, hint, reli}) => {
+        //
+        // Tobias 2026-06-04: shrinkable=false EXEMPTS the metric from Bayesian-Shrinkage.
+        // Background — shrinkage prior is calibrated for STREAK-RESPONSE indices
+        // (n_prior=30 streaks). Metrics that aggregate across ALL actions (not streaks)
+        // already have large effective n and should be displayed as raw.
+        // Match Stamina (h2/h1 adverse-rate ratio, n≈500-1000 actions) is the canonical
+        // example — historically displayed shrunken in this card but raw in the
+        // Match-Phase-Drift section, causing the two to disagree for the same player.
+        // Single-source-of-truth: shrinkable controls a SINGLE Bayesian step at the
+        // display boundary; raw stays in tooltips for traceability.
+        const TendBar = ({label, sub, m, type, hint, reli, shrinkable = true}) => {
           const rel = reliTier(reli);
           if (!m || m.idx == null) return (
             <div style={{background:"#0d1117",border:"1px solid #1f2937",borderRadius:8,padding:"10px 12px",opacity:0.5}}>
@@ -4232,11 +4242,13 @@ function MindTab({p}) {
               <div style={{fontSize:10,color:"#4b5563",marginTop:4}}>insufficient data</div>
             </div>
           );
-          // Use shrunken values for display, raw for tooltip
+          // Use shrunken values for display, raw for tooltip — UNLESS the metric is
+          // exempted (shrinkable=false), in which case raw IS the display value
+          // (consistency with other sections like Match-Phase-Drift).
           const idx_raw = m.idx;
           const z_raw = m.z;
-          const idx = shrink(idx_raw);    // Bayesian-shrunken display value
-          const z = shrinkZ(z_raw);
+          const idx = shrinkable ? shrink(idx_raw) : idx_raw;
+          const z   = shrinkable ? shrinkZ(z_raw)  : z_raw;
           const lo = m.lo, hi = m.hi;
           // CI excludes 1.0 = statistically significant deviation from baseline
           const sigDev = (lo != null && hi != null && (lo > 1.0 || hi < 1.0));
@@ -4372,7 +4384,12 @@ function MindTab({p}) {
           {key:"passive",    m:mm.passive,    type:"neutral",  reli:0.03, label:"Engagement",      sub:"actions taken under stress",    hint:"After multi-event slumps: how many actions does he take in the next 4 plays vs. expected? Low = withdraws / checks out."},
           {key:"aggressor",  m:mm.aggressor,  type:"neutral",  reli:0.05, label:"Shot-Seeking",    sub:"more shots under stress",       hint:"After multi-event slumps: does FGA-Rate spike (force shots) or fall (fade away)? Both extremes can be tells."},
           {key:"bounceback", m:mm.bounceback, type:"positive", reli:0.04, label:"Bounceback eFG",  sub:"shooting recovers under stress",hint:"After multi-event slumps: does eFG% on subsequent shots recover? High = clutch shot-making mentality."},
-          {key:"stamina",    m:staminaM,      type:"adverse",  reli:0.07, label:"Match Stamina",   sub:"adverse rate H2 vs H1",         hint:"Half-2 vs Half-1 adverse-event rate. >1 = gets worse in the 2nd half (conditioning / mental fatigue). <1 = stays stable or improves."},
+          // Stamina exempted from Bayesian-Shrinkage (Tobias 2026-06-04):
+          // stamina_idx aggregates over ALL actions (n≈500-1000), not streaks.
+          // Shrinking with the streak-calibrated prior (n_prior=30) was distorting
+          // this card relative to the Match-Phase-Drift section, which always
+          // displayed raw. Now both surfaces show the identical value.
+          {key:"stamina",    m:staminaM,      type:"adverse",  reli:0.07, label:"Match Stamina",   sub:"adverse rate H2 vs H1",         hint:"Half-2 vs Half-1 adverse-event rate. >1 = gets worse in the 2nd half (conditioning / mental fatigue). <1 = stays stable or improves.", shrinkable:false},
         ];
         for (const c of cards) {
           if (!c.m || c.m.idx == null) continue;
