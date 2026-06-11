@@ -1,0 +1,46 @@
+# =============================================================================
+# render.yaml — Blueprint-Spec für ProspectTheory Backend
+# =============================================================================
+#
+# Diese Datei ist die LANGFRISTIGE Source-of-Truth für die Render-Service-
+# Konfiguration. Aktueller Status (2026-06-11):
+#
+#   - Bestehender Service "prospecttheory-data" wird per Dashboard verwaltet,
+#     NICHT per Blueprint. render.yaml hier dient als ehrliche Spec, die mit
+#     dem Dashboard-State synchronisiert wird (manuell, beim Editieren).
+#
+#   - Ziel: Bei nächster Service-Neuerstellung (z.B. Disaster Recovery,
+#     Region-Wechsel, Plan-Upgrade-Migration) als Blueprint deployen — dann
+#     gibt's Dashboard-Drift gar nicht mehr.
+#
+# Dashboard-Settings (Stand 2026-06-11, nach build.sh-Refactor):
+#   - Root Directory: (empty)              ← Repo-Root, NICHT backend/
+#   - Build Command:  bash build.sh
+#   - Start Command:  cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+#
+# Pipeline-Steps stehen in build.sh — DORT pflegen, NICHT hier.
+#
+# Migration zum Blueprint-Modus (späterer Sprint):
+#   1. Diese Spec final reviewen (envVars, region, plan)
+#   2. Render Dashboard → New → Blueprint → Repo verbinden
+#   3. Custom Domain (api.prospecttheory.io) auf neuen Service umziehen
+#   4. Alten Service löschen
+#   Vorsicht: Cutover braucht DNS-TTL-Bedacht.
+# =============================================================================
+
+services:
+  - type: web
+    name: prospecttheory-api
+    runtime: python
+    plan: free
+    region: oregon
+    # Build-Logik bewusst minimal — alle Steps + Reihenfolge in build.sh.
+    # So sind Pipeline-Änderungen versioniert (PR-reviewbar) statt UI-State.
+    buildCommand: bash build.sh
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /
+    envVars:
+      - key: DATA_DIR
+        value: ./data/processed
+      - key: PYTHON_VERSION
+        value: "3.11"
