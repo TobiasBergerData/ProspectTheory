@@ -107,6 +107,92 @@ const ARCH_COLORS = {
 const valColor = (pctl) => { if(pctl==null)return"#6b7280";if(pctl>=90)return"#22c55e";if(pctl>=75)return"#86efac";if(pctl>=60)return"#a3e635";if(pctl>=40)return"#fbbf24";if(pctl>=25)return"#f97316";return"#ef4444"; };
 const valBg = (pctl) => valColor(pctl)+"18";
 
+// ── Sprint-3.2 v27 Archetype Groups (2026-06-12) ──────────────────────────────
+// Generated from data-pipeline/data/processed/archetype_priors_v27.json.
+// 11 empirically-derived NBA archetype clusters (K-Means on 8 roles + 2 anthro).
+// Each prospect is PLACED into the closest GROUP — the named players below are
+// illustrative MEMBERS of that cluster, NOT individual comparables for the prospect.
+// Star threshold: peak_pie ≥ 18. Color codes: green ≥15%, amber ≥8%, blue ≥4%, gray <4%.
+const ARCHETYPE_V27_PRIORS = {
+  "Two-Way Lead Guard": {
+    pos: "Playmaker", n_nba: 46, starRate: 0.239, median: 5.8, p90: 22.9,
+    groupMembers: ["Shai Gilgeous-Alexander", "James Harden", "Damian Lillard", "Derrick White", "George Hill"],
+    desc: "Cluster of 6'4\"+ lead guards with defensive solidity and scoring volume. Historically the most productive lead-guard archetype.",
+    color: "#22c55e",
+  },
+  "Offensive Lead Guard": {
+    pos: "Playmaker", n_nba: 58, starRate: 0.086, median: 1.8, p90: 15.9,
+    groupMembers: ["Stephen Curry", "Kemba Walker", "Fred VanVleet", "Jalen Brunson", "Trae Young"],
+    desc: "Cluster of 6'2\" lead guards with offense-first skill sets (scoring, shooting, playmaking). Smaller frames, undersized for two-way impact.",
+    color: "#f59e0b",
+  },
+  "Elite Two-Way Forward": {
+    pos: "Wing", n_nba: 81, starRate: 0.148, median: 2.4, p90: 19.7,
+    groupMembers: ["Jayson Tatum", "Paul George", "Draymond Green", "Kawhi Leonard", "Franz Wagner"],
+    desc: "Cluster of 6'8\"+ forwards with complete two-way skill sets (defense, scoring, playmaking). Highest non-guard star rate in the dataset.",
+    color: "#f59e0b",
+  },
+  "Two-Way Wing": {
+    pos: "Wing", n_nba: 128, starRate: 0.062, median: 1.8, p90: 11.7,
+    groupMembers: ["Anthony Edwards", "Donovan Mitchell", "Jimmy Butler", "Khris Middleton", "Josh Hart"],
+    desc: "Cluster of 6'6\" wings with balanced profiles (moderate defense, scoring, spacing). The largest wing cluster — broad distribution from stars to role players.",
+    color: "#3b82f6",
+  },
+  "Combo Scoring Wing": {
+    pos: "Wing", n_nba: 80, starRate: 0.037, median: 1.1, p90: 12.3,
+    groupMembers: ["Russell Westbrook", "Devin Booker", "Immanuel Quickley", "Jamal Murray", "Tyler Herro"],
+    desc: "Cluster of 6'5\" college wings whose careers typically evolve into NBA lead-scorer roles. Pre-draft profile: moderate college USG; NBA outcome: high-volume scoring guards.",
+    color: "#94a3b8",
+    isComboGuard: true,  // pos-disclaimer flag (pre-draft wing → NBA lead guard)
+  },
+  "Power Combo Forward": {
+    pos: "Wing", n_nba: 53, starRate: 0.000, median: 0.1, p90: 11.1,
+    groupMembers: ["Jaylen Brown", "DeMar DeRozan", "Al-Farouq Aminu", "Julius Randle", "Scottie Barnes"],
+    desc: "Cluster of 6'7\"+ physical forwards with defense and rim activity, but limited spacing. Historically below baseline for star outcomes.",
+    color: "#94a3b8",
+  },
+  "3-and-D Specialist Wing": {
+    pos: "Wing", n_nba: 21, starRate: 0.048, median: -0.7, p90: 8.3,
+    groupMembers: ["Jrue Holiday", "Duncan Robinson", "Matisse Thybulle", "Tre Jones", "Kevin Porter Jr."],
+    desc: "Small replacement-level wing cluster (n=21). Mediocre across all skill axes. Historical star rate near zero — most members reach bench-rotation outcomes at best.",
+    color: "#3b82f6",
+    isReplacement: true,
+  },
+  "Two-Way Big": {
+    pos: "Big", n_nba: 40, starRate: 0.050, median: 2.5, p90: 14.8,
+    groupMembers: ["Joel Embiid", "Anthony Davis", "Jaren Jackson Jr.", "DeMarcus Cousins", "Chet Holmgren"],
+    desc: "Cluster of 6'11\" bigs with elite rim protection, defense, and inside scoring. Lower star rate than the skill-big cluster — defensive bigs win less often than offensive ones.",
+    color: "#3b82f6",
+  },
+  "Skilled Offensive Big": {
+    pos: "Big", n_nba: 42, starRate: 0.119, median: 3.7, p90: 23.0,
+    groupMembers: ["Domantas Sabonis", "Kevin Love", "Karl-Anthony Towns", "Blake Griffin", "Evan Mobley"],
+    desc: "Cluster of 6'11\" bigs with elite offensive skill sets (scoring, spacing, playmaking, rebounding). Highest star rate of any big cluster.",
+    color: "#f59e0b",
+  },
+  "Stretch Forward Big": {
+    pos: "Big", n_nba: 23, starRate: 0.000, median: 1.5, p90: 13.8,
+    groupMembers: ["Chandler Parsons", "Michael Porter Jr.", "Lauri Markkanen", "Paolo Banchero", "Luke Kornet"],
+    desc: "Cluster of 6'10\" smaller bigs with spacing profiles but limited defense. Floor-spacing forwards, historically zero star outcomes.",
+    color: "#94a3b8",
+  },
+  "Anchor Rim Big": {
+    pos: "Big", n_nba: 26, starRate: 0.115, median: -0.5, p90: 17.6,
+    groupMembers: ["Jarrett Allen", "Steven Adams", "DeAndre Jordan", "Andre Drummond", "Chris Boucher"],
+    desc: "Cluster of 6'11\" pure rim anchors (high rim protection, no spacing). Traditional rim-rolling centers.",
+    color: "#f59e0b",
+  },
+};
+
+// Confidence buckets — describes how cleanly the prospect's feature vector
+// sits inside one cluster vs. its runner-up. NOT a player-quality judgment.
+function archetypeV27Bucket(conf) {
+  if (conf == null) return null;
+  if (conf >= 0.50) return { label: "Strong fit", color: "#22c55e", bg: "rgba(34,197,94,0.12)" };
+  if (conf >= 0.20) return { label: "Moderate fit", color: "#f59e0b", bg: "rgba(245,158,11,0.12)" };
+  return { label: "Loose fit", color: "#94a3b8", bg: "rgba(148,163,184,0.12)" };
+}
+
 // ── Position-spezifische Empirical-Percentile (BartTorvik 2008-2026) ──
 // Tobias 2026-05-09: Frontend-Fallback wenn API kein pctl_ast / pctl_to liefert.
 // AST% Verteilung pro Position (D1 NCAA, ≥10 GP):
@@ -1627,11 +1713,19 @@ function mapProfile(d) {
     // Tall wings (≥81") get Stretch-4 / Glass Cleaner pass-through (Tatum/Markkanen pattern).
     archetype: filterArchetypesByPos(d.archetype || "", resolvedPos, d.ht ?? d.height_in ?? d.college_height_inches, _ncaaArch).split("|")[0] || "",
     archetypesAll: filterArchetypesByPos(d.archetypes_all || d.archetype || "", resolvedPos, d.ht ?? d.height_in ?? d.college_height_inches, _ncaaArch),
+    // Sprint-3.2 v27 Archetype-fields (post 10c-Pipeline-Run).
+    // Wenn v27 nicht im Backend-Output → undefined → ArchetypeV27Card hidet sich automatisch.
+    archetypeV27: d.archetype_v27 || null,
+    archetypeV27Confidence: d.archetype_v27_confidence ?? null,
+    archetypeV27Alternative: d.archetype_v27_alternative || null,
+    archetypeV27NArch: d.archetype_v27_n_arch ?? null,
+    archetypeV27ArchMedian: d.archetype_v27_arch_median ?? null,
+    archetypeV27ArchStarRate: d.archetype_v27_arch_star_rate ?? null,
     feas:{repl:d.feas_repl,rot:d.feas_rot,start:d.feas_start,allstar:d.feas_allstar,
       cleared:d.feas_cleared||"",blocker:d.feas_blocker||""},
     mu:d.pred_mu??d.mu??d.projected_pie??d.pred_mu_pie??d.aspm_adj??d.aspm,
     sigma:d.pred_sigma??d.sigma??d.mc_sigma??d.volatility,
-    pNba:d.pred_p_nba??d.pNba??d.pn,
+    // pNba merged into single definition further below (see ~Z.1779) — kept legacy fallbacks there.
     // Tobias 2026-05-09: predTier is now threshold-recalibrated (see recalibrateTier).
     // Original modal tier is preserved as `predTierRaw` for debugging / methodology.
     predTier: d.addedWins?.projTier ?? (() => {
@@ -1682,7 +1776,7 @@ function mapProfile(d) {
     waFloor: d.addedWins?.floor ?? d.waFloor ?? null,
     waCeiling: d.addedWins?.ceiling ?? d.waCeiling ?? null,
     waSigma: d.waSigma ?? d.v2_sigma ?? null,
-    pNba: d.addedWins?.pNba ?? d.pNba ?? null,   // real P(NBA) for the Non-NBA chart bar
+    pNba: d.addedWins?.pNba ?? d.pred_p_nba ?? d.pNba ?? d.pn ?? null,   // real P(NBA) for the Non-NBA chart bar (merged with legacy fallbacks)
     v2Conf: d.v2Conf ?? null,
     v2TierProbs: d.addedWins?.tierProbs ?? d.v2TierProbs ?? null,  // %-scale {Superstar:0.3, ...}
     v2Boosters: d.v2Boosters ?? null,
@@ -5113,7 +5207,70 @@ function ProjectionTab({p}) {
               </div>
             );
           })()}
-          {/* ── Archetype Pipeline ── */}
+          {/* ── Sprint-3.2 v27 Archetype Group (anchor-based K-Means + Bayesian shrinkage) ── */}
+          {p.archetypeV27 && ARCHETYPE_V27_PRIORS[p.archetypeV27] && (() => {
+            const v27 = ARCHETYPE_V27_PRIORS[p.archetypeV27];
+            const conf = p.archetypeV27Confidence ?? 0;
+            const bucket = archetypeV27Bucket(conf);
+            const alt = p.archetypeV27Alternative;
+            const altPriors = alt ? ARCHETYPE_V27_PRIORS[alt] : null;
+            return (
+              <div className="mt-4 rounded-xl p-4" style={{
+                background: bucket.bg,
+                borderLeft: `4px solid ${v27.color}`,
+                border: `1px solid ${v27.color}33`,
+              }}>
+                <div className="flex items-center gap-2 flex-wrap mb-2">
+                  <div className="text-xs uppercase tracking-widest" style={{color:"#9ca3af",letterSpacing:"0.1em"}}>
+                    Archetype Group (empirical, v27)
+                  </div>
+                  <div className="text-xs font-bold px-2 py-0.5 rounded"
+                    style={{background:bucket.color+"33",color:bucket.color,border:`1px solid ${bucket.color}66`}}>
+                    {bucket.label} · {(conf*100).toFixed(0)}%
+                  </div>
+                </div>
+                <div className="text-xs mb-2" style={{color:"#9ca3af",lineHeight:1.4}}>
+                  This prospect is placed into the closest archetype cluster based on his role profile + anthropometrics.
+                  The named players below are <strong style={{color:"#cbd5e1"}}>illustrative members of that group</strong>,
+                  not individual comparables.
+                </div>
+                <div className="flex items-baseline gap-3 flex-wrap mb-2">
+                  <div className="text-2xl font-bold" style={{color:v27.color}}>
+                    {p.archetypeV27}
+                  </div>
+                  <div className="text-xs" style={{color:"#9ca3af"}}>
+                    Group stats: n={v27.n_nba} historical NBA players · {(v27.starRate*100).toFixed(0)}% star rate · median peak-WA {v27.median.toFixed(1)} · 90th pct {v27.p90.toFixed(1)}
+                  </div>
+                </div>
+                <div className="text-xs mb-2" style={{color:"#cbd5e1",lineHeight:1.5}}>{v27.desc}</div>
+                <div className="text-xs mb-1" style={{color:"#9ca3af"}}>
+                  <strong style={{color:"#e5e7eb"}}>Group members include:</strong> {v27.groupMembers.slice(0,5).join(" · ")}
+                </div>
+                {v27.isComboGuard && (
+                  <div className="text-xs mt-2 px-2 py-1 rounded" style={{
+                    background:"rgba(245,158,11,0.10)",color:"#fbbf24",border:"1px solid rgba(245,158,11,0.3)"
+                  }}>
+                    ⓘ Pre-draft archetype: this college combo-guard cluster historically develops into NBA lead-scorer roles. Group classification reflects pre-draft role (driven by college USG), not the player's eventual NBA position.
+                  </div>
+                )}
+                {v27.isReplacement && (
+                  <div className="text-xs mt-2 px-2 py-1 rounded" style={{
+                    background:"rgba(148,163,184,0.10)",color:"#94a3b8",border:"1px solid rgba(148,163,184,0.3)"
+                  }}>
+                    ⓘ Replacement-tier group: small NBA sample (n={v27.n_nba}), historically near-zero star rate. Bayesian shrinkage applies a weak anchor (model trusts the LightGBM prediction more for this cluster).
+                  </div>
+                )}
+                {alt && altPriors && conf < 0.50 && (
+                  <div className="text-xs mt-2" style={{color:"#9ca3af"}}>
+                    <strong style={{color:"#cbd5e1"}}>Runner-up group (low fit confidence):</strong>{" "}
+                    <span style={{color:altPriors.color}}>{alt}</span>{" "}
+                    <span style={{color:"#6b7280"}}>(n={altPriors.n_nba}, {(altPriors.starRate*100).toFixed(0)}% star rate)</span>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+          {/* ── Archetype Pipeline (v26 legacy — NCAA Role → NBA Projection) ── */}
           {(p.ncaaArchetype || p.nbaProjection) && (
             <div className="mt-4 rounded-xl px-4 py-3" style={{background:"#0a0e17",border:"1px solid #1f2937"}}>
               <div className="text-xs mb-2 mt-0" style={{color:"#6b7280",lineHeight:1.5,textAlign:"center"}}>
