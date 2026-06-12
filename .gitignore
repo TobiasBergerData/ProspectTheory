@@ -26,3 +26,10 @@ backend/prospecttheory.db
 
 # Backup files from rescue scripts
 frontend/src/*.bak*
+
+# Sprint-3.0 cleanup (2026-06-12): Pipeline-Output-Variants gehoeren nicht ins Repo
+backend/data/processed/_backup_pre_sprint2/
+backend/data/processed/*.gz
+backend/data/processed/api_anthro_comps.zip
+backend/data/processed/api_season_lines.json
+backend/data/processed/api_season_lines_intl.json
