@@ -7134,6 +7134,14 @@ function RiskProfileTab({p}) {
   const cons = rp.consensus;
   const p20 = rp.marketP20, p50 = rp.marketP50, p80 = rp.marketP80;
   const hasMarket = p20 != null && p80 != null;
+  // Tobias 2026-06-12: Steal-Probability als Heuristik aus Merit↔Market-Gap.
+  // gap = market_p50 - merit_slot. Auf 30-Pick-Range normiert, geclippt auf [0,100].
+  // Interpretation: 100% = Modell sagt 30+ Picks höher als Markt (klares Steal).
+  // 0% = Markt valuiert ≥ Modell (kein Steal-Potential).
+  // Heuristik bewusst einfach — methodisch saubere Bayesian Steal-Prob im Backlog (#70).
+  const steal = (p50 != null && merit != null)
+    ? Math.round(Math.max(0, Math.min(100, ((p50 - merit) / 30) * 100)))
+    : null;
   const showUp = star != null && star >= 15 && (rp.upsideFactors || []).length > 0;
   const showRisk = bust != null && bust >= 35 && (rp.riskFactors || []).length > 0;
 
@@ -7284,11 +7292,16 @@ function RiskProfileTab({p}) {
             where he'll go). The slider added noise without adding decision-relevant info. */}
       </div>
 
-      {/* Two risk axes */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/* Three risk axes — Bust (rot) / Steal (grün) / Star Upside (amber)
+          Tobias 2026-06-12: Steal als eigene Bar visualisiert, plus Star Upside
+          auf amber/gold umgefärbt damit die drei Achsen visuell klar getrennt sind.
+          Color-Schema: Bust=Risiko (rot), Steal=Opportunity (grün), Star=Premium (amber). */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <RiskBar label="🔥 Bust Risk — the pick that gets you fired" pct={bust ?? 0} color="#ef4444"
                  blurb="How likely he delivers LESS than the value his draft slot demands. High here at an early pick is the career-defining miss."/>
-        <RiskBar label="⭐ Star Upside — the pick you'd regret passing on" pct={star ?? 0} color="#22c55e"
+        <RiskBar label="💎 Steal Probability — value below the market" pct={steal ?? 0} color="#22c55e"
+                 blurb="Modell sagt höher als der Markt: Merit-Slot besser als Market-Median. Hoher Steal-Wert spät im Draft = der Lurker, den die anderen Teams übersehen."/>
+        <RiskBar label="⭐ Star Upside — the pick you'd regret passing on" pct={star ?? 0} color="#f59e0b"
                  blurb="How likely he becomes an All-Star-level player. High here at a late slot is the lurking star you don't want to let slip."/>
       </div>
 
