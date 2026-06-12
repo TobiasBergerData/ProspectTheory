@@ -1651,6 +1651,20 @@ function mapProfile(d) {
       return recalibrateTier(legacy, fallback);
     })(),
     predTierRaw: d.v2Tier ?? d.pred_tier ?? d.predicted_tier ?? d.tier,
+    // Sprint-3.0.C (2026-06-12): Multi-Layer Tier Output, backend-vorberechnet.
+    //   tierLayered.point_estimate    — historisch / headline tier (proj_tier)
+    //   tierLayered.modal             — mode of tier_probs (vorsichtigste Sicht)
+    //   tierLayered.weighted_label    — display-fertig: "Modal (P%)" oder "Range Tier1-Tier2"
+    //   tierLayered.ci_95             — [tier_low, tier_high] über cumulative probability
+    //   tierLayered.sample_confidence — "Full" | "Partial" | "Insufficient"
+    // Source-of-Truth: model_utils.build_multi_layer_tier(). Frontend wählt nur
+    // welche Sicht angezeigt wird — kein Compute hier. Siehe SPRINT_3_0_DESIGN.md
+    // für vollständige methodische Begründung.
+    tierLayered: d.tier_layered ?? null,
+    // Sprint-3.0.A: Sample-Size-aware Eligibility (separater Quick-Access shortcut).
+    // Identisch zu tierLayered.sample_confidence, aber bequemer für Filter-Logic.
+    sampleConfidence: d.tier_layered?.sample_confidence ?? d.sample_confidence_tier ?? null,
+    sampleNEffective: d.sample_n_effective ?? null,
     // Tobias 2026-05-05: potential_tier zeigt P(A+)≥30%-basierten Tier (statt nur Modal).
     // Doncic mit S=45% A=51.5% bekommt "Superstar Potential" (45%≥30%), waehrend
     // predicted_tier "All-Star" bleibt. Macht Pre-Draft-Potenzial sichtbar.
@@ -1888,6 +1902,66 @@ const BadgeChip = ({text,color="#22c55e"}) => {
 };
 
 const TierBadge = ({tier}) => <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{background:(TC[tier]||"#6b7280")+"22",color:TC[tier]||"#6b7280",border:`1px solid ${(TC[tier]||"#6b7280")}44`}}>{tier}</span>;
+
+// Sprint-3.0.A (2026-06-12): Sample-Confidence Badge.
+// Macht Modell-Konfidenz visuell sichtbar — wichtig für Pod-Decisions
+// und Daten-Konsumenten ("ist diese Bewertung verlässlich?").
+//
+// Color-Semantic:
+//   Full         → green (genug Sample für verlässliche Bewertung)
+//   Partial      → amber (echter Rollen-Anteil, aber statistisch unsicher)
+//   Insufficient → red   (Walk-on / Garbage-Time — Modell läuft, Vorsicht)
+//
+// Empirische Begründung: p10 historischer NBA-Spieler 2018-2024 hatte
+// GP≥24 AND Min_per≥25 → Full-Threshold. Siehe SPRINT_3_0_DESIGN.md.
+const SAMPLE_CONFIDENCE_COLORS = {
+  Full:         { bg: "#22c55e22", color: "#22c55e", border: "#22c55e44", label: "Full Sample" },
+  Partial:      { bg: "#fbbf2422", color: "#fbbf24", border: "#fbbf2444", label: "Partial Sample" },
+  Insufficient: { bg: "#ef444422", color: "#ef4444", border: "#ef444444", label: "Insufficient Sample" },
+  Unknown:      { bg: "#6b728022", color: "#9ca3af", border: "#6b728044", label: "Sample n/a" },
+};
+
+const SampleConfidenceBadge = ({ confidence, nEffective, compact=false }) => {
+  if (!confidence) return null;
+  const c = SAMPLE_CONFIDENCE_COLORS[confidence] || SAMPLE_CONFIDENCE_COLORS.Unknown;
+  const title = nEffective != null
+    ? `${c.label} (${Math.round(nEffective)} total minutes)`
+    : c.label;
+  return (
+    <span
+      className="px-2 py-0.5 rounded-full text-xs font-medium"
+      style={{ background: c.bg, color: c.color, border: `1px solid ${c.border}` }}
+      title={title}
+    >
+      {compact ? confidence : c.label}
+    </span>
+  );
+};
+
+// Sprint-3.0.C: Multi-Layer Tier Display. Wählt zwischen "Confident-Mode"
+// (nur point_estimate) und "Honest-Mode" (modal + CI). Default: Confident-Mode
+// für Backward-Compatibility, kann via UI-Toggle umgeschaltet werden.
+const MultiLayerTierDisplay = ({ tierLayered, mode = "confident", showConfidence = true }) => {
+  if (!tierLayered) return null;
+  const { point_estimate, modal, weighted_label, ci_95, sample_confidence } = tierLayered;
+  const primaryTier = mode === "honest" ? modal : point_estimate;
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <TierBadge tier={primaryTier} />
+      {mode === "honest" && weighted_label && weighted_label !== `${primaryTier} (100%)` && (
+        <span className="text-xs" style={{ color: "#9ca3af" }}>
+          {weighted_label}
+        </span>
+      )}
+      {mode === "honest" && ci_95 && ci_95[0] && ci_95[1] && ci_95[0] !== ci_95[1] && (
+        <span className="text-xs" style={{ color: "#6b7280" }}>
+          CI: {ci_95[0]} – {ci_95[1]}
+        </span>
+      )}
+      {showConfidence && <SampleConfidenceBadge confidence={sample_confidence} compact />}
+    </div>
+  );
+};
 
 const StatCell = ({label,val,pctl,suffix="",tooltip}) => (
   <div className="text-center p-2 rounded-lg" style={{background:valBg(pctl)}} title={tooltip}>
