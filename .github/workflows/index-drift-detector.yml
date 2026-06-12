@@ -1,0 +1,126 @@
+name: Index-Drift Detector
+
+# Verhindert Wiederholung der Sprint-Recovery-Krise (2026-06-11).
+# Damals waren Code-Files aus Git-Index verloren gegangen, ohne dass es
+# bemerkt wurde — Render-Build-Cache hatte den Service am Leben gehalten.
+# Dieser Workflow läuft bei jedem Push und prüft kritische Files auf
+# Existenz im Remote.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify-critical-files:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Verify backend Python code exists
+        run: |
+          set -e
+          critical=(
+            backend/main.py
+            backend/build_db.py
+            backend/build.sh
+            backend/requirements.txt
+            backend/inject_added_wins.py
+            backend/inject_draft_risk.py
+            backend/inject_game_logs.py
+            backend/inject_leverage_efficiency.py
+            backend/inject_mind_metrics.py
+            backend/inject_nba_role.py
+            backend/inject_ogbpm.py
+            backend/inject_position_overrides.py
+            backend/inject_season_advanced.py
+            backend/inject_shooting_m1.py
+            backend/inject_shot_creation_spectrum.py
+            backend/inject_skill_curve.py
+            backend/name_utils.py
+            render.yaml
+          )
+          missing=()
+          for f in "${critical[@]}"; do
+            if [[ ! -f "$f" ]]; then
+              missing+=("$f")
+            fi
+          done
+          if [[ ${#missing[@]} -gt 0 ]]; then
+            echo "FATAL: Critical files missing in Remote:"
+            printf '  - %s\n' "${missing[@]}"
+            echo ""
+            echo "Sprint-Recovery-Krise wiederholt sich. Index-Drift!"
+            echo "Lokal verifizieren mit: git status; git ls-tree -r origin/main --name-only"
+            exit 1
+          fi
+          echo "✓ All ${#critical[@]} critical backend files present"
+
+      - name: Verify frontend code exists
+        run: |
+          set -e
+          critical=(
+            frontend/src/App.jsx
+            frontend/src/main.jsx
+            frontend/src/index.css
+            frontend/package.json
+            frontend/index.html
+            frontend/vite.config.js
+          )
+          missing=()
+          for f in "${critical[@]}"; do
+            if [[ ! -f "$f" ]]; then
+              missing+=("$f")
+            fi
+          done
+          if [[ ${#missing[@]} -gt 0 ]]; then
+            echo "FATAL: Frontend files missing:"
+            printf '  - %s\n' "${missing[@]}"
+            exit 1
+          fi
+          echo "✓ All ${#critical[@]} critical frontend files present"
+
+      - name: Verify Sprint-3.0 data artifacts
+        run: |
+          set -e
+          for part in part1 part2 part3; do
+            f="backend/data/processed/api_profiles_${part}.json"
+            if [[ ! -f "$f" ]]; then
+              echo "FATAL: $f missing — Pipeline-Output nicht synced"
+              exit 1
+            fi
+            size=$(stat -c%s "$f" 2>/dev/null || stat -f%z "$f" 2>/dev/null)
+            if [[ $size -lt 10000000 ]]; then
+              echo "FATAL: $f is suspiciously small ($size bytes) — truncated?"
+              exit 1
+            fi
+          done
+          echo "✓ All 3 api_profiles_part*.json present and reasonably sized"
+
+      - name: Verify documentation completeness
+        run: |
+          set -e
+          docs=(
+            docs/ARCHITECTURE.md
+            docs/METHODS_DICT.md
+            docs/SCHEMA_CONTRACT.md
+            docs/ADR/001-polyrepo-architecture.md
+            docs/sprints/SPRINT_3_0_DESIGN.md
+          )
+          missing=()
+          for f in "${docs[@]}"; do
+            if [[ ! -f "$f" ]]; then
+              missing+=("$f")
+            fi
+          done
+          if [[ ${#missing[@]} -gt 0 ]]; then
+            echo "WARN: Documentation files missing:"
+            printf '  - %s\n' "${missing[@]}"
+            echo "(non-blocking, aber Doku-Erosion)"
+          else
+            echo "✓ All documentation present"
+          fi

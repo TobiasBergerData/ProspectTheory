@@ -1,0 +1,73 @@
+name: Render Build Verification
+
+# Validiert dass der Render-Build-Command + Service-Setup intakt sind.
+# Simuliert die wichtigsten Build-Steps lokal in CI um Crashes wie
+# "requirements.txt not found" (Sprint-Recovery-Krise) abzufangen
+# BEVOR sie Render-Deploys brechen.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'render.yaml'
+      - '.github/workflows/render-build-verification.yml'
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Verify build.sh syntax + executable
+        run: |
+          test -f backend/build.sh || (echo "FATAL: backend/build.sh missing"; exit 1)
+          bash -n backend/build.sh
+          echo "✓ build.sh syntax valid"
+
+      - name: Verify build.sh references match injection scripts
+        run: |
+          set -e
+          cd backend
+          # Extract inject_*.py references from build.sh, verify each exists
+          referenced=$(grep -oE 'inject_[a-z_]+\.py' build.sh | sort -u)
+          for script in $referenced; do
+            if [[ ! -f "$script" ]]; then
+              echo "FATAL: build.sh references $script but file missing"
+              exit 1
+            fi
+          done
+          echo "✓ All build.sh-referenced inject scripts exist"
+
+      - name: Verify requirements.txt installable
+        run: |
+          cd backend
+          pip install -r requirements.txt
+          echo "✓ requirements.txt installs cleanly"
+
+      - name: Verify Python imports
+        run: |
+          cd backend
+          python -c "import main; print('✓ main.py imports OK')"
+          python -c "import build_db; print('✓ build_db.py imports OK')"
+          # Inject-Scripts werden zur Build-Time auf Render ausgeführt,
+          # nicht hier (brauchen DB). Aber Syntax-Check geht:
+          for f in inject_*.py; do
+            python -c "import ast; ast.parse(open('$f').read())" || (echo "FATAL: $f syntax invalid"; exit 1)
+          done
+          echo "✓ All inject scripts have valid Python syntax"
+
+      - name: Verify render.yaml is in sync with Dashboard expectations
+        run: |
+          test -f render.yaml || (echo "FATAL: render.yaml missing"; exit 1)
+          grep -q "bash build.sh" render.yaml || (echo "FATAL: render.yaml buildCommand mismatch"; exit 1)
+          grep -q "uvicorn main:app" render.yaml || (echo "FATAL: render.yaml startCommand mismatch"; exit 1)
+          echo "✓ render.yaml in sync"
