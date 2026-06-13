@@ -7107,8 +7107,33 @@ function CompsTab({p}) {
         </div>
       )}
 
+      {/* ── Sprint-3.3 #38: Two-views disclaimer + Group-Context Cross-Reference ── */}
+      {p.archetypeV27 && ARCHETYPE_V27_PRIORS[p.archetypeV27] && (() => {
+        const v27 = ARCHETYPE_V27_PRIORS[p.archetypeV27];
+        return (
+          <div className="rounded-xl p-3" style={{
+            background: "rgba(15,23,42,0.6)",
+            borderLeft: `3px solid ${v27.color}`,
+            border: "1px solid rgba(71,85,105,0.4)",
+          }}>
+            <div className="flex items-start gap-3 flex-wrap">
+              <div className="text-xs uppercase tracking-widest mt-0.5" style={{color:"#94a3b8",letterSpacing:"0.1em",whiteSpace:"nowrap"}}>
+                Two views ⓘ
+              </div>
+              <div className="text-xs flex-1" style={{color:"#cbd5e1",lineHeight:1.55}}>
+                The table below shows <strong style={{color:"#e5e7eb"}}>statistically similar individual players</strong> — past prospects whose pre-draft stat profile matches this prospect's.
+                This is <strong style={{color:"#fbbf24"}}>not the same as archetype-group membership</strong>: stat-similarity is per-individual,
+                while the archetype group (<span style={{color:v27.color,fontWeight:"600"}}>{p.archetypeV27}</span>) reflects the player's K-Means cluster in role + anthropometric space.
+                A stat-comp can sit in a different archetype cluster than the prospect — and vice versa. See the
+                Overview tab for the archetype group's collective cohort context (n={v27.n_nba}, star rate {(v27.starRate*100).toFixed(0)}%).
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── STATISTICAL COMPS TABLE ── */}
-      <Sec icon="📊" title="Statistical Comps" sub="Weighted cosine similarity across 16 era-adjusted dimensions: 12 core stats (BPM, USG%, TS%, AST%, TO%, ORB%, DRB%, STL%, BLK%, 3P%, FT%, FTR) plus 4 shot-profile frequencies (3PA, Rim, Mid, Dunk). The 8 columns shown are the most pod-relevant — the full match calculation uses all 16. Reached Tier = the comp's verified NBA outcome (Star/All-Star/Starter/Role/Replacement/Bust) or the model's projection for current prospects.">
+      <Sec icon="📊" title="Statistical Individuals (stat-similarity)" sub="These are individual players whose pre-draft stat profile most closely matches this prospect's — weighted cosine similarity across 16 era-adjusted dimensions: 12 core stats (BPM, USG%, TS%, AST%, TO%, ORB%, DRB%, STL%, BLK%, 3P%, FT%, FTR) plus 4 shot-profile frequencies (3PA, Rim, Mid, Dunk). The 8 columns shown are the most pod-relevant — the full match calculation uses all 16. Reached Tier = the comp's verified NBA outcome (Star/All-Star/Starter/Role/Replacement/Bust) or the model's projection for current prospects. NOTE: stat-similarity is INDEPENDENT of the archetype group classification shown on the Overview tab — two different statistical lenses.">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
