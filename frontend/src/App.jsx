@@ -7584,20 +7584,27 @@ function CompsV5Tab({p}) {
       )}
 
       {/* Section divider — separates Primary from Baseline Context */}
-      {indiv && (fc || co || cl) && (
+      {indiv && (co || cl) && (
         <div className="flex items-center gap-3 text-xs" style={{color:"#64748b"}}>
           <div style={{flex:1, height:1, background:"#374151"}}/>
-          <span>Historical baseline context (cohort + cluster aggregates)</span>
+          <span>Historical baselines — how players matching this profile have actually performed</span>
           <div style={{flex:1, height:1, background:"#374151"}}/>
         </div>
       )}
 
-      {/* ─── BASELINE: Triangulated (Layer 3 + Layer 4 combined) ───
-          Sprint-3.11: four tiers (Role+, Starter+, AllStar+, Bust<0).
-          Roleplayer+ is the "made an NBA impact" metric — most inclusive.
-          Bust uses the stricter <0 threshold (truly negative impact),
-          not the legacy <0.9 which lumped in Replacement-tier players. */}
-      {fc && (
+      {/* ─── Sprint-3.15 (Tobias 2026-06-13): Combined NBA outcome forecast
+          (Triangulated) IS NOT RENDERED. Plus die zwei Hero cards (Individual +
+          Triangulated) wirken UX-mäßig redundant — visually parallel, both
+          give player-level percentages, even though methodically they answer
+          different questions (Individual = LightGBM player-specific;
+          Triangulated = inverse-variance weighted Cohort + Cluster baseline
+          aggregate). Individual stays as the primary forecast above; Cohort
+          and Cluster baselines stay as context below (with example players +
+          Δ annotations). The Triangulated payload remains on the API for
+          future use, but the card was removed for clarity. Gated with
+          `false && fc` so the entire JSX block stays in source as a single
+          documented unit — re-enable by flipping the literal. ─── */}
+      {false && fc && (
         <div className="p-4 rounded-lg" style={{background:"#0f172a", border:"1px solid #1e293b"}}>
           <div className="flex justify-between items-baseline mb-2">
             <div className="text-sm font-semibold" style={{color:"#f1f5f9"}}>
@@ -7655,14 +7662,20 @@ function CompsV5Tab({p}) {
 
       {/* ─── Layer 3 + Layer 4 detail cards (side-by-side) ─── */}
       <div className="grid md:grid-cols-2 gap-4">
-        {/* LAYER 3: Age-Stage Cohort forecast */}
+        {/* LAYER 3: Age-Stage Cohort forecast — Sprint-3.15 adds example
+            players + Δ annotation to the Individual primary forecast. The
+            subtitle states the question this card answers in one sentence so
+            the user does not have to read the methods block to interpret it. */}
         {co && (
           <div className="p-4 rounded-lg" style={{background:"#1f2937", border:"1px solid #374151"}}>
             <div className="flex justify-between items-baseline mb-2">
               <div>
-                <div className="text-sm font-semibold" style={{color:"#f1f5f9"}}>Layer 3: Age-Stage cohort</div>
+                <div className="text-sm font-semibold" style={{color:"#f1f5f9"}}>Cohort baseline (Age-Stage)</div>
                 <div className="text-xs" style={{color:"#9ca3af"}}>
-                  Age {co.cohort?.[0]}-{co.cohort?.[1]}, {co.pos}, n={co.n}
+                  What players of the SAME age + position historically achieved
+                </div>
+                <div className="text-xs mt-0.5" style={{color:"#94a3b8"}}>
+                  Cohort: Age {co.cohort?.[0]}-{co.cohort?.[1]}, {co.pos}, n={co.n}
                 </div>
               </div>
               <Tip content={
@@ -7670,6 +7683,9 @@ function CompsV5Tab({p}) {
                   Match against NBA-careered players who were the SAME age + position
                   at this stage of their career. Returns the distribution of their NBA peak
                   performance (peak_pie). Bayesian-shrunk toward overall NBA mean.
+                  Note: this is a BASELINE — every prospect in the same cohort gets
+                  the same numbers, regardless of how good they are individually.
+                  Compare against the player-specific forecast at the top.
                 </div>
               }><span className="text-xs cursor-help" style={{color:"#475569"}}>ⓘ</span></Tip>
             </div>
@@ -7715,18 +7731,64 @@ function CompsV5Tab({p}) {
                   </span></div>
                 <PctBar pct={co.bust_shrunk} ci={co.bust_ci} color="#ef4444" />
               </div>
+
+              {/* Sprint-3.15: concrete example players — best + worst outcomes
+                  from this exact cohort, sourced from the same n=X pool that
+                  produces the rates above. Makes the baseline interpretable
+                  beyond aggregate numbers. */}
+              {co.top && co.top.length > 0 && (
+                <div className="mt-2 pt-2" style={{borderTop:"1px solid #374151"}}>
+                  <div style={{color:"#9ca3af"}}>Best outcomes from this cohort:</div>
+                  <div style={{color:"#22c55e"}}>
+                    {co.top.slice(0, 3).map(t => `${t.name} (${t.peak_pie})`).join(" · ")}
+                  </div>
+                </div>
+              )}
+              {co.worst && co.worst.length > 0 && (
+                <div className="mt-1">
+                  <div style={{color:"#9ca3af"}}>Worst outcomes (bust examples):</div>
+                  <div style={{color:"#ef4444"}}>
+                    {co.worst.slice(0, 3).map(t => `${t.name} (${t.peak_pie})`).join(" · ")}
+                  </div>
+                </div>
+              )}
+
+              {/* Sprint-3.15: Δ annotation — how much the player-specific
+                  forecast diverges from this cohort baseline. Reads like
+                  "+21pp above cohort Starter+ baseline". */}
+              {indiv && (
+                <div className="mt-2 pt-2" style={{borderTop:"1px solid #374151", color:"#94a3b8"}}>
+                  Player vs cohort baseline:
+                  {indiv.pct_starter_plus != null && co.starter_shrunk != null && (
+                    <div style={{color:deltaColor(delta(indiv.pct_starter_plus, co.starter_shrunk))}}>
+                      Starter+: {fmtDelta(delta(indiv.pct_starter_plus, co.starter_shrunk))}
+                    </div>
+                  )}
+                  {indiv.pct_all_star_plus != null && co.allstar_shrunk != null && (
+                    <div style={{color:deltaColor(delta(indiv.pct_all_star_plus, co.allstar_shrunk))}}>
+                      All-Star+: {fmtDelta(delta(indiv.pct_all_star_plus, co.allstar_shrunk))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {/* LAYER 4: Archetype Cluster forecast */}
+        {/* LAYER 4: Archetype Cluster forecast — Sprint-3.15 reframes as
+            a baseline. Top/worst outcomes were already shown here; we add
+            the same subtitle/disclaimer pattern as Cohort + Δ annotations
+            to the player-specific Individual forecast at the top. */}
         {cl && (
           <div className="p-4 rounded-lg" style={{background:"#1f2937", border:"1px solid #374151"}}>
             <div className="flex justify-between items-baseline mb-2">
               <div>
-                <div className="text-sm font-semibold" style={{color:"#f1f5f9"}}>Layer 4: Archetype cluster</div>
+                <div className="text-sm font-semibold" style={{color:"#f1f5f9"}}>Cluster baseline (Archetype)</div>
                 <div className="text-xs" style={{color:"#9ca3af"}}>
-                  {cl.name}, n={cl.n}
+                  What players with the SAME playing style historically achieved
+                </div>
+                <div className="text-xs mt-0.5" style={{color:"#94a3b8"}}>
+                  Archetype: {cl.name}, n={cl.n}
                 </div>
               </div>
               <Tip content={
@@ -7734,6 +7796,9 @@ function CompsV5Tab({p}) {
                   Group all NBA-careered prospects sharing this v27 archetype. The
                   resulting rate is the historical base rate for THIS playing style
                   cluster. Bayesian-shrunk toward overall NBA mean.
+                  Note: this is a BASELINE — every prospect with the same archetype
+                  gets the same numbers, regardless of individual talent. Compare
+                  against the player-specific forecast at the top.
                 </div>
               }><span className="text-xs cursor-help" style={{color:"#475569"}}>ⓘ</span></Tip>
             </div>
@@ -7779,6 +7844,25 @@ function CompsV5Tab({p}) {
                   <div style={{color:"#ef4444"}}>
                     {cl.worst.slice(0, 3).map(t => `${t.name} (${t.peak_pie})`).join(" · ")}
                   </div>
+                </div>
+              )}
+
+              {/* Sprint-3.15: Δ annotation against player-specific Individual
+                  forecast — makes it obvious whether the player projects above
+                  or below his archetype baseline. */}
+              {indiv && (
+                <div className="mt-2 pt-2" style={{borderTop:"1px solid #374151", color:"#94a3b8"}}>
+                  Player vs cluster baseline:
+                  {indiv.pct_starter_plus != null && cl.starter_shrunk != null && (
+                    <div style={{color:deltaColor(delta(indiv.pct_starter_plus, cl.starter_shrunk))}}>
+                      Starter+: {fmtDelta(delta(indiv.pct_starter_plus, cl.starter_shrunk))}
+                    </div>
+                  )}
+                  {indiv.pct_all_star_plus != null && cl.allstar_shrunk != null && (
+                    <div style={{color:deltaColor(delta(indiv.pct_all_star_plus, cl.allstar_shrunk))}}>
+                      All-Star+: {fmtDelta(delta(indiv.pct_all_star_plus, cl.allstar_shrunk))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -7889,7 +7973,7 @@ function CompsV5Tab({p}) {
             seasons. Each dimension also has its own era window (Style ±10yr, Skill ±15yr,
             Physical all-era, Trajectory ±20yr, Outcome ±18yr) — basketball changed
             after 2015 so style/skill use shorter windows than the era-neutral dimensions.
-            Plus an anthropometric height band of ±3 inches is applied to all
+            An anthropometric height band of ±3 inches is also applied to all
             stat-based dimensions: a 6'9" Wing can match a 6'10" Big if anatomically
             comparable, but a 6'4" Playmaker is never matched against a 6'11" rim
             protector even when their stat profiles coincidentally look similar.
