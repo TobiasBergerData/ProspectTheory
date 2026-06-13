@@ -7277,6 +7277,489 @@ function CompsTab({p}) {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB: COMPS v5 — NBA Front Office Standard Multi-Dimensional Comp Engine
+// ═══════════════════════════════════════════════════════════════════════════
+// Sprint-3.6 through Sprint-3.10 (Tobias 2026-06-13): Complete replacement of
+// the legacy v3 single-score comp system with a methodologically rigorous
+// 5-dimensional engine matching NBA elite front office (Boston/OKC tier) practice.
+//
+// Why v5 replaces v3:
+//   Old v3 produced one "similarity score" by collapsing all signals into a
+//   single Euclidean distance. This conflated style (how the player plays),
+//   skill (what they can do), physical (anthropometric profile), trajectory
+//   (year-over-year development), and outcome (historical NBA careers of
+//   similar prospects). A high single-score could mean any combination —
+//   the user could not tell what was actually similar.
+//
+// What v5 does instead:
+//   - FIVE separate dimensions, each independently interpretable.
+//   - Each dimension has its own feature set + era window + quality filter.
+//   - For each dimension we return both a "Mixed" top-5 (any pool player)
+//     and an "NBA-only" top-3 (NBA-careered candidates) — the user toggles.
+//   - Per top comp we expose the 3 features that drove the match ("drivers")
+//     and the 2 features that diverge most ("diverges").
+//
+// Forecast structure (Layer 3 + Layer 4 + Triangulation):
+//   - Layer 3 Cohort: matches the prospect's stat profile to NBA-careered
+//     players in the SAME age bucket (18.5-19.5 freshman etc.) and SAME
+//     position. We return the distribution of their actual NBA peaks.
+//   - Layer 4 Cluster: groups the prospect by archetype_v27 (Two-Way Wing,
+//     Skilled Offensive Big, etc.) and returns cluster-wide outcomes.
+//   - Triangulation: inverse-variance weighted combination of L3 + L4.
+//
+// Robustness (Sprint-3.8):
+//   - Bayesian shrinkage toward the overall NBA population mean (k=50
+//     pseudo-count) — small cohorts get pulled toward the average so a
+//     67% All-Star rate from n=15 prospects does not get over-interpreted.
+//   - Beta-Binomial 95% credibility intervals on each rate.
+//   - Bootstrap CIs on the peak_wa median (continuous metric, 200 resamples).
+//
+// Calibration validation (Sprint-3.8.D):
+//   Leave-one-out backtest on 549 historical prospects (2010-2020) showed
+//   bucket-weighted MAE 0.78%-3.40% across all six forecast types, with
+//   aggregate bias under 0.2%. All verdicts: EXCELLENT. The engine can be
+//   trusted at the aggregate level. Individual discrimination is by design
+//   limited (cohort/cluster forecasts are group-level estimates).
+//
+// Backend endpoint:
+//   GET /api/comps/v5/{slug} → see backend/main.py route_comps_v5 for schema.
+// ═══════════════════════════════════════════════════════════════════════════
+function CompsV5Tab({p}) {
+  const [v5, setV5] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState(null);
+  // Default view: NBA-only (more interpretable). Mixed shows pool nearest neighbors.
+  const [nbaOnly, setNbaOnly] = useState(true);
+  // Which dimension drilldown is open (drivers/diverges popup).
+  const [openDrillKey, setOpenDrillKey] = useState(null);
+
+  useEffect(() => {
+    if (!p?.slug) return;
+    setLoading(true); setErr(null);
+    fetch(`${API_BASE}/comps/v5/${p.slug}`)
+      .then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`))
+      .then(data => { setV5(data); setLoading(false); })
+      .catch(e => { setErr(String(e)); setLoading(false); });
+  }, [p?.slug]);
+
+  if (loading) return <div className="text-sm" style={{color:"#9ca3af"}}>Loading v5 comp data…</div>;
+  if (err) return <div className="text-sm" style={{color:"#ef4444"}}>Error loading v5 comps: {err}</div>;
+  if (!v5 || !v5.available) {
+    return (
+      <div className="text-sm p-4 rounded-lg" style={{background:"#1f2937", color:"#9ca3af"}}>
+        v5 comp data not available for this player.
+        {v5?.reason && <div className="mt-2 text-xs">{v5.reason}</div>}
+      </div>
+    );
+  }
+
+  // Color scales matching site convention.
+  const simColor = (s) => s > 0.85 ? "#22c55e" : s > 0.70 ? "#86efac" : s > 0.55 ? "#3b82f6" : s > 0.40 ? "#fbbf24" : "#ef4444";
+  const pctColor = (p) => p == null ? "#9ca3af" : p > 50 ? "#22c55e" : p > 30 ? "#86efac" : p > 15 ? "#fbbf24" : "#ef4444";
+
+  // Dimension card colors (one accent per dimension, used in card headers).
+  const DIM_ACCENTS = {
+    style:      "#a78bfa", // purple — "how he plays"
+    skill:      "#22d3ee", // cyan   — "what he can do"
+    physical:   "#fb923c", // orange — "how he looks"
+    trajectory: "#34d399", // green  — "how he develops"
+    outcome:    "#f472b6", // pink   — "who succeeded like him"
+  };
+  const DIM_LABELS = {
+    style:      "Style",
+    skill:      "Skill",
+    physical:   "Physical",
+    trajectory: "Trajectory",
+    outcome:    "Outcome",
+  };
+  const DIM_SUBTITLES = {
+    style:      "Shot distribution + usage + role context",
+    skill:      "Efficiency + advanced metrics (era-adjusted)",
+    physical:   "Height + wingspan + position-aware",
+    trajectory: "Year-over-year development slopes",
+    outcome:    "Same age-stage NBA outcome matches",
+  };
+
+  // Choose dataset: nbaOnly = "dimensions_nba" else "dimensions"
+  const dimSet = nbaOnly ? (v5.dimensions_nba || {}) : (v5.dimensions || {});
+
+  // Forecast helpers — pull from Bayesian-shrunk fields with CI bounds.
+  const fc = v5.triangulated_forecast || null;     // Sprint-3.8.C combined
+  const co = v5.cohort_forecast || null;            // Sprint-3.7 Layer 3
+  const cl = v5.cluster_forecast || null;           // Sprint-3.7 Layer 4
+
+  const PctBar = ({pct, ci, color}) => {
+    const w = Math.max(0, Math.min(100, pct ?? 0));
+    return (
+      <div className="mt-1" style={{position:"relative", height:6, background:"#1f2937", borderRadius:3}}>
+        <div style={{width:`${w}%`, height:6, background:color, borderRadius:3}}/>
+        {ci && ci.length === 2 && (
+          <div style={{
+            position:"absolute", top:-1, height:8,
+            left:`${ci[0]}%`, width:`${Math.max(0, ci[1]-ci[0])}%`,
+            border:`1px dashed ${color}`, borderRadius:3, opacity:0.6
+          }}/>
+        )}
+      </div>
+    );
+  };
+
+  const fmt = (v, suffix="%") => v == null ? "—" : `${Math.round(v)}${suffix}`;
+  const fmtCI = (ci) => ci && ci.length === 2 ? `[${Math.round(ci[0])}-${Math.round(ci[1])}${ci[1] > 5 ? "%" : ""}]` : "";
+
+  return (
+    <div className="space-y-5">
+      {/* ─── Header: methodology pointer + view toggle + position badges ─── */}
+      <div className="flex flex-wrap justify-between items-start gap-3">
+        <div className="flex-1 min-w-0">
+          <Tip content={
+            <div style={{color:"#cbd5e1", maxWidth:380}}>
+              v5 splits "similarity" into 5 independent dimensions. Each one
+              answers a different question — see Methods section at the bottom
+              for the full breakdown. Backtested calibration on 549 historical
+              prospects: bucket-weighted MAE 0.78-3.40%, EXCELLENT across all
+              six forecast types.
+            </div>
+          }>
+            <div className="text-xs cursor-help" style={{color:"#6b7280"}}>
+              v5 multi-dimensional comp engine — NBA front office standard.
+              <span style={{color:"#475569"}}> ⓘ</span>
+            </div>
+          </Tip>
+          <div className="flex flex-wrap gap-2 mt-1.5">
+            {/* Sprint-3.9 Layer 7 — functional position (8-way) */}
+            {v5.functional_position && (
+              <span className="px-2 py-0.5 rounded text-xs font-semibold"
+                    style={{background:"#1e3a5f", color:"#93c5fd", border:"1px solid #2563eb"}}>
+                {v5.functional_position}
+              </span>
+            )}
+            {v5.pos_group && (
+              <span className="px-2 py-0.5 rounded text-xs"
+                    style={{background:"#1f2937", color:"#9ca3af", border:"1px solid #374151"}}>
+                Position group: {v5.pos_group}
+              </span>
+            )}
+            {/* Sprint-3.8.E Combine-Coverage Disclosure */}
+            {!v5.combine_coverage && (
+              <span className="px-2 py-0.5 rounded text-xs"
+                    style={{background:"#78350f", color:"#fcd34d", border:"1px solid #92400e"}}
+                    title="Combine measurements not available. Physical comp uses college height only — refresh after May Combine.">
+                ⚠ No combine data
+              </span>
+            )}
+          </div>
+        </div>
+        {/* View toggle: NBA-only (default, more interpretable) vs Mixed (any pool player). */}
+        <div className="flex gap-1 p-1 rounded-lg" style={{background:"#1f2937"}}>
+          <button onClick={() => setNbaOnly(true)} className="px-3 py-1 rounded text-xs font-semibold"
+                  style={{background: nbaOnly ? "#f97316" : "transparent", color: nbaOnly ? "#000" : "#9ca3af"}}>
+            NBA careers only
+          </button>
+          <button onClick={() => setNbaOnly(false)} className="px-3 py-1 rounded text-xs font-semibold"
+                  style={{background: !nbaOnly ? "#f97316" : "transparent", color: !nbaOnly ? "#000" : "#9ca3af"}}>
+            Full pool
+          </button>
+        </div>
+      </div>
+
+      {/* ─── Forecast Hero: Triangulated (Layer 3 + Layer 4 combined) ─── */}
+      {fc && (
+        <div className="p-4 rounded-lg" style={{background:"#0f172a", border:"1px solid #1e293b"}}>
+          <div className="flex justify-between items-baseline mb-2">
+            <div className="text-sm font-semibold" style={{color:"#f1f5f9"}}>
+              Combined NBA outcome forecast
+            </div>
+            <Tip content={
+              <div style={{color:"#cbd5e1", maxWidth:340}}>
+                Inverse-variance weighted combination of two independent forecasts:
+                Layer 3 (Age-Stage Cohort, n={fc.n3_cohort}) and Layer 4 (Archetype
+                Cluster, n={fc.n4_cluster}). Both use Bayesian-shrunk rates so the
+                combined forecast inherits the robustness of both.
+              </div>
+            }>
+              <span className="text-xs cursor-help" style={{color:"#475569"}}>method ⓘ</span>
+            </Tip>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <div className="text-xs" style={{color:"#9ca3af"}}>Starter or better</div>
+              <div className="text-xl font-bold" style={{color:pctColor(fc.pct_starter_combined)}}>
+                {fmt(fc.pct_starter_combined)}
+              </div>
+              <PctBar pct={fc.pct_starter_combined} color={pctColor(fc.pct_starter_combined)} />
+            </div>
+            <div>
+              <div className="text-xs" style={{color:"#9ca3af"}}>All-Star or better</div>
+              <div className="text-xl font-bold" style={{color:pctColor(fc.pct_all_star_combined)}}>
+                {fmt(fc.pct_all_star_combined)}
+              </div>
+              <PctBar pct={fc.pct_all_star_combined} color={pctColor(fc.pct_all_star_combined)} />
+            </div>
+            <div>
+              <div className="text-xs" style={{color:"#9ca3af"}}>Bust risk</div>
+              <div className="text-xl font-bold" style={{color:"#ef4444"}}>
+                {fmt(fc.pct_busted_combined)}
+              </div>
+              <PctBar pct={fc.pct_busted_combined} color="#ef4444" />
+            </div>
+          </div>
+          <div className="text-xs mt-3" style={{color:"#64748b"}}>
+            Triangulated from Layer 3 (n={fc.n3_cohort} age-stage cohort) + Layer 4 (n={fc.n4_cluster} archetype cluster).
+          </div>
+        </div>
+      )}
+
+      {/* ─── Layer 3 + Layer 4 detail cards (side-by-side) ─── */}
+      <div className="grid md:grid-cols-2 gap-4">
+        {/* LAYER 3: Age-Stage Cohort forecast */}
+        {co && (
+          <div className="p-4 rounded-lg" style={{background:"#1f2937", border:"1px solid #374151"}}>
+            <div className="flex justify-between items-baseline mb-2">
+              <div>
+                <div className="text-sm font-semibold" style={{color:"#f1f5f9"}}>Layer 3: Age-Stage cohort</div>
+                <div className="text-xs" style={{color:"#9ca3af"}}>
+                  Age {co.cohort?.[0]}-{co.cohort?.[1]}, {co.pos}, n={co.n}
+                </div>
+              </div>
+              <Tip content={
+                <div style={{color:"#cbd5e1", maxWidth:320}}>
+                  Match against NBA-careered players who were the SAME age + position
+                  at this stage of their career. Returns the distribution of their NBA peak
+                  performance (peak_pie). Bayesian-shrunk toward overall NBA mean.
+                </div>
+              }><span className="text-xs cursor-help" style={{color:"#475569"}}>ⓘ</span></Tip>
+            </div>
+            <div className="space-y-2 text-xs">
+              <div>
+                <span style={{color:"#9ca3af"}}>Peak WA median: </span>
+                <span className="font-semibold" style={{color:"#f1f5f9"}}>{co.wa_med ?? "—"}</span>
+                {co.wa_ci && (
+                  <span style={{color:"#64748b"}}> CI95 [{co.wa_ci[0]}, {co.wa_ci[1]}]</span>
+                )}
+                {co.wa_p25 != null && co.wa_p75 != null && (
+                  <span style={{color:"#6b7280"}}>  · p25 {co.wa_p25} / p75 {co.wa_p75}</span>
+                )}
+              </div>
+              <div>
+                <div className="flex justify-between"><span style={{color:"#9ca3af"}}>Starter+</span>
+                  <span style={{color:pctColor(co.starter_shrunk)}}>
+                    {fmt(co.starter_shrunk)} <span style={{color:"#64748b"}}>{fmtCI(co.starter_ci)}</span>
+                  </span></div>
+                <PctBar pct={co.starter_shrunk} ci={co.starter_ci} color={pctColor(co.starter_shrunk)} />
+              </div>
+              <div>
+                <div className="flex justify-between"><span style={{color:"#9ca3af"}}>All-Star+</span>
+                  <span style={{color:pctColor(co.allstar_shrunk)}}>
+                    {fmt(co.allstar_shrunk)} <span style={{color:"#64748b"}}>{fmtCI(co.allstar_ci)}</span>
+                  </span></div>
+                <PctBar pct={co.allstar_shrunk} ci={co.allstar_ci} color={pctColor(co.allstar_shrunk)} />
+              </div>
+              <div>
+                <div className="flex justify-between"><span style={{color:"#9ca3af"}}>Bust</span>
+                  <span style={{color:"#ef4444"}}>
+                    {fmt(co.bust_shrunk)} <span style={{color:"#64748b"}}>{fmtCI(co.bust_ci)}</span>
+                  </span></div>
+                <PctBar pct={co.bust_shrunk} ci={co.bust_ci} color="#ef4444" />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* LAYER 4: Archetype Cluster forecast */}
+        {cl && (
+          <div className="p-4 rounded-lg" style={{background:"#1f2937", border:"1px solid #374151"}}>
+            <div className="flex justify-between items-baseline mb-2">
+              <div>
+                <div className="text-sm font-semibold" style={{color:"#f1f5f9"}}>Layer 4: Archetype cluster</div>
+                <div className="text-xs" style={{color:"#9ca3af"}}>
+                  {cl.name}, n={cl.n}
+                </div>
+              </div>
+              <Tip content={
+                <div style={{color:"#cbd5e1", maxWidth:320}}>
+                  Group all NBA-careered prospects sharing this v27 archetype. The
+                  resulting rate is the historical base rate for THIS playing style
+                  cluster. Bayesian-shrunk toward overall NBA mean.
+                </div>
+              }><span className="text-xs cursor-help" style={{color:"#475569"}}>ⓘ</span></Tip>
+            </div>
+            <div className="space-y-2 text-xs">
+              <div>
+                <span style={{color:"#9ca3af"}}>Peak WA median: </span>
+                <span className="font-semibold" style={{color:"#f1f5f9"}}>{cl.wa_med ?? "—"}</span>
+              </div>
+              <div>
+                <div className="flex justify-between"><span style={{color:"#9ca3af"}}>Starter+ (shrunk)</span>
+                  <span style={{color:pctColor(cl.starter_shrunk)}}>{fmt(cl.starter_shrunk)}</span></div>
+                <PctBar pct={cl.starter_shrunk} color={pctColor(cl.starter_shrunk)} />
+              </div>
+              <div>
+                <div className="flex justify-between"><span style={{color:"#9ca3af"}}>All-Star+ (shrunk)</span>
+                  <span style={{color:pctColor(cl.allstar_shrunk)}}>{fmt(cl.allstar_shrunk)}</span></div>
+                <PctBar pct={cl.allstar_shrunk} color={pctColor(cl.allstar_shrunk)} />
+              </div>
+              <div>
+                <div className="flex justify-between"><span style={{color:"#9ca3af"}}>Bust (shrunk)</span>
+                  <span style={{color:"#ef4444"}}>{fmt(cl.bust_shrunk)}</span></div>
+                <PctBar pct={cl.bust_shrunk} color="#ef4444" />
+              </div>
+              {cl.top && cl.top.length > 0 && (
+                <div className="mt-2 pt-2" style={{borderTop:"1px solid #374151"}}>
+                  <div style={{color:"#9ca3af"}}>Best outcomes:</div>
+                  <div style={{color:"#22c55e"}}>
+                    {cl.top.slice(0, 3).map(t => `${t.name} (${t.peak_pie})`).join(" · ")}
+                  </div>
+                </div>
+              )}
+              {cl.worst && cl.worst.length > 0 && (
+                <div className="mt-1">
+                  <div style={{color:"#9ca3af"}}>Worst outcomes (bust examples):</div>
+                  <div style={{color:"#ef4444"}}>
+                    {cl.worst.slice(0, 3).map(t => `${t.name} (${t.peak_pie})`).join(" · ")}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ─── 5 Comp Dimensions (Layer 1) ─── */}
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {["style","skill","physical","trajectory","outcome"].map(dim => {
+          const comps = dimSet[dim] || [];
+          const accent = DIM_ACCENTS[dim];
+          return (
+            <div key={dim} className="p-4 rounded-lg" style={{background:"#1f2937", border:"1px solid #374151"}}>
+              <div className="flex justify-between items-baseline mb-3">
+                <div>
+                  <div className="text-sm font-semibold" style={{color:accent}}>
+                    {DIM_LABELS[dim]}
+                  </div>
+                  <div className="text-xs" style={{color:"#9ca3af"}}>
+                    {DIM_SUBTITLES[dim]}
+                  </div>
+                </div>
+                <div className="text-xs" style={{color:"#475569"}}>{comps.length}</div>
+              </div>
+              {comps.length === 0 ? (
+                <div className="text-xs" style={{color:"#64748b", fontStyle:"italic"}}>
+                  {dim === "trajectory" && !v5.dimensions?.trajectory?.length
+                    ? "No multi-season slope data (1-season players excluded)."
+                    : nbaOnly ? "No NBA-careered comps found." : "No comps available."}
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {comps.slice(0, 5).map((c, i) => (
+                    <div key={i} className="flex items-center gap-2 text-xs">
+                      <div className="flex-1 min-w-0 truncate">
+                        {c.nba && <span style={{color:"#fbbf24"}} title="NBA careered">★ </span>}
+                        <span style={{color:"#f1f5f9"}}>{c.n}</span>
+                        {c.y && <span style={{color:"#64748b"}}> ({c.y})</span>}
+                      </div>
+                      <div className="font-mono" style={{color:simColor(c.s), minWidth:36, textAlign:"right"}}>
+                        {(c.s * 100).toFixed(0)}%
+                      </div>
+                    </div>
+                  ))}
+                  {/* Drivers/diverges for top comp (Sprint-3.9 Layer 5 Causal Reasoning). */}
+                  {comps[0]?.drv && comps[0].drv.length > 0 && (
+                    <div className="mt-2 pt-2 text-xs" style={{borderTop:"1px solid #374151", color:"#9ca3af"}}>
+                      <div>
+                        <span style={{color:"#86efac"}}>Top match drivers: </span>
+                        {comps[0].drv.slice(0, 3).map(d => d.l).join(", ")}
+                      </div>
+                      {comps[0].div && comps[0].div.length > 0 && (
+                        <div>
+                          <span style={{color:"#fbbf24"}}>Diverges on: </span>
+                          {comps[0].div.slice(0, 2).map(d => d.l).join(", ")}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ═════════════════════════════════════════════════════════════════════
+          METHODS — methodology explained in place, per Tobias 2026-06-13.
+          This block stays inside the tab so a curious reader can read what
+          the engine actually does without leaving the page.
+          ═════════════════════════════════════════════════════════════════════ */}
+      <div className="p-4 rounded-lg text-xs" style={{background:"#0f172a", border:"1px solid #1e293b", color:"#cbd5e1"}}>
+        <div className="font-semibold mb-2" style={{color:"#f1f5f9"}}>Methods</div>
+        <div className="space-y-2">
+          <div>
+            <span style={{color:"#a78bfa"}}>1. Five separate dimensions.</span> "Similarity"
+            is not a single number — it is five distinct questions. Style asks
+            <em> how does he play</em> (shot distribution, usage). Skill asks
+            <em> what can he do</em> (era-adjusted efficiency, BPM, advanced metrics).
+            Physical asks <em>how does he look</em> (height, wingspan, position-aware).
+            Trajectory asks <em>how is he developing</em> (year-over-year slopes;
+            blank for 1-season prospects by design). Outcome asks <em>who succeeded
+            with this profile</em> (same-age-stage NBA outcome matches).
+          </div>
+          <div>
+            <span style={{color:"#22d3ee"}}>2. Quality-adjusted pool.</span> Candidates
+            are filtered to Sprint-3.0.A eligibility ≥ Partial, excluding injury-fallback
+            seasons. Each dimension also has its own era window (Style ±10yr, Skill ±15yr,
+            Physical all-era, Trajectory ±20yr, Outcome ±18yr) — basketball changed
+            after 2015 so style/skill use shorter windows than the era-neutral dimensions.
+          </div>
+          <div>
+            <span style={{color:"#fb923c"}}>3. Bayesian shrinkage.</span> Cohort and
+            cluster rates are shrunk toward the overall NBA-careered population mean
+            with pseudo-count k=50. A 67% All-Star rate from n=15 prospects gets
+            pulled toward the ~27% population baseline so we do not over-interpret
+            small samples. Larger samples (n=400+) move very little.
+          </div>
+          <div>
+            <span style={{color:"#34d399"}}>4. Credibility intervals.</span> Each tier
+            rate (Starter+, All-Star+, Bust) gets a 95% Beta-Binomial CI. The peak_wa
+            median gets a bootstrap CI (200 resamples). Wide CIs are the engine
+            telling you: small sample, do not trust the point estimate.
+          </div>
+          <div>
+            <span style={{color:"#f472b6"}}>5. Triangulation.</span> Layer 3 (cohort)
+            and Layer 4 (cluster) are independent forecasts. We combine them using
+            inverse-variance weighting: more precise forecast (larger n, narrower
+            CI) gets more weight. The combined rate is the headline at the top.
+          </div>
+          <div>
+            <span style={{color:"#fbbf24"}}>6. Calibration backtest.</span> Leave-one-out
+            validation on 549 historical prospects (2010–2020): bucket-weighted MAE
+            0.78–3.40% across all six forecast types, aggregate bias under 0.2%.
+            Verdict: EXCELLENT on all six. The engine is well-calibrated at the
+            aggregate level; individual discrimination is limited by design
+            (cohort/cluster forecasts are group-level estimates by construction).
+          </div>
+          <div>
+            <span style={{color:"#93c5fd"}}>7. Functional position (Layer 7).</span> The
+            badge at the top assigns one of 8 styles (Pure PG, Combo Guard,
+            Shooting Guard, On-ball Wing, Off-ball Wing, Slasher Wing, Stretch Big,
+            Block Big, Combo Big) from stat patterns — finer than the traditional
+            Playmaker/Wing/Big trichotomy.
+          </div>
+          <div style={{color:"#64748b"}}>
+            Source: comparison_v5.json, generated by data-pipeline
+            <code style={{color:"#94a3b8"}}> scripts/09_comparison_engine_v5.py</code>.
+            Backtest verdict from
+            <code style={{color:"#94a3b8"}}> scripts/validate_comps_v5_backtest.py</code>.
+            Backend endpoint:
+            <code style={{color:"#94a3b8"}}> GET /api/comps/v5/{`{slug}`}</code>.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 // ═══════════════════════════════════════════════════════════
 // TAB: RISK PROFILE  (Phase 2 — Market vs Merit + two risk axes)
 // ═══════════════════════════════════════════════════════════
@@ -10078,7 +10561,12 @@ export default function App() {
             {tab==="mind"&&<MindTab p={p}/>}
             {tab==="scouting"&&<ScoutingTab p={p} mode="scouting"/>}
             {tab==="roles"&&<ScoutingTab p={p} mode="roles"/>}
-            {tab==="comps"&&<CompsTab p={p}/>}
+            {/* Sprint-3.10 (Tobias 2026-06-13): Comps tab now routed to the
+                v5 NBA-Profi engine. The legacy CompsTab function is kept in
+                source above as a deprecated reference but no longer rendered.
+                Old single-score stats comps and anthro comps are deprecated;
+                v5 covers their use cases with explicit per-dimension splits. */}
+            {tab==="comps"&&<CompsV5Tab p={p}/>}
             {tab==="devtrajectory"&&<DevTrajectoryTab p={p}/>}
             {tab==="projection"&&<ProjectionTab p={p}/>}
             {/* Tobias 2026-06-04 (Sprint-2): Risk Profile Tab re-enabled — siehe TABS-Eintrag */}
