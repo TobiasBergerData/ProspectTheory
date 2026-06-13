@@ -7334,14 +7334,32 @@ function CompsV5Tab({p}) {
   // Which dimension drilldown is open (drivers/diverges popup).
   const [openDrillKey, setOpenDrillKey] = useState(null);
 
+  // Sprint-3.10 hotfix (Tobias 2026-06-13): robust slug detection. The `p`
+  // object can be a board entry (minimal data, only has `name`+`team`) OR a
+  // full profile (has explicit `slug`). The board entry is keyed-by-name in
+  // PLAYERS dict; only after profile fetch does `slug` get set explicitly.
+  // We try a chain of candidate fields so the fetch fires either way.
+  const slug = p?.slug || p?.s || p?.player_id || p?.id;
+
   useEffect(() => {
-    if (!p?.slug) return;
+    if (!slug) {
+      // Still no slug — log to console so we can diagnose if this persists.
+      console.log("[CompsV5Tab] no slug yet, p keys:", p ? Object.keys(p) : null);
+      return;
+    }
+    console.log("[CompsV5Tab] fetching v5 for slug:", slug);
     setLoading(true); setErr(null);
-    fetch(`${API_BASE}/comps/v5/${p.slug}`)
+    fetch(`${API_BASE}/comps/v5/${slug}`)
       .then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`))
-      .then(data => { setV5(data); setLoading(false); })
-      .catch(e => { setErr(String(e)); setLoading(false); });
-  }, [p?.slug]);
+      .then(data => {
+        console.log("[CompsV5Tab] v5 response received, available:", data?.available);
+        setV5(data); setLoading(false);
+      })
+      .catch(e => {
+        console.warn("[CompsV5Tab] fetch error:", e);
+        setErr(String(e)); setLoading(false);
+      });
+  }, [slug]);
 
   if (loading) return <div className="text-sm" style={{color:"#9ca3af"}}>Loading v5 comp data…</div>;
   if (err) return <div className="text-sm" style={{color:"#ef4444"}}>Error loading v5 comps: {err}</div>;
