@@ -7334,12 +7334,15 @@ function CompsV5Tab({p}) {
   // Which dimension drilldown is open (drivers/diverges popup).
   const [openDrillKey, setOpenDrillKey] = useState(null);
 
-  // Sprint-3.10 hotfix (Tobias 2026-06-13): robust slug detection. The `p`
-  // object can be a board entry (minimal data, only has `name`+`team`) OR a
-  // full profile (has explicit `slug`). The board entry is keyed-by-name in
-  // PLAYERS dict; only after profile fetch does `slug` get set explicitly.
-  // We try a chain of candidate fields so the fetch fires either way.
-  const slug = p?.slug || p?.s || p?.player_id || p?.id;
+  // Sprint-3.10 hotfix v2 (Tobias 2026-06-13): The `p` object is the result
+  // of mapProfile() which has 168 keys but DROPS the `slug` field (verified
+  // via diagnostic console.log). The board entry keyed-by-name in PLAYERS
+  // does not preserve slug either. The slug DOES exist in the URL pathname
+  // (/player/{slug}) — we use that as the authoritative source.
+  // Fallback chain order: explicit fields first, then URL extraction.
+  const slug = p?.slug || p?.s || p?.player_id || p?.id ||
+               (typeof window !== "undefined" &&
+                window.location.pathname.match(/^\/player\/(.+?)(?:\/|$)/)?.[1]);
 
   useEffect(() => {
     if (!slug) {
