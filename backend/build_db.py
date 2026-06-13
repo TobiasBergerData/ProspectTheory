@@ -107,7 +107,7 @@ def create_tables(cur):
         )
     """)
     cur.execute("CREATE INDEX IF NOT EXISTS idx_search_name_lower ON search(name_lower)")
-    for t in ("stat_comps", "anthro_comps", "season_lines"):
+    for t in ("stat_comps", "anthro_comps", "season_lines", "comps_v5"):
         cur.execute(f"""
             CREATE TABLE IF NOT EXISTS {t} (
                 player_id TEXT PRIMARY KEY,
@@ -243,6 +243,45 @@ def load_comps(cur, table, filename):
     print(f"  → {len(batch):,} entries in {table}")
 
 
+def load_comps_v5(cur):
+    """Sprint-3.10.A: Load NBA-Profi 5-dim Comps Engine outputs.
+
+    Plus reads api_comps_v5_part*.json (split files) + merges + stores in DB.
+    Plus die data per entry ist die slim v5 struct: 5 dimensions + forecasts +
+    functional_position + combine_coverage.
+    """
+    split_files = sorted(DATA_DIR.glob("api_comps_v5_part*.json"))
+    if not split_files:
+        single = DATA_DIR / "api_comps_v5.json"
+        if not single.exists():
+            print("  ⚠ api_comps_v5 not found — skipping v5 comps")
+            return
+        split_files = [single]
+
+    merged = {}
+    total_mb = 0
+    for sp in split_files:
+        sz_mb = sp.stat().st_size / 1e6
+        total_mb += sz_mb
+        print(f"  Loading {sp.name} ({sz_mb:.1f} MB)...")
+        with open(sp, "r", encoding="utf-8") as f:
+            merged.update(json.load(f))
+    print(f"  v5 split-merge: {len(split_files)} parts, {total_mb:.1f} MB → {len(merged):,} entries")
+
+    batch = []
+    for pid, entry in merged.items():
+        if not isinstance(entry, dict):
+            continue
+        # Plus die v5 slim entries haben kein eigenes slug-Feld — looked up via profiles.
+        batch.append((str(pid), None, compress(entry)))
+
+    cur.executemany(
+        "INSERT OR REPLACE INTO comps_v5 (player_id, slug, data) VALUES (?,?,?)",
+        batch,
+    )
+    print(f"  → {len(batch):,} entries in comps_v5")
+
+
 def main():
     print("=" * 65)
     print("BUILD prospecttheory.db (Render Build-on-Deploy)")
@@ -263,6 +302,7 @@ def main():
     load_search(cur)
     load_comps(cur, "stat_comps", "api_stat_comps.json")
     load_comps(cur, "anthro_comps", "api_anthro_comps.json")
+    load_comps_v5(cur)  # Sprint-3.10.A NBA-Profi 5-dim Comps Engine
 
     conn.commit()
     cur.execute("ANALYZE")
