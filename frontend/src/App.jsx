@@ -7402,13 +7402,33 @@ function CompsV5Tab({p}) {
     outcome:    "Same age-stage NBA outcome matches",
   };
 
-  // Choose dataset: nbaOnly = "dimensions_nba" else "dimensions"
+  // Sprint-3.10.C fix (Tobias 2026-06-13): two dimensions ignore the
+  // NBA toggle and ALWAYS read from the full pool:
+  //   - Outcome is already NBA-only by Layer 3 design (peak_pie required),
+  //     so dimensions_nba.outcome was never populated. Reading from
+  //     v5.dimensions.outcome unconditionally keeps Zion/Cade/Tatum visible
+  //     when the user is in "NBA careers only" mode.
+  //   - Drivers/Diverges metadata is only carried on the full-pool comps
+  //     (backend slim_v5 only emits drv/div for mixed top-3). We surface
+  //     them under EVERY dimension card regardless of toggle, because the
+  //     drivers explain WHY the match exists — same explanation applies
+  //     whether the user is browsing the mixed or NBA-filtered view.
   const dimSet = nbaOnly ? (v5.dimensions_nba || {}) : (v5.dimensions || {});
+  const fullPool = v5.dimensions || {};   // always-on source for outcome + drivers
 
   // Forecast helpers — pull from Bayesian-shrunk fields with CI bounds.
-  const fc = v5.triangulated_forecast || null;     // Sprint-3.8.C combined
-  const co = v5.cohort_forecast || null;            // Sprint-3.7 Layer 3
-  const cl = v5.cluster_forecast || null;           // Sprint-3.7 Layer 4
+  // Sprint-3.12 (Tobias 2026-06-13): Individual Forecast from 10c LightGBM
+  // tier_probs is the PRIMARY forecast. Cohort and Cluster are reframed as
+  // baseline context. Triangulated remains as the historical-evidence summary
+  // but is presented secondary to the individual prediction.
+  const indiv = v5.individual_forecast || null;     // Sprint-3.12 player-specific
+  const fc = v5.triangulated_forecast || null;     // Sprint-3.8.C combined (baseline aggregation)
+  const co = v5.cohort_forecast || null;            // Sprint-3.7 Layer 3 (baseline)
+  const cl = v5.cluster_forecast || null;           // Sprint-3.7 Layer 4 (baseline)
+  // Delta helper — how much does the individual diverge from baseline?
+  const delta = (a, b) => (a != null && b != null) ? Math.round(a - b) : null;
+  const fmtDelta = (d) => d == null ? "" : (d > 0 ? `+${d}pp` : `${d}pp`);
+  const deltaColor = (d) => d == null ? "#64748b" : (d > 5 ? "#22c55e" : d < -5 ? "#ef4444" : "#9ca3af");
 
   const PctBar = ({pct, ci, color}) => {
     const w = Math.max(0, Math.min(100, pct ?? 0));
@@ -7485,7 +7505,98 @@ function CompsV5Tab({p}) {
         </div>
       </div>
 
-      {/* ─── Forecast Hero: Triangulated (Layer 3 + Layer 4 combined) ─── */}
+      {/* ─── PRIMARY: Individual Player Forecast (Sprint-3.12) ───
+          The player-specific forecast from the 10c LightGBM model. This is the
+          ACTUAL prediction for this player — it accounts for his individual
+          BPM, USG, age, anthro, recruit rank, advanced metrics etc., so it
+          properly discriminates between a top-5 pick and a second-rounder.
+          The Cohort and Cluster cards below are presented as historical
+          baselines / context for interpreting this primary forecast. */}
+      {indiv && (
+        <div className="p-4 rounded-lg" style={{background:"#1a2942", border:"2px solid #3b82f6"}}>
+          <div className="flex justify-between items-baseline mb-2">
+            <div>
+              <div className="text-sm font-semibold" style={{color:"#dbeafe"}}>
+                Player-specific outcome forecast
+              </div>
+              <div className="text-xs" style={{color:"#93c5fd"}}>
+                Primary prediction — from 10c LightGBM model using this player's full feature set
+              </div>
+            </div>
+            <Tip content={
+              <div style={{color:"#cbd5e1", maxWidth:380}}>
+                Source: the per-player tier probabilities computed in 10c by a
+                LightGBM regressor on 30 input features (BPM, USG, TS, age,
+                anthro, recruit rank, advanced metrics, etc.). Out-of-sample
+                CV correlation r=0.39, in-sample r=0.62. The model output is
+                already Bayesian-shrunk via Sprint-3.0.B and Sprint-3.2. Tier
+                cutoffs use peak-WAR thresholds (≥0.9 Roleplayer+, ≥3.2 Starter+,
+                ≥6.6 All-Star+, &lt;0 Bust) so they are directly comparable
+                to the baseline cards below.
+              </div>
+            }>
+              <span className="text-xs cursor-help" style={{color:"#60a5fa"}}>model ⓘ</span>
+            </Tip>
+          </div>
+          <div className="grid grid-cols-4 gap-3">
+            <div>
+              <div className="text-xs" style={{color:"#9ca3af"}}>Roleplayer+ <span style={{color:"#64748b"}}>(impact)</span></div>
+              <div className="text-2xl font-bold" style={{color:pctColor(indiv.pct_role_player_plus)}}>
+                {fmt(indiv.pct_role_player_plus)}
+              </div>
+              <PctBar pct={indiv.pct_role_player_plus} color={pctColor(indiv.pct_role_player_plus)} />
+            </div>
+            <div>
+              <div className="text-xs" style={{color:"#9ca3af"}}>Starter+</div>
+              <div className="text-2xl font-bold" style={{color:pctColor(indiv.pct_starter_plus)}}>
+                {fmt(indiv.pct_starter_plus)}
+              </div>
+              <PctBar pct={indiv.pct_starter_plus} color={pctColor(indiv.pct_starter_plus)} />
+            </div>
+            <div>
+              <div className="text-xs" style={{color:"#9ca3af"}}>All-Star+</div>
+              <div className="text-2xl font-bold" style={{color:pctColor(indiv.pct_all_star_plus)}}>
+                {fmt(indiv.pct_all_star_plus)}
+              </div>
+              <PctBar pct={indiv.pct_all_star_plus} color={pctColor(indiv.pct_all_star_plus)} />
+            </div>
+            <div>
+              <div className="text-xs" style={{color:"#9ca3af"}}>Bust <span style={{color:"#64748b"}}>(&lt;0)</span></div>
+              <div className="text-2xl font-bold" style={{color:"#ef4444"}}>
+                {fmt(indiv.pct_busted)}
+              </div>
+              <PctBar pct={indiv.pct_busted} color="#ef4444" />
+            </div>
+          </div>
+          {indiv.war_point_estimate != null && (
+            <div className="text-xs mt-3" style={{color:"#94a3b8"}}>
+              Point estimate: peak WAR = {Number(indiv.war_point_estimate).toFixed(1)}
+              {indiv.tier_probs && (
+                <span style={{color:"#64748b"}}>
+                  {" "}· raw probs: S {indiv.tier_probs.superstar}% / A {indiv.tier_probs.all_star}% /
+                  St {indiv.tier_probs.starter}% / R {indiv.tier_probs.roleplayer}% /
+                  Repl {indiv.tier_probs.replacement}% / Neg {indiv.tier_probs.negative}%
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Section divider — separates Primary from Baseline Context */}
+      {indiv && (fc || co || cl) && (
+        <div className="flex items-center gap-3 text-xs" style={{color:"#64748b"}}>
+          <div style={{flex:1, height:1, background:"#374151"}}/>
+          <span>Historical baseline context (cohort + cluster aggregates)</span>
+          <div style={{flex:1, height:1, background:"#374151"}}/>
+        </div>
+      )}
+
+      {/* ─── BASELINE: Triangulated (Layer 3 + Layer 4 combined) ───
+          Sprint-3.11: four tiers (Role+, Starter+, AllStar+, Bust<0).
+          Roleplayer+ is the "made an NBA impact" metric — most inclusive.
+          Bust uses the stricter <0 threshold (truly negative impact),
+          not the legacy <0.9 which lumped in Replacement-tier players. */}
       {fc && (
         <div className="p-4 rounded-lg" style={{background:"#0f172a", border:"1px solid #1e293b"}}>
           <div className="flex justify-between items-baseline mb-2">
@@ -7498,28 +7609,37 @@ function CompsV5Tab({p}) {
                 Layer 3 (Age-Stage Cohort, n={fc.n3_cohort}) and Layer 4 (Archetype
                 Cluster, n={fc.n4_cluster}). Both use Bayesian-shrunk rates so the
                 combined forecast inherits the robustness of both.
+                Roleplayer+ uses threshold peak_wa ≥ 0.9 (made impact); Bust
+                uses peak_wa &lt; 0 (truly negative impact).
               </div>
             }>
               <span className="text-xs cursor-help" style={{color:"#475569"}}>method ⓘ</span>
             </Tip>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-4 gap-3">
             <div>
-              <div className="text-xs" style={{color:"#9ca3af"}}>Starter or better</div>
+              <div className="text-xs" style={{color:"#9ca3af"}}>Roleplayer+ <span style={{color:"#64748b"}}>(impact)</span></div>
+              <div className="text-xl font-bold" style={{color:pctColor(fc.pct_role_player_combined)}}>
+                {fmt(fc.pct_role_player_combined)}
+              </div>
+              <PctBar pct={fc.pct_role_player_combined} color={pctColor(fc.pct_role_player_combined)} />
+            </div>
+            <div>
+              <div className="text-xs" style={{color:"#9ca3af"}}>Starter+</div>
               <div className="text-xl font-bold" style={{color:pctColor(fc.pct_starter_combined)}}>
                 {fmt(fc.pct_starter_combined)}
               </div>
               <PctBar pct={fc.pct_starter_combined} color={pctColor(fc.pct_starter_combined)} />
             </div>
             <div>
-              <div className="text-xs" style={{color:"#9ca3af"}}>All-Star or better</div>
+              <div className="text-xs" style={{color:"#9ca3af"}}>All-Star+</div>
               <div className="text-xl font-bold" style={{color:pctColor(fc.pct_all_star_combined)}}>
                 {fmt(fc.pct_all_star_combined)}
               </div>
               <PctBar pct={fc.pct_all_star_combined} color={pctColor(fc.pct_all_star_combined)} />
             </div>
             <div>
-              <div className="text-xs" style={{color:"#9ca3af"}}>Bust risk</div>
+              <div className="text-xs" style={{color:"#9ca3af"}}>Bust <span style={{color:"#64748b"}}>(&lt;0)</span></div>
               <div className="text-xl font-bold" style={{color:"#ef4444"}}>
                 {fmt(fc.pct_busted_combined)}
               </div>
@@ -7528,6 +7648,7 @@ function CompsV5Tab({p}) {
           </div>
           <div className="text-xs mt-3" style={{color:"#64748b"}}>
             Triangulated from Layer 3 (n={fc.n3_cohort} age-stage cohort) + Layer 4 (n={fc.n4_cluster} archetype cluster).
+            Tiers are cumulative: Roleplayer+ includes Starter+ includes All-Star+.
           </div>
         </div>
       )}
@@ -7563,6 +7684,16 @@ function CompsV5Tab({p}) {
                   <span style={{color:"#6b7280"}}>  · p25 {co.wa_p25} / p75 {co.wa_p75}</span>
                 )}
               </div>
+              {/* Sprint-3.11: Roleplayer+ tier (>=0.9), the "made an NBA impact" line. */}
+              {co.role_shrunk != null && (
+                <div>
+                  <div className="flex justify-between"><span style={{color:"#9ca3af"}}>Roleplayer+</span>
+                    <span style={{color:pctColor(co.role_shrunk)}}>
+                      {fmt(co.role_shrunk)} <span style={{color:"#64748b"}}>{fmtCI(co.role_ci)}</span>
+                    </span></div>
+                  <PctBar pct={co.role_shrunk} ci={co.role_ci} color={pctColor(co.role_shrunk)} />
+                </div>
+              )}
               <div>
                 <div className="flex justify-between"><span style={{color:"#9ca3af"}}>Starter+</span>
                   <span style={{color:pctColor(co.starter_shrunk)}}>
@@ -7578,7 +7709,7 @@ function CompsV5Tab({p}) {
                 <PctBar pct={co.allstar_shrunk} ci={co.allstar_ci} color={pctColor(co.allstar_shrunk)} />
               </div>
               <div>
-                <div className="flex justify-between"><span style={{color:"#9ca3af"}}>Bust</span>
+                <div className="flex justify-between"><span style={{color:"#9ca3af"}}>Bust <span style={{color:"#64748b"}}>(&lt;0)</span></span>
                   <span style={{color:"#ef4444"}}>
                     {fmt(co.bust_shrunk)} <span style={{color:"#64748b"}}>{fmtCI(co.bust_ci)}</span>
                   </span></div>
@@ -7611,6 +7742,14 @@ function CompsV5Tab({p}) {
                 <span style={{color:"#9ca3af"}}>Peak WA median: </span>
                 <span className="font-semibold" style={{color:"#f1f5f9"}}>{cl.wa_med ?? "—"}</span>
               </div>
+              {/* Sprint-3.11: Roleplayer+ tier added to Layer 4 cluster card too. */}
+              {cl.role_shrunk != null && (
+                <div>
+                  <div className="flex justify-between"><span style={{color:"#9ca3af"}}>Roleplayer+ (shrunk)</span>
+                    <span style={{color:pctColor(cl.role_shrunk)}}>{fmt(cl.role_shrunk)}</span></div>
+                  <PctBar pct={cl.role_shrunk} color={pctColor(cl.role_shrunk)} />
+                </div>
+              )}
               <div>
                 <div className="flex justify-between"><span style={{color:"#9ca3af"}}>Starter+ (shrunk)</span>
                   <span style={{color:pctColor(cl.starter_shrunk)}}>{fmt(cl.starter_shrunk)}</span></div>
@@ -7622,7 +7761,7 @@ function CompsV5Tab({p}) {
                 <PctBar pct={cl.allstar_shrunk} color={pctColor(cl.allstar_shrunk)} />
               </div>
               <div>
-                <div className="flex justify-between"><span style={{color:"#9ca3af"}}>Bust (shrunk)</span>
+                <div className="flex justify-between"><span style={{color:"#9ca3af"}}>Bust <span style={{color:"#64748b"}}>(&lt;0, shrunk)</span></span>
                   <span style={{color:"#ef4444"}}>{fmt(cl.bust_shrunk)}</span></div>
                 <PctBar pct={cl.bust_shrunk} color="#ef4444" />
               </div>
@@ -7650,7 +7789,10 @@ function CompsV5Tab({p}) {
       {/* ─── 5 Comp Dimensions (Layer 1) ─── */}
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
         {["style","skill","physical","trajectory","outcome"].map(dim => {
-          const comps = dimSet[dim] || [];
+          // Sprint-3.10.C: outcome always from full pool (NBA-only by design).
+          const comps = dim === "outcome" ? (fullPool.outcome || []) : (dimSet[dim] || []);
+          // Drivers come from full-pool top comp (only place they exist).
+          const driversSource = (fullPool[dim] || [])[0];
           const accent = DIM_ACCENTS[dim];
           return (
             <div key={dim} className="p-4 rounded-lg" style={{background:"#1f2937", border:"1px solid #374151"}}>
@@ -7685,19 +7827,24 @@ function CompsV5Tab({p}) {
                       </div>
                     </div>
                   ))}
-                  {/* Drivers/diverges for top comp (Sprint-3.9 Layer 5 Causal Reasoning). */}
-                  {comps[0]?.drv && comps[0].drv.length > 0 && (
+                  {/* Drivers/diverges for top comp (Sprint-3.9 Layer 5 Causal Reasoning).
+                      Sprint-3.10.C: always read from full-pool top comp (driversSource),
+                      regardless of NBA toggle — drv/div only exist there in backend slim. */}
+                  {driversSource?.drv && driversSource.drv.length > 0 && (
                     <div className="mt-2 pt-2 text-xs" style={{borderTop:"1px solid #374151", color:"#9ca3af"}}>
                       <div>
                         <span style={{color:"#86efac"}}>Top match drivers: </span>
-                        {comps[0].drv.slice(0, 3).map(d => d.l).join(", ")}
+                        {driversSource.drv.slice(0, 3).map(d => d.l).join(", ")}
                       </div>
-                      {comps[0].div && comps[0].div.length > 0 && (
+                      {driversSource.div && driversSource.div.length > 0 && (
                         <div>
                           <span style={{color:"#fbbf24"}}>Diverges on: </span>
-                          {comps[0].div.slice(0, 2).map(d => d.l).join(", ")}
+                          {driversSource.div.slice(0, 2).map(d => d.l).join(", ")}
                         </div>
                       )}
+                      <div className="mt-1" style={{color:"#64748b", fontSize:"0.85em"}}>
+                        (based on the closest full-pool match{nbaOnly && driversSource.n ? `: ${driversSource.n}` : ""})
+                      </div>
                     </div>
                   )}
                 </div>
@@ -7716,6 +7863,17 @@ function CompsV5Tab({p}) {
         <div className="font-semibold mb-2" style={{color:"#f1f5f9"}}>Methods</div>
         <div className="space-y-2">
           <div>
+            <span style={{color:"#60a5fa"}}>0. Three-layer forecast hierarchy.</span> The
+            top blue card is the <em>player-specific</em> forecast — what the 10c
+            LightGBM model says about THIS player using all 30 of his input features.
+            It is the actual prediction. The cards below it are <em>historical baselines</em>:
+            cohort (same age + position) and cluster (same archetype). Baselines
+            apply equally to every player in their group, so they answer
+            "how does the typical cohort do?" — not "how will this specific player do?"
+            The delta annotations show how much the individual diverges from each
+            baseline.
+          </div>
+          <div>
             <span style={{color:"#a78bfa"}}>1. Five separate dimensions.</span> "Similarity"
             is not a single number — it is five distinct questions. Style asks
             <em> how does he play</em> (shot distribution, usage). Skill asks
@@ -7726,11 +7884,15 @@ function CompsV5Tab({p}) {
             with this profile</em> (same-age-stage NBA outcome matches).
           </div>
           <div>
-            <span style={{color:"#22d3ee"}}>2. Quality-adjusted pool.</span> Candidates
+            <span style={{color:"#22d3ee"}}>2. Quality-adjusted pool + anthropometric band.</span> Candidates
             are filtered to Sprint-3.0.A eligibility ≥ Partial, excluding injury-fallback
             seasons. Each dimension also has its own era window (Style ±10yr, Skill ±15yr,
             Physical all-era, Trajectory ±20yr, Outcome ±18yr) — basketball changed
             after 2015 so style/skill use shorter windows than the era-neutral dimensions.
+            Plus an anthropometric height band of ±3 inches is applied to all
+            stat-based dimensions: a 6'9" Wing can match a 6'10" Big if anatomically
+            comparable, but a 6'4" Playmaker is never matched against a 6'11" rim
+            protector even when their stat profiles coincidentally look similar.
           </div>
           <div>
             <span style={{color:"#fb923c"}}>3. Bayesian shrinkage.</span> Cohort and
