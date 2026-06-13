@@ -118,7 +118,18 @@ def create_tables(cur):
 
 
 def load_profiles_data():
-    """Liest split-files bevorzugt, sonst single api_profiles.json."""
+    """Liest split-files bevorzugt, sonst single api_profiles.json.
+
+    Sprint-3.14 (Tobias 2026-06-13 Render OOM fix): legacy behaviour merged
+    every profile part into one dict — fine alone, but combined with the v5
+    comps build and the stat/anthro comp loads it pushed peak memory past
+    the Free-Tier 512 MB cap. We still return a merged dict here because
+    load_profiles() then iterates once; this is unchanged. The bigger win
+    comes from the comps_v5 streaming loader (see load_comps_v5) since v5
+    is the largest single payload at ~155 MB. If profiles ever grows beyond
+    ~200 MB on disk, refactor this to a generator yielding (key, profile)
+    so load_profiles() can stream too.
+    """
     split_files = sorted(DATA_DIR.glob("api_profiles_part*.json"))
     if split_files:
         merged = {}
@@ -223,32 +234,56 @@ def load_search(cur):
 
 
 def load_comps(cur, table, filename):
+    """Load a single comp file into a DB table.
+
+    Sprint-3.14: chunked batch insertion + explicit dict deletion. With
+    stat_comps at 42 MB and anthro_comps at 60 MB the original "load whole
+    dict, build full batch, insert" pattern held ~150 MB resident per call;
+    chunking caps that and lets gc reclaim incrementally.
+    """
     path = DATA_DIR / filename
     if not path.exists():
         return
     print(f"  Loading {path.name} ({path.stat().st_size/1e6:.1f} MB)...")
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
-    batch = []
+    inserted = 0
+    chunk = []
+    CHUNK_SIZE = 2000
     for key, entry in data.items():
         pid = entry.get("player_id") or (key if ":" in key else None)
         slug = entry.get("slug")
         if not pid or not slug:
             continue
-        batch.append((pid, slug, compress(entry)))
-    cur.executemany(
-        f"INSERT OR REPLACE INTO {table} (player_id, slug, data) VALUES (?,?,?)",
-        batch,
-    )
-    print(f"  → {len(batch):,} entries in {table}")
+        chunk.append((pid, slug, compress(entry)))
+        if len(chunk) >= CHUNK_SIZE:
+            cur.executemany(
+                f"INSERT OR REPLACE INTO {table} (player_id, slug, data) VALUES (?,?,?)",
+                chunk,
+            )
+            inserted += len(chunk)
+            chunk = []
+    if chunk:
+        cur.executemany(
+            f"INSERT OR REPLACE INTO {table} (player_id, slug, data) VALUES (?,?,?)",
+            chunk,
+        )
+        inserted += len(chunk)
+    del data  # free the JSON dict before the next loader runs
+    print(f"  → {inserted:,} entries in {table}")
 
 
 def load_comps_v5(cur):
-    """Sprint-3.10.A: Load NBA-Profi 5-dim Comps Engine outputs.
+    """Sprint-3.10.A + Sprint-3.14 streaming variant.
 
-    Plus reads api_comps_v5_part*.json (split files) + merges + stores in DB.
-    Plus die data per entry ist die slim v5 struct: 5 dimensions + forecasts +
-    functional_position + combine_coverage.
+    Sprint-3.14 (Tobias 2026-06-13 Render OOM fix): the original implementation
+    merged ALL api_comps_v5_part*.json files into one in-memory dict before
+    inserting into SQLite. With 4 split files at ~38 MB each, the merged dict
+    plus the simultaneously-loaded api_profiles + stat_comps + anthro_comps
+    dicts blew past Render's 512 MB Free-Tier limit and killed the build with
+    a connection-reset crash. The fix below processes one split at a time:
+    load the JSON, batch-insert into SQLite, free the dict, move on. Peak
+    memory drops from ~500 MB merged to ~50 MB per part.
     """
     split_files = sorted(DATA_DIR.glob("api_comps_v5_part*.json"))
     if not split_files:
@@ -258,28 +293,33 @@ def load_comps_v5(cur):
             return
         split_files = [single]
 
-    merged = {}
-    total_mb = 0
+    total_inserted = 0
+    total_mb = 0.0
     for sp in split_files:
         sz_mb = sp.stat().st_size / 1e6
         total_mb += sz_mb
         print(f"  Loading {sp.name} ({sz_mb:.1f} MB)...")
         with open(sp, "r", encoding="utf-8") as f:
-            merged.update(json.load(f))
-    print(f"  v5 split-merge: {len(split_files)} parts, {total_mb:.1f} MB → {len(merged):,} entries")
+            part_data = json.load(f)
 
-    batch = []
-    for pid, entry in merged.items():
-        if not isinstance(entry, dict):
-            continue
-        # Plus die v5 slim entries haben kein eigenes slug-Feld — looked up via profiles.
-        batch.append((str(pid), None, compress(entry)))
+        batch = []
+        for pid, entry in part_data.items():
+            if not isinstance(entry, dict):
+                continue
+            # Slim v5 entries have no separate slug field — looked up via profiles.
+            batch.append((str(pid), None, compress(entry)))
 
-    cur.executemany(
-        "INSERT OR REPLACE INTO comps_v5 (player_id, slug, data) VALUES (?,?,?)",
-        batch,
-    )
-    print(f"  → {len(batch):,} entries in comps_v5")
+        cur.executemany(
+            "INSERT OR REPLACE INTO comps_v5 (player_id, slug, data) VALUES (?,?,?)",
+            batch,
+        )
+        total_inserted += len(batch)
+        # Free memory immediately before loading the next split.
+        del part_data
+        del batch
+
+    print(f"  v5 streaming-load: {len(split_files)} parts, {total_mb:.1f} MB → "
+          f"{total_inserted:,} entries in comps_v5")
 
 
 def main():
@@ -298,13 +338,32 @@ def main():
     cur.execute("PRAGMA synchronous=NORMAL")
     create_tables(cur)
 
+    # Sprint-3.14 (Tobias 2026-06-13): commit + gc between stages so each
+    # loader has the full Free-Tier memory budget. Without these commits, the
+    # WAL grows in memory, and the profile dict from load_profiles_data is
+    # held by load_profiles until its function frame exits — combined with
+    # the comps_v5 streaming load that follows, we kept blowing past 512 MB.
+    import gc
     load_profiles(cur)
-    load_search(cur)
-    load_comps(cur, "stat_comps", "api_stat_comps.json")
-    load_comps(cur, "anthro_comps", "api_anthro_comps.json")
-    load_comps_v5(cur)  # Sprint-3.10.A NBA-Profi 5-dim Comps Engine
-
     conn.commit()
+    gc.collect()
+
+    load_search(cur)
+    conn.commit()
+    gc.collect()
+
+    load_comps(cur, "stat_comps", "api_stat_comps.json")
+    conn.commit()
+    gc.collect()
+
+    load_comps(cur, "anthro_comps", "api_anthro_comps.json")
+    conn.commit()
+    gc.collect()
+
+    load_comps_v5(cur)  # Sprint-3.10.A + Sprint-3.14 streaming load
+    conn.commit()
+    gc.collect()
+
     cur.execute("ANALYZE")
     cur.execute("VACUUM")
     conn.commit()
