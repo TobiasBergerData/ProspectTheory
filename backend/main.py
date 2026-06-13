@@ -1145,6 +1145,56 @@ async def route_comps_v5(slug: str):
             "reason": "v5 comp data not available for this player",
         }
 
+    # Sprint-3.12 (Tobias 2026-06-13): Individual Player Forecast.
+    # Methodological motivation: Layer 3 (cohort) and Layer 4 (cluster) forecasts
+    # are AGGREGATE estimates — every player in the same age+position cohort
+    # gets the same numbers, regardless of how good they actually are. A
+    # second-round Wing and a top-5 Wing both inherit "Wing 18.5-19.5" cohort
+    # outcomes. That is the right thing for those layers (they are baselines),
+    # but the user needs a forecast that ACTUALLY discriminates.
+    #
+    # 10c already computes per-player tier probabilities from the LightGBM model.
+    # We expose them here as the "Individual" forecast — the primary view in the
+    # UI — with the existing Cohort/Cluster layers retained as context baselines.
+    #
+    # Tier semantics (consistent with Sprint-3.11):
+    #   Roleplayer+: P(WAR >= 0.9)  = super + allstar + starter + role
+    #   Starter+:    P(WAR >= 3.2)  = super + allstar + starter
+    #   All-Star+:   P(WAR >= 6.6)  = super + allstar
+    #   Bust (<0):   P(WAR < 0)     = neg
+    individual_forecast = None
+    if profile:
+        _ps = profile.get("prob_super")
+        _pa = profile.get("prob_allstar")
+        _pst = profile.get("prob_starter")
+        _pr = profile.get("prob_role")
+        _prep = profile.get("prob_repl")
+        _pn = profile.get("prob_neg") or profile.get("prob_out")
+        if any(v is not None for v in [_ps, _pa, _pst, _pr, _prep, _pn]):
+            # Fill None with 0 only after presence check (preserve true zeros).
+            _ps = _ps or 0; _pa = _pa or 0; _pst = _pst or 0
+            _pr = _pr or 0; _prep = _prep or 0; _pn = _pn or 0
+            # Detect scale: 10c outputs are typically already in percent (0-100).
+            _total = _ps + _pa + _pst + _pr + _prep + _pn
+            _scale = 1.0 if _total > 1.5 else 100.0
+            individual_forecast = {
+                "pct_all_star_plus":    round((_ps + _pa) * _scale, 1),
+                "pct_starter_plus":     round((_ps + _pa + _pst) * _scale, 1),
+                "pct_role_player_plus": round((_ps + _pa + _pst + _pr) * _scale, 1),
+                "pct_busted":           round(_pn * _scale, 1),
+                "source":               "10c_lightgbm_tier_probs",
+                "war_point_estimate":   profile.get("war") or profile.get("ppwa"),
+                # Plus raw tier probs für transparency in tooltip
+                "tier_probs": {
+                    "superstar":    round(_ps * _scale, 1),
+                    "all_star":     round(_pa * _scale, 1),
+                    "starter":      round(_pst * _scale, 1),
+                    "roleplayer":   round(_pr * _scale, 1),
+                    "replacement":  round(_prep * _scale, 1),
+                    "negative":     round(_pn * _scale, 1),
+                },
+            }
+
     # Plus die slim v5 entry hat compact keys (fp, pg, cc, cohort, cluster, forecast).
     # Plus die response struct expand zu human-readable fields.
     return {
@@ -1153,6 +1203,8 @@ async def route_comps_v5(slug: str):
         "functional_position": entry.get("fp", ""),
         "pos_group": entry.get("pg", ""),
         "combine_coverage": entry.get("cc", False),
+        # Sprint-3.12 — primary forecast (player-specific from 10c model).
+        "individual_forecast": individual_forecast,
         # 5 Comp-Dimensionen (mixed top-5)
         "dimensions": {
             "style":      entry.get("style", []),
