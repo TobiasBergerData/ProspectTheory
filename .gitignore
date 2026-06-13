@@ -33,3 +33,4 @@ backend/data/processed/*.gz
 backend/data/processed/api_anthro_comps.zip
 backend/data/processed/api_season_lines.json
 backend/data/processed/api_season_lines_intl.json
+backend/data/processed/unified_board_scores.csv
