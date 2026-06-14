@@ -388,8 +388,8 @@ const METHODS = {
   // The Star+ Creator PROJECTION lives in a separate field (starCreator).
   selfCreation: {
     name: "Creation",
-    formula: "Self-Created Scoring  =  USG × TS × Self-Share\nPassing Creation       =  AST% × clamp(AST/TO, 0.5, 2.5) ÷ 2.5\nComposite (position-weighted): PG 40/60 · Wing 70/30 · Big 80/20 (scoring/passing)\nSample penalty applies below 300 college FGA.",
-    desc: "What the prospect produces RIGHT NOW — a skill measurement, not a forecast.\n\nThis pillar measures total offensive creation, both shots the player generates himself and possessions he creates for teammates. Methodology is v2 (Self-Adjusted Box Creation), not the classical Ben Taylor formula.\n\nTWO COMPONENTS:\n\n• Self-Created Scoring (USG × TS × Self-Share): on-ball volume × shot efficiency × the share of shots that are NOT assisted (tracked from play-by-play).\n\n• Passing Creation (AST% × Quality): assist rate, weighted by AST/TO ratio so high-turnover passers are penalized.\n\nPosition weighting reflects role expectations: Playmakers lean passing-heavy (40/60), Wings balanced toward scoring (70/30), Bigs primarily scorers (80/20).\n\nA high score requires PRODUCTION the player generates himself — either as a self-created shooter or as a primary passer. A high-volume catch-and-shoot wing scores LOWER than a moderate-volume off-dribble creator with strong passing.\n\nFor the projection of whether he'll become a Star+ Creator in the NBA (a separate, calibrated probability forecast), see the Star+ Creator Projection in the NBA Projections section.",
+    formula: "L1 Translation:  USG_t = USG × league_strength_combined ;  AST_t = AST% × league_strength_combined\nL2 Composite (same v2 formula with translated inputs):\n   Self-Created Scoring = USG_t × TS × Self-Share\n   Passing Creation     = AST_t × clamp(AST/TO, 0.5, 2.5) ÷ 2.5\n   Position weights: PG 40/60 · Wing 70/30 · Big 80/20 (scoring/passing)\nL3 Anchor: position-stratified percentile rank vs Draft Pool 2008-2020 ∩ peak_pie known (n≈640).",
+    desc: "What the prospect produces RIGHT NOW — a skill measurement, not a forecast.\n\nThis pillar measures total offensive creation, both shots the player generates himself and possessions he creates for teammates. Sprint-3.22 update: a NBA-Stats-Pro three-layer backend (Translation + Composite + Anchored Percentile) produces a single 0-100 number that is comparable across NCAA and international prospects.\n\nWHY THE TRANSLATION:\nRaw college USG and AST do not transfer 1:1 between leagues. A 28% USG in the Euroleague is harder to generate than a 28% USG in a Mid-Major NCAA conference. The Translation layer multiplies USG and AST by `league_strength_combined` (intl = league_weight, NCAA = conf_strength) — putting Doncic at Real Madrid and Boozer at Duke on the same scale.\n\nWHY THE ANCHOR:\nRaw composite values don't have a natural interpretation. The Draft Pool — ~640 historic prospects 2008-2020 with known NBA peak_pie — IS the natural reference. Position-stratified percentile rank against this pool gives a clean reading.\n\nSCALE ANCHORS:\n  50 — average draft prospect\n  75 — solid NBA rotation player\n  85 — All-Star path\n  95+ — Star path\n\nA value of 90 means: 'this prospect creates better than 90% of historic draft prospects at his position'.\n\nTWO COMPONENTS WITHIN THE COMPOSITE (unchanged from v2):\n\n• Self-Created Scoring (USG_t × TS × Self-Share): translated on-ball volume × shot efficiency × the share of shots that are NOT assisted (from play-by-play; box-score proxy for international prospects).\n\n• Passing Creation (AST_t × Quality): translated assist rate, weighted by AST/TO ratio.\n\nPosition weighting (PG 40/60, Wing 70/30, Big 80/20) reflects role expectations.\n\nFor the projection of whether he'll become a Star+ Creator in the NBA (a separate, calibrated probability forecast), see the Star+ Creator Projection in the NBA Projections section.",
   },
   overall: {
     name: "Overall Production Rating",
@@ -1652,6 +1652,14 @@ function mapProfile(d) {
     // here. Mixing skill and projection in the same pillar slot was semantically
     // wrong and got reverted.
     selfCreation: (() => {
+      // Sprint-3.22 (2026-06-14): Creation Skill v3 hat Priority — Backend
+      // computiert via Translation (USG/AST × league_strength_combined) +
+      // Anchored Percentile vs Draft Pool 2008-2020 ∩ peak_pie. Single number
+      // 0-100, position-stratified, intl/NCAA comparable.
+      // Anchors: 50=avg draft prospect, 75=solid NBA rotation, 85=All-Star path,
+      // 95+=Star path.
+      // Falls v3 nicht da → v2 inline-formula als Fallback (legacy below).
+      if (d.creation_skill_v3 != null) return Math.round(d.creation_skill_v3);
       const legacy = d.creation_score ?? d.self_creation ?? d.box_creation_idx ?? d.self_creation_idx ?? 50;
       const usg = d.usg ?? d.college_usg;
       const ts = d.ts ?? d.ts_pct;
