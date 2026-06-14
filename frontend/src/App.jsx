@@ -375,11 +375,11 @@ const METHODS = {
     formula: "(pctl(STL%) × 0.35 + pctl(BLK%) × 0.35 + pctl(DBPM) × 0.30) × Intl_Adj",
     desc: "Position-weighted defensive value. International players get a 1.15× uplift as FIBA rules and pace suppress raw defensive stats. Stocks threshold bonus for dual-threat defenders.",
   },
-  // Tobias 2026-06-04 v20: METHODS dict for Creation
+  // Sprint-3.17 D.6 (2026-06-14): Creation Pillar v3 — Calibrated Probability Score
   selfCreation: {
     name: "Creation",
-    formula: "Self-Created Scoring = USG × TS × Self-Share  +  Passing Creation = AST% × clamp(AST/TO, 0.5, 2.5) ÷ 2.5\nComposite (position-weighted): PG 40/60, Wing 70/30, Big 80/20  ·  sample-penalized below 300 FGA",
-    desc: "Total offensive creation — both for himself and for teammates. v2 methodology, not classical Ben Taylor Box Creation.\n\nTWO COMPONENTS:\n\n• Self-Created Scoring (USG × TS × Self-Share): on-ball volume × efficiency × the share of his shots that are NOT assisted (PBP-tracked).\n\n• Passing Creation (AST% × Quality): assist rate, weighted by AST/TO ratio so that high-turnover passers are penalized.\n\nPosition-weighting reflects role expectations: Playmakers lean passing-heavy (40/60), Wings are balanced toward scoring (70/30), Bigs are primarily scorers (80/20). A sample-size penalty applies below 300 college FGA.\n\nHigh score requires PRODUCTION the player generates himself — either as a self-created shooter or as a primary passer. A high-volume catch-and-shoot wing will score LOWER than a moderate-volume off-dribble creator with strong passing.",
+    formula: "P(Star+ Creator) = triangulated(LR model · cohort baseline · archetype cluster)\nLR features: USG%, TS%, AST%, age-adj production, height, league strength, defensive BPM, AST/USG ratio, scorer-tilt\nPost-process: position-aware Bayesian shrinkage + isotonic calibration on 2015-2017 hold-out",
+    desc: "Calibrated probability that a prospect becomes a Star+ Creator in the NBA — i.e. peak All-Star tier AND high-USG (≥24%, Big ≥22%) AND high-AST (≥18%, Big ≥14%).\n\nMETHODOLOGY:\n\n• Position-stratified L2 Logistic Regression (Playmaker / Wing / Big) trained on 472 historic prospects (2008-2014), calibrated on 2015-2017, evaluated on 2018-2020.\n• Triangulated with Comps Engine v5 Layer 3 (age-stage cohort) + Layer 4 (archetype cluster) — three independent views of the same question.\n• Position-aware Bayesian shrinkage softens overconfident predictions when training samples are thin (especially Bigs, n=16).\n• Isotonic calibration ensures predicted probabilities match observed frequencies (Wing Brier=0.047, world-class).\n\nSCORE INTERPRETATION (0-100 calibrated):\n  ≥ 60   elite Creator candidates (Flagg, Zion, Doncic-tier)\n  40-60  high Creator potential\n  25-40  possible Creator role\n  ≤ 25   unlikely Creator\n\nIMPORTANT: NO prospect is 95% Star+ Creator. Historic base rate is ~8-15% per position; even 60% is a massive lift above the population.\n\nFalls back to legacy v2 (Self-Created Scoring + Passing Creation, USG × TS × Self-Share + AST%×Quality) for prospects without v3 coverage.",
   },
   overall: {
     name: "Overall Production Rating",
@@ -1632,10 +1632,14 @@ function mapProfile(d) {
     dunkR: d.dunk_r ?? d.dunk_rate ?? d.dunkR,
     dunkPct: d.dunk_pct ?? d.dunkPct,
     fta: d.fta, ftm: d.ftm, fga: d.fga,
-    // Tobias 2026-06-03 v15: Self-Adjusted Box Creation (v2)
-    // Self-Adjusted Box Creation: USG × TS × Self_Share + AST_p × Quality, position-weighted.
-    // Falls back to legacy creation_score if PBP shot-creation data is missing.
+    // Sprint-3.17 D.6 (2026-06-14): Creation Pillar v3 — Calibrated Probability Score.
+    // Priority: creation_pillar_v3 (LR + Bayesian + Triangulation, calibrated) →
+    // legacy v2 formula (Self-Adjusted Box Creation) → legacy creation_score.
     selfCreation: (() => {
+      // v3 takes priority — it's the calibrated Star+ Creator probability (0-100).
+      const v3 = d.creation_pillar_v3;
+      if (v3 != null && Number.isFinite(v3)) return Math.round(v3);
+
       const legacy = d.creation_score ?? d.self_creation ?? d.box_creation_idx ?? d.self_creation_idx ?? 50;
       const usg = d.usg ?? d.college_usg;
       const ts = d.ts ?? d.ts_pct;
@@ -1668,6 +1672,11 @@ function mapProfile(d) {
       const scaled = Math.max(0, Math.min(100, (composite / 25) * 100));
       return Math.round(scaled);
     })(),
+    // Sprint-3.17 D.5 — top-3 SHAP features driving the Creation Pillar v3 score.
+    // Format: "+0.34 Usage % / +0.22 AST/USG / +0.18 Self-Creation"
+    creationExplanation: d.creation_pillar_v3_explanation ?? null,
+    // The Phase B Pillar score before Triangulation (for transparency tooltip).
+    creationPillarPhaseB: d.creation_pillar_v3_phase_b ?? null,
     selfCreationPct: d.box_creation ?? d.self_creation_pct ?? null,
     boxScoring: d.box_scoring ?? null,
     boxAssist: d.box_assist ?? null,
