@@ -375,11 +375,20 @@ const METHODS = {
     formula: "(pctl(STL%) × 0.35 + pctl(BLK%) × 0.35 + pctl(DBPM) × 0.30) × Intl_Adj",
     desc: "Position-weighted defensive value. International players get a 1.15× uplift as FIBA rules and pace suppress raw defensive stats. Stocks threshold bonus for dual-threat defenders.",
   },
-  // Sprint-3.17 D.6 (2026-06-14): Creation Pillar v3 — Calibrated Probability Score
+  // Sprint-3.17 D.7 (2026-06-14): NBA Projection — Star+ Creator probability.
+  // This is a FORECAST, not a current-skill measurement. Lives in the NBA
+  // Projections section, separate from the Creation skill pillar.
+  starCreator: {
+    name: "Star+ Creator Projection",
+    formula: "Display = position-percentile rank of P(Star+ Creator)\nP(Star+) = 0.5 × LR(features) + 0.25 × cohort_baseline + 0.25 × archetype_cluster\nLR features: USG%, TS%, AST%, age-adj production, height, league strength, defensive BPM, AST/USG ratio, scorer-tilt\nPost-process: position-aware Bayesian shrinkage + isotonic calibration on 2015-2017 hold-out",
+    desc: "PROJECTION (not a current-skill measurement). The position-percentile rank for becoming a Star+ Creator in the NBA — i.e. peak All-Star tier AND high-USG (≥24%, Big ≥22%) AND high-AST (≥18%, Big ≥14%).\n\nDISPLAY (0-100 = position-percentile rank, same scale as other pillars):\n  85+   elite Creator candidate within his position\n  70-85 above-average Creator profile\n  50-70 average / below-average\n  ≤ 50  low Creator probability\n\nUNDERLYING CALIBRATED PROBABILITY (raw, shown in detail tooltip):\nRanges from ~5% to ~65% — historic base rate is 8-15% per position, so even 60% calibrated is a massive lift above the population.\n\nMETHODOLOGY:\n\n• Position-stratified L2 Logistic Regression (Playmaker / Wing / Big) trained on 472 historic prospects (2008-2014), calibrated on 2015-2017, evaluated on 2018-2020.\n• Triangulated with Comps Engine v5 Layer 3 (age-stage cohort) + Layer 4 (archetype cluster) — three independent views of the same question.\n• Position-aware Bayesian shrinkage softens overconfident predictions when training samples are thin (especially Bigs, n=16).\n• Isotonic calibration ensures predicted probabilities match observed frequencies (Wing Brier=0.047, world-class).\n\nThis is a projection, NOT a current-skill measurement. Compare with the Creation skill pillar (which measures USG × TS × Self-Share + AST × Quality) for what the prospect produces right now.",
+  },
+  // Sprint-3.17 D.7 (2026-06-14): Creation = SKILL pillar (v2 Self-Adjusted Box Creation).
+  // The v3 Star+ Creator projection lives in the NBA Projections section.
   selfCreation: {
     name: "Creation",
-    formula: "P(Star+ Creator) = triangulated(LR model · cohort baseline · archetype cluster)\nLR features: USG%, TS%, AST%, age-adj production, height, league strength, defensive BPM, AST/USG ratio, scorer-tilt\nPost-process: position-aware Bayesian shrinkage + isotonic calibration on 2015-2017 hold-out",
-    desc: "Calibrated probability that a prospect becomes a Star+ Creator in the NBA — i.e. peak All-Star tier AND high-USG (≥24%, Big ≥22%) AND high-AST (≥18%, Big ≥14%).\n\nMETHODOLOGY:\n\n• Position-stratified L2 Logistic Regression (Playmaker / Wing / Big) trained on 472 historic prospects (2008-2014), calibrated on 2015-2017, evaluated on 2018-2020.\n• Triangulated with Comps Engine v5 Layer 3 (age-stage cohort) + Layer 4 (archetype cluster) — three independent views of the same question.\n• Position-aware Bayesian shrinkage softens overconfident predictions when training samples are thin (especially Bigs, n=16).\n• Isotonic calibration ensures predicted probabilities match observed frequencies (Wing Brier=0.047, world-class).\n\nSCORE INTERPRETATION (0-100 calibrated):\n  ≥ 60   elite Creator candidates (Flagg, Zion, Doncic-tier)\n  40-60  high Creator potential\n  25-40  possible Creator role\n  ≤ 25   unlikely Creator\n\nIMPORTANT: NO prospect is 95% Star+ Creator. Historic base rate is ~8-15% per position; even 60% is a massive lift above the population.\n\nFalls back to legacy v2 (Self-Created Scoring + Passing Creation, USG × TS × Self-Share + AST%×Quality) for prospects without v3 coverage.",
+    formula: "Self-Created Scoring = USG × TS × Self-Share  +  Passing Creation = AST% × clamp(AST/TO, 0.5, 2.5) ÷ 2.5\nComposite (position-weighted): PG 40/60, Wing 70/30, Big 80/20  ·  sample-penalized below 300 FGA",
+    desc: "Total offensive creation a prospect generates RIGHT NOW — both for himself and for teammates. v2 methodology, not classical Ben Taylor Box Creation. This is a current-skill pillar; the NBA Star+ Creator projection (calibrated probability that he'll become a Creator-tier player in the league) is shown separately in the NBA Projections section.\n\nTWO COMPONENTS:\n\n• Self-Created Scoring (USG × TS × Self-Share): on-ball volume × efficiency × the share of his shots that are NOT assisted (PBP-tracked).\n\n• Passing Creation (AST% × Quality): assist rate, weighted by AST/TO ratio so that high-turnover passers are penalized.\n\nPosition-weighting reflects role expectations: Playmakers lean passing-heavy (40/60), Wings are balanced toward scoring (70/30), Bigs are primarily scorers (80/20). A sample-size penalty applies below 300 college FGA.\n\nHigh score requires PRODUCTION the player generates himself — either as a self-created shooter or as a primary passer. A high-volume catch-and-shoot wing will score LOWER than a moderate-volume off-dribble creator with strong passing.",
   },
   overall: {
     name: "Overall Production Rating",
@@ -1632,14 +1641,16 @@ function mapProfile(d) {
     dunkR: d.dunk_r ?? d.dunk_rate ?? d.dunkR,
     dunkPct: d.dunk_pct ?? d.dunkPct,
     fta: d.fta, ftm: d.ftm, fga: d.fga,
-    // Sprint-3.17 D.6 (2026-06-14): Creation Pillar v3 — Calibrated Probability Score.
-    // Priority: creation_pillar_v3 (LR + Bayesian + Triangulation, calibrated) →
-    // legacy v2 formula (Self-Adjusted Box Creation) → legacy creation_score.
+    // Sprint-3.17 D.7 (2026-06-14): Creation Pillar — SKILL (not projection).
+    // The v2 Self-Adjusted Box Creation measures what the prospect CURRENTLY does
+    // (USG × TS × Self-Share + AST × Quality, position-weighted), matching the
+    // semantic of the other skill pillars (Defense, Shooting, Feel, Athletic).
+    //
+    // The v3 calibrated Star+ Creator probability is a projection (future NBA
+    // outcome) and lives in the NBA Projections section as `starCreator`, NOT
+    // here. Mixing skill and projection in the same pillar slot was semantically
+    // wrong and got reverted.
     selfCreation: (() => {
-      // v3 takes priority — it's the calibrated Star+ Creator probability (0-100).
-      const v3 = d.creation_pillar_v3;
-      if (v3 != null && Number.isFinite(v3)) return Math.round(v3);
-
       const legacy = d.creation_score ?? d.self_creation ?? d.box_creation_idx ?? d.self_creation_idx ?? 50;
       const usg = d.usg ?? d.college_usg;
       const ts = d.ts ?? d.ts_pct;
@@ -1672,11 +1683,13 @@ function mapProfile(d) {
       const scaled = Math.max(0, Math.min(100, (composite / 25) * 100));
       return Math.round(scaled);
     })(),
-    // Sprint-3.17 D.5 — top-3 SHAP features driving the Creation Pillar v3 score.
-    // Format: "+0.34 Usage % / +0.22 AST/USG / +0.18 Self-Creation"
-    creationExplanation: d.creation_pillar_v3_explanation ?? null,
-    // The Phase B Pillar score before Triangulation (for transparency tooltip).
-    creationPillarPhaseB: d.creation_pillar_v3_phase_b ?? null,
+    // Sprint-3.17 D.7 — NBA Projection: Star+ Creator probability (not a skill,
+    // but a projected NBA outcome). Lives in the NBA Projections section,
+    // semantically separate from the Creation skill pillar above.
+    starCreator:            d.creation_pillar_v3 ?? null,              // 0-100 display (position percentile)
+    starCreatorProbability: d.creation_pillar_v3_probability ?? null,  // 0-1 raw calibrated
+    starCreatorExplanation: d.creation_pillar_v3_explanation ?? null,  // top-3 SHAP features
+    starCreatorPhaseB:      d.creation_pillar_v3_phase_b ?? null,      // pre-Triangulation score
     selfCreationPct: d.box_creation ?? d.self_creation_pct ?? null,
     boxScoring: d.box_scoring ?? null,
     boxAssist: d.box_assist ?? null,
