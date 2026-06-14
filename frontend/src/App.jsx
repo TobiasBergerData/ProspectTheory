@@ -8176,6 +8176,81 @@ function RiskProfileTab({p}) {
         );
       })()}
 
+      {/* Sprint-3.17 D.7+D.9: Star+ Creator Projection (calibrated probability × 100) */}
+      {p.starCreator != null && Number.isFinite(p.starCreator) && p.starCreator > 0 && (() => {
+        const score = p.starCreator;
+        // Color anchors match historic base-rate semantics:
+        //   ≤15  unlikely (base rate)
+        //   15-30 average / slight lift
+        //   30-50 strong lift over the population
+        //   ≥50  exceptional Creator profile
+        const color = score >= 50 ? "#22c55e"   // green = exceptional
+                    : score >= 30 ? "#fbbf24"   // amber = strong
+                    : score >= 15 ? "#06b6d4"   // cyan  = around base
+                    : "#6b7280";                // gray  = unlikely
+        const tierLabel = score >= 50 ? "Exceptional Creator profile"
+                        : score >= 30 ? "Strong Creator potential"
+                        : score >= 15 ? "Around the base-rate"
+                        : "Unlikely Creator";
+        return (
+          <div className="rounded-xl p-4" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+            <div className="text-sm font-semibold text-gray-100 mb-1">
+              Star+ Creator Projection
+            </div>
+            <div className="text-xs text-gray-400 mb-3 leading-relaxed">
+              Calibrated probability that this prospect becomes a Star+ Creator in the NBA — peak
+              All-Star tier <span className="text-gray-300">AND</span> high on-ball usage
+              <span className="text-gray-300"> AND</span> high passing involvement. Historic base
+              rate is 8–15% per position, so anything above ~30 is a strong lift over the
+              population. <span className="text-gray-500">No prospect realistically scores 95%+.</span>
+            </div>
+            <div className="flex flex-wrap gap-5 mb-3 items-end">
+              <div>
+                <div className="text-2xl font-bold" style={{color}}>{score.toFixed(1)}%</div>
+                <div className="text-[10px] text-gray-500 uppercase tracking-wide">
+                  Star+ Creator Probability
+                </div>
+              </div>
+              <div>
+                <div className="text-sm text-gray-200">{tierLabel}</div>
+                <div className="text-[10px] text-gray-500 uppercase tracking-wide">Tier read</div>
+              </div>
+              {p.starCreatorPhaseB != null && Number.isFinite(p.starCreatorPhaseB) && (
+                <div>
+                  <div className="text-sm text-gray-300">{p.starCreatorPhaseB.toFixed(1)}%</div>
+                  <div className="text-[10px] text-gray-500 uppercase tracking-wide">
+                    Model only (pre-triangulation)
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex h-5 rounded overflow-hidden mb-1" style={{background:"#1f2937"}}>
+              <div
+                style={{width:`${Math.min(100, score)}%`, background:color}}
+                title={`${score.toFixed(1)}% calibrated probability`}
+              />
+            </div>
+            <div className="flex justify-between text-[10px] text-gray-500">
+              <span>0%</span>
+              <span>base rate ~8–15%</span>
+              <span>50%</span>
+              <span>100%</span>
+            </div>
+            {p.starCreatorExplanation && (
+              <div className="text-[11px] text-gray-400 mt-3 leading-relaxed">
+                <span className="text-gray-500 uppercase tracking-wide text-[10px] mr-1">Drivers:</span>
+                {p.starCreatorExplanation}
+              </div>
+            )}
+            <div className="text-[10px] text-gray-500 mt-2 leading-relaxed">
+              Position-stratified Logistic Regression · Bayesian shrinkage · Triangulated with
+              Comps Engine v5 (age-stage cohort + archetype cluster). Calibrated on held-out
+              2015-2017 set.
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Draft Range */}
       <div className="rounded-2xl p-5" style={{background:"linear-gradient(135deg,#0d1117,#111827)",border:"1px solid #1f2937"}}>
         <h3 className="text-base font-bold text-gray-100 mb-1">Draft Range</h3>
