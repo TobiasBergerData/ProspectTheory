@@ -3902,7 +3902,7 @@ function MindTab({p}) {
         (Anthony Edwards, Brunson, Trae Young, Haliburton) scored <em>below-median</em> on the mind composite
         in their final NCAA season. Mind correlates weakly with NBA peak Wins Added (|r| &lt; 0.10 univariate).
         Treat this as <strong className="text-gray-200">qualitative behavioural reference</strong>, not a projection.
-        Full methodology and historical validation in <span className="text-gray-200">Research → Mind Framework</span>.
+        Full methodology, sample-size conventions and historic validation in <a href="https://github.com/TobiasBergerData/ProspectTheory/blob/main/docs/MIND_FRAMEWORK.md" target="_blank" rel="noopener noreferrer" style={{color:"#60a5fa",textDecoration:"underline"}}>docs/MIND_FRAMEWORK.md</a>.
       </p>
     </div>
   );
@@ -4345,6 +4345,16 @@ function MindTab({p}) {
                           sub="FT in last 5 min Half 2 with ≤5pt diff."
                           fga={ft.clutch_fta} efg={ft.clutch_pct} delta={ft.clutch_delta} type="ft" minSample={5}/>
                       )}
+                      {/* Sprint-3.24 (2026-06-14): FT-Resilience nach Adverse Event */}
+                      {ft.resilience?.idx != null && (() => {
+                        const r = ft.resilience;
+                        const delta = (r.pct_post != null && r.pct_base != null) ? (r.pct_post - r.pct_base) : null;
+                        return (
+                          <PressureCard title="FT after Adverse Streak"
+                            sub={`FT% post-streak vs baseline. Resilience idx ${r.idx.toFixed(2)} (${r.trips_post} post vs ${r.trips_base} base trips).`}
+                            fga={r.trips_post} efg={r.pct_post} delta={delta} type="ft" minSample={5}/>
+                        );
+                      })()}
                     </div>
                     <div style={{fontSize:9,color:"#475569",marginTop:4,fontStyle:"italic"}}>
                       Cards with &lt;8 attempts are directional only — a single make/miss can shift eFG dramatically.

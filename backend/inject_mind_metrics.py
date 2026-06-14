@@ -172,6 +172,28 @@ def build_mind_block(row) -> dict:
             "clutch_pct":   round_or_none(row.get("clutch_ft_pct"), 1),
             "clutch_delta": round_or_none(row.get("clutch_ft_delta"), 1),
         })
+
+    # Sprint-3.24 (Tobias 2026-06-14): FT-Resilience nach Adverse Event.
+    # Misst FT-Trip Success-Rate POST-STREAK vs BASELINE. Bleibt der Spieler
+    # nach einem Slump an der Linie akkurat?
+    #   > 1.0  stable/improves under pressure
+    #   ≈ 1.0  neutral
+    #   < 1.0  drops
+    # Sample-Size-Filter: min 5 FT-Trips in BEIDEN baseline und post-Streak.
+    ft_resilience = round_or_none(row.get("ft_resilience"), 3)
+    ft_trips_base = int(safe_num(row.get("ft_trips_base_streak")) or 0)
+    ft_trips_post = int(safe_num(row.get("ft_trips_post_streak")) or 0)
+    if ft_resilience is not None and ft_trips_base >= 5 and ft_trips_post >= 5:
+        ft_block["resilience"] = {
+            "idx":         ft_resilience,
+            "lo":          round_or_none(row.get("ft_resilience_lo"), 3),
+            "hi":          round_or_none(row.get("ft_resilience_hi"), 3),
+            "pct_base":    round_or_none(row.get("ft_pct_base_streak"), 1),
+            "pct_post":    round_or_none(row.get("ft_pct_post_streak"), 1),
+            "trips_base":  ft_trips_base,
+            "trips_post":  ft_trips_post,
+        }
+
     block["ft"] = ft_block
 
     # Match-Phase-Drift (Tobias 2026-05-09): Mental Stamina H1 vs H2
