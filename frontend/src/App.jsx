@@ -1687,10 +1687,20 @@ function mapProfile(d) {
     // Sprint-3.17 D.7 — NBA Projection: Star+ Creator probability (not a skill,
     // but a projected NBA outcome). Lives in the NBA Projections section,
     // semantically separate from the Creation skill pillar above.
-    starCreator:            d.creation_pillar_v3 ?? null,              // 0-100 display (position percentile)
-    starCreatorProbability: d.creation_pillar_v3_probability ?? null,  // 0-1 raw calibrated
-    starCreatorExplanation: d.creation_pillar_v3_explanation ?? null,  // top-3 SHAP features
-    starCreatorPhaseB:      d.creation_pillar_v3_phase_b ?? null,      // pre-Triangulation score
+    starCreator:            d.star_creator_projection ?? d.creation_pillar_v3 ?? null,
+    starCreatorProbability: d.star_creator_probability ?? d.creation_pillar_v3_probability ?? null,
+    starCreatorExplanation: d.star_creator_explanation ?? d.creation_pillar_v3_explanation ?? null,
+    starCreatorPhaseB:      d.star_creator_phase_b ?? d.creation_pillar_v3_phase_b ?? null,
+    // Sprint-3.18 (2026-06-14): Elite Shooter Projection.
+    eliteShooter:            d.elite_shooter_projection ?? null,
+    eliteShooterProbability: d.elite_shooter_probability ?? null,
+    eliteShooterExplanation: d.elite_shooter_explanation ?? null,
+    eliteShooterPhaseB:      d.elite_shooter_phase_b ?? null,
+    // Sprint-3.19 (2026-06-14): All-Defensive Player Projection.
+    allDefensive:            d.all_defensive_projection ?? null,
+    allDefensiveProbability: d.all_defensive_probability ?? null,
+    allDefensiveExplanation: d.all_defensive_explanation ?? null,
+    allDefensivePhaseB:      d.all_defensive_phase_b ?? null,
     selfCreationPct: d.box_creation ?? d.self_creation_pct ?? null,
     boxScoring: d.box_scoring ?? null,
     boxAssist: d.box_assist ?? null,
@@ -5784,6 +5794,195 @@ function ProjectionTab({p}) {
         })()}
       </Sec>
 
+      {/* ═══════════════════════════════════════════════════════════
+          Sprint-3.17.X (2026-06-14): Role/Outcome Projections section.
+          Container for calibrated probability forecasts of specific NBA
+          outcomes — distinct from the Tier Probabilities above (which
+          forecast value tier). Add new role projection cards here as
+          they ship — they share the same display convention (% × 100).
+          ═══════════════════════════════════════════════════════════ */}
+      <Sec title="Role Projections" subtitle="Calibrated probabilities of specific NBA role outcomes">
+        <div className="space-y-4">
+          <p className="text-xs text-gray-400 leading-relaxed">
+            Each card is a forecast of a specific NBA role outcome — whether the prospect
+            becomes a Star+ Creator, an elite shooter, an All-Defensive player, etc. Scores
+            are calibrated probabilities anchored against historic prospects who actually
+            reached the outcome. Historic base rates are low (typically 8-15%), so a score
+            well above that is a strong lift over the population. No prospect realistically
+            scores 95%+ — anything that high would mean the model is overfitting.
+          </p>
+
+          {/* Star+ Creator Projection */}
+          {p.starCreator != null && Number.isFinite(p.starCreator) && p.starCreator > 0 && (() => {
+            const score = p.starCreator;
+            const color = score >= 50 ? "#22c55e"
+                        : score >= 30 ? "#fbbf24"
+                        : score >= 15 ? "#06b6d4"
+                        : "#6b7280";
+            const tierLabel = score >= 50 ? "Exceptional Creator profile"
+                            : score >= 30 ? "Strong Creator potential"
+                            : score >= 15 ? "Around the base-rate"
+                            : "Unlikely Creator";
+            return (
+              <div className="rounded-xl p-4" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+                <div className="text-sm font-semibold text-gray-100 mb-1">
+                  Star+ Creator Projection
+                </div>
+                <div className="text-xs text-gray-400 mb-3 leading-relaxed">
+                  Probability of becoming a Star+ Creator in the NBA — peak All-Star tier
+                  <span className="text-gray-300"> AND</span> high on-ball usage
+                  <span className="text-gray-300"> AND</span> high passing involvement.
+                </div>
+                <div className="flex flex-wrap gap-5 mb-3 items-end">
+                  <div>
+                    <div className="text-2xl font-bold" style={{color}}>{score.toFixed(1)}%</div>
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wide">
+                      Star+ Creator Probability
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-200">{tierLabel}</div>
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wide">Tier read</div>
+                  </div>
+                  {p.starCreatorPhaseB != null && Number.isFinite(p.starCreatorPhaseB) && (
+                    <div>
+                      <div className="text-sm text-gray-300">{p.starCreatorPhaseB.toFixed(1)}%</div>
+                      <div className="text-[10px] text-gray-500 uppercase tracking-wide">
+                        Model only (pre-triangulation)
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="flex h-5 rounded overflow-hidden mb-1" style={{background:"#1f2937"}}>
+                  <div
+                    style={{width:`${Math.min(100, score)}%`, background:color}}
+                    title={`${score.toFixed(1)}% calibrated probability`}
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] text-gray-500">
+                  <span>0%</span>
+                  <span>base rate ~8–15%</span>
+                  <span>50%</span>
+                  <span>100%</span>
+                </div>
+                {p.starCreatorExplanation && (
+                  <div className="text-[11px] text-gray-400 mt-3 leading-relaxed">
+                    <span className="text-gray-500 uppercase tracking-wide text-[10px] mr-1">Drivers:</span>
+                    {p.starCreatorExplanation}
+                  </div>
+                )}
+                <div className="text-[10px] text-gray-500 mt-2 leading-relaxed">
+                  Position-stratified Logistic Regression · Bayesian shrinkage · Triangulated
+                  with Comps Engine v5 (age-stage cohort + archetype cluster). Calibrated on
+                  held-out 2015-2017 set.
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Elite Shooter Projection (Sprint-3.18) */}
+          {p.eliteShooter != null && Number.isFinite(p.eliteShooter) && p.eliteShooter > 0 && (() => {
+            const score = p.eliteShooter;
+            const color = score >= 50 ? "#22c55e" : score >= 30 ? "#fbbf24" : score >= 15 ? "#06b6d4" : "#6b7280";
+            const tier  = score >= 50 ? "Exceptional shooter profile"
+                        : score >= 30 ? "Strong shooting projection"
+                        : score >= 15 ? "Around the base-rate"
+                        : "Unlikely floor-spacer";
+            return (
+              <div className="rounded-xl p-4" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+                <div className="text-sm font-semibold text-gray-100 mb-1">Elite Shooter Projection</div>
+                <div className="text-xs text-gray-400 mb-3 leading-relaxed">
+                  Probability of becoming an NBA floor-spacer — peak 3P% ≥ 36% (Bigs ≥ 33%) AND 3PAr ≥ 0.30 (Bigs ≥ 0.20),
+                  measured over qualifying seasons with ≥ 2 attempts per game.
+                </div>
+                <div className="flex flex-wrap gap-5 mb-3 items-end">
+                  <div>
+                    <div className="text-2xl font-bold" style={{color}}>{score.toFixed(1)}%</div>
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wide">Elite Shooter Probability</div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-200">{tier}</div>
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wide">Tier read</div>
+                  </div>
+                  {p.eliteShooterPhaseB != null && Number.isFinite(p.eliteShooterPhaseB) && (
+                    <div>
+                      <div className="text-sm text-gray-300">{p.eliteShooterPhaseB.toFixed(1)}%</div>
+                      <div className="text-[10px] text-gray-500 uppercase tracking-wide">Model only (pre-triangulation)</div>
+                    </div>
+                  )}
+                </div>
+                <div className="flex h-5 rounded overflow-hidden mb-1" style={{background:"#1f2937"}}>
+                  <div style={{width:`${Math.min(100, score)}%`, background:color}} />
+                </div>
+                <div className="flex justify-between text-[10px] text-gray-500">
+                  <span>0%</span><span>base rate ~10–15%</span><span>50%</span><span>100%</span>
+                </div>
+                {p.eliteShooterExplanation && (
+                  <div className="text-[11px] text-gray-400 mt-3 leading-relaxed">
+                    <span className="text-gray-500 uppercase tracking-wide text-[10px] mr-1">Drivers:</span>
+                    {p.eliteShooterExplanation}
+                  </div>
+                )}
+                <div className="text-[10px] text-gray-500 mt-2 leading-relaxed">
+                  Position-stratified Logistic Regression · Bayesian shrinkage · Triangulated with Comps Engine v5.
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* All-Defensive Player Projection (Sprint-3.19) */}
+          {p.allDefensive != null && Number.isFinite(p.allDefensive) && p.allDefensive > 0 && (() => {
+            const score = p.allDefensive;
+            const color = score >= 50 ? "#22c55e" : score >= 30 ? "#fbbf24" : score >= 15 ? "#06b6d4" : "#6b7280";
+            const tier  = score >= 50 ? "Exceptional defensive profile"
+                        : score >= 30 ? "Strong defensive projection"
+                        : score >= 15 ? "Around the base-rate"
+                        : "Unlikely All-Defensive";
+            return (
+              <div className="rounded-xl p-4" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+                <div className="text-sm font-semibold text-gray-100 mb-1">All-Defensive Player Projection</div>
+                <div className="text-xs text-gray-400 mb-3 leading-relaxed">
+                  Probability of becoming an NBA All-Defensive level player. Position-aware target:
+                  Guards via STL rate + DEF_WS, Wings via DEF_WS (highest All-Def density), Bigs via
+                  DEF_WS or BLK rate (rim-protection path).
+                </div>
+                <div className="flex flex-wrap gap-5 mb-3 items-end">
+                  <div>
+                    <div className="text-2xl font-bold" style={{color}}>{score.toFixed(1)}%</div>
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wide">All-Defensive Probability</div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-200">{tier}</div>
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wide">Tier read</div>
+                  </div>
+                  {p.allDefensivePhaseB != null && Number.isFinite(p.allDefensivePhaseB) && (
+                    <div>
+                      <div className="text-sm text-gray-300">{p.allDefensivePhaseB.toFixed(1)}%</div>
+                      <div className="text-[10px] text-gray-500 uppercase tracking-wide">Model only (pre-triangulation)</div>
+                    </div>
+                  )}
+                </div>
+                <div className="flex h-5 rounded overflow-hidden mb-1" style={{background:"#1f2937"}}>
+                  <div style={{width:`${Math.min(100, score)}%`, background:color}} />
+                </div>
+                <div className="flex justify-between text-[10px] text-gray-500">
+                  <span>0%</span><span>base rate ~8–12%</span><span>50%</span><span>100%</span>
+                </div>
+                {p.allDefensiveExplanation && (
+                  <div className="text-[11px] text-gray-400 mt-3 leading-relaxed">
+                    <span className="text-gray-500 uppercase tracking-wide text-[10px] mr-1">Drivers:</span>
+                    {p.allDefensiveExplanation}
+                  </div>
+                )}
+                <div className="text-[10px] text-gray-500 mt-2 leading-relaxed">
+                  Position-stratified Logistic Regression · Bayesian shrinkage · Triangulated with Comps Engine v5.
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      </Sec>
+
       {/* Role Fit & Team Context placeholder removed 2026-05-09 (User: feature is on backlog, no need to advertise it) */}
     </div>
   );
@@ -8176,81 +8375,6 @@ function RiskProfileTab({p}) {
         );
       })()}
 
-      {/* Sprint-3.17 D.7+D.9: Star+ Creator Projection (calibrated probability × 100) */}
-      {p.starCreator != null && Number.isFinite(p.starCreator) && p.starCreator > 0 && (() => {
-        const score = p.starCreator;
-        // Color anchors match historic base-rate semantics:
-        //   ≤15  unlikely (base rate)
-        //   15-30 average / slight lift
-        //   30-50 strong lift over the population
-        //   ≥50  exceptional Creator profile
-        const color = score >= 50 ? "#22c55e"   // green = exceptional
-                    : score >= 30 ? "#fbbf24"   // amber = strong
-                    : score >= 15 ? "#06b6d4"   // cyan  = around base
-                    : "#6b7280";                // gray  = unlikely
-        const tierLabel = score >= 50 ? "Exceptional Creator profile"
-                        : score >= 30 ? "Strong Creator potential"
-                        : score >= 15 ? "Around the base-rate"
-                        : "Unlikely Creator";
-        return (
-          <div className="rounded-xl p-4" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
-            <div className="text-sm font-semibold text-gray-100 mb-1">
-              Star+ Creator Projection
-            </div>
-            <div className="text-xs text-gray-400 mb-3 leading-relaxed">
-              Calibrated probability that this prospect becomes a Star+ Creator in the NBA — peak
-              All-Star tier <span className="text-gray-300">AND</span> high on-ball usage
-              <span className="text-gray-300"> AND</span> high passing involvement. Historic base
-              rate is 8–15% per position, so anything above ~30 is a strong lift over the
-              population. <span className="text-gray-500">No prospect realistically scores 95%+.</span>
-            </div>
-            <div className="flex flex-wrap gap-5 mb-3 items-end">
-              <div>
-                <div className="text-2xl font-bold" style={{color}}>{score.toFixed(1)}%</div>
-                <div className="text-[10px] text-gray-500 uppercase tracking-wide">
-                  Star+ Creator Probability
-                </div>
-              </div>
-              <div>
-                <div className="text-sm text-gray-200">{tierLabel}</div>
-                <div className="text-[10px] text-gray-500 uppercase tracking-wide">Tier read</div>
-              </div>
-              {p.starCreatorPhaseB != null && Number.isFinite(p.starCreatorPhaseB) && (
-                <div>
-                  <div className="text-sm text-gray-300">{p.starCreatorPhaseB.toFixed(1)}%</div>
-                  <div className="text-[10px] text-gray-500 uppercase tracking-wide">
-                    Model only (pre-triangulation)
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="flex h-5 rounded overflow-hidden mb-1" style={{background:"#1f2937"}}>
-              <div
-                style={{width:`${Math.min(100, score)}%`, background:color}}
-                title={`${score.toFixed(1)}% calibrated probability`}
-              />
-            </div>
-            <div className="flex justify-between text-[10px] text-gray-500">
-              <span>0%</span>
-              <span>base rate ~8–15%</span>
-              <span>50%</span>
-              <span>100%</span>
-            </div>
-            {p.starCreatorExplanation && (
-              <div className="text-[11px] text-gray-400 mt-3 leading-relaxed">
-                <span className="text-gray-500 uppercase tracking-wide text-[10px] mr-1">Drivers:</span>
-                {p.starCreatorExplanation}
-              </div>
-            )}
-            <div className="text-[10px] text-gray-500 mt-2 leading-relaxed">
-              Position-stratified Logistic Regression · Bayesian shrinkage · Triangulated with
-              Comps Engine v5 (age-stage cohort + archetype cluster). Calibrated on held-out
-              2015-2017 set.
-            </div>
-          </div>
-        );
-      })()}
-
       {/* Draft Range */}
       <div className="rounded-2xl p-5" style={{background:"linear-gradient(135deg,#0d1117,#111827)",border:"1px solid #1f2937"}}>
         <h3 className="text-base font-bold text-gray-100 mb-1">Draft Range</h3>
@@ -9142,7 +9266,7 @@ function MethodologyTab() {
     {cat:"Added Wins Projection Model",items:["monteCarlo","posClassification"],desc:"The core engine: a two-stage (hurdle) value model. Stage 1 estimates P(NBA) on the FULL prospect pool (~15k NCAA + international players, NBA reached or not) — a calibrated logistic model, ROC-AUC 0.98 on a 2017–2019 holdout. Stage 2 predicts the expected value if he reaches the league — a regularized, fully-explainable ElasticNet trained on 752 NBA careers. The headline = P(NBA) × E[Added Wins | NBA]. Target variable: Added Wins — the best 3-consecutive-season window in the first 8 NBA years, a team-anchored blend of player-isolated on-court impact (xRAPM, 70%) and box production (30%), scaled so a roster's player-wins sum to the team's actual wins-above-replacement (additivity). Trained with a temporal split (≤2016 train, 2017–2019 holdout, no future leakage). Validated: value-model Spearman ρ = 0.41 out-of-sample (vs craftednba.com benchmark 0.373). Output: a single interpretable number plus a full tier-probability distribution. Honest caveat: the number is an EXPECTED value and is deliberately modest — a college profile rarely signals stardom (e.g. SGA looked ordinary at Kentucky), so star upside is shown via the tier distribution, not inflated into the point estimate. A separate high-floor model (P(NBA or EuroLeague-tier), trained on international career outcomes too) gives the downside. Projections for undrafted/fringe players are extrapolations beyond the training distribution."},
     {cat:"Risk Profile Tab — Draft Range & Risk (NEW)",items:[],desc:"Reframes the projection as a front-office decision: where a player will be drafted vs. where he belongs, plus risk in both directions. (1) MARKET RANGE — the realistic pick range, PROJECTED from an existing consensus mock ranking (a single consensus board, one rank per player). We do not generate a new consensus; we take that rank and map it onto where similarly-ranked players were actually drafted in 2008–2018. The band width therefore reflects how a consensus rank historically translates into a real pick (teams reach, prospects slide) — NOT disagreement between different mock boards. Two players with the same consensus rank get the same band. Out-of-sample on 2019–2025 the actual pick falls inside the predicted p20–p80 band 63% of the time (target ~60%), with Spearman(consensus, pick)=+0.85. (2) MERIT SLOT — where a player belongs on talent in an average draft. Our projected value (Added Wins) is recalibrated onto the realized-Wins-Added scale, then mapped through an isotonic curve E[peak Wins Added | pick] built from mature drafts. Our value predicts realized NBA outcome (peak Wins Added) markedly better than the actual draft order did: Spearman +0.54 vs +0.29. The gap between Merit and Market is the steal/bust signal (e.g. Tyrese Haliburton: market #10, merit #1). (3) TWO RISK AXES, computed from a kernel-weighted empirical distribution of comparable past prospects (similar projected value × archetype affinity): BUST RISK = share of comps who delivered below the value their slot demanded — well-calibrated (predicted 75–100% → 86% actual bust rate; James Wiseman scored 96%); STAR UPSIDE = share who reached All-Star level, blended 70/30 with the archetype's empirical All-Star rate so high-ceiling archetypes get proper credit. (4) ARCHETYPE VALUE — positional value is measured, not assumed: we compute each NBA archetype's realized peak Wins Added distribution from ~1,210 NBA players. Scoring Playmaker (ceiling ~29 WA) and Stretch Rim Protector (~28) carry the highest ceilings; pure rim-runners and role-archetypes cap around starter level. This is why a player's best-case archetype shapes his upside. CAVEATS: market range needs a consensus-board presence (most deep prospects have none); the box-score value model can under-rate raw, young upside; reason-code factors are surfaced from the projection engine and are noisier for international prospects (FIBA signals translate imperfectly)."},
     {cat:"Risk Profile Tab — Projected NBA Role (pre→post, NEW)",items:[],desc:"Answers 'what does this player's TYPE actually become in the NBA, and what is that worth?' (1) NBA-OUTCOME ROLES: every NBA player (1,780, ≥500 peak-window minutes) is classified into the SAME archetype taxonomy as our prospects, but from his realized NBA peak — using the identical role-score formulas and assignment logic as the prospect pipeline, only ranked against NBA peers instead of college peers. So pre-draft type and NBA type share one comparable label set. Each NBA role's value is measured empirically: Scoring Playmaker (lead guard) is most valuable (median ~25 peak Wins Added, 50% All-Star); 'empty' roles (Non-Specialized / Slashing / Defensive Wing) rarely stick (8–14% reach Role-Player value). (2) TRANSITION: across matured drafted classes (≤2020), P(NBA outcome | pre-draft archetype), INCLUDING an honest 'Did Not Stick' (no established ≥500-min role). The same type's outcome depends heavily on talent — an elite-projected Scoring Playmaker sticks 75% / All-Star 38%, a marginal one 6% / 0% ('a scoring guard has to be elite to play'). (3) PER-PROSPECT PROJECTION: outcome distribution = kernel-weighted comparable past prospects (same pre-draft archetype × similar projected value). Output: most-likely NBA role, full outcome distribution with each role's typical value, P(establishes a role) and P(reaches Role-Player value) as the FLOOR, expected Wins Added. Floor calibration is sound (predicted 0–15%→5% actual, 50–100%→86%; James Wiseman projects 14% stick, Wembanyama 100%). CAVEATS: NBA stats lack height → NBA position is box-derived (occasional guard/wing/big misfires); college-tuned role thresholds on NBA percentiles cause rare star misfires (Harden→Defensive Guard via his turnover profile); extreme-talent prospects (Boozer) have few comps (flagged); draft-position confound (early picks get more opportunity)."},
-    {cat:"Star+ Creator Projection (NEW — Sprint-3.17)",items:["starCreator"],desc:"A calibrated forecast: what's the probability this prospect becomes a Star+ Creator in the NBA? Star+ Creator = peak All-Star tier (peak_pie ≥ 6.6) AND high on-ball usage (≥24%, Bigs ≥22%) AND high passing involvement (≥18%, Bigs ≥14%). The score is a position-percentile rank (0-100) so it sits on the same scale as the skill pillars; the raw calibrated probability (~5%-65%) is exposed in the detail view. THIS IS A PROJECTION, not a skill measurement — for what the prospect produces RIGHT NOW, see the Creation pillar. HOW THE MODEL WORKS: (1) Position-stratified Logistic Regression — separate models per Playmaker / Wing / Big, trained on 472 historic prospects (2008-2014). 14 input features: USG%, TS%, AST%, height, age-adjusted production, consensus rank, league strength, defensive BPM, AST/USG ratio, scorer-tilt, plus position-specific signals (e.g. AST/TO for PGs, 3-and-D / rim-pressure / helio-scorer for Wings, OREB% / height×AST / stretch for Bigs). (2) Calibrated on 2015-2017 prospects via isotonic regression so predicted probabilities match real observed frequencies (no overconfidence). (3) Position-aware Bayesian shrinkage pulls predictions toward the population base rate; this is what keeps thin-sample predictions honest (k=20 for PG/Wing, k=30 for Big with its sparse n=16 Star+ examples). (4) Triangulated with the Comps Engine v5: P(Star+) = 0.50 × Logistic Regression + 0.25 × age-stage cohort baseline + 0.25 × archetype cluster baseline. Three independent views of the same question. (5) Top-3 SHAP features per prediction expose what drove the score (e.g. 'Usage % (+0.32), Age-adj Production (+0.24), Consensus (+0.18)'). HONEST PERFORMANCE (TEST = 2018-2020, held out from training): Wing models — Brier 0.047, AUC 0.90, world-class. Playmaker — Brier 0.18, AUC 0.74, solid. Big models — small validation sample (1 Star+ Big in 2018-2020), the Bayesian shrinkage compensates. WHY NO PROSPECT SCORES 95%+: historic base rate is 8-15% per position; a 60% calibrated probability is already a massive lift above the population. Any model showing 95%+ Star+ Creator probability would be overfitting, not signal."},
+    {cat:"NBA Role Projections (NEW — Sprint-3.17+)",items:["starCreator"],desc:"A small set of focused, position-aware forecasts answering the three role questions every front office asks: will this prospect become a Creator, an elite Shooter, or an All-Defensive player in the NBA? Each forecast is a calibrated probability on the same scale as the Tier Probabilities (% × 100). All three projections live in their own cards in the Projection tab and share a common methodology so they can be compared side by side. CURRENTLY SHIPPED: Star+ Creator Projection. COMING NEXT: Elite Shooter, All-Defensive Player. SHARED METHODOLOGY: (1) Position-stratified Logistic Regression — separate models for Playmaker / Wing / Big, because the role definitions and signal weights differ structurally (a high-AST guard means something different than a high-AST big). (2) Position-aware target thresholds where the underlying role rate is structurally different — e.g. Star+ Creator-Bigs use USG ≥ 22 / AST ≥ 14 instead of 24 / 18, because Creator-Bigs are mechanically rarer. (3) Isotonic calibration on a held-out 2015-2017 set so predicted probabilities match real observed frequencies (no overconfidence). (4) Bayesian shrinkage per position pulls thin-sample predictions toward the population base rate — k=20 for guards/wings, k=30 for bigs. (5) Triangulated with the Comps Engine v5: 0.50 × Logistic Regression + 0.25 × age-stage cohort baseline + 0.25 × archetype cluster baseline. Three independent views combined. (6) Top-3 SHAP features per prediction expose what drove the score (e.g. 'Usage % (+0.32), Age-adj Production (+0.24), Consensus (+0.18)'). HONEST PERFORMANCE: tested on 2018-2020 prospects (never seen during training). Star+ Creator — Wing Brier 0.047 / AUC 0.90 (world-class), Playmaker AUC 0.74 (solid), Big small validation sample compensated by Bayesian shrinkage. Elite Shooter and All-Defensive will receive the same evaluation when they ship. WHY NO PROSPECT SCORES 95%+: historic base rates are 8-15% per position; a 60% calibrated probability is already a massive lift above the population. Any model showing 95%+ would be overfitting, not signal. These are projections of a SPECIFIC ROLE OUTCOME and complement the existing Tier Probabilities (which forecast value tier independent of role)."},
     {cat:"Comps Engine v5 — Self-Match Exclusion + Pool Improvements (NEW — Sprint-3.16)",items:[],desc:"Two fundamental engine improvements deployed June 2026. (1) SELF-MATCH EXCLUSION: a player is no longer returned as his own comp. Previously, NBA-careered prospects (Anthony Davis, Jalen Brunson, etc.) appeared as 100% matches against themselves in outcome / cohort / cluster top-outcome lists, because they sat in both the query pool AND the comparison pool. The filter now runs centrally at the output assembly step, so it covers all five comp dimensions (style, skill, physical, trajectory, outcome) and both the Layer 3 (cohort) and Layer 4 (cluster) top-outcome example lists. (2) BETTER POOL COVERAGE: historic NBA stars from the pre-2014 era — Anthony Davis 2012, Andrew Wiggins, Embiid, etc. — were previously filtered out of the comparison pool because their college-era data was flagged 'Insufficient' (pre-PBP era). They are now kept whenever a known NBA peak (peak_pie) is available, regardless of college-data quality. (3) COHORT CACHING: the Layer 3 cohort outcome distribution is computed once per (age × position) bucket instead of per query player, reducing pipeline runtime ~10×. (4) AD VERIFICATION: the diagnostic test case was Anthony Davis 2012 Kentucky. He is now correctly returned as a Block Big with face-valid comps — Walker Kessler, Brandon Clarke, Cole Aldrich, Myles Turner — instead of the previous '(no comps)' state."},
     {cat:"Tier Probabilities — Beta-Binomial from Comp Cohort",items:[],desc:"Replaces the parametric Normal(PPWA, σ) tier mass with a non-parametric posterior built directly from each prospect's kernel-weighted comp cohort (the same cohort used for exp_wa). FOR EACH PROSPECT: count how many of his comp neighbours peaked at each tier (Superstar / All-Star / Starter / Role Player / Replacement / Negative), weighted by Gaussian kernel proximity in projected_war. Smooth those counts toward a fixed league prior with k=8 pseudo-comps: posterior_tier = (k × P_league + count) / (k + Σcounts). The league prior mirrors realistic per-class scarcity (~0.5 Superstar, 3 All-Star, 12 Starter per draft class). WHY: NBA outcomes are right-skewed with heavy tails — a symmetric Normal centred on PPWA misallocates mass. Reading the cohort directly is more honest (no Normal assumption, no hand-tuned σ scaling, no clipping) AND more individual — every prospect's tier distribution reflects HIS specific archetype neighbours, not a generic Gaussian. HEADLINE TIER vs COHORT MODAL — DELIBERATE TENSION: the headline tier is derived from PPWA directly via calibrated cutoffs; the cohort modal can disagree. When Anthony Davis is listed Superstar (PPWA=25) but only 24% of his pre-draft comps actually reached that tier (cohort modal = Role Player at 26%), the gap is REAL signal — it surfaces the historical bust risk the headline number conceals. When Cameron Boozer is listed All-Star (PPWA=15) but 22% of his cohort were Replacement, the cohort flag matches the 'helio-big peaked lower than expected' historical pattern. CAVEATS: small cohorts (eff-N < 10) shrink strongly toward the league prior; the prior itself is calibrated on 2008–2019 NBA outcomes so very recent archetype shifts may not yet show; cohort modal != prediction — it is HISTORY, not destiny."},
     {cat:"Archetype Value Bands (Research — this tab)",items:[],desc:"A draft-strategy research sub-section shown above (Method tab). For each of 16 NBA archetypes we compute the realized peak Wins Added distribution of past players of that type (~1,210 NBA players, draft classes ~2008–2024): floor (25th percentile = downside), median (typical), and ceiling (90th percentile = upside). Displayed as horizontal value bands so you can read draft strategy by player type: highest ceiling = swing-for-upside pick (Scoring Playmaker / Stretch Rim Protector, ceiling ~28–29 WA); highest floor = safest pick (Stretch Rim Protector); highest median = best balanced bet. Each band carries its SAMPLE SIZE (n) as a data-confidence signal — a type observed 374 times (Scoring Wing) is far better understood than one seen 19 times (3-and-D Wing), whose edges are noisier. Rarity is shown for confidence, NOT as a value claim (rare ≠ better). Hover any band (or see the highlighted card for the current player's type) for EXAMPLE NBA PLAYERS grouped by the tier they reached — a concrete sense of the range (note: these are pre-draft archetypes; some players, like Jokic from a pre-draft 'Scoring Wing', evolved into a different NBA role). The same archetype-value numbers also appear in the Roles & Archetypes tab (each archetype's NBA ceiling tier + % reaching Starter+/All-Star+). PRE-DRAFT → NBA TRANSITION: a second view shows, per pre-draft archetype, what those players actually became in the NBA (drafted classes ≤2020) — including an honest 'Did Not Stick' (never established a rotation role). E.g. a pre-draft Scoring Wing most often does not stick or becomes a role-filler; a Stretch Rim Protector usually becomes a Stretch Big / Rim Protector. A talent overlay then splits the same type by projected-value tier: an elite-projected Scoring Playmaker sticks 75% / All-Star 38%, a marginal one 6% / 0% — quantifying 'a scoring guard has to be elite to be worth it'. (Drafted-player population, so it carries a draft-position confound; thin pre-draft types omitted.)"},
