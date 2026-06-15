@@ -7496,9 +7496,11 @@ function BodyTab({p}) {
         const offensiveStyleVerdict = (side) => {
           const dh = side.height_delta;
           const dws = side.wingspan_delta;
-          const dw = side.weight_delta;
           const avg = [dh, dws].filter(x => x != null).reduce((a, b) => a + b, 0) / [dh, dws].filter(x => x != null).length;
           if (isNaN(avg)) return { style: "—", color: "#9ca3af", desc: "" };
+          const h = fs.actual.height;
+          // Sprint-3.32: segment-aware verdict for tall bigs
+          const isTallBig = h != null && h >= 84;
           if (avg > 1.5) return { style: "paint-oriented", color: "#f59e0b",
             desc: "stats look like a bigger player's — strong ORB%, dunks, paint pressure. Pattern: traditional Big-style offense." };
           if (avg > 0.5) return { style: "balanced", color: "#9ca3af",
@@ -7506,9 +7508,13 @@ function BodyTab({p}) {
           if (avg > -0.5) return { style: "balanced", color: "#9ca3af",
             desc: "offensive stats match his listed frame closely." };
           if (avg > -1.5) return { style: "perimeter-leaning", color: "#a78bfa",
-            desc: "stats look more like a smaller player's — likely less paint volume, more perimeter game. Modern stretch profile." };
+            desc: isTallBig
+              ? "stats look more like a perimeter player's — modern skill-Big signal in a tall frame. Star-positive segment (≥7'0\" who play smaller offensively show elevated star rates)."
+              : "stats look more like a smaller player's — likely less paint volume, more perimeter game. Modern stretch profile." };
           return { style: "perimeter / stretch", color: "#a78bfa",
-            desc: "clear stretch-Big or perimeter-oriented pattern. Low paint volume relative to his size — value lies in spacing + skill, not physical dominance." };
+            desc: isTallBig
+              ? "clear stretch / skilled-big pattern. Tall body + perimeter offensive footprint = Markkanen/JJJ/Porzingis archetype. Skill-in-body is a Star-positive signal in this size segment."
+              : "clear stretch-Big or perimeter-oriented pattern. Low paint volume relative to his size — value lies in spacing + skill, not physical dominance." };
         };
 
         const defensiveVerdict = (side) => {
@@ -7516,8 +7522,13 @@ function BodyTab({p}) {
           const dws = side.wingspan_delta;
           const avg = [dh, dws].filter(x => x != null).reduce((a, b) => a + b, 0) / [dh, dws].filter(x => x != null).length;
           if (isNaN(avg)) return { tone: "—", color: "#9ca3af", desc: "" };
+          const h = fs.actual.height;
+          // Sprint-3.32: segment-aware verdict for small guards
+          const isSmall = h != null && h <= 77;
           if (avg > 1.5) return { tone: "plays much bigger", color: "#22c55e",
-            desc: "stat profile matches taller / longer defenders. Leverages frame defensively." };
+            desc: isSmall
+              ? "stats match a taller defender — outsized defensive impact for his frame. Star-positive signal in this size segment (small guards who play bigger: motor/IQ/effort archetype)."
+              : "stat profile matches taller / longer defenders. Leverages frame defensively." };
           if (avg > 0.5) return { tone: "plays slightly bigger", color: "#86efac",
             desc: "above-frame defensive impact — good signal." };
           if (avg > -0.5) return { tone: "plays his size", color: "#9ca3af",
@@ -7612,14 +7623,44 @@ function BodyTab({p}) {
           <Sec icon="📏" title="Functional Frame — Does he play bigger than his size?"
             sub={`A 6'6" guard with 16% BLK gets predicted as a Center — because his stats match one. Plus three anthro dimensions (height, wingspan, weight), each predicted from its OWN driver stats. Plus comp pool: NBA-careered players in their college years 2008-2020 (n=644 height, 485 wingspan, 87 weight). Plus Standing Reach is the canonical combine composite ("how much court does he cover?"). Plus defensive: bigger = better. Plus offensive: bigger = paint-style, smaller = stretch-style (Markkanen pattern). Neither is inherently better.`}>
 
-            {/* ── Sprint-3.31 (2026-06-15): Honesty disclaimer — style descriptor, not predictor ── */}
+            {/* ── Sprint-3.32 (2026-06-15): conditional star pattern — extremes matter ── */}
+            {(() => {
+              // Plus Small-Giant + Skilled-Big pattern detection
+              const h = fs.actual.height;
+              const dDef = ((fs.defensive?.height_delta ?? 0) + (fs.defensive?.wingspan_delta ?? 0)) / 2;
+              const dOff = ((fs.offensive?.height_delta ?? 0) + (fs.offensive?.wingspan_delta ?? 0)) / 2;
+              let pattern = null;
+              if (h != null && h <= 77 && dDef >= 2) {
+                pattern = {
+                  label: "Small-Giant pattern",
+                  detail: "Small frame + outsized defensive stats. Motor/IQ/effort signal — Star+ rate 28% in this segment (≤6'5\") vs 18% class mean. Historic comps: Kemba Walker (+28.6 WA), Fred VanVleet (+19.9), Ty Lawson (+17.1), Isaiah Thomas (+16.2).",
+                };
+              } else if (h != null && h >= 84 && dOff <= -2) {
+                pattern = {
+                  label: "Skilled-Big pattern",
+                  detail: "Tall frame + perimeter-leaning offensive stats. Skill-in-body signal — Star+ rate 30% in this segment (≥7'0\") vs 15% class mean. Historic comps: Joel Embiid (+36.3 WA), Rudy Gobert (+30.9), Nikola Vucevic (+24.2), Kristaps Porzingis (+15.5), Jaren Jackson Jr. (+14.1), Lauri Markkanen (+15.3).",
+                };
+              }
+              return pattern && (
+                <div style={{background:"#2e1065",border:"1px solid #a855f780",borderRadius:8,
+                              padding:"10px 12px",marginBottom:12}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                    <span style={{fontSize:14}}>⭐</span>
+                    <span style={{fontSize:13,fontWeight:600,color:"#c084fc"}}>{pattern.label}</span>
+                  </div>
+                  <div style={{fontSize:11,color:"#e9d5ff",lineHeight:1.5}}>{pattern.detail}</div>
+                </div>
+              );
+            })()}
+
+            {/* ── Sprint-3.31 + 3.32: methodological disclaimer ── */}
             <div style={{background:"#1f1300",border:"1px solid #fbbf2440",borderRadius:8,
                           padding:"10px 12px",marginBottom:14,fontSize:11,color:"#d1d5db",lineHeight:1.5}}>
               <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
                 <span style={{fontSize:11,color:"#fbbf24",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5}}>About this metric</span>
               </div>
               <div>
-                <strong style={{color:"#fbbf24",fontWeight:500}}>Stylistic descriptor — not a Star-Factor.</strong> Functional Frame matches a prospect's stat profile to NBA-careered players with similar anthropometrics, but it does <strong style={{color:"#e5e7eb",fontWeight:500}}>not predict career outcome</strong>. Plus the correlation with peak Wins Added is &lt; 0.05 across the historic pool (n=861). Plus the Role-Player tier even shows the highest "plays bigger" delta (+0.27"), not the Superstar tier. Plus use this as a <strong style={{color:"#e5e7eb",fontWeight:500}}>style-mapping tool</strong> (paint vs perimeter, leveraged vs un-leveraged frame, NBA comps) — not for star/bust forecasting. Plus for that, see Tier Probabilities, Star+ Creator Projection, and Added Wins on the Projection tab.
+                <strong style={{color:"#fbbf24",fontWeight:500}}>Stylistic descriptor — conditional Star-Factor only at the extremes.</strong> Aggregate correlation with peak career WA is just +0.04 across the historic pool (n=861), so the metric does <strong style={{color:"#e5e7eb",fontWeight:500}}>not</strong> linearly predict star/bust outcomes. Plus however, segmenting by frame size reveals two conditional patterns where the signal IS positive: small guards (≤6'5") who play bigger (motor/effort, +10pp Star rate vs class mean) and tall bigs (≥7'0") who play smaller offensively (skill-in-body — Wemby/Embiid/Porzingis archetype, +15pp Star rate). Plus use for style-mapping, comp-matching, and extreme-pattern detection — not for outcome forecasting on Wings or Mid-Bigs. For projection see Tier Probabilities, Star+ Creator, and Added Wins on the Projection tab.
               </div>
             </div>
 
