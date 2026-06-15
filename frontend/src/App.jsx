@@ -7610,7 +7610,18 @@ function BodyTab({p}) {
 
         return (
           <Sec icon="📏" title="Functional Frame — Does he play bigger than his size?"
-            sub={`A 6'6" guard with 16% BLK gets predicted as a Center — because his stats match one. Plus three anthro dimensions (height, wingspan, weight), each predicted from its OWN driver stats. Plus pool: Draft 2008-2020 (n=644 height, 485 wingspan, 87 weight). Plus Standing Reach is the canonical combine composite ("how much court does he cover?"). Plus defensive: bigger = better. Plus offensive: bigger = paint-style, smaller = stretch-style (Markkanen pattern). Neither is inherently better.`}>
+            sub={`A 6'6" guard with 16% BLK gets predicted as a Center — because his stats match one. Plus three anthro dimensions (height, wingspan, weight), each predicted from its OWN driver stats. Plus comp pool: NBA-careered players in their college years 2008-2020 (n=644 height, 485 wingspan, 87 weight). Plus Standing Reach is the canonical combine composite ("how much court does he cover?"). Plus defensive: bigger = better. Plus offensive: bigger = paint-style, smaller = stretch-style (Markkanen pattern). Neither is inherently better.`}>
+
+            {/* ── Sprint-3.31 (2026-06-15): Honesty disclaimer — style descriptor, not predictor ── */}
+            <div style={{background:"#1f1300",border:"1px solid #fbbf2440",borderRadius:8,
+                          padding:"10px 12px",marginBottom:14,fontSize:11,color:"#d1d5db",lineHeight:1.5}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                <span style={{fontSize:11,color:"#fbbf24",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5}}>About this metric</span>
+              </div>
+              <div>
+                <strong style={{color:"#fbbf24",fontWeight:500}}>Stylistic descriptor — not a Star-Factor.</strong> Functional Frame matches a prospect's stat profile to NBA-careered players with similar anthropometrics, but it does <strong style={{color:"#e5e7eb",fontWeight:500}}>not predict career outcome</strong>. Plus the correlation with peak Wins Added is &lt; 0.05 across the historic pool (n=861). Plus the Role-Player tier even shows the highest "plays bigger" delta (+0.27"), not the Superstar tier. Plus use this as a <strong style={{color:"#e5e7eb",fontWeight:500}}>style-mapping tool</strong> (paint vs perimeter, leveraged vs un-leveraged frame, NBA comps) — not for star/bust forecasting. Plus for that, see Tier Probabilities, Star+ Creator Projection, and Added Wins on the Projection tab.
+              </div>
+            </div>
 
             {/* Hero: Functional Standing Reach */}
             {reachAvg != null && reachActual != null && (
@@ -7639,8 +7650,8 @@ function BodyTab({p}) {
               <Side title="Offensive Frame" icon="🔥" sideKey="offensive" side={fs.offensive} neutralOff={true}/>
             </div>
 
-            <div style={{fontSize:9,color:"#475569",marginTop:10,fontStyle:"italic",lineHeight:1.4}}>
-              Methodology: pooled Ridge regressions, dimension-specific features per target (height = vertical, wingspan = lateral, weight = mass). Plus shaded band = 95% Wald CI based on in-sample residual SD. Plus weight predictions are directional only (n=87 pool). Plus 3D comp matching uses normalized distance in (height, wingspan, weight) space.
+            <div style={{fontSize:9,color:"#475569",marginTop:10,fontStyle:"italic",lineHeight:1.5}}>
+              Methodology: pooled Ridge regressions, dimension-specific features per target (height = vertical signal, wingspan = lateral, weight = mass). Plus comp pool: 644 NBA-careered players from College draft years 2008-2020, in their college seasons. Plus the regressions learn "what stats do NBA players of size X show?" — they do NOT learn "what stats predict NBA success" (that's the Tier model). Plus shaded band = 95% Wald CI based on in-sample residual SD. Plus weight predictions are directional only (n=87 pool). Plus 3D comp matching uses normalized distance in (height, wingspan, weight) space. Plus correlation of reach Δ with NBA peak career WA: defensive +0.04, offensive -0.02, composite +0.01 (n=861) — confirms this is a descriptor, not a predictor.
             </div>
           </Sec>
         );
