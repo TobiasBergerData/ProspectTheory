@@ -7623,30 +7623,48 @@ function BodyTab({p}) {
           <Sec icon="📏" title="Functional Frame — Does he play bigger than his size?"
             sub={`A 6'6" guard with 16% BLK gets predicted as a Center — because his stats match one. Plus three anthro dimensions (height, wingspan, weight), each predicted from its OWN driver stats. Plus comp pool: NBA-careered players in their college years 2008-2020 (n=644 height, 485 wingspan, 87 weight). Plus Standing Reach is the canonical combine composite ("how much court does he cover?"). Plus defensive: bigger = better. Plus offensive: bigger = paint-style, smaller = stretch-style (Markkanen pattern). Neither is inherently better.`}>
 
-            {/* ── Sprint-3.32 (2026-06-15): conditional star pattern — extremes matter ── */}
+            {/* ── Sprint-3.33 (2026-06-15): three conditional patterns ── */}
             {(() => {
-              // Plus Small-Giant + Skilled-Big pattern detection
               const h = fs.actual.height;
               const dDef = ((fs.defensive?.height_delta ?? 0) + (fs.defensive?.wingspan_delta ?? 0)) / 2;
               const dOff = ((fs.offensive?.height_delta ?? 0) + (fs.offensive?.wingspan_delta ?? 0)) / 2;
+              const dAvg = (dDef + dOff) / 2;
               let pattern = null;
+              // 1. Small-Giant pattern (≤6'5", plays bigger defensively)
               if (h != null && h <= 77 && dDef >= 2) {
                 pattern = {
                   label: "Small-Giant pattern",
-                  detail: "Small frame + outsized defensive stats. Motor/IQ/effort signal — Star+ rate 28% in this segment (≤6'5\") vs 18% class mean. Historic comps: Kemba Walker (+28.6 WA), Fred VanVleet (+19.9), Ty Lawson (+17.1), Isaiah Thomas (+16.2).",
+                  signal: "Star+ signal (+10pp)",
+                  detail: "Small frame + outsized defensive stats. Motor/IQ/effort archetype. Plus Star+ rate 25% in this segment vs 14-21% baseline. Plus Bust rate stays elevated at 35% — high variance, more Stars AND more Busts than 'plays his size'. Plus full commitment matters: 'slightly bigger' is the worst sub-bucket (46% Bust). Historic comps: Kemba Walker (+28.6 WA), Fred VanVleet (+19.9), Ty Lawson (+17.1), Isaiah Thomas (+16.2), Patty Mills (+9.0).",
                 };
-              } else if (h != null && h >= 84 && dOff <= -2) {
+              }
+              // 2. Wing-Big pattern (6'6-6'8, plays MUCH bigger): strongest stick signal
+              else if (h != null && h >= 78 && h < 81 && dAvg >= 2) {
+                pattern = {
+                  label: "Wing-Big pattern",
+                  signal: "Stick signal (-22pp Bust)",
+                  detail: "Wings who translate their frame into outsized stats stick in the NBA — the STRONGEST sample-validated pattern in this analysis. Plus Bust rate drops to 19% vs Wing mean 41% (-22pp). Plus Stick rate 81%. Plus mean WA +5.4 vs +2.8 for 'slightly bigger' Wings. Plus 'going halfway' is the worst Wing-Bucket (50% Bust). Historic comps: Brandon Clarke (+7.1 WA), John Collins (+11.1), Jarred Vanderbilt (+4.9), Kenneth Faried (+8.5), Marcus Thornton.",
+                };
+              }
+              // 3. Skilled-Big pattern (≥7'0", plays smaller offensively)
+              else if (h != null && h >= 84 && dOff <= -2) {
                 pattern = {
                   label: "Skilled-Big pattern",
-                  detail: "Tall frame + perimeter-leaning offensive stats. Skill-in-body signal — Star+ rate 30% in this segment (≥7'0\") vs 15% class mean. Historic comps: Joel Embiid (+36.3 WA), Rudy Gobert (+30.9), Nikola Vucevic (+24.2), Kristaps Porzingis (+15.5), Jaren Jackson Jr. (+14.1), Lauri Markkanen (+15.3).",
+                  signal: "Star+ + Stick signal (+25pp / +25pp)",
+                  detail: "Tall frame + perimeter-leaning offensive stats — Wembanyama / Embiid / Porzingis archetype. Plus for 7'0\"+ specifically: Star+ rate 44%, Stick rate 64%, Bust rate 28%. Plus 7-footers who play their listed size actually show 60% Bust rate — the inverse. Plus the strongest skill-in-frame signal in the analysis. Historic comps: Joel Embiid (+36.3 WA), Rudy Gobert (+30.9), Nikola Vucevic (+24.2), Kristaps Porzingis (+15.5), Lauri Markkanen (+15.3), Jaren Jackson Jr. (+14.1).",
                 };
               }
               return pattern && (
                 <div style={{background:"#2e1065",border:"1px solid #a855f780",borderRadius:8,
                               padding:"10px 12px",marginBottom:12}}>
-                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
-                    <span style={{fontSize:14}}>⭐</span>
-                    <span style={{fontSize:13,fontWeight:600,color:"#c084fc"}}>{pattern.label}</span>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:6,marginBottom:4}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <span style={{fontSize:14}}>⭐</span>
+                      <span style={{fontSize:13,fontWeight:600,color:"#c084fc"}}>{pattern.label}</span>
+                    </div>
+                    <span style={{fontSize:10,color:"#c4b5fd",background:"#4c1d95",padding:"2px 8px",borderRadius:4,fontWeight:500}}>
+                      {pattern.signal}
+                    </span>
                   </div>
                   <div style={{fontSize:11,color:"#e9d5ff",lineHeight:1.5}}>{pattern.detail}</div>
                 </div>
@@ -7660,7 +7678,7 @@ function BodyTab({p}) {
                 <span style={{fontSize:11,color:"#fbbf24",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5}}>About this metric</span>
               </div>
               <div>
-                <strong style={{color:"#fbbf24",fontWeight:500}}>Stylistic descriptor — conditional Star-Factor only at the extremes.</strong> Aggregate correlation with peak career WA is just +0.04 across the historic pool (n=861), so the metric does <strong style={{color:"#e5e7eb",fontWeight:500}}>not</strong> linearly predict star/bust outcomes. Plus however, segmenting by frame size reveals two conditional patterns where the signal IS positive: small guards (≤6'5") who play bigger (motor/effort, +10pp Star rate vs class mean) and tall bigs (≥7'0") who play smaller offensively (skill-in-body — Wemby/Embiid/Porzingis archetype, +15pp Star rate). Plus use for style-mapping, comp-matching, and extreme-pattern detection — not for outcome forecasting on Wings or Mid-Bigs. For projection see Tier Probabilities, Star+ Creator, and Added Wins on the Projection tab.
+                <strong style={{color:"#fbbf24",fontWeight:500}}>Stylistic descriptor with conditional star/stick signals at the extremes.</strong> Aggregate correlation with peak career WA is just +0.04 across the historic pool (n=861), so the metric does <strong style={{color:"#e5e7eb",fontWeight:500}}>not</strong> linearly predict star/bust outcomes. Plus however, segmenting by frame size reveals THREE conditional patterns where the signal IS positive: <strong style={{color:"#c084fc",fontWeight:500}}>Small-Giant</strong> (≤6'5" + plays bigger → motor/effort, Star+ rate +10pp), <strong style={{color:"#c084fc",fontWeight:500}}>Wing-Big</strong> (6'6-6'8 + plays much bigger → defensive impact, Bust rate −22pp), and <strong style={{color:"#c084fc",fontWeight:500}}>Skilled-Big</strong> (≥7'0 + plays smaller offensively → Wemby/Embiid archetype, Star+ +25pp + Stick +25pp). Plus use for style-mapping, comp-matching, and extreme-pattern detection. For projection see Tier Probabilities, Star+ Creator, and Added Wins on the Projection tab.
               </div>
             </div>
 
