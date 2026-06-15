@@ -1729,6 +1729,11 @@ function mapProfile(d) {
     mindMetrics: d.mindMetrics ?? null,
     // Sprint-3.25 (#19, 2026-06-14): Usage Reaction Strahl
     usageReaction: d.usageReaction ?? null,
+    // Sprint-3.29 (2026-06-15): Functional Size — predicted height/wingspan
+    // from defensive (REB-D, BLK, STL) and offensive (ORB, dunks, FTR)
+    // stat profile, anchored on Draft Pool 2008-2020. Plus answers
+    // "does he play bigger or smaller than his frame?"
+    functionalSize: d.functionalSize ?? null,
     // Per-Game-Stats für Scouting Skill-Curve + Development In-Season-Trajectory
     gameLogs: d.gameLogs ?? null,
     // Draft Risk Profile (Market/Merit range + bust/star risk) — inject_draft_risk.py
@@ -7426,6 +7431,175 @@ function BodyTab({p}) {
         estimatedWt={estimatedWt}
         standingReach={standingReach}
       />
+
+      {/* ── Sprint-3.29 (2026-06-15): Functional Size — Off/Def split ── */}
+      {p.functionalSize && (() => {
+        const fs = p.functionalSize;
+        // Plus inches → feet'inches" display helper
+        const inchesToFt = (inches) => {
+          if (inches == null) return "—";
+          const ft = Math.floor(inches / 12);
+          const inc = Math.round(inches - ft * 12);
+          return `${ft}'${inc}"`;
+        };
+        const fmtDelta = (d) => {
+          if (d == null) return "—";
+          return `${d > 0 ? "+" : ""}${d.toFixed(1)}"`;
+        };
+        // Slope-bar component: actual + predicted as positions on bar
+        const FrameBar = ({label, sublabel, actual, predicted, delta, residual}) => {
+          if (predicted == null) return null;
+          const RANGE = 5;  // ±5 inches on the bar
+          const clamp = Math.max(-RANGE, Math.min(RANGE, delta ?? 0));
+          const pct = ((clamp + RANGE) / (2 * RANGE)) * 100;
+          const color = delta == null ? "#9ca3af" :
+                        delta > 0.5 ? "#22c55e" :
+                        delta < -0.5 ? "#ef4444" :
+                        "#9ca3af";
+          // Plus CI band based on residual SD
+          let ci_lo_pct = null, ci_hi_pct = null;
+          if (residual != null && delta != null) {
+            const lo = Math.max(-RANGE, delta - 1.96 * residual);
+            const hi = Math.min(RANGE, delta + 1.96 * residual);
+            ci_lo_pct = ((lo + RANGE) / (2 * RANGE)) * 100;
+            ci_hi_pct = ((hi + RANGE) / (2 * RANGE)) * 100;
+          }
+          return (
+            <div style={{width:"100%",marginBottom:14}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                <div style={{display:"flex",flexDirection:"column"}}>
+                  <span style={{fontSize:12,fontWeight:600,color:"#e5e7eb"}}>{label}</span>
+                  <span style={{fontSize:10,color:"#6b7280"}}>{sublabel}</span>
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <span style={{fontSize:13,color:"#9ca3af"}}>
+                    {actual != null ? inchesToFt(actual) : "—"} <span style={{color:"#475569"}}>actual</span>
+                  </span>
+                  <span style={{margin:"0 6px",color:"#475569"}}>→</span>
+                  <span style={{fontSize:15,fontWeight:700,color,fontFamily:"Oswald,sans-serif"}}>
+                    {inchesToFt(predicted)}
+                  </span>
+                  <div style={{fontSize:11,color}}>
+                    {fmtDelta(delta)} {delta == null ? "" : delta > 0 ? "plays bigger" : delta < 0 ? "plays smaller" : "plays his size"}
+                  </div>
+                </div>
+              </div>
+              <div style={{position:"relative",background:"#1f2937",borderRadius:6,height:10,overflow:"visible"}}>
+                <div style={{position:"absolute",left:"50%",top:-2,bottom:-2,width:2,background:"#374151"}}/>
+                {ci_lo_pct != null && (
+                  <div style={{position:"absolute",left:`${Math.min(ci_lo_pct,ci_hi_pct)}%`,
+                                width:`${Math.abs(ci_hi_pct-ci_lo_pct)}%`,
+                                top:0,bottom:0,
+                                background:color,opacity:0.22,borderRadius:6}}/>
+                )}
+                <div style={{position:"absolute",left:`calc(${pct}% - 4px)`,top:-2,
+                              width:8,height:14,background:color,borderRadius:2,
+                              boxShadow:"0 0 4px rgba(0,0,0,0.5)"}}/>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",marginTop:3,fontSize:9,color:"#475569"}}>
+                <span>− 5" (plays much smaller)</span>
+                <span>actual size</span>
+                <span>+ 5" (plays much bigger)</span>
+              </div>
+            </div>
+          );
+        };
+
+        // Plus the verdict — single-sentence answer for each side
+        const verdictText = (side) => {
+          const dh = side.height_delta;
+          const dw = side.wingspan_delta;
+          const avgDelta = dw != null && dh != null ? (dh + dw) / 2 : (dh ?? dw);
+          if (avgDelta == null) return "Insufficient data.";
+          if (avgDelta > 1.0) {
+            return `Plays significantly bigger than his listed frame (+${avgDelta.toFixed(1)}" avg). Stat profile matches taller historic players.`;
+          } else if (avgDelta > 0.3) {
+            return `Plays slightly bigger than his frame (+${avgDelta.toFixed(1)}" avg). Uses his physical tools well.`;
+          } else if (avgDelta > -0.3) {
+            return `Plays at his listed size (${avgDelta > 0 ? "+" : ""}${avgDelta.toFixed(1)}" avg). Stat profile matches his frame.`;
+          } else if (avgDelta > -1.0) {
+            return `Plays slightly smaller than his frame (${avgDelta.toFixed(1)}" avg). Some physical advantage not fully translating to stats.`;
+          } else {
+            return `Plays significantly smaller than his listed frame (${avgDelta.toFixed(1)}" avg). Stat profile matches shorter historic players — room for physical leverage.`;
+          }
+        };
+
+        // Plus rendering a single side (DEF or OFF) as a card
+        const Side = ({title, question, side, color}) => (
+          <div style={{background:"#0d1117",border:"1px solid #1f2937",borderRadius:10,padding:"14px 16px",flex:1,minWidth:0}}>
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:13,fontWeight:600,color,marginBottom:2}}>{title}</div>
+              <div style={{fontSize:10,color:"#9ca3af",lineHeight:1.4}}>{question}</div>
+            </div>
+            {/* Verdict box */}
+            <div style={{background:"#1f293730",border:`1px solid ${color}40`,borderRadius:6,padding:"8px 10px",marginBottom:12}}>
+              <div style={{fontSize:10,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.5,marginBottom:3}}>Verdict</div>
+              <div style={{fontSize:11,color:"#d1d5db",lineHeight:1.5}}>{verdictText(side)}</div>
+            </div>
+            {/* Frame bars */}
+            <FrameBar label="Height" sublabel="Predicted body height from stat profile"
+              actual={fs.actual.height} predicted={side.height} delta={side.height_delta}
+              residual={side.residual_height}/>
+            <FrameBar label="Wingspan" sublabel="Predicted wingspan from stat profile"
+              actual={fs.actual.wingspan} predicted={side.wingspan} delta={side.wingspan_delta}
+              residual={side.residual_wingspan}/>
+            {/* Top features */}
+            {side.top_features && side.top_features.length > 0 && (
+              <div style={{marginTop:8}}>
+                <div style={{fontSize:10,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Driving Stats</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                  {side.top_features.map((f, i) => (
+                    <div key={i} style={{background:f.contrib > 0 ? "#14532d40" : "#7f1d1d40",
+                                           border:`1px solid ${f.contrib > 0 ? "#22c55e60" : "#ef444460"}`,
+                                           color:f.contrib > 0 ? "#86efac" : "#fca5a5",
+                                           borderRadius:4,padding:"3px 7px",fontSize:11}}>
+                      {f.label} <span style={{fontWeight:700}}>{f.contrib > 0 ? "+" : ""}{f.contrib.toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{fontSize:9,color:"#475569",marginTop:4,fontStyle:"italic"}}>
+                  Green = makes him predicted bigger. Red = makes him predicted smaller. Values are standardized regression contributions.
+                </div>
+              </div>
+            )}
+            {/* Comps */}
+            {side.comps && side.comps.length > 0 && (
+              <div style={{marginTop:12}}>
+                <div style={{fontSize:10,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Historic Comps (nearest predicted height)</div>
+                <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                  {side.comps.map((c, i) => (
+                    <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:11,padding:"4px 8px",
+                                          background:"#0a0e14",borderRadius:4}}>
+                      <span style={{color:"#e5e7eb"}}>{c.name}</span>
+                      <span style={{color:"#9ca3af"}}>{c.pos} · {inchesToFt(c.value)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+
+        return (
+          <Sec icon="📏" title="Functional Frame — Does he play bigger or smaller than his size?"
+            sub={`Predicted height + wingspan from his statistical profile (raw rebounding, blocks, steals, dunks, FT rate) anchored on the historic Draft Pool 2008-2020 (n=644). Plus the gap between predicted and listed measurements shows where he plays "bigger" or "smaller" than his body. Methodology: pooled Ridge regression (position-agnostic) — a 6'6" guard with 16% BLK gets predicted as a Center, because his stats look like one.`}>
+            <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
+              <Side
+                title="Defensive Frame"
+                question="How big does he play DEFENSIVELY? Driven by defensive rebounds, blocks, steals."
+                side={fs.defensive}
+                color="#3b82f6"
+              />
+              <Side
+                title="Offensive Frame"
+                question="How big does he play OFFENSIVELY? Driven by offensive rebounds, dunks, free-throw rate."
+                side={fs.offensive}
+                color="#f97316"
+              />
+            </div>
+          </Sec>
+        );
+      })()}
 
       {/* ── NBA COMBINE SCATTER ──
            Tobias 2026-05-06: einziger Scatter, Class-Scatter entfernt.
