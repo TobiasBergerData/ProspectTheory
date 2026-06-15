@@ -277,11 +277,77 @@ gelb, untersample-grau).
 
 ## Backlog
 
-- **Sprint-3.24 (#18)**: FT-Resilience nach Adverse Event (Mind v2)
-- **Sprint-3.25 (#19)**: Usage Reaction Strahl (Scorer/Passer Slope)
+- ✓ **Sprint-3.24 (#18)**: FT-Resilience nach Adverse Event (Mind v2) — deployed
+- ✓ **Sprint-3.25 (#19)**: Usage Reaction Strahl (Scorer/Passer Slope) — deployed
 - Plus konzeptionell offen: Multi-Season Trajectory Mind (statt single-Season
   Snapshot) — wenn ein Spieler über 2 Saisons konsistent Aggressor-tilt zeigt,
   ist das stärker als ein einmaliger Score.
+- Plus Multi-Season Usage Reaction (statt nur 2025-26 single season) für mehr
+  Statistical Power.
+
+---
+
+## Sprint-3.25 (#19) — Usage Reaction Strahl
+
+**Wurzel-Frage:** Wie reagiert der Spieler bei erhöhter Usage? Plus skaliert er
+Scoring + Passing oder dropt er ab?
+
+**Methodik** (per Spieler-Saison aus `pbp_game_logs_<season>.csv`):
+
+```
+Filter:   n_games ≥ 10  AND  possessions/game ≥ 5  AND  USG-SD ≥ 1.0
+Berechne: pts_per_poss + ast_per_poss pro Game
+Linear Regression vs usg_proxy:
+  Scorer-Slope = Δ(PTS/poss) / Δ(USG-pts)
+  Passer-Slope = Δ(AST/poss) / Δ(USG-pts)
+CI:       95% Wald-Intervall um die Slope-Schätzung
+```
+
+**Interpretation:**
+- **Scorer-Slope > +0.005** = scales scoring (+0.5 PTS/100 poss pro 1 USG-pt)
+- **≈ 0** = flat (ceiling player, scoring nicht skalierbar)
+- **< -0.005** = drops (overtaxed under high-usage games)
+- **Passer-Slope > +0.001** = scales playmaking (rare, hauptsächlich Top-PGs)
+- **< -0.001** = becomes pure shooter (typical für non-PG Stars)
+
+**Pool Distribution (2025-26, n=1064 player-seasons):**
+```
+scorer_slope  mean=+0.007  p10=-0.031  p50=+0.006  p90=+0.046
+passer_slope  mean=-0.012  p10=-0.031  p50=-0.009  p90=+0.004
+```
+
+**Top 2026er Befund:**
+```
+Nate Ament      scorer +0.010  passer -0.020   scales scoring as USG rises
+Braden Smith    scorer +0.002  passer -0.061   strong passer-drop (becomes shooter)
+Mikel Brown     scorer +0.002  passer -0.018   neutral/slight drop
+Mark Mitchell   scorer -0.010  passer -0.015   drops under high USG
+Dailyn Swain    scorer -0.011  passer -0.022   drops
+Jalen Haralson  scorer -0.016  passer +0.005   scoring drops, slight passing scale
+Cameron Boozer  scorer -0.017  passer -0.011   scoring efficiency falls slightly
+Bennett Stirtz  scorer -0.019  passer -0.036   drops both
+```
+
+**Sample-Size-Warnung:** 2025-26 ist mid-season — die meisten 2026er haben
+nur 10-12 games. Plus die Slopes sind sample-thin (r² 0.01-0.30 typisch). Plus
+methodisch direktional, NICHT statistisch robust. Plus die UI zeigt
+`directional · n=N` Badge wenn n_games < 15.
+
+**Decision-Frame:** Slopes sind QUALITATIVE stylistische Indikatoren:
+- Negative Scorer-Slope (Boozer, Stirtz) suggests: in big games sinkt
+  pts/poss leicht — möglicherweise durch double-teams in high-leverage
+  contexts. Plus aber sample-thin = Film-Verification.
+- Plus negative Passer-Slope = der Spieler wird unter höherer Usage zum
+  reinen Shooter. Plus methodisch normal für Wing/Big-Stars, ungewöhnlich
+  für echte PG-Stars.
+
+**Code-References:**
+| Component | File |
+|---|---|
+| Compute | `data-pipeline/scripts/compute_usage_reaction.py` |
+| Inject | `backend/inject_usage_reaction.py` |
+| UI | `frontend/src/App.jsx::MindTab` (Strahl-Card nach FT-Resilience) |
+| Output | `data/processed/pbp_usage_reaction_<season>.csv` |
 
 ---
 

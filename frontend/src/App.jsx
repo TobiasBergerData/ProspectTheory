@@ -1727,6 +1727,8 @@ function mapProfile(d) {
     skillCurve: d.skillCurve ?? null,
     // Mind-Tab Mental-Resilience metrics (Tobias 2026-05-09)
     mindMetrics: d.mindMetrics ?? null,
+    // Sprint-3.25 (#19, 2026-06-14): Usage Reaction Strahl
+    usageReaction: d.usageReaction ?? null,
     // Per-Game-Stats für Scouting Skill-Curve + Development In-Season-Trajectory
     gameLogs: d.gameLogs ?? null,
     // Draft Risk Profile (Market/Merit range + bust/star risk) — inject_draft_risk.py
@@ -4359,6 +4361,107 @@ function MindTab({p}) {
                     <div style={{fontSize:9,color:"#475569",marginTop:4,fontStyle:"italic"}}>
                       Cards with &lt;8 attempts are directional only — a single make/miss can shift eFG dramatically.
                     </div>
+
+                    {/* ── Sprint-3.25 (#19, 2026-06-14): Usage Reaction Strahl ── */}
+                    {p.usageReaction && p.usageReaction.n_games >= 10 && (() => {
+                      const ur = p.usageReaction;
+                      // Slope-Skala: typical pool p10 / p90 für scorer und passer
+                      // (aus compute_usage_reaction.py 2025-26 distribution)
+                      // scorer: p10=-0.031, p90=+0.046 → range ±0.05
+                      // passer: p10=-0.031, p90=+0.004 → range ±0.04 (asymmetric)
+                      const SLOPE_RANGE = 0.05;
+                      const StrahlBar = ({label, slope, slope_lo, slope_hi, r2, p_val, interpretation}) => {
+                        if (slope == null) return null;
+                        const clamped = Math.max(-SLOPE_RANGE, Math.min(SLOPE_RANGE, slope));
+                        const pct = ((clamped + SLOPE_RANGE) / (2 * SLOPE_RANGE)) * 100;
+                        const sigColor = slope > 0.005 ? "#22c55e" :
+                                          slope > -0.005 ? "#9ca3af" :
+                                          "#ef4444";
+                        const ci_lo_pct = slope_lo != null ? ((Math.max(-SLOPE_RANGE, Math.min(SLOPE_RANGE, slope_lo)) + SLOPE_RANGE) / (2 * SLOPE_RANGE)) * 100 : null;
+                        const ci_hi_pct = slope_hi != null ? ((Math.max(-SLOPE_RANGE, Math.min(SLOPE_RANGE, slope_hi)) + SLOPE_RANGE) / (2 * SLOPE_RANGE)) * 100 : null;
+                        const isSig = p_val != null && p_val < 0.05;
+                        return (
+                          <div style={{width:"100%",marginBottom:10}}>
+                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                              <div style={{display:"flex",flexDirection:"column"}}>
+                                <span style={{fontSize:12,fontWeight:600,color:"#e5e7eb"}}>{label}</span>
+                                <span style={{fontSize:10,color:"#6b7280"}}>{interpretation}</span>
+                              </div>
+                              <div style={{textAlign:"right"}}>
+                                <span style={{fontSize:14,fontWeight:700,color:sigColor,fontFamily:"Oswald,sans-serif"}}>
+                                  {slope > 0 ? "+" : ""}{(slope*100).toFixed(1)}
+                                </span>
+                                <span style={{fontSize:10,color:"#6b7280",marginLeft:3}}>/100 poss · 1 USG-pt</span>
+                                {r2 != null && (
+                                  <div style={{fontSize:9,color:isSig ? "#86efac" : "#6b7280"}}>
+                                    r²={r2.toFixed(2)} · p={p_val?.toFixed(3) ?? "—"}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <div style={{position:"relative",background:"#1f2937",borderRadius:6,height:10,overflow:"visible"}}>
+                              {/* Zero marker at 50% */}
+                              <div style={{position:"absolute",left:"50%",top:-2,bottom:-2,width:2,background:"#374151"}}/>
+                              {/* CI band */}
+                              {ci_lo_pct != null && ci_hi_pct != null && (
+                                <div style={{position:"absolute",left:`${Math.min(ci_lo_pct,ci_hi_pct)}%`,
+                                              width:`${Math.abs(ci_hi_pct-ci_lo_pct)}%`,
+                                              top:0,bottom:0,
+                                              background:sigColor,opacity:0.25,borderRadius:6}}/>
+                              )}
+                              {/* Point estimate */}
+                              <div style={{position:"absolute",left:`calc(${pct}% - 4px)`,top:-2,
+                                            width:8,height:14,background:sigColor,borderRadius:2,
+                                            boxShadow:"0 0 4px rgba(0,0,0,0.5)"}}/>
+                            </div>
+                            <div style={{display:"flex",justifyContent:"space-between",marginTop:3,fontSize:9,color:"#475569"}}>
+                              <span>−5/100 poss (drops)</span>
+                              <span>flat</span>
+                              <span>+5/100 poss (scales)</span>
+                            </div>
+                          </div>
+                        );
+                      };
+                      const limited = ur.limited_sample || ur.n_games < 15;
+                      return (
+                        <div style={{background:"#0d1117",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px",marginTop:14}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8}}>
+                            <div>
+                              <div style={{fontSize:13,fontWeight:600,color:"#e5e7eb"}}>Usage Reaction Strahl</div>
+                              <div style={{fontSize:10,color:"#9ca3af"}}>
+                                Linear slope (Δ PTS/poss resp. Δ AST/poss per +1 USG-pt) · {ur.n_games} games · USG range {ur.usg_range?.min?.toFixed(0)}–{ur.usg_range?.max?.toFixed(0)}
+                              </div>
+                            </div>
+                            {limited && (
+                              <span style={{fontSize:10,color:"#fbbf24",background:"#1f1300",padding:"2px 6px",borderRadius:4}}>
+                                directional · n={ur.n_games}
+                              </span>
+                            )}
+                          </div>
+                          <StrahlBar
+                            label="Scorer Slope"
+                            slope={ur.scorer_slope}
+                            slope_lo={ur.scorer_slope_lo}
+                            slope_hi={ur.scorer_slope_hi}
+                            r2={ur.scorer_r2}
+                            p_val={ur.scorer_p}
+                            interpretation="Δ PTS-Effizienz pro +1 USG (positive = skaliert Scoring)"
+                          />
+                          <StrahlBar
+                            label="Passer Slope"
+                            slope={ur.passer_slope}
+                            slope_lo={ur.passer_slope_lo}
+                            slope_hi={ur.passer_slope_hi}
+                            r2={ur.passer_r2}
+                            p_val={ur.passer_p}
+                            interpretation="Δ AST/poss pro +1 USG (positive = playmaking skaliert mit Usage; most Stars are negative weil sie zum Shooter werden)"
+                          />
+                          <div style={{fontSize:9,color:"#475569",marginTop:6,fontStyle:"italic",lineHeight:1.4}}>
+                            Per-Game Linear Regression aus {ur.n_games} BartTorvik Box-Scores 2025-26. CI = 95% Wald. Sample-thin bei &lt; 15 Games — direktional, nicht statistisch robust.
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </>
                 );
               })()}

@@ -47,11 +47,11 @@ cd "$SCRIPT_DIR"
 echo "[build.sh] Working directory: $(pwd)"
 
 # ─── Step 1: Python Dependencies ───
-log_step "STEP 1/13: Install Python dependencies"
+log_step "STEP 1/15: Install Python dependencies"
 pip install -r requirements.txt
 
 # ─── Step 2: Build SQLite DB aus api_profiles_part*.json ───
-log_step "STEP 2/13: Build prospecttheory.db from api_profiles"
+log_step "STEP 2/15: Build prospecttheory.db from api_profiles"
 python -u build_db.py
 
 # ─── Steps 3-13: Inject-Pipeline ───
@@ -65,6 +65,7 @@ INJECT_STEPS=(
   "inject_mind_metrics.py"             # PBP-Mind-Metrics (Aggressor, Clutch, etc.)
   "inject_season_advanced.py"          # astP/toP/stlP/blkP/ftr in seasonLines
   "inject_game_logs.py"                # Per-Game Stats für Scouting-Skill-Curve
+  "inject_usage_reaction.py"           # Sprint-3.25 (#19): Scorer/Passer Slope vs USG
   "inject_draft_risk.py"               # Risk-Profile (Market/Merit/Bust/Star)
   "inject_nba_role.py"                 # NBA-Rollen-Projektion (pre→post + Floor)
   "inject_added_wins.py"               # Added Wins (P(NBA) × E[AW|NBA])
@@ -74,7 +75,7 @@ INJECT_STEPS=(
 
 STEP=3
 for script in "${INJECT_STEPS[@]}"; do
-  log_step "STEP $STEP/13: $script"
+  log_step "STEP $STEP/15: $script"
   if [[ ! -f "$script" ]]; then
     echo "[build.sh] FATAL: $script not found in $(pwd)"
     exit 1
@@ -84,7 +85,7 @@ for script in "${INJECT_STEPS[@]}"; do
 done
 
 # ─── Build-Validation ───
-log_step "BUILD COMPLETE — Validation (Step 14/14)"
+log_step "BUILD COMPLETE — Validation (Step 15/15)"
 if [[ ! -f "data/processed/prospecttheory.db" ]]; then
   echo "[build.sh] FATAL: prospecttheory.db not created — build pipeline broken"
   exit 1
