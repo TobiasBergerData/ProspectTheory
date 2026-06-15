@@ -116,7 +116,7 @@ def main():
 
     conn = sqlite3.connect(DB)
     cur = conn.cursor()
-    cur.execute("SELECT pid, data FROM profiles")
+    cur.execute("SELECT player_id, data FROM profiles")
     rows = cur.fetchall()
     print(f"  DB profiles: {len(rows):,}")
 
@@ -141,7 +141,7 @@ def main():
         data["usageReaction"] = build_usage_reaction_block(match)
 
         new_blob = zlib.compress(json.dumps(data).encode("utf-8"))
-        cur.execute("UPDATE profiles SET data = ? WHERE pid = ?", (new_blob, pid))
+        cur.execute("UPDATE profiles SET data = ? WHERE player_id = ?", (new_blob, pid))
         updated += 1
 
     conn.commit()
