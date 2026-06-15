@@ -4362,7 +4362,7 @@ function MindTab({p}) {
                       Cards with &lt;8 attempts are directional only — a single make/miss can shift eFG dramatically.
                     </div>
 
-                    {/* ── Sprint-3.25 (#19, 2026-06-14): Usage Reaction Strahl ── */}
+                    {/* ── Sprint-3.25 (#19, 2026-06-14) / Sprint-3.28 (2026-06-15 EN rewrite + verdict): Usage Reaction ── */}
                     {p.usageReaction && p.usageReaction.n_games >= 10 && (() => {
                       const ur = p.usageReaction;
                       // Slope-Skala: typical pool p10 / p90 für scorer und passer
@@ -4370,7 +4370,75 @@ function MindTab({p}) {
                       // scorer: p10=-0.031, p90=+0.046 → range ±0.05
                       // passer: p10=-0.031, p90=+0.004 → range ±0.04 (asymmetric)
                       const SLOPE_RANGE = 0.05;
-                      const StrahlBar = ({label, slope, slope_lo, slope_hi, r2, p_val, interpretation}) => {
+
+                      // ── Verdict-Logik: beantwortet die Wurzel-Frage ──
+                      // "When usage rises, does he become more of a Scorer or a Passer?"
+                      // Plus die 3 Hauptfaktoren: scorer slope sign + passer slope sign + significance.
+                      const computeVerdict = () => {
+                        const ss = ur.scorer_slope ?? 0;
+                        const ps = ur.passer_slope ?? 0;
+                        const ssSig = ur.scorer_p != null && ur.scorer_p < 0.05;
+                        const psSig = ur.passer_p != null && ur.passer_p < 0.05;
+                        const FLAT = 0.005;    // |slope| < this counts as flat
+
+                        // Pure Playmaker: passing scales significantly, scoring flat/stable
+                        if (ps > FLAT && Math.abs(ss) < FLAT && psSig) {
+                          return {
+                            tilt: "Playmaker-tilt",
+                            color: "#3b82f6",
+                            msg: "When usage rises, he creates significantly more assists while scoring efficiency stays stable. Typical for elite Point Guards who scale playmaking with possessions.",
+                          };
+                        }
+                        // Dual Playmaker: passing scales + scoring scales (rare, elite)
+                        if (ps > FLAT && ss > FLAT) {
+                          return {
+                            tilt: "Dual Scaling",
+                            color: "#a855f7",
+                            msg: "Both scoring efficiency AND assists scale upward with usage. Rare elite pattern — gains efficiency in BOTH dimensions when given the ball.",
+                          };
+                        }
+                        // Scorer-tilt (Boozer): scoring stable, passing significantly drops
+                        if (ps < -FLAT && Math.abs(ss) < FLAT && psSig) {
+                          return {
+                            tilt: "Scorer-tilt",
+                            color: "#f97316",
+                            msg: "When usage rises, scoring efficiency stays stable but passing significantly drops. Becomes more of a scorer/finisher, less of a playmaker — typical Wing-Star pattern.",
+                          };
+                        }
+                        // Pure Scorer: scoring scales, passing flat/drops
+                        if (ss > FLAT && ps <= FLAT) {
+                          return {
+                            tilt: "Pure Scorer",
+                            color: "#f97316",
+                            msg: "When usage rises, scoring efficiency improves (gets MORE efficient with more possessions). Classic on-ball scorer profile.",
+                          };
+                        }
+                        // Volume-limited: both drop
+                        if (ss < -FLAT && ps < -FLAT) {
+                          return {
+                            tilt: "Volume-limited",
+                            color: "#ef4444",
+                            msg: "Both scoring efficiency and assists drop under higher usage. Profile suggests limited shot-creation capacity — best in lower-usage roles where he stays efficient.",
+                          };
+                        }
+                        // Balanced: both flat
+                        if (Math.abs(ss) < FLAT && Math.abs(ps) < FLAT) {
+                          return {
+                            tilt: "Balanced / Stable",
+                            color: "#86efac",
+                            msg: "Both slopes near flat — uses extra possessions without specializing toward scoring or playmaking. Versatile usage profile.",
+                          };
+                        }
+                        // Mixed (default fallback)
+                        return {
+                          tilt: "Mixed pattern",
+                          color: "#9ca3af",
+                          msg: `Scoring slope ${ss > 0 ? "+" : ""}${(ss * 100).toFixed(1)} PTS/100 poss, passing slope ${ps > 0 ? "+" : ""}${(ps * 100).toFixed(1)} AST/100 poss per +1 USG-pt. Plus read the individual bars below for the full picture.`,
+                        };
+                      };
+                      const verdict = computeVerdict();
+
+                      const StrahlBar = ({label, sublabel, slope, slope_lo, slope_hi, r2, p_val, leftLabel, rightLabel, unit}) => {
                         if (slope == null) return null;
                         const clamped = Math.max(-SLOPE_RANGE, Math.min(SLOPE_RANGE, slope));
                         const pct = ((clamped + SLOPE_RANGE) / (2 * SLOPE_RANGE)) * 100;
@@ -4383,41 +4451,38 @@ function MindTab({p}) {
                         return (
                           <div style={{width:"100%",marginBottom:10}}>
                             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-                              <div style={{display:"flex",flexDirection:"column"}}>
+                              <div style={{display:"flex",flexDirection:"column",maxWidth:"68%"}}>
                                 <span style={{fontSize:12,fontWeight:600,color:"#e5e7eb"}}>{label}</span>
-                                <span style={{fontSize:10,color:"#6b7280"}}>{interpretation}</span>
+                                <span style={{fontSize:10,color:"#6b7280",lineHeight:1.3}}>{sublabel}</span>
                               </div>
                               <div style={{textAlign:"right"}}>
                                 <span style={{fontSize:14,fontWeight:700,color:sigColor,fontFamily:"Oswald,sans-serif"}}>
                                   {slope > 0 ? "+" : ""}{(slope*100).toFixed(1)}
                                 </span>
-                                <span style={{fontSize:10,color:"#6b7280",marginLeft:3}}>/100 poss · 1 USG-pt</span>
+                                <span style={{fontSize:10,color:"#6b7280",marginLeft:3}}>{unit}/100 poss per +1 USG</span>
                                 {r2 != null && (
                                   <div style={{fontSize:9,color:isSig ? "#86efac" : "#6b7280"}}>
-                                    r²={r2.toFixed(2)} · p={p_val?.toFixed(3) ?? "—"}
+                                    r²={r2.toFixed(2)} · p={p_val?.toFixed(3) ?? "—"} {isSig ? "· significant" : "· not significant"}
                                   </div>
                                 )}
                               </div>
                             </div>
                             <div style={{position:"relative",background:"#1f2937",borderRadius:6,height:10,overflow:"visible"}}>
-                              {/* Zero marker at 50% */}
                               <div style={{position:"absolute",left:"50%",top:-2,bottom:-2,width:2,background:"#374151"}}/>
-                              {/* CI band */}
                               {ci_lo_pct != null && ci_hi_pct != null && (
                                 <div style={{position:"absolute",left:`${Math.min(ci_lo_pct,ci_hi_pct)}%`,
                                               width:`${Math.abs(ci_hi_pct-ci_lo_pct)}%`,
                                               top:0,bottom:0,
                                               background:sigColor,opacity:0.25,borderRadius:6}}/>
                               )}
-                              {/* Point estimate */}
                               <div style={{position:"absolute",left:`calc(${pct}% - 4px)`,top:-2,
                                             width:8,height:14,background:sigColor,borderRadius:2,
                                             boxShadow:"0 0 4px rgba(0,0,0,0.5)"}}/>
                             </div>
                             <div style={{display:"flex",justifyContent:"space-between",marginTop:3,fontSize:9,color:"#475569"}}>
-                              <span>−5/100 poss (drops)</span>
-                              <span>flat</span>
-                              <span>+5/100 poss (scales)</span>
+                              <span>← {leftLabel}</span>
+                              <span>flat (no change with usage)</span>
+                              <span>{rightLabel} →</span>
                             </div>
                           </div>
                         );
@@ -4425,39 +4490,59 @@ function MindTab({p}) {
                       const limited = ur.limited_sample || ur.n_games < 15;
                       return (
                         <div style={{background:"#0d1117",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px",marginTop:14}}>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8}}>
+                          {/* ── Header with root question ── */}
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:10}}>
                             <div>
-                              <div style={{fontSize:13,fontWeight:600,color:"#e5e7eb"}}>Usage Reaction Strahl</div>
-                              <div style={{fontSize:10,color:"#9ca3af"}}>
-                                Linear slope (Δ PTS/poss resp. Δ AST/poss per +1 USG-pt) · {ur.n_games} games · USG range {ur.usg_range?.min?.toFixed(0)}–{ur.usg_range?.max?.toFixed(0)}
+                              <div style={{fontSize:13,fontWeight:600,color:"#e5e7eb"}}>Usage Reaction — Scorer or Passer?</div>
+                              <div style={{fontSize:10,color:"#9ca3af",lineHeight:1.4}}>
+                                When this player takes <strong style={{color:"#d1d5db"}}>more usage</strong>, does he become more of a <strong style={{color:"#f97316"}}>scorer</strong> or more of a <strong style={{color:"#3b82f6"}}>passer</strong>? Built from per-game linear regression on {ur.n_games} games (USG range {ur.usg_range?.min?.toFixed(0)}–{ur.usg_range?.max?.toFixed(0)}%).
                               </div>
                             </div>
                             {limited && (
-                              <span style={{fontSize:10,color:"#fbbf24",background:"#1f1300",padding:"2px 6px",borderRadius:4}}>
+                              <span style={{fontSize:10,color:"#fbbf24",background:"#1f1300",padding:"2px 6px",borderRadius:4,whiteSpace:"nowrap",marginLeft:8}}>
                                 directional · n={ur.n_games}
                               </span>
                             )}
                           </div>
+
+                          {/* ── Verdict box: the answer in one sentence ── */}
+                          <div style={{background:`${verdict.color}15`, border:`1px solid ${verdict.color}50`,
+                                        borderRadius:8, padding:"10px 12px", marginBottom:14}}>
+                            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                              <span style={{fontSize:10,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.5}}>Verdict</span>
+                              <span style={{fontSize:14,fontWeight:700,color:verdict.color}}>{verdict.tilt}</span>
+                            </div>
+                            <div style={{fontSize:11,color:"#d1d5db",lineHeight:1.55}}>{verdict.msg}</div>
+                          </div>
+
+                          {/* ── Detail bars: the underlying numbers ── */}
+                          <div style={{fontSize:10,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>The two slopes behind the verdict</div>
                           <StrahlBar
-                            label="Scorer Slope"
+                            label="Scoring efficiency vs usage"
+                            sublabel="How does PTS-per-possession change when his usage goes up?"
                             slope={ur.scorer_slope}
                             slope_lo={ur.scorer_slope_lo}
                             slope_hi={ur.scorer_slope_hi}
                             r2={ur.scorer_r2}
                             p_val={ur.scorer_p}
-                            interpretation="Δ PTS-Effizienz pro +1 USG (positive = skaliert Scoring)"
+                            leftLabel="less efficient under high usage"
+                            rightLabel="more efficient under high usage"
+                            unit="PTS"
                           />
                           <StrahlBar
-                            label="Passer Slope"
+                            label="Passing rate vs usage"
+                            sublabel="How does AST-per-possession change when his usage goes up?"
                             slope={ur.passer_slope}
                             slope_lo={ur.passer_slope_lo}
                             slope_hi={ur.passer_slope_hi}
                             r2={ur.passer_r2}
                             p_val={ur.passer_p}
-                            interpretation="Δ AST/poss pro +1 USG (positive = playmaking skaliert mit Usage; most Stars are negative weil sie zum Shooter werden)"
+                            leftLabel="passes less when given more usage"
+                            rightLabel="passes more when given more usage"
+                            unit="AST"
                           />
                           <div style={{fontSize:9,color:"#475569",marginTop:6,fontStyle:"italic",lineHeight:1.4}}>
-                            Per-Game Linear Regression aus {ur.n_games} BartTorvik Box-Scores 2025-26. CI = 95% Wald. Sample-thin bei &lt; 15 Games — direktional, nicht statistisch robust.
+                            Methodology: per-game linear regression on {ur.n_games} BartTorvik box scores from 2025-26. Shaded band = 95% Wald confidence interval. Slopes are read as "PTS (or AST) per 100 possessions, per 1-point USG increase". A slope is statistically significant when p &lt; 0.05 AND the CI does not cross zero. Below 15 games the verdict is directional only — confirm with film and re-run mid-season.
                           </div>
                         </div>
                       );
