@@ -7432,170 +7432,215 @@ function BodyTab({p}) {
         standingReach={standingReach}
       />
 
-      {/* ── Sprint-3.29 (2026-06-15): Functional Size — Off/Def split ── */}
+      {/* ── Sprint-3.30 (2026-06-15) v2: Functional Frame NBA-Pro architecture ── */}
       {p.functionalSize && (() => {
         const fs = p.functionalSize;
-        // Plus inches → feet'inches" display helper
         const inchesToFt = (inches) => {
           if (inches == null) return "—";
           const ft = Math.floor(inches / 12);
           const inc = Math.round(inches - ft * 12);
           return `${ft}'${inc}"`;
         };
-        const fmtDelta = (d) => {
-          if (d == null) return "—";
-          return `${d > 0 ? "+" : ""}${d.toFixed(1)}"`;
-        };
-        // Slope-bar component: actual + predicted as positions on bar
-        const FrameBar = ({label, sublabel, actual, predicted, delta, residual}) => {
-          if (predicted == null) return null;
-          const RANGE = 5;  // ±5 inches on the bar
-          const clamp = Math.max(-RANGE, Math.min(RANGE, delta ?? 0));
-          const pct = ((clamp + RANGE) / (2 * RANGE)) * 100;
-          const color = delta == null ? "#9ca3af" :
-                        delta > 0.5 ? "#22c55e" :
-                        delta < -0.5 ? "#ef4444" :
-                        "#9ca3af";
-          // Plus CI band based on residual SD
+        const fmtDelta = (d, unit = '"') => d == null ? "—" : `${d > 0 ? "+" : ""}${d.toFixed(1)}${unit}`;
+
+        // Plus side semantics — defensive is monotonic (bigger=better), offensive is neutral (paint vs perimeter)
+        const sideSemantics = (sideKey) => sideKey === "defensive"
+          ? { positiveColor: "#22c55e", negativeColor: "#ef4444",
+              positiveLabel: "plays bigger", negativeLabel: "plays smaller" }
+          : { positiveColor: "#f59e0b", negativeColor: "#a78bfa",
+              positiveLabel: "paint-oriented", negativeLabel: "perimeter/stretch" };
+
+        const FrameBar = ({label, sublabel, actual, predicted, delta, residual, semantics, unit = '"', range = 5}) => {
+          if (predicted == null || delta == null) return null;
+          const clamp = Math.max(-range, Math.min(range, delta));
+          const pct = ((clamp + range) / (2 * range)) * 100;
+          const color = Math.abs(delta) < 0.3 ? "#9ca3af" :
+                        delta > 0 ? semantics.positiveColor : semantics.negativeColor;
           let ci_lo_pct = null, ci_hi_pct = null;
-          if (residual != null && delta != null) {
-            const lo = Math.max(-RANGE, delta - 1.96 * residual);
-            const hi = Math.min(RANGE, delta + 1.96 * residual);
-            ci_lo_pct = ((lo + RANGE) / (2 * RANGE)) * 100;
-            ci_hi_pct = ((hi + RANGE) / (2 * RANGE)) * 100;
+          if (residual != null) {
+            const lo = Math.max(-range, delta - 1.96 * residual);
+            const hi = Math.min(range, delta + 1.96 * residual);
+            ci_lo_pct = ((lo + range) / (2 * range)) * 100;
+            ci_hi_pct = ((hi + range) / (2 * range)) * 100;
           }
           return (
-            <div style={{width:"100%",marginBottom:14}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+            <div style={{width:"100%",marginBottom:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:3}}>
                 <div style={{display:"flex",flexDirection:"column"}}>
-                  <span style={{fontSize:12,fontWeight:600,color:"#e5e7eb"}}>{label}</span>
-                  <span style={{fontSize:10,color:"#6b7280"}}>{sublabel}</span>
+                  <span style={{fontSize:11,fontWeight:600,color:"#e5e7eb"}}>{label}</span>
+                  <span style={{fontSize:9,color:"#6b7280"}}>{sublabel}</span>
                 </div>
                 <div style={{textAlign:"right"}}>
-                  <span style={{fontSize:13,color:"#9ca3af"}}>
-                    {actual != null ? inchesToFt(actual) : "—"} <span style={{color:"#475569"}}>actual</span>
+                  <span style={{fontSize:11,color:"#6b7280"}}>{unit === '"' ? inchesToFt(actual) : (actual != null ? `${Math.round(actual)} lbs` : "—")}</span>
+                  <span style={{margin:"0 4px",color:"#475569"}}>→</span>
+                  <span style={{fontSize:13,fontWeight:700,color,fontFamily:"Oswald,sans-serif"}}>
+                    {unit === '"' ? inchesToFt(predicted) : `${Math.round(predicted)} lbs`}
                   </span>
-                  <span style={{margin:"0 6px",color:"#475569"}}>→</span>
-                  <span style={{fontSize:15,fontWeight:700,color,fontFamily:"Oswald,sans-serif"}}>
-                    {inchesToFt(predicted)}
-                  </span>
-                  <div style={{fontSize:11,color}}>
-                    {fmtDelta(delta)} {delta == null ? "" : delta > 0 ? "plays bigger" : delta < 0 ? "plays smaller" : "plays his size"}
-                  </div>
+                  <span style={{fontSize:11,marginLeft:5,color}}>{fmtDelta(delta, unit)}</span>
                 </div>
               </div>
-              <div style={{position:"relative",background:"#1f2937",borderRadius:6,height:10,overflow:"visible"}}>
+              <div style={{position:"relative",background:"#1f2937",borderRadius:4,height:7}}>
                 <div style={{position:"absolute",left:"50%",top:-2,bottom:-2,width:2,background:"#374151"}}/>
                 {ci_lo_pct != null && (
                   <div style={{position:"absolute",left:`${Math.min(ci_lo_pct,ci_hi_pct)}%`,
-                                width:`${Math.abs(ci_hi_pct-ci_lo_pct)}%`,
-                                top:0,bottom:0,
-                                background:color,opacity:0.22,borderRadius:6}}/>
+                                width:`${Math.abs(ci_hi_pct-ci_lo_pct)}%`,top:0,bottom:0,
+                                background:color,opacity:0.2,borderRadius:4}}/>
                 )}
-                <div style={{position:"absolute",left:`calc(${pct}% - 4px)`,top:-2,
-                              width:8,height:14,background:color,borderRadius:2,
-                              boxShadow:"0 0 4px rgba(0,0,0,0.5)"}}/>
-              </div>
-              <div style={{display:"flex",justifyContent:"space-between",marginTop:3,fontSize:9,color:"#475569"}}>
-                <span>− 5" (plays much smaller)</span>
-                <span>actual size</span>
-                <span>+ 5" (plays much bigger)</span>
+                <div style={{position:"absolute",left:`calc(${pct}% - 3px)`,top:-2,
+                              width:6,height:11,background:color,borderRadius:2}}/>
               </div>
             </div>
           );
         };
 
-        // Plus the verdict — single-sentence answer for each side
-        const verdictText = (side) => {
+        const offensiveStyleVerdict = (side) => {
           const dh = side.height_delta;
-          const dw = side.wingspan_delta;
-          const avgDelta = dw != null && dh != null ? (dh + dw) / 2 : (dh ?? dw);
-          if (avgDelta == null) return "Insufficient data.";
-          if (avgDelta > 1.0) {
-            return `Plays significantly bigger than his listed frame (+${avgDelta.toFixed(1)}" avg). Stat profile matches taller historic players.`;
-          } else if (avgDelta > 0.3) {
-            return `Plays slightly bigger than his frame (+${avgDelta.toFixed(1)}" avg). Uses his physical tools well.`;
-          } else if (avgDelta > -0.3) {
-            return `Plays at his listed size (${avgDelta > 0 ? "+" : ""}${avgDelta.toFixed(1)}" avg). Stat profile matches his frame.`;
-          } else if (avgDelta > -1.0) {
-            return `Plays slightly smaller than his frame (${avgDelta.toFixed(1)}" avg). Some physical advantage not fully translating to stats.`;
-          } else {
-            return `Plays significantly smaller than his listed frame (${avgDelta.toFixed(1)}" avg). Stat profile matches shorter historic players — room for physical leverage.`;
-          }
+          const dws = side.wingspan_delta;
+          const dw = side.weight_delta;
+          const avg = [dh, dws].filter(x => x != null).reduce((a, b) => a + b, 0) / [dh, dws].filter(x => x != null).length;
+          if (isNaN(avg)) return { style: "—", color: "#9ca3af", desc: "" };
+          if (avg > 1.5) return { style: "paint-oriented", color: "#f59e0b",
+            desc: "stats look like a bigger player's — strong ORB%, dunks, paint pressure. Pattern: traditional Big-style offense." };
+          if (avg > 0.5) return { style: "balanced", color: "#9ca3af",
+            desc: "balanced offensive footprint — uses his frame at typical pool rate." };
+          if (avg > -0.5) return { style: "balanced", color: "#9ca3af",
+            desc: "offensive stats match his listed frame closely." };
+          if (avg > -1.5) return { style: "perimeter-leaning", color: "#a78bfa",
+            desc: "stats look more like a smaller player's — likely less paint volume, more perimeter game. Modern stretch profile." };
+          return { style: "perimeter / stretch", color: "#a78bfa",
+            desc: "clear stretch-Big or perimeter-oriented pattern. Low paint volume relative to his size — value lies in spacing + skill, not physical dominance." };
         };
 
-        // Plus rendering a single side (DEF or OFF) as a card
-        const Side = ({title, question, side, color}) => (
-          <div style={{background:"#0d1117",border:"1px solid #1f2937",borderRadius:10,padding:"14px 16px",flex:1,minWidth:0}}>
-            <div style={{marginBottom:10}}>
-              <div style={{fontSize:13,fontWeight:600,color,marginBottom:2}}>{title}</div>
-              <div style={{fontSize:10,color:"#9ca3af",lineHeight:1.4}}>{question}</div>
-            </div>
-            {/* Verdict box */}
-            <div style={{background:"#1f293730",border:`1px solid ${color}40`,borderRadius:6,padding:"8px 10px",marginBottom:12}}>
-              <div style={{fontSize:10,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.5,marginBottom:3}}>Verdict</div>
-              <div style={{fontSize:11,color:"#d1d5db",lineHeight:1.5}}>{verdictText(side)}</div>
-            </div>
-            {/* Frame bars */}
-            <FrameBar label="Height" sublabel="Predicted body height from stat profile"
-              actual={fs.actual.height} predicted={side.height} delta={side.height_delta}
-              residual={side.residual_height}/>
-            <FrameBar label="Wingspan" sublabel="Predicted wingspan from stat profile"
-              actual={fs.actual.wingspan} predicted={side.wingspan} delta={side.wingspan_delta}
-              residual={side.residual_wingspan}/>
-            {/* Top features */}
-            {side.top_features && side.top_features.length > 0 && (
-              <div style={{marginTop:8}}>
-                <div style={{fontSize:10,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Driving Stats</div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                  {side.top_features.map((f, i) => (
-                    <div key={i} style={{background:f.contrib > 0 ? "#14532d40" : "#7f1d1d40",
-                                           border:`1px solid ${f.contrib > 0 ? "#22c55e60" : "#ef444460"}`,
-                                           color:f.contrib > 0 ? "#86efac" : "#fca5a5",
-                                           borderRadius:4,padding:"3px 7px",fontSize:11}}>
-                      {f.label} <span style={{fontWeight:700}}>{f.contrib > 0 ? "+" : ""}{f.contrib.toFixed(2)}</span>
-                    </div>
-                  ))}
-                </div>
-                <div style={{fontSize:9,color:"#475569",marginTop:4,fontStyle:"italic"}}>
-                  Green = makes him predicted bigger. Red = makes him predicted smaller. Values are standardized regression contributions.
-                </div>
+        const defensiveVerdict = (side) => {
+          const dh = side.height_delta;
+          const dws = side.wingspan_delta;
+          const avg = [dh, dws].filter(x => x != null).reduce((a, b) => a + b, 0) / [dh, dws].filter(x => x != null).length;
+          if (isNaN(avg)) return { tone: "—", color: "#9ca3af", desc: "" };
+          if (avg > 1.5) return { tone: "plays much bigger", color: "#22c55e",
+            desc: "stat profile matches taller / longer defenders. Leverages frame defensively." };
+          if (avg > 0.5) return { tone: "plays slightly bigger", color: "#86efac",
+            desc: "above-frame defensive impact — good signal." };
+          if (avg > -0.5) return { tone: "plays his size", color: "#9ca3af",
+            desc: "defensive stats match his listed frame." };
+          if (avg > -1.5) return { tone: "plays slightly smaller", color: "#fbbf24",
+            desc: "some defensive frame leverage missing — room for growth." };
+          return { tone: "plays much smaller", color: "#ef4444",
+            desc: "defensive stat profile matches shorter / smaller defenders. Physical advantage not yet translating." };
+        };
+
+        const Side = ({title, icon, sideKey, side, neutralOff = false}) => {
+          const semantics = sideSemantics(sideKey);
+          const verdict = neutralOff ? offensiveStyleVerdict(side) : defensiveVerdict(side);
+          const headerColor = sideKey === "defensive" ? "#3b82f6" : "#f97316";
+          return (
+            <div style={{background:"#0d1117",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px",flex:1,minWidth:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+                <span style={{fontSize:13,fontWeight:600,color:headerColor}}>{icon} {title}</span>
               </div>
-            )}
-            {/* Comps */}
-            {side.comps && side.comps.length > 0 && (
-              <div style={{marginTop:12}}>
-                <div style={{fontSize:10,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Historic Comps (nearest predicted height)</div>
-                <div style={{display:"flex",flexDirection:"column",gap:4}}>
-                  {side.comps.map((c, i) => (
-                    <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:11,padding:"4px 8px",
-                                          background:"#0a0e14",borderRadius:4}}>
-                      <span style={{color:"#e5e7eb"}}>{c.name}</span>
-                      <span style={{color:"#9ca3af"}}>{c.pos} · {inchesToFt(c.value)}</span>
-                    </div>
-                  ))}
+              <div style={{background:"#0a0e14",border:`1px solid ${(neutralOff ? verdict.color : verdict.color)}30`,
+                            borderRadius:6,padding:"7px 10px",marginBottom:10}}>
+                <div style={{fontSize:9,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.5,marginBottom:2}}>
+                  {neutralOff ? "Offensive Style" : "Verdict"}
                 </div>
+                <div style={{fontSize:13,fontWeight:700,color:(neutralOff ? verdict.color : verdict.color),marginBottom:3}}>
+                  {neutralOff ? verdict.style : verdict.tone}
+                </div>
+                <div style={{fontSize:10,color:"#d1d5db",lineHeight:1.4}}>{verdict.desc}</div>
               </div>
-            )}
-          </div>
-        );
+
+              <FrameBar label="Height" sublabel={sideKey === "defensive" ? "via BLK%, DRB%, DBPM" : "via dunks, rim%, ORB%"}
+                actual={fs.actual.height} predicted={side.height} delta={side.height_delta}
+                residual={side.residual_height} semantics={semantics}/>
+              <FrameBar label="Wingspan" sublabel={sideKey === "defensive" ? "via STL%, DRB%, BLK%" : "via ORB%, ff_orb, AST%"}
+                actual={fs.actual.wingspan} predicted={side.wingspan} delta={side.wingspan_delta}
+                residual={side.residual_wingspan} semantics={semantics}/>
+              <FrameBar label="Weight" sublabel={"via " + (sideKey === "defensive" ? "DRB%, rim protect" : "FTR, ORB%, rim%") + " · directional only"}
+                actual={fs.actual.weight} predicted={side.weight} delta={side.weight_delta}
+                residual={side.residual_weight} semantics={semantics} unit="lbs" range={30}/>
+
+              {side.top_features && side.top_features.length > 0 && (
+                <div style={{marginTop:8}}>
+                  <div style={{fontSize:9,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.5,marginBottom:3}}>Top driving stats</div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                    {side.top_features.slice(0,4).map((f, i) => (
+                      <div key={i} style={{background:f.contrib > 0 ? "#14532d40" : "#7f1d1d40",
+                                             border:`1px solid ${f.contrib > 0 ? "#22c55e60" : "#ef444460"}`,
+                                             color:f.contrib > 0 ? "#86efac" : "#fca5a5",
+                                             borderRadius:3,padding:"2px 6px",fontSize:10}}>
+                        {f.label} {f.contrib > 0 ? "+" : ""}{f.contrib.toFixed(2)}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {side.comps && side.comps.length > 0 && (
+                <div style={{marginTop:10}}>
+                  <div style={{fontSize:9,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.5,marginBottom:3}}>Frame comps (3D match: h + ws + wt)</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                    {side.comps.slice(0,3).map((c, i) => (
+                      <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:10,padding:"3px 7px",
+                                            background:"#0a0e14",borderRadius:3}}>
+                        <span style={{color:"#e5e7eb"}}>{c.name}</span>
+                        <span style={{color:"#6b7280",fontSize:9}}>
+                          {c.pos} · {inchesToFt(c.height)}
+                          {c.wingspan ? ` / ${inchesToFt(c.wingspan)}` : ""}
+                          {c.weight ? ` / ${Math.round(c.weight)} lbs` : ""}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        };
+
+        // Hero composite Standing Reach delta — averaged def + off
+        const reachDeltaAvg = (() => {
+          const vals = [fs.defensive?.reach_delta, fs.offensive?.reach_delta].filter(v => v != null);
+          return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+        })();
+        const reachActual = fs.actual.height != null && fs.actual.wingspan != null
+          ? fs.actual.height + (fs.actual.wingspan - 60) / 2
+          : null;
+        const reachAvg = fs.defensive?.reach != null && fs.offensive?.reach != null
+          ? (fs.defensive.reach + fs.offensive.reach) / 2
+          : (fs.defensive?.reach ?? fs.offensive?.reach);
 
         return (
-          <Sec icon="📏" title="Functional Frame — Does he play bigger or smaller than his size?"
-            sub={`Predicted height + wingspan from his statistical profile (raw rebounding, blocks, steals, dunks, FT rate) anchored on the historic Draft Pool 2008-2020 (n=644). Plus the gap between predicted and listed measurements shows where he plays "bigger" or "smaller" than his body. Methodology: pooled Ridge regression (position-agnostic) — a 6'6" guard with 16% BLK gets predicted as a Center, because his stats look like one.`}>
-            <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
-              <Side
-                title="Defensive Frame"
-                question="How big does he play DEFENSIVELY? Driven by defensive rebounds, blocks, steals."
-                side={fs.defensive}
-                color="#3b82f6"
-              />
-              <Side
-                title="Offensive Frame"
-                question="How big does he play OFFENSIVELY? Driven by offensive rebounds, dunks, free-throw rate."
-                side={fs.offensive}
-                color="#f97316"
-              />
+          <Sec icon="📏" title="Functional Frame — Does he play bigger than his size?"
+            sub={`A 6'6" guard with 16% BLK gets predicted as a Center — because his stats match one. Plus three anthro dimensions (height, wingspan, weight), each predicted from its OWN driver stats. Plus pool: Draft 2008-2020 (n=644 height, 485 wingspan, 87 weight). Plus Standing Reach is the canonical combine composite ("how much court does he cover?"). Plus defensive: bigger = better. Plus offensive: bigger = paint-style, smaller = stretch-style (Markkanen pattern). Neither is inherently better.`}>
+
+            {/* Hero: Functional Standing Reach */}
+            {reachAvg != null && reachActual != null && (
+              <div style={{background:"#0a0e14",border:"1px solid #1f2937",borderRadius:10,padding:"12px 16px",marginBottom:14}}>
+                <div style={{fontSize:10,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.5,marginBottom:3}}>
+                  Functional Standing Reach <span style={{color:"#475569",textTransform:"none",letterSpacing:0,marginLeft:6}}>· "what reach would the pool guess from his stats?"</span>
+                </div>
+                <div style={{display:"flex",alignItems:"baseline",gap:10,flexWrap:"wrap"}}>
+                  <span style={{fontSize:24,fontWeight:700,fontFamily:"Oswald,sans-serif",color:"#e5e7eb"}}>{inchesToFt(reachAvg)}</span>
+                  <span style={{fontSize:12,color:"#6b7280"}}>vs listed {inchesToFt(reachActual)}</span>
+                  {reachDeltaAvg != null && (
+                    <span style={{marginLeft:"auto",fontSize:13,fontWeight:700,
+                                    color:reachDeltaAvg > 0.5 ? "#22c55e" : reachDeltaAvg < -0.5 ? "#ef4444" : "#9ca3af"}}>
+                      {fmtDelta(reachDeltaAvg)} average
+                    </span>
+                  )}
+                </div>
+                <div style={{fontSize:10,color:"#6b7280",marginTop:5,lineHeight:1.4}}>
+                  Composite: height + (wingspan − 60) / 2. Plus a near-zero gap = he leverages his frame at typical pool rate. Plus large positive = "plays much bigger". Plus large negative = "doesn't translate frame to impact" or "specialized stretch profile".
+                </div>
+              </div>
+            )}
+
+            <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+              <Side title="Defensive Frame" icon="🛡️" sideKey="defensive" side={fs.defensive} neutralOff={false}/>
+              <Side title="Offensive Frame" icon="🔥" sideKey="offensive" side={fs.offensive} neutralOff={true}/>
+            </div>
+
+            <div style={{fontSize:9,color:"#475569",marginTop:10,fontStyle:"italic",lineHeight:1.4}}>
+              Methodology: pooled Ridge regressions, dimension-specific features per target (height = vertical, wingspan = lateral, weight = mass). Plus shaded band = 95% Wald CI based on in-sample residual SD. Plus weight predictions are directional only (n=87 pool). Plus 3D comp matching uses normalized distance in (height, wingspan, weight) space.
             </div>
           </Sec>
         );
