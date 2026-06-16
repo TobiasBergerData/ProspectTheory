@@ -7681,13 +7681,40 @@ function BodyTab({p}) {
                 <div style={{fontSize:10,color:"#d1d5db",lineHeight:1.4}}>{verdict.desc}</div>
               </div>
 
-              <FrameBar label="Height" sublabel={sideKey === "defensive" ? "via BLK%, DRB%, DBPM" : "via dunks, rim%, ORB%"}
+              {/* Sprint-3.39.A (Tobias 2026-06-16): Sublabels kompakt halten,
+                  Methodik-Details über Hover-Tip + Methods Tab. Plus Feature-
+                  Sets sind Sprint-3.38 empirisch validiert (LassoCV + Bootstrap).
+                  Plus volle Liste pro Modell siehe Methods → Functional Frame. */}
+              <Tip content={
+                <div style={{color:"#cbd5e1",maxWidth:340,fontSize:11,lineHeight:1.5}}>
+                  <div style={{fontWeight:600,color:"#e5e7eb",marginBottom:4}}>How these are computed</div>
+                  {sideKey === "defensive" ? (
+                    <>
+                      <div><strong style={{color:"#93c5fd"}}>Height</strong>: Ridge on BLK%, STL%, DRB%, Rim Protection role (n=644, R²=0.62).</div>
+                      <div><strong style={{color:"#93c5fd"}}>Wingspan</strong>: Ridge on STL%, DRB%, BLK% (n=485, R²=0.61).</div>
+                      <div><strong style={{color:"#93c5fd"}}>Weight</strong>: Ridge on STL%, DRB%, DBPM, Rim Protection (n=87, R²=0.52, directional).</div>
+                    </>
+                  ) : (
+                    <>
+                      <div><strong style={{color:"#fdba74"}}>Height</strong>: Ridge on 10 offensive features (dunks, rim%, mid%, 3P%, ORB%, ff_orb, AST%, FTR, OBPM, Rebounder role; n=644, R²=0.68).</div>
+                      <div><strong style={{color:"#fdba74"}}>Wingspan</strong>: identical 10-feature LASSO selection as Height (n=485, R²=0.62).</div>
+                      <div><strong style={{color:"#fdba74"}}>Weight</strong>: Ridge on ORB% + AST% (n=87, R²=0.64, directional).</div>
+                    </>
+                  )}
+                  <div style={{marginTop:6,color:"#64748b",fontSize:10}}>Plus features empirically selected via LassoCV + Bootstrap-Stability. Full methodology in Methods → Functional Frame.</div>
+                </div>
+              }>
+                <div style={{fontSize:9,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.5,marginBottom:6,cursor:"help"}}>
+                  Predicted vs listed <span style={{color:"#475569"}}>ⓘ how computed</span>
+                </div>
+              </Tip>
+              <FrameBar label="Height" sublabel="prediction"
                 actual={fs.actual.height} predicted={side.height} delta={side.height_delta}
                 residual={side.residual_height} semantics={semantics}/>
-              <FrameBar label="Wingspan" sublabel={sideKey === "defensive" ? "via STL%, DRB%, BLK%" : "via ORB%, ff_orb, AST%"}
+              <FrameBar label="Wingspan" sublabel="prediction"
                 actual={fs.actual.wingspan} predicted={side.wingspan} delta={side.wingspan_delta}
                 residual={side.residual_wingspan} semantics={semantics}/>
-              <FrameBar label="Weight" sublabel={"via " + (sideKey === "defensive" ? "DRB%, rim protect" : "FTR, ORB%, rim%") + " · directional only"}
+              <FrameBar label="Weight" sublabel="prediction · directional only"
                 actual={fs.actual.weight} predicted={side.weight} delta={side.weight_delta}
                 residual={side.residual_weight} semantics={semantics} unit="lbs" range={30}/>
 
@@ -7701,24 +7728,27 @@ function BodyTab({p}) {
               {side.top_features && side.top_features.length > 0 && (
                 <div style={{marginTop:8}}>
                   <Tip content={
-                    <div style={{color:"#cbd5e1", maxWidth:340, lineHeight:1.4, fontSize:11}}>
+                    <div style={{color:"#cbd5e1", maxWidth:360, lineHeight:1.4, fontSize:11}}>
                       <div style={{fontWeight:600, marginBottom:4, color:"#e5e7eb"}}>How to read these</div>
                       Each tile is one statistical feature that pushed the
-                      prediction for height, wingspan or weight up or down vs
-                      the draft-pool baseline. Plus the number is the
-                      <em> contribution magnitude</em> in the unit of the
-                      predicted dimension (inches for h/ws, lbs for wt) —
-                      bigger absolute value = stronger pull.
+                      prediction <strong style={{color:"#e5e7eb"}}>above or below the draft-pool average</strong>
+                      &nbsp;(NOT vs. the player's actual measurement!). Number = contribution
+                      magnitude in the unit of the predicted dimension
+                      (inches / lbs).
                       <br/><br/>
                       Plus <span style={{color:"#86efac"}}>+green</span> = stat
-                      pushed prediction <em>larger</em> than baseline.
-                      <span style={{color:"#fca5a5"}}> −red</span> = pushed it
-                      <em> smaller</em>.
+                      pulled prediction <em>up</em> from pool mean.
+                      <span style={{color:"#fca5a5"}}>−red</span> = pulled it
+                      <em> down</em>.
+                      <br/><br/>
+                      Plus the <strong style={{color:"#fbbf24"}}>Δ vs listed</strong> in
+                      each dim-header tells a separate story: how the
+                      prediction compares to the player's MEASURED frame. All-green drivers
+                      with negative Δ means "stats say bigger-than-pool-mean, but still smaller than his measured size" — perfectly normal.
                       <br/><br/>
                       Plus the same stat can appear under multiple dimensions
-                      (e.g. ORB% drives both height- and weight-prediction)
-                      because each dimension has its own model — that's
-                      mathematically intended, not a duplicate display bug.
+                      (e.g. ORB% drives height + wingspan + weight predictions)
+                      because each has its own model.
                     </div>
                   }>
                     <div style={{fontSize:9,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.5,marginBottom:3,cursor:"help"}}>
@@ -7749,15 +7779,36 @@ function BodyTab({p}) {
                       if (groups[k]) groups[k].push(f);
                     });
                     const dimLabels = { height: "Height", wingspan: "Wingspan", weight: "Weight" };
+                    // Sprint-3.39.E (Tobias 2026-06-16): per-Dim Header zeigt
+                    // jetzt predicted + Δ vs actual. Plus löst die "alle grün
+                    // bei negativem Δ"-Inkonsistenz auf: User sieht direkt dass
+                    // drivers die Prediction relativ zur Pool-Baseline erklären,
+                    // nicht den Gap zur Actual-Messung.
+                    const dimToSide = {
+                      height: { pred: side.height, delta: side.height_delta, actual: fs.actual.height, unit: '"' },
+                      wingspan: { pred: side.wingspan, delta: side.wingspan_delta, actual: fs.actual.wingspan, unit: '"' },
+                      weight: { pred: side.weight, delta: side.weight_delta, actual: fs.actual.weight, unit: ' lbs' },
+                    };
+                    const fmtNum = (v, u) => {
+                      if (v == null) return "—";
+                      return u === '"' ? inchesToFt(v) : `${Math.round(v)}${u}`;
+                    };
                     return (
                       <div style={{display:"flex",flexDirection:"column",gap:5}}>
                         {["height","wingspan","weight"].map(dim => {
                           const feats = groups[dim].slice(0,3);
                           if (feats.length === 0) return null;
+                          const d = dimToSide[dim];
+                          const dColor = d.delta == null ? "#64748b" : d.delta > 0.3 ? "#86efac" : d.delta < -0.3 ? "#fca5a5" : "#9ca3af";
                           return (
                             <div key={dim}>
-                              <div style={{fontSize:9,color:"#64748b",marginBottom:2,letterSpacing:0.3}}>
-                                → {dimLabels[dim]}
+                              <div style={{fontSize:9,color:"#64748b",marginBottom:2,letterSpacing:0.3,display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:6}}>
+                                <span>→ {dimLabels[dim]}: predicted <span style={{color:"#cbd5e1",fontWeight:600}}>{fmtNum(d.pred, d.unit)}</span></span>
+                                {d.delta != null && (
+                                  <span style={{color:dColor,fontSize:9}}>
+                                    Δ {d.delta > 0 ? "+" : ""}{d.delta.toFixed(1)}{d.unit} vs listed
+                                  </span>
+                                )}
                               </div>
                               <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
                                 {feats.map((f, i) => (
@@ -7814,7 +7865,7 @@ function BodyTab({p}) {
 
         return (
           <Sec icon="📏" title="Functional Frame — Does he play bigger than his size?"
-            sub={`A 6'6" guard with 16% BLK gets predicted as a Center — because his stats match one. Plus three anthro dimensions (height, wingspan, weight), each predicted from its OWN driver stats. Plus comp pool: NBA-careered players in their college years 2008-2020 (n=644 height, 485 wingspan, 87 weight). Plus Standing Reach is the canonical combine composite ("how much court does he cover?"). Plus defensive: bigger = better. Plus offensive: bigger = paint-style, smaller = stretch-style (Markkanen pattern). Neither is inherently better.`}>
+            sub={`Statistical fingerprint vs. listed measurements across 3 dimensions (height, wingspan, weight) × 2 sides (defensive, offensive). Plus full methodology in Methods → Functional Frame.`}>
 
             {/* ── Sprint-3.33 (2026-06-15): three conditional patterns ── */}
             {(() => {
@@ -7864,16 +7915,22 @@ function BodyTab({p}) {
               );
             })()}
 
-            {/* ── Sprint-3.31 + 3.32: methodological disclaimer ── */}
-            <div style={{background:"#1f1300",border:"1px solid #fbbf2440",borderRadius:8,
-                          padding:"10px 12px",marginBottom:14,fontSize:11,color:"#d1d5db",lineHeight:1.5}}>
-              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
-                <span style={{fontSize:11,color:"#fbbf24",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5}}>About this metric</span>
+            {/* Sprint-3.39.B (Tobias 2026-06-16): Disclaimer auf Quick-Read
+                gekürzt. Plus volle Methodik inkl. conditional patterns + Sprint
+                3.31 honesty in Methods → Functional Frame. */}
+            <Tip content={
+              <div style={{color:"#cbd5e1",maxWidth:380,fontSize:11,lineHeight:1.5}}>
+                <div style={{fontWeight:600,color:"#fbbf24",marginBottom:4}}>About this metric</div>
+                Stylistic descriptor with conditional signals at extremes (aggregate r=+0.04 with peak WA, n=861).
+                Plus three positive segments: <strong style={{color:"#c084fc"}}>Small-Giant</strong> (≤6'5" + plays bigger, Star+ +10pp), <strong style={{color:"#c084fc"}}>Wing-Big</strong> (6'6-6'8 + plays much bigger, Bust −22pp), <strong style={{color:"#c084fc"}}>Skilled-Big</strong> (≥7'0 + plays smaller offensively, Star+/Stick +25pp).
+                Plus use for style-mapping; for outcome projection see Projection tab.
               </div>
-              <div>
-                <strong style={{color:"#fbbf24",fontWeight:500}}>Stylistic descriptor with conditional star/stick signals at the extremes.</strong> Aggregate correlation with peak career WA is just +0.04 across the historic pool (n=861), so the metric does <strong style={{color:"#e5e7eb",fontWeight:500}}>not</strong> linearly predict star/bust outcomes. Plus however, segmenting by frame size reveals THREE conditional patterns where the signal IS positive: <strong style={{color:"#c084fc",fontWeight:500}}>Small-Giant</strong> (≤6'5" + plays bigger → motor/effort, Star+ rate +10pp), <strong style={{color:"#c084fc",fontWeight:500}}>Wing-Big</strong> (6'6-6'8 + plays much bigger → defensive impact, Bust rate −22pp), and <strong style={{color:"#c084fc",fontWeight:500}}>Skilled-Big</strong> (≥7'0 + plays smaller offensively → Wemby/Embiid archetype, Star+ +25pp + Stick +25pp). Plus use for style-mapping, comp-matching, and extreme-pattern detection. For projection see Tier Probabilities, Star+ Creator, and Added Wins on the Projection tab.
+            }>
+              <div style={{background:"#1f1300",border:"1px solid #fbbf2440",borderRadius:8,
+                            padding:"8px 12px",marginBottom:14,fontSize:11,color:"#d1d5db",lineHeight:1.5,cursor:"help"}}>
+                <span style={{color:"#fbbf24",fontWeight:600}}>Stylistic descriptor</span> · aggregate r=+0.04 with peak WA (not a linear predictor), but positive at extremes via 3 conditional patterns. <span style={{color:"#64748b"}}>ⓘ details</span>
               </div>
-            </div>
+            </Tip>
 
             {/* Hero: Functional Standing Reach */}
             {reachAvg != null && reachActual != null && (
@@ -7937,8 +7994,10 @@ function BodyTab({p}) {
               <Side title="Offensive Frame" icon="🔥" sideKey="offensive" side={fs.offensive} neutralOff={true}/>
             </div>
 
+            {/* Sprint-3.39.B: Methodology auf 1-Liner getrimmt mit Methods-Link
+                für volle Details. */}
             <div style={{fontSize:9,color:"#475569",marginTop:10,fontStyle:"italic",lineHeight:1.5}}>
-              Methodology: pooled Ridge regressions, dimension-specific features per target (height = vertical signal, wingspan = lateral, weight = mass). Plus comp pool: 644 NBA-careered players from College draft years 2008-2020, in their college seasons. Plus the regressions learn "what stats do NBA players of size X show?" — they do NOT learn "what stats predict NBA success" (that's the Tier model). Plus shaded band = 95% Wald CI based on in-sample residual SD. Plus weight predictions are directional only (n=87 pool). Plus 3D comp matching uses normalized distance in (height, wingspan, weight) space. Plus correlation of reach Δ with NBA peak career WA: defensive +0.04, offensive -0.02, composite +0.01 (n=861) — confirms this is a descriptor, not a predictor.
+              6 Ridge models · features empirically selected (LassoCV + Bootstrap-Stability, Sprint-3.38) · pool n=644/485/87 (height/wingspan/weight) · shaded band = 95% Wald CI · Plus full methodology in Methods → Functional Frame.
             </div>
           </Sec>
         );
