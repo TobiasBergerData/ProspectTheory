@@ -117,45 +117,75 @@ def create_tables(cur):
         """)
 
 
-def load_profiles_data():
-    """Liest split-files bevorzugt, sonst single api_profiles.json.
+def iter_profiles_data():
+    """Sprint-3.34 (2026-06-16 Render OOM fix): streaming generator.
 
-    Sprint-3.14 (Tobias 2026-06-13 Render OOM fix): legacy behaviour merged
-    every profile part into one dict — fine alone, but combined with the v5
-    comps build and the stat/anthro comp loads it pushed peak memory past
-    the Free-Tier 512 MB cap. We still return a merged dict here because
-    load_profiles() then iterates once; this is unchanged. The bigger win
-    comes from the comps_v5 streaming loader (see load_comps_v5) since v5
-    is the largest single payload at ~155 MB. If profiles ever grows beyond
-    ~200 MB on disk, refactor this to a generator yielding (key, profile)
-    so load_profiles() can stream too.
+    Sprint-3.29-3.33 grew the profiles payload from 4 to 5 parts (~204 MB total)
+    due to the functionalSize dict expansion. The legacy load_profiles_data
+    merged everything into one dict — that peaked at ~250 MB resident, which
+    combined with SQLite WAL + the upcoming comps_v5 load pushed past the
+    512 MB Free Tier cap. All builds since cb298a2 failed.
+
+    Fix: yield (key, profile) one at a time, one part at a time. Peak memory
+    drops from ~250 MB merged dict to ~45 MB per part. Same pattern as
+    load_comps_v5 (Sprint-3.14).
     """
     split_files = sorted(DATA_DIR.glob("api_profiles_part*.json"))
     if split_files:
-        merged = {}
         total = 0
         for sp in split_files:
             sz = sp.stat().st_size
             total += sz
             print(f"  Loading {sp.name} ({sz/1e6:.1f} MB)...")
             with open(sp, "r", encoding="utf-8") as f:
-                merged.update(json.load(f))
-        print(f"  Split-merge: {len(split_files)} parts, {total/1e6:.1f} MB → {len(merged):,} profiles")
-        return merged
+                part = json.load(f)
+            yield from part.items()
+            del part
+            import gc
+            gc.collect()
+        print(f"  Stream-load: {len(split_files)} parts, {total/1e6:.1f} MB total")
+        return
 
     single = DATA_DIR / "api_profiles.json"
     if not single.exists():
         raise FileNotFoundError(f"Neither split parts nor {single.name} found in {DATA_DIR}")
     print(f"  Loading {single.name} ({single.stat().st_size/1e6:.1f} MB)...")
     with open(single, "r", encoding="utf-8") as f:
-        return json.load(f)
+        data = json.load(f)
+    yield from data.items()
 
 
 def load_profiles(cur):
-    data = load_profiles_data()
+    """Sprint-3.34: stream from generator + batch-insert every CHUNK_SIZE rows.
+    Caps peak memory at ~one part (~45 MB) + one chunk (~5 MB) instead of
+    holding the full merged dict (~250 MB)."""
+    BATCH_SIZE = 2000
     batch_profiles, batch_board, batch_seasons = [], [], []
-    skipped = 0
-    for key, p in data.items():
+    total_profiles = total_seasons = skipped = 0
+
+    profile_sql = "INSERT OR REPLACE INTO profiles (player_id, slug, name, name_lower, data) VALUES (?,?,?,?,?)"
+    board_sql = """INSERT OR REPLACE INTO board
+           (player_id, slug, name, name_lower, team, pos, year, conf, source, made_nba, tier,
+            mu, p_nba, ups, aspm, war, age, career_path,
+            overall, ceiling, bpm,
+            prob_super, prob_allstar, prob_starter,
+            prob_role, prob_repl, prob_out,
+            archetype, confidence)
+           VALUES (?,?,?,?, ?,?,?,?,?,?,?, ?,?,?,?,?,?,?, ?,?,?, ?,?,?, ?,?,?, ?,?)"""
+    season_sql = "INSERT OR REPLACE INTO season_lines (player_id, slug, data) VALUES (?,?,?)"
+
+    def flush():
+        nonlocal batch_profiles, batch_board, batch_seasons, total_profiles, total_seasons
+        if batch_profiles:
+            cur.executemany(profile_sql, batch_profiles)
+            cur.executemany(board_sql, batch_board)
+            total_profiles += len(batch_profiles)
+        if batch_seasons:
+            cur.executemany(season_sql, batch_seasons)
+            total_seasons += len(batch_seasons)
+        batch_profiles, batch_board, batch_seasons = [], [], []
+
+    for key, p in iter_profiles_data():
         pid = p.get("player_id") or (key if ":" in key else None)
         slug = p.get("slug")
         name = p.get("name") or (key if ":" not in key else "")
@@ -183,27 +213,11 @@ def load_profiles(cur):
             p.get("archetype", ""), p.get("confidence", "full"),
         ))
 
-    cur.executemany(
-        "INSERT OR REPLACE INTO profiles (player_id, slug, name, name_lower, data) VALUES (?,?,?,?,?)",
-        batch_profiles,
-    )
-    cur.executemany(
-        """INSERT OR REPLACE INTO board
-           (player_id, slug, name, name_lower, team, pos, year, conf, source, made_nba, tier,
-            mu, p_nba, ups, aspm, war, age, career_path,
-            overall, ceiling, bpm,
-            prob_super, prob_allstar, prob_starter,
-            prob_role, prob_repl, prob_out,
-            archetype, confidence)
-           VALUES (?,?,?,?, ?,?,?,?,?,?,?, ?,?,?,?,?,?,?, ?,?,?, ?,?,?, ?,?,?, ?,?)""",
-        batch_board,
-    )
-    if batch_seasons:
-        cur.executemany(
-            "INSERT OR REPLACE INTO season_lines (player_id, slug, data) VALUES (?,?,?)",
-            batch_seasons,
-        )
-    print(f"  → {len(batch_profiles):,} profiles, {len(batch_seasons):,} season_lines"
+        if len(batch_profiles) >= BATCH_SIZE:
+            flush()
+
+    flush()
+    print(f"  → {total_profiles:,} profiles, {total_seasons:,} season_lines"
           + (f" ({skipped:,} skipped)" if skipped else ""))
 
 
