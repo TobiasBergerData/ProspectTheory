@@ -11106,6 +11106,12 @@ function StatsLabView({onSelect}) {
   const [posFilter,  setPosFilter]    = useState(["Playmaker","Wing","Big"]);
   const [srcFilter,  setSrcFilter]    = useState(["ncaa","intl"]);
   const [search,     setSearch]       = useState("");
+  // Sample-size Range-Filter (Tobias 2026-06-16): MP and GP minima
+  // to drop noise (n=2 GP "prospects"). Empty string = no bound.
+  const [mpMin, setMpMin] = useState("");
+  const [mpMax, setMpMax] = useState("");
+  const [gpMin, setGpMin] = useState("");
+  const [gpMax, setGpMax] = useState("");
 
   // Columns + sort + pagination
   const [presetId,     setPresetId]   = useState("default");
@@ -11161,14 +11167,29 @@ function StatsLabView({onSelect}) {
   const filtered = useMemo(() => {
     if (!rows) return [];
     const q = search.trim().toLowerCase();
+    // Plus parse range bounds once outside the loop
+    const _f = (s) => { const n = parseFloat(s); return isNaN(n) ? null : n; };
+    const mpLo = _f(mpMin), mpHi = _f(mpMax);
+    const gpLo = _f(gpMin), gpHi = _f(gpMax);
     return rows.filter(r => {
       if (yearFilter.length && !yearFilter.includes(r.year)) return false;
       if (posFilter.length && r.pos && !posFilter.includes(r.pos)) return false;
       if (srcFilter.length && r.source && !srcFilter.includes(r.source)) return false;
       if (q && !(r.name || "").toLowerCase().includes(q)) return false;
+      // MP / GP range filters: null-row excluded only if a bound is set
+      if (mpLo != null || mpHi != null) {
+        if (r.mp == null) return false;
+        if (mpLo != null && r.mp < mpLo) return false;
+        if (mpHi != null && r.mp > mpHi) return false;
+      }
+      if (gpLo != null || gpHi != null) {
+        if (r.gp == null) return false;
+        if (gpLo != null && r.gp < gpLo) return false;
+        if (gpHi != null && r.gp > gpHi) return false;
+      }
       return true;
     });
-  }, [rows, yearFilter, posFilter, srcFilter, search]);
+  }, [rows, yearFilter, posFilter, srcFilter, search, mpMin, mpMax, gpMin, gpMax]);
 
   const sorted = useMemo(() => {
     if (!filtered.length) return filtered;
@@ -11328,6 +11349,47 @@ function StatsLabView({onSelect}) {
             className="w-full px-3 py-2 rounded text-sm"
             style={{background:"#0a0e16", color:"#f1f5f9", border:"1px solid #1f2937"}}
           />
+        </div>
+
+        {/* Sample-size filters: MP and GP minima drop sub-sample noise */}
+        <div className="rounded-xl p-4" style={{background:"#0d111766",border:"1px solid #1f2937"}}>
+          <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#9ca3af"}}>Sample Size</div>
+          <div className="space-y-2">
+            <div>
+              <div className="text-[11px] mb-1" style={{color:"#6b7280"}}>Minutes per game (MP)</div>
+              <div className="flex gap-1.5">
+                <input type="number" inputMode="decimal" placeholder="min" value={mpMin}
+                  onChange={e=>setMpMin(e.target.value)}
+                  className="w-full px-2 py-1.5 rounded text-xs"
+                  style={{background:"#0a0e16",color:"#f1f5f9",border:"1px solid #1f2937"}}/>
+                <input type="number" inputMode="decimal" placeholder="max" value={mpMax}
+                  onChange={e=>setMpMax(e.target.value)}
+                  className="w-full px-2 py-1.5 rounded text-xs"
+                  style={{background:"#0a0e16",color:"#f1f5f9",border:"1px solid #1f2937"}}/>
+              </div>
+            </div>
+            <div>
+              <div className="text-[11px] mb-1" style={{color:"#6b7280"}}>Games played (GP)</div>
+              <div className="flex gap-1.5">
+                <input type="number" inputMode="numeric" placeholder="min" value={gpMin}
+                  onChange={e=>setGpMin(e.target.value)}
+                  className="w-full px-2 py-1.5 rounded text-xs"
+                  style={{background:"#0a0e16",color:"#f1f5f9",border:"1px solid #1f2937"}}/>
+                <input type="number" inputMode="numeric" placeholder="max" value={gpMax}
+                  onChange={e=>setGpMax(e.target.value)}
+                  className="w-full px-2 py-1.5 rounded text-xs"
+                  style={{background:"#0a0e16",color:"#f1f5f9",border:"1px solid #1f2937"}}/>
+              </div>
+            </div>
+            {(mpMin||mpMax||gpMin||gpMax) && (
+              <button
+                onClick={()=>{setMpMin("");setMpMax("");setGpMin("");setGpMax("");}}
+                className="text-[11px] mt-1 underline"
+                style={{color:"#9ca3af"}}>
+                clear sample-size filters
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="rounded-xl p-4 text-xs" style={{background:"#0d111733",color:"#6b7280"}}>
