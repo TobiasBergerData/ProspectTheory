@@ -7690,18 +7690,18 @@ function BodyTab({p}) {
                   <div style={{fontWeight:600,color:"#e5e7eb",marginBottom:4}}>How these are computed</div>
                   {sideKey === "defensive" ? (
                     <>
-                      <div><strong style={{color:"#93c5fd"}}>Height</strong>: Ridge on BLK%, STL%, DRB%, Rim Protection role (n=644, R²=0.62).</div>
-                      <div><strong style={{color:"#93c5fd"}}>Wingspan</strong>: Ridge on STL%, DRB%, BLK% (n=485, R²=0.61).</div>
-                      <div><strong style={{color:"#93c5fd"}}>Weight</strong>: Ridge on STL%, DRB%, DBPM, Rim Protection (n=87, R²=0.52, directional).</div>
+                      <div><strong style={{color:"#93c5fd"}}>Height</strong>: predicted from BLK%, STL%, DRB%, Rim Protection role.</div>
+                      <div><strong style={{color:"#93c5fd"}}>Wingspan</strong>: predicted from STL%, DRB%, BLK%.</div>
+                      <div><strong style={{color:"#93c5fd"}}>Weight</strong>: predicted from STL%, DRB%, DBPM, Rim Protection (directional only).</div>
                     </>
                   ) : (
                     <>
-                      <div><strong style={{color:"#fdba74"}}>Height</strong>: Ridge on 10 offensive features (dunks, rim%, mid%, 3P%, ORB%, ff_orb, AST%, FTR, OBPM, Rebounder role; n=644, R²=0.68).</div>
-                      <div><strong style={{color:"#fdba74"}}>Wingspan</strong>: identical 10-feature LASSO selection as Height (n=485, R²=0.62).</div>
-                      <div><strong style={{color:"#fdba74"}}>Weight</strong>: Ridge on ORB% + AST% (n=87, R²=0.64, directional).</div>
+                      <div><strong style={{color:"#fdba74"}}>Height</strong>: predicted from 10 offensive features (dunks, rim%, mid%, 3P%, ORB%, ff_orb, AST%, FTR, OBPM, Rebounder role).</div>
+                      <div><strong style={{color:"#fdba74"}}>Wingspan</strong>: same 10 offensive features as Height.</div>
+                      <div><strong style={{color:"#fdba74"}}>Weight</strong>: predicted from ORB% + AST% (directional only).</div>
                     </>
                   )}
-                  <div style={{marginTop:6,color:"#64748b",fontSize:10}}>Plus features empirically selected via LassoCV + Bootstrap-Stability. Full methodology in Methods → Functional Frame.</div>
+                  <div style={{marginTop:6,color:"#64748b",fontSize:10}}>Plus full methodology + validation details in Methods → Functional Frame.</div>
                 </div>
               }>
                 <div style={{fontSize:9,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.5,marginBottom:6,cursor:"help"}}>
@@ -7921,14 +7921,14 @@ function BodyTab({p}) {
             <Tip content={
               <div style={{color:"#cbd5e1",maxWidth:380,fontSize:11,lineHeight:1.5}}>
                 <div style={{fontWeight:600,color:"#fbbf24",marginBottom:4}}>About this metric</div>
-                Stylistic descriptor with conditional signals at extremes (aggregate r=+0.04 with peak WA, n=861).
-                Plus three positive segments: <strong style={{color:"#c084fc"}}>Small-Giant</strong> (≤6'5" + plays bigger, Star+ +10pp), <strong style={{color:"#c084fc"}}>Wing-Big</strong> (6'6-6'8 + plays much bigger, Bust −22pp), <strong style={{color:"#c084fc"}}>Skilled-Big</strong> (≥7'0 + plays smaller offensively, Star+/Stick +25pp).
-                Plus use for style-mapping; for outcome projection see Projection tab.
+                Stylistic descriptor — useful for style-mapping + comp-matching, not as a linear outcome predictor.
+                Plus three conditional patterns where the signal IS positive at extremes: <strong style={{color:"#c084fc"}}>Small-Giant</strong> (small frame + plays bigger defensively), <strong style={{color:"#c084fc"}}>Wing-Big</strong> (6'6-6'8 + plays much bigger), <strong style={{color:"#c084fc"}}>Skilled-Big</strong> (≥7'0 + plays smaller offensively).
+                Plus for outcome projection see the Projection tab. Plus full validation in Methods → Functional Frame.
               </div>
             }>
               <div style={{background:"#1f1300",border:"1px solid #fbbf2440",borderRadius:8,
                             padding:"8px 12px",marginBottom:14,fontSize:11,color:"#d1d5db",lineHeight:1.5,cursor:"help"}}>
-                <span style={{color:"#fbbf24",fontWeight:600}}>Stylistic descriptor</span> · aggregate r=+0.04 with peak WA (not a linear predictor), but positive at extremes via 3 conditional patterns. <span style={{color:"#64748b"}}>ⓘ details</span>
+                <span style={{color:"#fbbf24",fontWeight:600}}>Stylistic descriptor</span> · not a linear outcome predictor, but positive at extremes via 3 conditional patterns. <span style={{color:"#64748b"}}>ⓘ details</span>
               </div>
             </Tip>
 
@@ -7994,10 +7994,10 @@ function BodyTab({p}) {
               <Side title="Offensive Frame" icon="🔥" sideKey="offensive" side={fs.offensive} neutralOff={true}/>
             </div>
 
-            {/* Sprint-3.39.B: Methodology auf 1-Liner getrimmt mit Methods-Link
-                für volle Details. */}
+            {/* Sprint-3.39.B: Methodology auf 1-Liner getrimmt — alle
+                statistischen Details (R², n, validation) leben in Methods Tab. */}
             <div style={{fontSize:9,color:"#475569",marginTop:10,fontStyle:"italic",lineHeight:1.5}}>
-              6 Ridge models · features empirically selected (LassoCV + Bootstrap-Stability, Sprint-3.38) · pool n=644/485/87 (height/wingspan/weight) · shaded band = 95% Wald CI · Plus full methodology in Methods → Functional Frame.
+              6 Ridge models with empirically selected features · shaded band = 95% confidence corridor · Plus full methodology in Methods → Functional Frame.
             </div>
           </Sec>
         );
