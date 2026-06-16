@@ -2742,6 +2742,59 @@ function ShootingTab({p}) {
   // einen Tier-spezifischen FGA-Wert kennen. Bleibt im UI als heuristische Schätzung.
   const projNba3pa = proj3PAr != null ? Math.round(projFGA * proj3PAr / 100 * 10) / 10 : null;
 
+  // Sprint-3.37.H (Tobias 2026-06-16): Three-Layer Synthese aus M1-Output.
+  // Plus Backend inject_shooting_m1.py schreibt nur shooting.m1.*, aber das
+  // UI erwartet shooting.skill / .intent / .volume / .touchTier Subdicts.
+  // Plus Vor Sprint-3.37.H zeigten Layer 1/2/3 leer ("—%") obwohl m1 vorhanden
+  // war. Wurzel: kein Mapping zwischen den Schichten — daher synthesize wir
+  // hier client-seitig aus projNba3p / proj3PAr.
+  // Plus typical-miss-Werte (±2.85 Layer 1, ±9.7 Layer 2) stammen aus dem
+  // Berger-2022 M1-Paper (NCAA RMSE) und matchen den im UI gezeigten Text.
+  const shootingSynth = (() => {
+    if (!p.shooting) return null;
+    const out = { ...p.shooting };
+    // Layer 1 — Skill (projected NBA 3P%)
+    if (out.skill == null && projNba3p != null) {
+      out.skill = {
+        p50: projNba3p,
+        lo: Math.max(0, projNba3p - 2.85),
+        hi: Math.min(60, projNba3p + 2.85),
+      };
+    }
+    // Layer 2 — Intent (projected NBA 3PAr)
+    if (out.intent == null && proj3PAr != null) {
+      const tier = proj3PAr >= 50 ? "High" : proj3PAr >= 35 ? "Moderate" : "Low";
+      out.intent = {
+        p50: proj3PAr,
+        lo: Math.max(0, proj3PAr - 9.7),
+        hi: Math.min(100, proj3PAr + 9.7),
+        tier,
+      };
+    }
+    // Touch Tier from FT% (Berger 2022 thresholds)
+    if (out.touchTier == null && ft != null) {
+      out.touchTier = ft >= 86 ? "Elite" : ft >= 78 ? "Strong" : ft >= 72 ? "Average" : "Weak";
+    }
+    // Layer 3 — Volume: Tier-conditional 3PA/game = FGA(tier×pos) × proj3PAr.
+    // Plus tierPosFga ist 5 Zeilen weiter oben definiert und damit hier in
+    // scope — wir leiten 3PA/game pro Tier ab. Keys matchen die Frontend-Map
+    // unten (allStar, starter, rolePlayer, replacement).
+    if (out.volume == null && proj3PAr != null && p.pos) {
+      const fgaForTier = (tier) => (tierPosFga[tier] || tierPosFga["Starter"])[p.pos] || 13;
+      out.volume = {
+        allStar:     Math.round(fgaForTier("All-Star")    * proj3PAr / 100 * 10) / 10,
+        starter:     Math.round(fgaForTier("Starter")      * proj3PAr / 100 * 10) / 10,
+        rolePlayer:  Math.round(fgaForTier("Role Player")  * proj3PAr / 100 * 10) / 10,
+        replacement: Math.round(fgaForTier("Replacement")  * proj3PAr / 100 * 10) / 10,
+      };
+    }
+    return out;
+  })();
+  // Plus Wir reichen die synthetische Variante anstelle des Roh-`p.shooting`
+  // in den nachfolgenden Render-Block. Plus Override nur wenn synth != null,
+  // sonst Fallback aufs ursprüngliche Objekt (Backwards-Compat).
+  if (shootingSynth) p = { ...p, shooting: shootingSynth };
+
   const sc = (pct, type) => {
     if (pct == null) return "#6b7280";
     if (type==="3pt") return pct>38?"#22c55e":pct>34?"#86efac":pct>30?"#fbbf24":"#ef4444";
@@ -7435,10 +7488,14 @@ function BodyTab({p}) {
       {/* ── Sprint-3.30 (2026-06-15) v2: Functional Frame NBA-Pro architecture ── */}
       {p.functionalSize && (() => {
         const fs = p.functionalSize;
+        // Sprint-3.37.B: Wingspan 6'12" Bug-Fix (Tobias 2026-06-16).
+        // Plus Alter Code: ft=floor(83.5/12)=6, inc=round(83.5-72)=round(11.5)=12 → "6'12""
+        // Plus Fix: total inches ZUERST runden, dann floor+modulo. Mathematisch sauber.
         const inchesToFt = (inches) => {
           if (inches == null) return "—";
-          const ft = Math.floor(inches / 12);
-          const inc = Math.round(inches - ft * 12);
+          const total = Math.round(inches);
+          const ft = Math.floor(total / 12);
+          const inc = total % 12;
           return `${ft}'${inc}"`;
         };
         const fmtDelta = (d, unit = '"') => d == null ? "—" : `${d > 0 ? "+" : ""}${d.toFixed(1)}${unit}`;
@@ -7493,28 +7550,57 @@ function BodyTab({p}) {
           );
         };
 
+        // Sprint-3.37.D (Tobias 2026-06-16): Position-aware Verdict-Texte.
+        // Plus Vor dem Refactor bekam z.B. Mikel Brown Jr. (Playmaker 6'5") als
+        // Offensive-Style "clear stretch-Big or perimeter-oriented pattern" —
+        // weil der alte Code nur die Δ-Avg checkte, nicht aber die Position.
+        // Big-spezifische Vokabeln (Stretch-Big, Markkanen, Porzingis) gehören
+        // ausschließlich zu pos=Big. Guards/Wings bekommen Perimeter-Sprache.
+        const posGroup = (p.pos || "").trim();   // "Playmaker" | "Wing" | "Big" | ""
+        const isPerimeter = posGroup === "Playmaker" || posGroup === "Wing";
+        const isBig = posGroup === "Big";
+
         const offensiveStyleVerdict = (side) => {
           const dh = side.height_delta;
           const dws = side.wingspan_delta;
           const avg = [dh, dws].filter(x => x != null).reduce((a, b) => a + b, 0) / [dh, dws].filter(x => x != null).length;
           if (isNaN(avg)) return { style: "—", color: "#9ca3af", desc: "" };
-          const h = fs.actual.height;
-          // Sprint-3.32: segment-aware verdict for tall bigs
-          const isTallBig = h != null && h >= 84;
-          if (avg > 1.5) return { style: "paint-oriented", color: "#f59e0b",
-            desc: "stats look like a bigger player's — strong ORB%, dunks, paint pressure. Pattern: traditional Big-style offense." };
-          if (avg > 0.5) return { style: "balanced", color: "#9ca3af",
-            desc: "balanced offensive footprint — uses his frame at typical pool rate." };
+
+          // Sehr paint-orientiert (avg > 1.5)
+          if (avg > 1.5) {
+            if (isPerimeter) return { style: "interior-leaning for position", color: "#f59e0b",
+              desc: "stats heavier on rim diet, ORB%, paint pressure than typical for his position. Pattern: slasher / driver with limited spacing — value depends on finishing efficiency." };
+            return { style: "paint-oriented", color: "#f59e0b",
+              desc: "stats look like a bigger player's — strong ORB%, dunks, paint pressure. Traditional Big-style offense." };
+          }
+
+          // Slight oversize (avg 0.5–1.5)
+          if (avg > 0.5) return { style: "balanced (slight paint-tilt)", color: "#9ca3af",
+            desc: isPerimeter
+              ? "offensive footprint matches a slightly bigger guard/wing — average rim diet for position with some paint pressure."
+              : "balanced offensive footprint — uses his frame at typical pool rate." };
+
+          // Frame-match (avg -0.5 to 0.5)
           if (avg > -0.5) return { style: "balanced", color: "#9ca3af",
             desc: "offensive stats match his listed frame closely." };
-          if (avg > -1.5) return { style: "perimeter-leaning", color: "#a78bfa",
-            desc: isTallBig
-              ? "stats look more like a perimeter player's — modern skill-Big signal in a tall frame. Star-positive segment (≥7'0\" who play smaller offensively show elevated star rates)."
-              : "stats look more like a smaller player's — likely less paint volume, more perimeter game. Modern stretch profile." };
-          return { style: "perimeter / stretch", color: "#a78bfa",
-            desc: isTallBig
-              ? "clear stretch / skilled-big pattern. Tall body + perimeter offensive footprint = Markkanen/JJJ/Porzingis archetype. Skill-in-body is a Star-positive signal in this size segment."
-              : "clear stretch-Big or perimeter-oriented pattern. Low paint volume relative to his size — value lies in spacing + skill, not physical dominance." };
+
+          // Slight smaller (avg -1.5 to -0.5)
+          if (avg > -1.5) {
+            if (isPerimeter) return { style: "perimeter-focused", color: "#a78bfa",
+              desc: "stats lean perimeter — typical guard/wing offensive profile, low rim diet, more on-ball / off-ball game on the outside." };
+            if (isBig) return { style: "perimeter-leaning Big", color: "#a78bfa",
+              desc: "stats look more like a perimeter player's — modern skill-Big signal in a tall frame. Star-positive segment (≥7'0\" who play smaller offensively show elevated star rates)." };
+            return { style: "perimeter-leaning", color: "#a78bfa",
+              desc: "stats look more like a smaller player's — likely less paint volume, more perimeter game." };
+          }
+
+          // Strong smaller (avg ≤ -1.5)
+          if (isPerimeter) return { style: "pure perimeter / spacer", color: "#a78bfa",
+            desc: "very low paint signature — off-ball shooter, spot-up scorer, or movement scorer profile. Value lies in spacing + off-ball reads, not interior pressure." };
+          if (isBig) return { style: "skilled-Big / stretch pattern", color: "#a78bfa",
+            desc: "clear stretch / skilled-Big pattern. Tall body + perimeter offensive footprint = Markkanen/JJJ/Porzingis archetype. Skill-in-body is Star-positive in this size segment." };
+          return { style: "stretch-leaning", color: "#a78bfa",
+            desc: "offensive footprint smaller than listed frame would suggest — likely spacing-first role." };
         };
 
         const defensiveVerdict = (side) => {
@@ -7523,20 +7609,27 @@ function BodyTab({p}) {
           const avg = [dh, dws].filter(x => x != null).reduce((a, b) => a + b, 0) / [dh, dws].filter(x => x != null).length;
           if (isNaN(avg)) return { tone: "—", color: "#9ca3af", desc: "" };
           const h = fs.actual.height;
-          // Sprint-3.32: segment-aware verdict for small guards
+          // Sprint-3.32 + 3.37.D: segment- + position-aware verdicts
           const isSmall = h != null && h <= 77;
-          if (avg > 1.5) return { tone: "plays much bigger", color: "#22c55e",
-            desc: isSmall
-              ? "stats match a taller defender — outsized defensive impact for his frame. Star-positive signal in this size segment (small guards who play bigger: motor/IQ/effort archetype)."
-              : "stat profile matches taller / longer defenders. Leverages frame defensively." };
+
+          if (avg > 1.5) {
+            if (isPerimeter && isSmall) return { tone: "plays much bigger", color: "#22c55e",
+              desc: "stats match a taller defender — outsized defensive impact for his guard frame. Star-positive segment (small guards who play bigger: motor/IQ/effort archetype, Kemba/VanVleet pattern)." };
+            return { tone: "plays much bigger", color: "#22c55e",
+              desc: "stat profile matches taller / longer defenders. Leverages frame defensively." };
+          }
           if (avg > 0.5) return { tone: "plays slightly bigger", color: "#86efac",
             desc: "above-frame defensive impact — good signal." };
           if (avg > -0.5) return { tone: "plays his size", color: "#9ca3af",
             desc: "defensive stats match his listed frame." };
           if (avg > -1.5) return { tone: "plays slightly smaller", color: "#fbbf24",
-            desc: "some defensive frame leverage missing — room for growth." };
+            desc: isPerimeter
+              ? "some defensive frame leverage missing — typical for guards/wings, room to improve on-ball physicality."
+              : "some defensive frame leverage missing — room for growth." };
           return { tone: "plays much smaller", color: "#ef4444",
-            desc: "defensive stat profile matches shorter / smaller defenders. Physical advantage not yet translating." };
+            desc: isBig
+              ? "defensive stat profile matches shorter players — Liability-Big segment, frame not translating to rim protection / DRB."
+              : "defensive stat profile matches shorter / smaller defenders. Physical advantage not yet translating." };
         };
 
         const Side = ({title, icon, sideKey, side, neutralOff = false}) => {
@@ -7569,19 +7662,90 @@ function BodyTab({p}) {
                 actual={fs.actual.weight} predicted={side.weight} delta={side.weight_delta}
                 residual={side.residual_weight} semantics={semantics} unit="lbs" range={30}/>
 
+              {/* Sprint-3.37.C (Tobias 2026-06-16): Top driving stats —
+                  gruppiert nach Dimension, falls Backend `dim_target` setzt
+                  (height/wingspan/weight). Sonst Fallback auf flat Liste, damit
+                  diese Frontend-Änderung auch ohne Pipeline-Re-Run lebt.
+                  Plus Tooltip-Hinweis: warum manche Stats mehrfach erscheinen
+                  (selbe Feature kann mehrere Dimensions prädizieren) + was die
+                  contrib-Zahl bedeutet. */}
               {side.top_features && side.top_features.length > 0 && (
                 <div style={{marginTop:8}}>
-                  <div style={{fontSize:9,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.5,marginBottom:3}}>Top driving stats</div>
-                  <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                    {side.top_features.slice(0,4).map((f, i) => (
-                      <div key={i} style={{background:f.contrib > 0 ? "#14532d40" : "#7f1d1d40",
-                                             border:`1px solid ${f.contrib > 0 ? "#22c55e60" : "#ef444460"}`,
-                                             color:f.contrib > 0 ? "#86efac" : "#fca5a5",
-                                             borderRadius:3,padding:"2px 6px",fontSize:10}}>
-                        {f.label} {f.contrib > 0 ? "+" : ""}{f.contrib.toFixed(2)}
+                  <Tip content={
+                    <div style={{color:"#cbd5e1", maxWidth:340, lineHeight:1.4, fontSize:11}}>
+                      <div style={{fontWeight:600, marginBottom:4, color:"#e5e7eb"}}>How to read these</div>
+                      Each tile is one statistical feature that pushed the
+                      prediction for height, wingspan or weight up or down vs
+                      the draft-pool baseline. Plus the number is the
+                      <em> contribution magnitude</em> in the unit of the
+                      predicted dimension (inches for h/ws, lbs for wt) —
+                      bigger absolute value = stronger pull.
+                      <br/><br/>
+                      Plus <span style={{color:"#86efac"}}>+green</span> = stat
+                      pushed prediction <em>larger</em> than baseline.
+                      <span style={{color:"#fca5a5"}}> −red</span> = pushed it
+                      <em> smaller</em>.
+                      <br/><br/>
+                      Plus the same stat can appear under multiple dimensions
+                      (e.g. ORB% drives both height- and weight-prediction)
+                      because each dimension has its own model — that's
+                      mathematically intended, not a duplicate display bug.
+                    </div>
+                  }>
+                    <div style={{fontSize:9,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.5,marginBottom:3,cursor:"help"}}>
+                      Top driving stats <span style={{color:"#475569"}}>ⓘ</span>
+                    </div>
+                  </Tip>
+                  {(() => {
+                    // Wenn Backend dim_target liefert → gruppieren. Sonst flat.
+                    const hasDim = side.top_features.some(f => f.dim_target);
+                    if (!hasDim) {
+                      return (
+                        <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                          {side.top_features.slice(0,4).map((f, i) => (
+                            <div key={i} style={{background:f.contrib > 0 ? "#14532d40" : "#7f1d1d40",
+                                                   border:`1px solid ${f.contrib > 0 ? "#22c55e60" : "#ef444460"}`,
+                                                   color:f.contrib > 0 ? "#86efac" : "#fca5a5",
+                                                   borderRadius:3,padding:"2px 6px",fontSize:10}}>
+                              {f.label} {f.contrib > 0 ? "+" : ""}{f.contrib.toFixed(2)}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    }
+                    // Gruppieren — Reihenfolge: height, wingspan, weight
+                    const groups = { height: [], wingspan: [], weight: [] };
+                    side.top_features.forEach(f => {
+                      const k = f.dim_target;
+                      if (groups[k]) groups[k].push(f);
+                    });
+                    const dimLabels = { height: "Height", wingspan: "Wingspan", weight: "Weight" };
+                    return (
+                      <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                        {["height","wingspan","weight"].map(dim => {
+                          const feats = groups[dim].slice(0,3);
+                          if (feats.length === 0) return null;
+                          return (
+                            <div key={dim}>
+                              <div style={{fontSize:9,color:"#64748b",marginBottom:2,letterSpacing:0.3}}>
+                                → {dimLabels[dim]}
+                              </div>
+                              <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                                {feats.map((f, i) => (
+                                  <div key={i} style={{background:f.contrib > 0 ? "#14532d40" : "#7f1d1d40",
+                                                         border:`1px solid ${f.contrib > 0 ? "#22c55e60" : "#ef444460"}`,
+                                                         color:f.contrib > 0 ? "#86efac" : "#fca5a5",
+                                                         borderRadius:3,padding:"2px 6px",fontSize:10}}>
+                                    {f.label} {f.contrib > 0 ? "+" : ""}{f.contrib.toFixed(2)}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -7703,6 +7867,41 @@ function BodyTab({p}) {
                 </div>
               </div>
             )}
+
+            {/* Sprint-3.37.G (Tobias 2026-06-16): Effective-Frame Sentence wenn
+                kein Combine-Measurement existiert. Plus Wir lassen die User
+                trotzdem wissen, wie der Spieler statistisch "spielt" — auch
+                ohne offizielle Anthro. Average aus def + off predictions. */}
+            {(() => {
+              const noWs = fs.actual.wingspan == null;
+              const noWt = fs.actual.weight == null;
+              if (!noWs && !noWt) return null;
+              const avgPred = (a, b) => {
+                const xs = [a, b].filter(x => x != null);
+                return xs.length ? xs.reduce((s,x) => s+x, 0) / xs.length : null;
+              };
+              const effWs = noWs ? avgPred(fs.defensive?.wingspan, fs.offensive?.wingspan) : null;
+              const effWt = noWt ? avgPred(fs.defensive?.weight, fs.offensive?.weight) : null;
+              const parts = [];
+              if (effWs != null) parts.push(<>an effective <strong style={{color:"#e5e7eb"}}>~{inchesToFt(effWs)} wingspan</strong></>);
+              if (effWt != null) parts.push(<>an effective <strong style={{color:"#e5e7eb"}}>~{Math.round(effWt)} lb frame</strong></>);
+              if (parts.length === 0) return null;
+              return (
+                <div style={{background:"#0a1424",border:"1px solid #1e3a5f",borderRadius:8,
+                              padding:"9px 12px",marginBottom:14,fontSize:11,color:"#cbd5e1",lineHeight:1.5}}>
+                  <span style={{color:"#93c5fd",fontWeight:600}}>Inferred frame</span>
+                  {" — "}
+                  no combine measurement on file, but his stat profile suggests he plays with{" "}
+                  {parts.map((p, i) => (
+                    <React.Fragment key={i}>
+                      {i > 0 && (i === parts.length - 1 ? " and " : ", ")}
+                      {p}
+                    </React.Fragment>
+                  ))}.
+                  <span style={{color:"#64748b"}}> Plus this is an inference from the predicted-vs-pool comparison, not a measurement — treat it as a stylistic descriptor, not a combine number.</span>
+                </div>
+              );
+            })()}
 
             <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
               <Side title="Defensive Frame" icon="🛡️" sideKey="defensive" side={fs.defensive} neutralOff={false}/>
@@ -8225,11 +8424,15 @@ function CompsV5Tab({p}) {
       {/* ─── PRIMARY: Individual Player Forecast (Sprint-3.12) ───
           The player-specific forecast from the 10c LightGBM model. This is the
           ACTUAL prediction for this player — it accounts for his individual
-          BPM, USG, age, anthro, recruit rank, advanced metrics etc., so it
-          properly discriminates between a top-5 pick and a second-rounder.
-          The Cohort and Cluster cards below are presented as historical
-          baselines / context for interpreting this primary forecast. */}
-      {indiv && (
+          BPM, USG, age, anthro, recruit rank, advanced metrics etc.
+
+          Sprint-3.37.A (Tobias 2026-06-16): Plus der Individual Forecast ist
+          im Comparison-Tab irreführend — er ist eine player-level Prediction,
+          KEIN Comp-Vergleich. Er gehört nur in den Overview/Forecast-Tab.
+          Gated mit `false && indiv` damit der Block dokumentiert im Code
+          bleibt und durch Flip wieder aktivierbar ist (gleiche Strategie wie
+          Sprint-3.15 für den Triangulated Forecast). */}
+      {false && indiv && (
         <div className="p-4 rounded-lg" style={{background:"#1a2942", border:"2px solid #3b82f6"}}>
           <div className="flex justify-between items-baseline mb-2">
             <div>
@@ -8300,8 +8503,10 @@ function CompsV5Tab({p}) {
         </div>
       )}
 
-      {/* Section divider — separates Primary from Baseline Context */}
-      {indiv && (co || cl) && (
+      {/* Sprint-3.37.A: Section divider mit dem Individual Forecast gegated.
+          Plus Ohne den Forecast-Hero macht "Historical baselines" als
+          Trenner keinen Sinn mehr — direkt zu den Cohort/Cluster Karten. */}
+      {false && indiv && (co || cl) && (
         <div className="flex items-center gap-3 text-xs" style={{color:"#64748b"}}>
           <div style={{flex:1, height:1, background:"#374151"}}/>
           <span>Historical baselines — how players matching this profile have actually performed</span>
