@@ -531,7 +531,64 @@ const BADGE_DEFS = {
   "High Maintenance":       { cat:"red",   rule:"CFFR < 40 (deep red zone of Net Possession Value)", desc:"Drains team possessions at a level rarely seen in NBA contributors. Net Possession Value is in the bottom ~8% of college players — multiple Four Factors (eFG / TO / OREB / FTR) are well below role expectation. Historical bust rate at this threshold is ~54% vs ~47% base." },
 };
 
-// ── Position group for badge logic (consistent with resolvePosition) ──
+// ── Sprint-3.40 Skill Intersections (Tobias 2026-06-16) ──────────────────
+// Constants pre-computed from data-pipeline/scripts/16_skill_intersections.py
+// against NBA-careered pool 2008-2020 (n=919, intl-supplemented via NFKD-join
+// on nba_added_wins_peak.csv). To refresh: re-run the script and copy the
+// extracted constants block. See `data/processed/skill_intersections.md`.
+//
+// Why only 2 pairs surfaced: continuous-slope regression (peak WA ~ min(z_a, z_b))
+// p < 0.05 with slope > +1.5 WA/+1σ ONLY for these two pairs. The four rejected
+// pairs are listed transparently in the UI footer.
+const SKILL_INTERSECTIONS = {
+  pos_stats: {
+    Playmaker: {ORB_per: {mu: 3.050,  sig: 1.487}, AST_per: {mu: 27.189, sig: 8.393}, blk_per: {mu: 0.924, sig: 0.777}},
+    Wing:      {ORB_per: {mu: 6.269,  sig: 3.582}, AST_per: {mu: 13.227, sig: 5.517}, blk_per: {mu: 2.244, sig: 1.924}},
+    Big:       {ORB_per: {mu: 10.871, sig: 3.047}, AST_per: {mu: 9.001,  sig: 4.628}, blk_per: {mu: 5.575, sig: 3.112}},
+  },
+  outcomes: {
+    crasher_distributor: {
+      Playmaker: {above: {n: 44, star: 47.7, bust: 22.7, meanWA: 9.06}, baseline: {n: 146, star: 23.3, bust: 43.8, meanWA: 4.23}},
+      Wing:      {above: {n: 62, star: 32.3, bust: 40.3, meanWA: 6.51}, baseline: {n: 479, star: 18.8, bust: 44.9, meanWA: 3.31}},
+      Big:       {above: {n: 36, star: 36.1, bust: 30.6, meanWA: 8.61}, baseline: {n: 152, star: 25.0, bust: 41.4, meanWA: 4.02}},
+    },
+    two_way_skill: {
+      Playmaker: {above: {n: 40, star: 50.0, bust: 20.0, meanWA: 9.70}, baseline: {n: 150, star: 23.3, bust: 44.0, meanWA: 4.19}},
+      Wing:      {above: {n: 70, star: 30.0, bust: 40.0, meanWA: 5.00}, baseline: {n: 471, star: 18.9, bust: 45.0, meanWA: 3.48}},
+      Big:       {above: {n: 27, star: 44.4, bust: 25.9, meanWA: 7.68}, baseline: {n: 161, star: 24.2, bust: 41.6, meanWA: 4.43}},
+    },
+  },
+  pairs: [
+    {
+      id: "crasher_distributor",
+      label: "Crasher + Distributor",
+      statA: "ORB_per", statB: "AST_per",
+      aLabel: "ORB%",   bLabel: "AST%",
+      color: "#a78bfa",
+      slope: "+2.03 WA per +1σ", slopeP: "p = 0.002",
+      hypothesis: "Crashers and distributors are mechanically anti-correlated (r = -0.55 in the pool): bigs rarely pass, guards rarely crash. Players above-avg in BOTH break the trade-off — historically a Jokic / Haliburton / Blake-Griffin signal.",
+      validators: "Nikola Jokic · Karl-Anthony Towns · Blake Griffin · Tyrese Haliburton · Ja Morant · Draymond Green · Kawhi Leonard",
+    },
+    {
+      id: "two_way_skill",
+      label: "Two-Way Skill (AST% × BLK%)",
+      statA: "AST_per", statB: "blk_per",
+      aLabel: "AST%",   bLabel: "BLK%",
+      color: "#22c55e",
+      slope: "+2.88 WA per +1σ", slopeP: "p < 0.001",
+      hypothesis: "Playmaking and rim protection are mechanically anti-correlated (r = -0.42 in the pool): point guards don't block, rim protectors don't pass. Above-avg in BOTH signals rare two-way utility — strongest single-pair effect we tested.",
+      validators: "Joel Embiid · Karl-Anthony Towns · Paul George · Draymond Green · Klay Thompson · John Wall · Tyrese Haliburton",
+    },
+  ],
+  rejected: [
+    {name: "3PAr × ORB% — Stretch + Crasher",  reason: "Wing-slope -0.18 (n.s.). Modern 3-and-D wings (Paul George, Otto Porter, OG Anunoby) are already above-avg in both — no unique edge beyond being a solid Wing."},
+    {name: "3PAr × FTR — Range + Fouled",      reason: "Global slope +0.62 borderline (p = 0.071). Only Lillard/Trae-type Playmaker micro-sample (n = 5) shows real lift."},
+    {name: "Rim Frequency × Low TO% — Driver", reason: "Pool r only -0.30; rim_freq mixes Bigs-rolling/Wings-cutting with actual drivers. No continuous signal."},
+    {name: "Rim Pressure × Low TO% — Driver",  reason: "Composite Rim Pressure barely anti-correlated with TO% (r = -0.14). Slope -0.08 (n.s.). The 'rim-attack increases turnovers' assumption doesn't show in pre-NBA data."},
+  ],
+};
+
+// Position group for badge logic (consistent with resolvePosition) ──
 function getBadgePos(p) {
   // If pos is already resolved to Playmaker/Wing/Big, use that
   const resolved = p.pos;
@@ -6609,6 +6666,133 @@ function ScoutingTab({p, mode="scouting"}) {
           })}
         </div>
       </Sec>
+
+      {/* ── SPRINT-3.40 SKILL INTERSECTIONS — z-score bars + outcome anchors ── */}
+      {(() => {
+        const posGroup = p.pos_group || p.pos;
+        if (!SKILL_INTERSECTIONS.pos_stats[posGroup]) return null;
+        const posStats = SKILL_INTERSECTIONS.pos_stats[posGroup];
+        // Compute z per stat: player vs position-pool μ/σ.
+        const zVal = (statKey) => {
+          const raw = p[statKey];
+          const m = posStats[statKey];
+          if (raw == null || !m || !m.sig) return null;
+          return (raw - m.mu) / m.sig;
+        };
+        // z-bar renderer: same style as Four Factors (left = below, right = above)
+        const Bar = ({z, color}) => {
+          if (z == null) return <div className="text-xs italic" style={{color:"#475569"}}>— stat missing</div>;
+          const barPct = Math.min(Math.abs(z) / 3 * 50, 50);
+          const isPos = z >= 0;
+          return (
+            <div className="relative h-7 rounded-lg overflow-hidden" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+              <div className="absolute top-0 bottom-0 w-0.5 z-10" style={{left:"50%",background:"#ffffff44"}}/>
+              {isPos
+                ? <div className="absolute top-1 bottom-1 rounded-r" style={{left:"50%",width:`${barPct}%`,background:`linear-gradient(90deg,${color}44,${color})`}}/>
+                : <div className="absolute top-1 bottom-1 rounded-l" style={{right:"50%",width:`${barPct}%`,background:`linear-gradient(270deg,${color}44,${color})`}}/>
+              }
+              <div className="absolute inset-0 flex items-center justify-between px-2 text-[10px]" style={{color:"#ffffff22"}}>
+                <span>−2σ</span><span>+2σ</span>
+              </div>
+            </div>
+          );
+        };
+        return (
+          <Sec icon="◈" title="Unique Skill Intersections (Anti-Correlated Pairs)" sub={`Two stat pairs that are historically anti-correlated in the NBA-careered pool (2008–2020, n=919). Being above-average in BOTH is structurally rare and historically tied to a meaningful peak-WA lift. Both bars are z-scores against the ${posGroup}-pool mean (μ, σ pre-computed). Anchors use the same pool.`}>
+            <div className="text-xs mb-4" style={{color:"#6b7280"}}>
+              <span style={{color:"#f97316"}}>No badges:</span> this is a continuous signal, not a binary label. Read the two bars and the anchor box together — what does it mean if a {posGroup} is at +1σ in both?
+            </div>
+            <div className="space-y-5">
+              {SKILL_INTERSECTIONS.pairs.map(pair => {
+                const za = zVal(pair.statA);
+                const zb = zVal(pair.statB);
+                const aboveBoth = (za != null && zb != null && za >= 0 && zb >= 0);
+                const outc = SKILL_INTERSECTIONS.outcomes[pair.id]?.[posGroup];
+                const statusColor = aboveBoth ? "#22c55e" : (za != null && zb != null) ? "#fbbf24" : "#6b7280";
+                const statusLabel = aboveBoth ? "Above-Avg in BOTH" : (za != null && zb != null) ? "Below avg in one" : "Insufficient data";
+                return (
+                  <div key={pair.id} className="rounded-xl p-5" style={{background:"#0d111788",border:`1px solid ${pair.color}33`}}>
+                    {/* Header */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <div className="text-base font-bold" style={{color:pair.color}}>{pair.label}</div>
+                        <div className="text-xs mt-0.5" style={{color:"#94a3b8"}}>Slope effect: <span style={{color:"#cbd5e1"}}>{pair.slope}</span> · {pair.slopeP}</div>
+                      </div>
+                      <div className="px-3 py-1 rounded-lg text-xs font-bold" style={{background:statusColor+"22",color:statusColor,border:`1px solid ${statusColor}55`}}>
+                        {statusLabel}
+                      </div>
+                    </div>
+
+                    {/* Bars */}
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <div className="flex justify-between items-baseline mb-1">
+                          <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>{pair.aLabel}</span>
+                          <span className="text-sm font-bold" style={{color:za != null && za >= 0 ? pair.color : "#ef4444",fontFamily:"'Oswald',sans-serif"}}>{za != null ? `${za>=0?"+":""}${za.toFixed(2)}σ` : "—"}</span>
+                        </div>
+                        <Bar z={za} color={pair.color}/>
+                      </div>
+                      <div>
+                        <div className="flex justify-between items-baseline mb-1">
+                          <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>{pair.bLabel}</span>
+                          <span className="text-sm font-bold" style={{color:zb != null && zb >= 0 ? pair.color : "#ef4444",fontFamily:"'Oswald',sans-serif"}}>{zb != null ? `${zb>=0?"+":""}${zb.toFixed(2)}σ` : "—"}</span>
+                        </div>
+                        <Bar z={zb} color={pair.color}/>
+                      </div>
+                    </div>
+
+                    {/* Hypothesis */}
+                    <div className="text-xs mb-3" style={{color:"#cbd5e1"}}>{pair.hypothesis}</div>
+
+                    {/* Outcome anchor — historical lift */}
+                    {outc && (
+                      <div className="grid grid-cols-2 gap-3 mb-3">
+                        <div className="rounded-lg p-3" style={{background:"#0d1117",border:`1px solid ${pair.color}44`}}>
+                          <div className="text-[10px] uppercase tracking-wider mb-1" style={{color:pair.color}}>Above-Avg in Both ({posGroup}, n={outc.above.n})</div>
+                          <div className="grid grid-cols-3 gap-1 text-[11px]">
+                            <div><span style={{color:"#6b7280"}}>Star+: </span><span className="font-bold" style={{color:"#22c55e"}}>{outc.above.star}%</span></div>
+                            <div><span style={{color:"#6b7280"}}>Bust: </span><span className="font-bold" style={{color:"#ef4444"}}>{outc.above.bust}%</span></div>
+                            <div><span style={{color:"#6b7280"}}>μ WA: </span><span className="font-bold" style={{color:"#fbbf24"}}>{outc.above.meanWA}</span></div>
+                          </div>
+                        </div>
+                        <div className="rounded-lg p-3" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+                          <div className="text-[10px] uppercase tracking-wider mb-1" style={{color:"#9ca3af"}}>Rest of {posGroup}-Pool (n={outc.baseline.n})</div>
+                          <div className="grid grid-cols-3 gap-1 text-[11px]">
+                            <div><span style={{color:"#6b7280"}}>Star+: </span><span className="font-bold" style={{color:"#9ca3af"}}>{outc.baseline.star}%</span></div>
+                            <div><span style={{color:"#6b7280"}}>Bust: </span><span className="font-bold" style={{color:"#9ca3af"}}>{outc.baseline.bust}%</span></div>
+                            <div><span style={{color:"#6b7280"}}>μ WA: </span><span className="font-bold" style={{color:"#9ca3af"}}>{outc.baseline.meanWA}</span></div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Validators */}
+                    <div className="text-[11px]" style={{color:"#6b7280"}}>
+                      <span style={{color:"#475569"}}>Historic above-avg validators:</span> <span style={{color:"#94a3b8"}}>{pair.validators}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Rejected pairs — transparency footer */}
+            <div className="mt-5 rounded-xl p-4" style={{background:"#0d111766",border:"1px solid #1f2937"}}>
+              <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#6b7280"}}>Also Tested — Not Significant</div>
+              <div className="text-[11px] mb-3" style={{color:"#94a3b8"}}>
+                These pairs we hypothesized as anti-correlated trade-offs and tested with the same z-score regression. None hit p &lt; 0.05 with a slope &gt; +1.5 WA/+1σ.
+              </div>
+              <div className="space-y-2">
+                {SKILL_INTERSECTIONS.rejected.map((r,i)=>(
+                  <div key={i} className="text-[11px] flex gap-2 items-baseline">
+                    <span style={{color:"#ef4444"}}>✗</span>
+                    <span><span className="font-semibold" style={{color:"#cbd5e1"}}>{r.name}</span> <span style={{color:"#6b7280"}}>— {r.reason}</span></span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Sec>
+        );
+      })()}
 
       {/* Tobias 2026-06-03 v13: Game-by-Game Skill Curve removed — see backlog Task #21 */}
       </>)}
