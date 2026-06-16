@@ -194,17 +194,29 @@ def main():
     print(f"  No match in CSV:      {n_no_match:,}")
     print(f"  ✓ Updated with usageReaction: {n_updated:,}")
 
-    # ── Self-Verify: count profiles with usageReaction field ──
+    # ── Self-Verify: decompress sample of updated profiles ──
+    # Plus the data column is zlib-compressed (build_db.py compress(p)), so
+    # a LIKE substring search on it is meaningless. We sample 200 profiles
+    # at random offsets and decompress to actually verify the field landed.
     verify_conn = sqlite3.connect(DB)
-    n_with_field = verify_conn.execute(
-        "SELECT COUNT(*) FROM profiles WHERE data LIKE ?",
-        ('%"usageReaction"%',),
-    ).fetchone()[0]
+    n_with_field = 0
+    n_checked = 0
+    for row in verify_conn.execute("SELECT data FROM profiles ORDER BY random() LIMIT 200"):
+        try:
+            d = json.loads(zlib.decompress(row[0]).decode("utf-8"))
+            n_checked += 1
+            if "usageReaction" in d:
+                n_with_field += 1
+        except Exception:
+            continue
     verify_conn.close()
-    print(f"  ✓ Verify: profiles containing usageReaction field: {n_with_field:,}")
+    print(f"  ✓ Verify (random sample of {n_checked}): {n_with_field} carry usageReaction")
 
-    if n_with_field == 0 and n_updated > 0:
-        print("❌ CRITICAL: updates reported but verify shows 0 — commit didn't persist!")
+    # Expectation: about (n_updated / total) of the sample should have the field.
+    # If we report >0 updates but sample comes back at exactly 0 across 200 rows,
+    # something is structurally wrong with persistence.
+    if n_with_field == 0 and n_updated > 50:
+        print("❌ CRITICAL: many updates reported but sample-verify shows 0 — investigate persistence")
         sys.exit(1)
 
 
