@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, Fragment } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, Cell, ResponsiveContainer, AreaChart, Area, CartesianGrid } from "recharts";
 
 // ═══════════════════════════════════════════════════════════
@@ -7892,11 +7892,11 @@ function BodyTab({p}) {
                   <span style={{color:"#93c5fd",fontWeight:600}}>Inferred frame</span>
                   {" — "}
                   no combine measurement on file, but his stat profile suggests he plays with{" "}
-                  {parts.map((p, i) => (
-                    <React.Fragment key={i}>
+                  {parts.map((part, i) => (
+                    <Fragment key={i}>
                       {i > 0 && (i === parts.length - 1 ? " and " : ", ")}
-                      {p}
-                    </React.Fragment>
+                      {part}
+                    </Fragment>
                   ))}.
                   <span style={{color:"#64748b"}}> Plus this is an inference from the predicted-vs-pool comparison, not a measurement — treat it as a stylistic descriptor, not a combine number.</span>
                 </div>
