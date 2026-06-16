@@ -7509,13 +7509,20 @@ function BodyTab({p}) {
 
         const FrameBar = ({label, sublabel, actual, predicted, delta, residual, semantics, unit = '"', range = 5}) => {
           if (predicted == null) return null;
-          // Sprint-3.37.J (Tobias 2026-06-16): Predicted-only Modus wenn kein
-          // Measurement existiert. Plus Vor dem Fix wurde der Balken komplett
-          // ausgeblendet (delta == null → return null) — bei 2026er prospects
-          // fehlt das Combine-Weight fast immer, dadurch verschwand der Weight-
-          // Strahl. Plus jetzt: zeige predicted-only Banner mit dashed border,
-          // ohne Δ-Visualisierung. Sentence-Form statt Vergleichs-Bar.
+          // Sprint-3.37.J + 3.39.F (Tobias 2026-06-16): Predicted-only Modus mit
+          // Strahl-Optik (statt Banner-Sentence). Plus konsistent zum
+          // Δ-Strahl-Pattern der Standard-FrameBars: predicted wird auf einer
+          // Pool-Range visualisiert (h: 70-90", ws: 72-94", wt: 160-300 lbs).
+          // Plus dashed border + "no measurement" Hint machen den predicted-only
+          // Modus visuell unterscheidbar — semantik klar ohne UI-Inkonsistenz.
           if (delta == null) {
+            // Pool-Range pro Dimension (mid-cohort visual context)
+            const poolRange = unit === '"'
+              ? (label === "Height" ? { min: 70, max: 90 } : { min: 72, max: 94 })
+              : { min: 160, max: 300 };
+            const pctOnRange = Math.max(2, Math.min(98,
+              ((predicted - poolRange.min) / (poolRange.max - poolRange.min)) * 100
+            ));
             return (
               <div style={{width:"100%",marginBottom:10}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:3}}>
@@ -7523,17 +7530,28 @@ function BodyTab({p}) {
                     <span style={{fontSize:11,fontWeight:600,color:"#e5e7eb"}}>{label}</span>
                     <span style={{fontSize:9,color:"#6b7280"}}>{sublabel}</span>
                   </div>
-                  <span style={{fontSize:10,color:"#64748b",fontStyle:"italic"}}>
-                    no measurement on file
-                  </span>
+                  <div style={{textAlign:"right"}}>
+                    <span style={{fontSize:10,color:"#64748b",fontStyle:"italic",marginRight:6}}>
+                      no measurement
+                    </span>
+                    <span style={{fontSize:13,fontWeight:700,color:"#93c5fd",fontFamily:"Oswald,sans-serif"}}>
+                      {unit === '"' ? inchesToFt(predicted) : `${Math.round(predicted)} lbs`}
+                    </span>
+                  </div>
                 </div>
-                <div style={{background:"#0a1424",border:"1px dashed #1e3a5f",
-                              borderRadius:4,padding:"5px 10px",fontSize:11,
-                              color:"#cbd5e1",textAlign:"center",lineHeight:1.4}}>
-                  Plays as if he were{" "}
-                  <strong style={{color:"#93c5fd",fontWeight:600,fontFamily:"Oswald,sans-serif",fontSize:13}}>
-                    {unit === '"' ? inchesToFt(predicted) : `${Math.round(predicted)} lbs`}
-                  </strong>
+                <div style={{position:"relative",background:"#1f2937",borderRadius:4,height:7,
+                              border:"1px dashed #1e3a5f"}}>
+                  <div style={{position:"absolute",left:`calc(${pctOnRange}% - 3px)`,top:-2,
+                                width:6,height:11,background:"#93c5fd",borderRadius:2,
+                                boxShadow:"0 0 4px #3b82f6aa"}}/>
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:8,
+                              color:"#475569",marginTop:2}}>
+                  <span>{unit === '"' ? inchesToFt(poolRange.min) : `${poolRange.min} lbs`}</span>
+                  <span style={{fontStyle:"italic"}}>
+                    pool range · predicted only
+                  </span>
+                  <span>{unit === '"' ? inchesToFt(poolRange.max) : `${poolRange.max} lbs`}</span>
                 </div>
               </div>
             );
@@ -8405,6 +8423,32 @@ function CompsV5Tab({p}) {
     trajectory: "Year-over-year development slopes",
     outcome:    "Same age-stage NBA outcome matches",
   };
+  // Sprint-3.39.C (Tobias 2026-06-16): Hover-Erklärungen für die 5 Dimensionen
+  // im Comp Tab. Plus simple-aber-nicht-zu-simple Format: "WAS fließt rein +
+  // WELCHE Frage beantwortet die Dimension?" — keine R²/Validations-Werte
+  // (das gehört in den Methods Tab).
+  const DIM_HOVER = {
+    style: {
+      title: "Style — how he plays",
+      body: "Shot distribution + role footprint. Plus features: rim/mid/3-point shot share, usage%, role scores (scorer/playmaker/spacer/driver/crasher), archetype tag. Plus answers: who shoots from where + fills the same role?",
+    },
+    skill: {
+      title: "Skill — how good he is",
+      body: "Efficiency + advanced metrics (era-adjusted). Plus features: BPM, TS%, eFG%, AST/TO ratio, OBPM, DBPM, position-percentile rank. Plus answers: who hits + reads the game at the same level?",
+    },
+    physical: {
+      title: "Physical — how he's built",
+      body: "Height + wingspan + position-aware build. Plus features: listed height, wingspan (measured or stats-imputed), weight, position group. Plus answers: who has the same frame + plays the same position?",
+    },
+    trajectory: {
+      title: "Trajectory — how he develops",
+      body: "Year-over-year development slopes. Plus features: BPM slope, OrtG slope, TS% slope from multi-season data. Plus only computed for players with ≥2 seasons. Plus answers: who's improving (or stagnating) at the same rate?",
+    },
+    outcome: {
+      title: "Outcome — who succeeded like him",
+      body: "Age-stage NBA outcome matches. Plus features: same draft age ±1 year, same position group, NBA-careered only, kernel-weighted by projected-value proximity. Plus answers: who entered at the same age + position and how did they end up?",
+    },
+  };
 
   // Sprint-3.10.C fix (Tobias 2026-06-13): two dimensions ignore the
   // NBA toggle and ALWAYS read from the full pool:
@@ -8891,14 +8935,21 @@ function CompsV5Tab({p}) {
           return (
             <div key={dim} className="p-4 rounded-lg" style={{background:"#1f2937", border:"1px solid #374151"}}>
               <div className="flex justify-between items-baseline mb-3">
-                <div>
-                  <div className="text-sm font-semibold" style={{color:accent}}>
-                    {DIM_LABELS[dim]}
+                <Tip content={
+                  <div style={{color:"#cbd5e1",maxWidth:340,fontSize:11,lineHeight:1.5}}>
+                    <div style={{fontWeight:600,color:accent,marginBottom:4}}>{DIM_HOVER[dim].title}</div>
+                    {DIM_HOVER[dim].body}
                   </div>
-                  <div className="text-xs" style={{color:"#9ca3af"}}>
-                    {DIM_SUBTITLES[dim]}
+                }>
+                  <div style={{cursor:"help"}}>
+                    <div className="text-sm font-semibold" style={{color:accent}}>
+                      {DIM_LABELS[dim]} <span style={{color:"#475569",fontSize:10,fontWeight:400}}>ⓘ</span>
+                    </div>
+                    <div className="text-xs" style={{color:"#9ca3af"}}>
+                      {DIM_SUBTITLES[dim]}
+                    </div>
                   </div>
-                </div>
+                </Tip>
                 <div className="text-xs" style={{color:"#475569"}}>{comps.length}</div>
               </div>
               {comps.length === 0 ? (
