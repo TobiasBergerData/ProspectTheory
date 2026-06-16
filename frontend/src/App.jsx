@@ -5140,10 +5140,57 @@ function MindTab({p}) {
 
 
 // ═══════════════════════════════════════════════════════════
-// Sprint-3.41 — H1/H2 Box-Score Splits (Tobias 2026-06-16)
+// Sprint-3.41/3.42 — H1/H2 Box-Score Splits (Tobias 2026-06-16)
 // 13 rate-Stats H1 vs H2 from PBP (garbage time excluded).
 // Source: p.halfSplits = {season, h1: {counts}, h2: {counts}, sample_floor_pass}
+//
+// Sprint-3.42 (2026-06-16): empirische Percentile-Calibration aus dem
+// 2025-26 NCAA-Pool (n=5483, ≥10 min/half). NCAA-Spieler werden im H2
+// MEISTENS besser (Median Δ TS%=+3.1pp), nicht schlechter — Color-coding
+// muss daher relativ zum Pool sein, nicht naiv sign-of-Δ. "Concerning"
+// heißt unter p10 für upside-stats, über p90 für TO%.
 // ═══════════════════════════════════════════════════════════
+const HALF_SPLIT_PERCENTILES = {
+  // Δ (H2 - H1), computed from 2025-26 NCAA pool (n=5483 with ≥10 min/half)
+  ts:       {p10: -19.0, p25: -4.9,  p50: +3.1,  p75: +11.2, p90: +24.0},
+  efg:      {p10: -21.6, p25: -6.9,  p50: +1.7,  p75: +10.9, p90: +25.0},
+  fg:       {p10: -16.7, p25: -5.0,  p50: +2.1,  p75: +9.8,  p90: +21.9},
+  ft:       {p10: -24.9, p25: -9.3,  p50:  0.0,  p75: +10.0, p90: +24.9},
+  ftr:      {p10: -0.17, p25:  0.0,  p50: +0.12, p75: +0.27, p90: +0.45},
+  usg:      {p10: -24.5, p25: -12.7, p50: -3.2,  p75: +2.0,  p90: +12.5},
+  to_pct:   {p10: -11.8, p25: -4.4,  p50: -0.5,  p75: +2.1,  p90: +9.0},
+  ast_fga:  {p10: -0.18, p25: -0.07, p50:  0.0,  p75: +0.07, p90: +0.21},
+  stl_fga:  {p10: -0.13, p25: -0.05, p50:  0.0,  p75: +0.04, p90: +0.15},
+  blk_fga:  {p10: -0.08, p25: -0.02, p50:  0.0,  p75: +0.02, p90: +0.08},
+  orb_fga:  {p10: -0.14, p25: -0.03, p50:  0.0,  p75: +0.06, p90: +0.18},
+  drb_fga:  {p10: -0.30, p25: -0.12, p50: -0.01, p75: +0.10, p90: +0.29},
+  ppp:      {p10: -0.34, p25: -0.08, p50: +0.07, p75: +0.22, p90: +0.45},
+};
+const HALF_SPLIT_POOL_N = 5483;
+
+// Plus computes the player's empirical percentile rank (0-100) for a
+// given Δ — linear interpolation between p10/p25/p50/p75/p90.
+function _halfSplitPercentile(delta, pcts) {
+  if (delta == null || !pcts) return null;
+  const x = [pcts.p10, pcts.p25, pcts.p50, pcts.p75, pcts.p90];
+  const y = [10, 25, 50, 75, 90];
+  if (delta <= x[0]) {
+    // Below p10: extrapolate down to ~0
+    const span = Math.max(0.1, x[0] - (x[0] - (x[1] - x[0])));
+    return Math.max(0, 10 * (1 - (x[0] - delta) / Math.max(0.1, x[1] - x[0])));
+  }
+  if (delta >= x[4]) {
+    return Math.min(100, 90 + 10 * (delta - x[4]) / Math.max(0.1, x[4] - x[3]));
+  }
+  for (let i = 0; i < x.length - 1; i++) {
+    if (delta <= x[i+1]) {
+      const t = (delta - x[i]) / Math.max(0.001, x[i+1] - x[i]);
+      return y[i] + t * (y[i+1] - y[i]);
+    }
+  }
+  return 50;
+}
+
 function HalfSplitSection({p}) {
   const hs = p?.halfSplits;
   if (!hs || !hs.h1 || !hs.h2) return null;
@@ -5198,38 +5245,51 @@ function HalfSplitSection({p}) {
       val: (h)=> poss(h) > 0 ? pts(h) / poss(h) : null },
   ];
 
-  // Compute deltas + direction
+  // Compute deltas, percentile rank vs NCAA pool, direction-score
   const computed = HALF_STATS.map(s => {
     const v1 = s.val(h1);
     const v2 = s.val(h2);
-    if (v1 == null || v2 == null) return {...s, v1: null, v2: null, delta: null, direction: 0};
+    if (v1 == null || v2 == null) return {...s, v1: null, v2: null, delta: null, pctl: null, dirScore: 0};
     const delta = v2 - v1;
-    // direction = +1 if shift is favourable for the player, -1 if unfavourable, 0 if neutral
-    let direction = 0;
-    if (s.good === "up")   direction = delta > 0 ? +1 : (delta < 0 ? -1 : 0);
-    if (s.good === "down") direction = delta < 0 ? +1 : (delta > 0 ? -1 : 0);
-    // neutral remains 0
-    return {...s, v1, v2, delta, direction};
+    const pcts = HALF_SPLIT_PERCENTILES[s.id];
+    const rawPctl = _halfSplitPercentile(delta, pcts);  // 0-100 of raw Δ
+    // For "down is good" stats, flip the percentile (high Δ TO% = bad direction)
+    const pctl = (s.good === "down" && rawPctl != null) ? 100 - rawPctl : rawPctl;
+    // dirScore in [-1, +1]: how far above (good) / below (bad) the typical NCAA pattern
+    let dirScore = 0;
+    if (pctl != null) {
+      dirScore = (pctl - 50) / 50;   // -1 = p0 (worst), +1 = p100 (best)
+    }
+    if (s.good === "neutral") dirScore = 0;
+    return {...s, v1, v2, delta, pctl, dirScore};
   });
 
-  // Verdict logic: count directional stats
+  // Verdict: average dirScore over the directional stats
   const directional = computed.filter(s => s.good !== "neutral" && s.delta !== null);
-  const score = directional.reduce((acc, s) => acc + s.direction, 0);
-  const total = directional.length || 1;
-  let verdict = "Stable across halves";
-  let verdictColor = "#9ca3af";
-  if (score >= Math.ceil(total * 0.35)) {
-    verdict = "Late-game riser — efficiency and activity tick up in H2";
+  const avgDir = directional.length > 0
+    ? directional.reduce((acc, s) => acc + s.dirScore, 0) / directional.length
+    : 0;
+
+  // Plus "extreme" counts — stats where the player is in the tails relative to NCAA peers
+  const strongPos = directional.filter(s => s.pctl >= 75).length;
+  const strongNeg = directional.filter(s => s.pctl <= 25).length;
+
+  let verdict, verdictColor;
+  if (avgDir >= 0.30) {
+    verdict = "Late-game riser — well above the typical NCAA H2 lift";
     verdictColor = "#22c55e";
-  } else if (score <= -Math.ceil(total * 0.35)) {
-    verdict = "Mid-game peaker — efficiency and activity drop in H2";
+  } else if (avgDir <= -0.30) {
+    verdict = "Mid-game peaker — fades clearly below the typical NCAA H2 lift";
     verdictColor = "#ef4444";
-  } else if (score > 0) {
-    verdict = "Slightly improves in H2 (mixed signal)";
+  } else if (avgDir >= 0.10) {
+    verdict = "Mildly improves vs peers in H2";
     verdictColor = "#86efac";
-  } else if (score < 0) {
-    verdict = "Slightly fades in H2 (mixed signal)";
+  } else if (avgDir <= -0.10) {
+    verdict = "Mildly fades vs peers in H2";
     verdictColor = "#fbbf24";
+  } else {
+    verdict = "Tracks the typical NCAA H2 pattern";
+    verdictColor = "#9ca3af";
   }
 
   const fmtVal = (v, fmt) => {
@@ -5250,7 +5310,7 @@ function HalfSplitSection({p}) {
 
   return (
     <Sec icon="🌡" title="First vs Second Half — Stamina & Concentration"
-         sub={`Box-stat split across both halves of this season's games. Garbage time (lead >20 in last 5 min, or >12 in last 2 min) excluded. Rates use possession or FGA normalisation, so minute-tracking noise doesn't bias the signal.`}>
+         sub={`Box-stat split across this season's games. NCAA players typically improve in H2 (median TS% +3pp) once they've read the defence and warmed up. Color is relative to the 2025-26 NCAA pool (n=${HALF_SPLIT_POOL_N.toLocaleString()}, ≥10 min/half): green = above-typical lift, red = unusual fade vs peers. Garbage time excluded.`}>
       {!hs.sample_floor_pass && (
         <div className="rounded-lg p-3 mb-4 text-xs"
              style={{background:"#fbbf2411",border:"1px solid #fbbf2444",color:"#fcd34d"}}>
@@ -5262,13 +5322,16 @@ function HalfSplitSection({p}) {
       <div className="rounded-xl p-4 mb-4 flex items-center justify-between"
            style={{background:"#0d111788",border:`1px solid ${verdictColor}55`}}>
         <div>
-          <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#9ca3af"}}>Verdict</div>
+          <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#9ca3af"}}>Verdict (vs NCAA peers)</div>
           <div className="text-base font-semibold" style={{color:verdictColor}}>{verdict}</div>
+          <div className="text-[11px] mt-1" style={{color:"#6b7280"}}>
+            {strongPos} stat{strongPos===1?"":"s"} above peer-typical (≥p75) · {strongNeg} below (≤p25)
+          </div>
         </div>
         <div className="text-right text-xs" style={{color:"#6b7280"}}>
-          <div>Directional score</div>
-          <div className="text-xl font-bold" style={{color:verdictColor,fontFamily:"'Oswald',sans-serif"}}>
-            {score >= 0 ? "+" : ""}{score} / {total}
+          <div>Avg peer percentile</div>
+          <div className="text-2xl font-bold" style={{color:verdictColor,fontFamily:"'Oswald',sans-serif"}}>
+            {Math.round(50 + avgDir * 50)}<span className="text-sm" style={{color:"#6b7280"}}>th</span>
           </div>
         </div>
       </div>
@@ -5288,32 +5351,60 @@ function HalfSplitSection({p}) {
             );
           }
 
-          // Bar magnitude: normalize per stat type so all bars are comparable
-          let normMax;
-          if (s.fmt === "pct")   normMax = 8;     // 8pp is a "big" half-to-half delta
-          else if (s.fmt === "ratio") normMax = 0.15;
-          else normMax = Math.max(10, Math.abs(s.delta) * 1.5);
-          const barPct = Math.min(Math.abs(s.delta) / normMax * 50, 50);
+          // Bar magnitude: based on player's percentile rank vs NCAA peers.
+          // Bar fills from center to 0/100 proportionally. 50th pctl = no bar.
+          const pctl = s.pctl ?? 50;
+          const barPct = Math.abs(pctl - 50);   // 0-50 (centered, both sides)
+          const isAbovePeer = pctl >= 50;
 
-          const color = s.direction > 0 ? "#22c55e"
-                       : s.direction < 0 ? "#ef4444"
-                       : "#9ca3af";
+          // Color spectrum based on percentile distance from peer-typical
+          let color;
+          if (s.good === "neutral") {
+            color = "#9ca3af";
+          } else if (pctl >= 90)      color = "#22c55e";
+          else if (pctl >= 75)        color = "#86efac";
+          else if (pctl >= 60)        color = "#bbf7d0";
+          else if (pctl <= 10)        color = "#ef4444";
+          else if (pctl <= 25)        color = "#fca5a5";
+          else if (pctl <= 40)        color = "#fecaca";
+          else                        color = "#9ca3af";   // 40-60 = peer-typical
+
+          // Plus "callout" badge for extreme tail values
+          let tail = null;
+          if (s.good !== "neutral") {
+            if (pctl >= 90) tail = {label: "Top 10%", color: "#22c55e"};
+            else if (pctl >= 75) tail = {label: "Above-typical", color: "#86efac"};
+            else if (pctl <= 10) tail = {label: "Bottom 10%", color: "#ef4444"};
+            else if (pctl <= 25) tail = {label: "Below-typical", color: "#fca5a5"};
+          }
+
+          // Peer-typical Δ reference (median of pool)
+          const peerMedian = HALF_SPLIT_PERCENTILES[s.id]?.p50;
 
           return (
             <Tip key={s.id} block wide content={
               <div>
                 <div className="font-bold mb-1" style={{color:color}}>{s.label}</div>
-                <div className="text-xs" style={{color:"#cbd5e1"}}>{s.desc}</div>
-                <div className="text-[11px] mt-2" style={{color:"#9ca3af"}}>
-                  "Up" interpretation: {s.good === "up" ? "higher = better (stamina + execution)"
-                                       : s.good === "down" ? "higher = WORSE (fatigue / focus loss)"
-                                       : "neutral — depends on role"}
+                <div className="text-xs mb-2" style={{color:"#cbd5e1"}}>{s.desc}</div>
+                <div className="text-[11px]" style={{color:"#94a3b8"}}>
+                  Player Δ: <span style={{color:"#e5e7eb"}}>{fmtDelta(s.delta, s.fmt)}</span>
+                  &nbsp;·&nbsp;
+                  NCAA median Δ: <span style={{color:"#e5e7eb"}}>{fmtDelta(peerMedian, s.fmt)}</span>
+                  &nbsp;·&nbsp;
+                  Percentile vs peers: <span style={{color:color}}>{Math.round(pctl)}th</span>
+                </div>
+                <div className="text-[11px] mt-2" style={{color:"#6b7280"}}>
+                  Good direction: {s.good === "up" ? "higher Δ = better" : s.good === "down" ? "lower Δ = better (TO%)" : "neutral"}
                 </div>
               </div>
             }>
               <div className="cursor-help">
                 <div className="flex items-center justify-between text-sm mb-1">
-                  <span style={{color:"#cbd5e1"}}>{s.label} <span style={{color:"#475569"}}>ⓘ</span></span>
+                  <span style={{color:"#cbd5e1"}}>
+                    {s.label} <span style={{color:"#475569"}}>ⓘ</span>
+                    {tail && <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold"
+                                   style={{background:tail.color+"22",color:tail.color,border:`1px solid ${tail.color}55`}}>{tail.label}</span>}
+                  </span>
                   <div className="flex items-center gap-3 text-xs">
                     <span style={{color:"#9ca3af"}}>H1 <span style={{color:"#e5e7eb"}}>{fmtVal(s.v1, s.fmt)}</span></span>
                     <span style={{color:"#475569"}}>→</span>
@@ -5324,8 +5415,8 @@ function HalfSplitSection({p}) {
                   </div>
                 </div>
                 <div className="relative h-7 rounded overflow-hidden" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
-                  <div className="absolute top-0 bottom-0 w-0.5 z-10" style={{left:"50%", background:"#ffffff22"}}/>
-                  {s.delta >= 0 ? (
+                  <div className="absolute top-0 bottom-0 w-0.5 z-10" style={{left:"50%", background:"#ffffff44"}}/>
+                  {isAbovePeer ? (
                     <div className="absolute top-1 bottom-1 rounded-r"
                          style={{left:"50%", width:`${barPct}%`, background:`linear-gradient(90deg,${color}33,${color})`}}/>
                   ) : (
@@ -5333,7 +5424,7 @@ function HalfSplitSection({p}) {
                          style={{right:"50%", width:`${barPct}%`, background:`linear-gradient(270deg,${color}33,${color})`}}/>
                   )}
                   <div className="absolute inset-0 flex items-center justify-between px-2 text-[10px]" style={{color:"#ffffff22"}}>
-                    <span>H2 down</span><span>H2 up</span>
+                    <span>Below peers</span><span>Above peers</span>
                   </div>
                 </div>
               </div>
