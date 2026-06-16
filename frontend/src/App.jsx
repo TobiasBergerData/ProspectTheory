@@ -561,12 +561,11 @@ const SKILL_INTERSECTIONS = {
   pairs: [
     {
       id: "crasher_distributor",
-      label: "Crasher + Distributor",
+      label: "Crasher + Distributor (ORB% × AST%)",
       statA: "ORB_per", statB: "AST_per",
       aLabel: "ORB%",   bLabel: "AST%",
       color: "#a78bfa",
-      slope: "+2.03 WA per +1σ", slopeP: "p = 0.002",
-      hypothesis: "Crashers and distributors are mechanically anti-correlated (r = -0.55 in the pool): bigs rarely pass, guards rarely crash. Players above-avg in BOTH break the trade-off — historically a Jokic / Haliburton / Blake-Griffin signal.",
+      hypothesis: "Bigs rarely pass, point guards rarely crash. A player above his position's average in BOTH breaks a structural trade-off. Historically a Jokic / Blake Griffin / Haliburton signal.",
       validators: "Nikola Jokic · Karl-Anthony Towns · Blake Griffin · Tyrese Haliburton · Ja Morant · Draymond Green · Kawhi Leonard",
     },
     {
@@ -575,16 +574,15 @@ const SKILL_INTERSECTIONS = {
       statA: "AST_per", statB: "blk_per",
       aLabel: "AST%",   bLabel: "BLK%",
       color: "#22c55e",
-      slope: "+2.88 WA per +1σ", slopeP: "p < 0.001",
-      hypothesis: "Playmaking and rim protection are mechanically anti-correlated (r = -0.42 in the pool): point guards don't block, rim protectors don't pass. Above-avg in BOTH signals rare two-way utility — strongest single-pair effect we tested.",
+      hypothesis: "Point guards don't block shots, rim protectors don't run the offense. A player above his position's average in BOTH signals rare two-way utility — Embiid / KAT / Paul George / Draymond territory.",
       validators: "Joel Embiid · Karl-Anthony Towns · Paul George · Draymond Green · Klay Thompson · John Wall · Tyrese Haliburton",
     },
   ],
   rejected: [
-    {name: "3PAr × ORB% — Stretch + Crasher",  reason: "Wing-slope -0.18 (n.s.). Modern 3-and-D wings (Paul George, Otto Porter, OG Anunoby) are already above-avg in both — no unique edge beyond being a solid Wing."},
-    {name: "3PAr × FTR — Range + Fouled",      reason: "Global slope +0.62 borderline (p = 0.071). Only Lillard/Trae-type Playmaker micro-sample (n = 5) shows real lift."},
-    {name: "Rim Frequency × Low TO% — Driver", reason: "Pool r only -0.30; rim_freq mixes Bigs-rolling/Wings-cutting with actual drivers. No continuous signal."},
-    {name: "Rim Pressure × Low TO% — Driver",  reason: "Composite Rim Pressure barely anti-correlated with TO% (r = -0.14). Slope -0.08 (n.s.). The 'rim-attack increases turnovers' assumption doesn't show in pre-NBA data."},
+    {name: "3PAr × ORB%",            reason: "Modern 3-and-D wings (Paul George, Otto Porter, OG Anunoby) tend to be above-avg in both anyway — no additional edge over just being a solid Wing."},
+    {name: "3PAr × FTR",             reason: "Only a handful of Playmakers (Lillard, Trae) hit this combination. Sample too small for a reliable signal."},
+    {name: "Rim Frequency × Low TO%", reason: "Rim-frequency mixes rolling bigs, cutting wings, and actual drivers — signal too noisy to be useful."},
+    {name: "Rim Pressure × Low TO%",  reason: "Rim-attack and turnover-rate are practically uncorrelated in college. The 'driving leads to more turnovers' trade-off doesn't show up."},
   ],
 };
 
@@ -6667,125 +6665,85 @@ function ScoutingTab({p, mode="scouting"}) {
         </div>
       </Sec>
 
-      {/* ── SPRINT-3.40 SKILL INTERSECTIONS — z-score bars + outcome anchors ── */}
+      {/* ── SPRINT-3.40 SKILL INTERSECTIONS — Four-Factors-style bars ── */}
       {(() => {
         const posGroup = p.pos_group || p.pos;
         if (!SKILL_INTERSECTIONS.pos_stats[posGroup]) return null;
         const posStats = SKILL_INTERSECTIONS.pos_stats[posGroup];
-        // Compute z per stat: player vs position-pool μ/σ.
+        // z per stat against the position-pool mean
         const zVal = (statKey) => {
           const raw = p[statKey];
           const m = posStats[statKey];
           if (raw == null || !m || !m.sig) return null;
           return (raw - m.mu) / m.sig;
         };
-        // z-bar renderer: same style as Four Factors (left = below, right = above)
-        const Bar = ({z, color}) => {
-          if (z == null) return <div className="text-xs italic" style={{color:"#475569"}}>— stat missing</div>;
-          const barPct = Math.min(Math.abs(z) / 3 * 50, 50);
-          const isPos = z >= 0;
-          return (
-            <div className="relative h-7 rounded-lg overflow-hidden" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
-              <div className="absolute top-0 bottom-0 w-0.5 z-10" style={{left:"50%",background:"#ffffff44"}}/>
-              {isPos
-                ? <div className="absolute top-1 bottom-1 rounded-r" style={{left:"50%",width:`${barPct}%`,background:`linear-gradient(90deg,${color}44,${color})`}}/>
-                : <div className="absolute top-1 bottom-1 rounded-l" style={{right:"50%",width:`${barPct}%`,background:`linear-gradient(270deg,${color}44,${color})`}}/>
-              }
-              <div className="absolute inset-0 flex items-center justify-between px-2 text-[10px]" style={{color:"#ffffff22"}}>
-                <span>−2σ</span><span>+2σ</span>
-              </div>
-            </div>
-          );
-        };
         return (
-          <Sec icon="◈" title="Unique Skill Intersections (Anti-Correlated Pairs)" sub={`Two stat pairs that are historically anti-correlated in the NBA-careered pool (2008–2020, n=919). Being above-average in BOTH is structurally rare and historically tied to a meaningful peak-WA lift. Both bars are z-scores against the ${posGroup}-pool mean (μ, σ pre-computed). Anchors use the same pool.`}>
-            <div className="text-xs mb-4" style={{color:"#6b7280"}}>
-              <span style={{color:"#f97316"}}>No badges:</span> this is a continuous signal, not a binary label. Read the two bars and the anchor box together — what does it mean if a {posGroup} is at +1σ in both?
-            </div>
-            <div className="space-y-5">
+          <Sec icon="◈" title="Skill Intersections" sub="Two stat pairs that don't usually go together at the college level. A player above his position's average in BOTH carries a meaningful peak-outcome lift — bigs who pass like guards, point guards who block like rim protectors. The bar shows the weaker of the two stats, because the intersection only counts when both are above average.">
+            <div className="space-y-4">
               {SKILL_INTERSECTIONS.pairs.map(pair => {
                 const za = zVal(pair.statA);
                 const zb = zVal(pair.statB);
-                const aboveBoth = (za != null && zb != null && za >= 0 && zb >= 0);
                 const outc = SKILL_INTERSECTIONS.outcomes[pair.id]?.[posGroup];
-                const statusColor = aboveBoth ? "#22c55e" : (za != null && zb != null) ? "#fbbf24" : "#6b7280";
-                const statusLabel = aboveBoth ? "Above-Avg in BOTH" : (za != null && zb != null) ? "Below avg in one" : "Insufficient data";
+                if (za == null || zb == null) {
+                  return (
+                    <div key={pair.id}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-sm font-semibold" style={{color:pair.color}}>{pair.label}</span>
+                        <span className="text-xs italic" style={{color:"#6b7280"}}>stat missing</span>
+                      </div>
+                      <div className="h-10 rounded-lg" style={{background:"#0d1117",border:"1px solid #1f2937"}}/>
+                    </div>
+                  );
+                }
+                const minZ = Math.min(za, zb);
+                const isPos = minZ >= 0;
+                const barPct = Math.min(Math.abs(minZ) / 3 * 50, 50);
                 return (
-                  <div key={pair.id} className="rounded-xl p-5" style={{background:"#0d111788",border:`1px solid ${pair.color}33`}}>
-                    {/* Header */}
-                    <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <div className="text-base font-bold" style={{color:pair.color}}>{pair.label}</div>
-                        <div className="text-xs mt-0.5" style={{color:"#94a3b8"}}>Slope effect: <span style={{color:"#cbd5e1"}}>{pair.slope}</span> · {pair.slopeP}</div>
+                  <Tip key={pair.id} block wide content={
+                    <div>
+                      <div className="font-bold mb-2" style={{color:pair.color}}>{pair.label}</div>
+                      <div className="text-xs mb-2" style={{color:"#cbd5e1"}}>{pair.hypothesis}</div>
+                      {outc && (
+                        <div className="text-xs mb-2 leading-relaxed" style={{color:"#94a3b8"}}>
+                          <div><span style={{color:pair.color}}>Above-avg {posGroup}s</span> (n={outc.above.n}): <span style={{color:"#22c55e"}}>{outc.above.star}% Star+</span> · <span style={{color:"#ef4444"}}>{outc.above.bust}% Bust</span> · μ WA <span style={{color:"#fbbf24"}}>{outc.above.meanWA}</span></div>
+                          <div><span style={{color:"#6b7280"}}>Rest of {posGroup}-pool</span> (n={outc.baseline.n}): {outc.baseline.star}% Star+ · {outc.baseline.bust}% Bust · μ WA {outc.baseline.meanWA}</div>
+                        </div>
+                      )}
+                      <div className="text-[11px]" style={{color:"#6b7280"}}><span style={{color:"#475569"}}>Validators:</span> {pair.validators}</div>
+                    </div>
+                  }>
+                    <div className="cursor-help">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-sm font-semibold" style={{color:pair.color}}>{pair.label} <span style={{color:"#475569"}}>ⓘ</span></span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs" style={{color:"#6b7280"}}>{pair.aLabel} {za>=0?"+":""}{za.toFixed(1)}σ · {pair.bLabel} {zb>=0?"+":""}{zb.toFixed(1)}σ</span>
+                          <span className="text-lg font-bold" style={{color:isPos?pair.color:"#ef4444",fontFamily:"'Oswald',sans-serif"}}>{minZ>=0?"+":""}{minZ.toFixed(1)}σ</span>
+                        </div>
                       </div>
-                      <div className="px-3 py-1 rounded-lg text-xs font-bold" style={{background:statusColor+"22",color:statusColor,border:`1px solid ${statusColor}55`}}>
-                        {statusLabel}
+                      <div className="relative h-10 rounded-lg overflow-hidden" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+                        <div className="absolute top-0 bottom-0 w-0.5 z-10" style={{left:"50%",background:"#ffffff44"}}/>
+                        {isPos ? (
+                          <div className="absolute top-1 bottom-1 rounded-r" style={{left:"50%",width:`${barPct}%`,background:`linear-gradient(90deg,${pair.color}44,${pair.color})`}}/>
+                        ) : (
+                          <div className="absolute top-1 bottom-1 rounded-l" style={{right:"50%",width:`${barPct}%`,background:`linear-gradient(270deg,${pair.color}44,${pair.color})`}}/>
+                        )}
+                        <div className="absolute inset-0 flex items-center justify-between px-3 text-xs" style={{color:"#ffffff22"}}>
+                          <span>− Below</span><span>+ Above</span>
+                        </div>
                       </div>
                     </div>
-
-                    {/* Bars */}
-                    <div className="grid grid-cols-2 gap-4 mb-4">
-                      <div>
-                        <div className="flex justify-between items-baseline mb-1">
-                          <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>{pair.aLabel}</span>
-                          <span className="text-sm font-bold" style={{color:za != null && za >= 0 ? pair.color : "#ef4444",fontFamily:"'Oswald',sans-serif"}}>{za != null ? `${za>=0?"+":""}${za.toFixed(2)}σ` : "—"}</span>
-                        </div>
-                        <Bar z={za} color={pair.color}/>
-                      </div>
-                      <div>
-                        <div className="flex justify-between items-baseline mb-1">
-                          <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>{pair.bLabel}</span>
-                          <span className="text-sm font-bold" style={{color:zb != null && zb >= 0 ? pair.color : "#ef4444",fontFamily:"'Oswald',sans-serif"}}>{zb != null ? `${zb>=0?"+":""}${zb.toFixed(2)}σ` : "—"}</span>
-                        </div>
-                        <Bar z={zb} color={pair.color}/>
-                      </div>
-                    </div>
-
-                    {/* Hypothesis */}
-                    <div className="text-xs mb-3" style={{color:"#cbd5e1"}}>{pair.hypothesis}</div>
-
-                    {/* Outcome anchor — historical lift */}
-                    {outc && (
-                      <div className="grid grid-cols-2 gap-3 mb-3">
-                        <div className="rounded-lg p-3" style={{background:"#0d1117",border:`1px solid ${pair.color}44`}}>
-                          <div className="text-[10px] uppercase tracking-wider mb-1" style={{color:pair.color}}>Above-Avg in Both ({posGroup}, n={outc.above.n})</div>
-                          <div className="grid grid-cols-3 gap-1 text-[11px]">
-                            <div><span style={{color:"#6b7280"}}>Star+: </span><span className="font-bold" style={{color:"#22c55e"}}>{outc.above.star}%</span></div>
-                            <div><span style={{color:"#6b7280"}}>Bust: </span><span className="font-bold" style={{color:"#ef4444"}}>{outc.above.bust}%</span></div>
-                            <div><span style={{color:"#6b7280"}}>μ WA: </span><span className="font-bold" style={{color:"#fbbf24"}}>{outc.above.meanWA}</span></div>
-                          </div>
-                        </div>
-                        <div className="rounded-lg p-3" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
-                          <div className="text-[10px] uppercase tracking-wider mb-1" style={{color:"#9ca3af"}}>Rest of {posGroup}-Pool (n={outc.baseline.n})</div>
-                          <div className="grid grid-cols-3 gap-1 text-[11px]">
-                            <div><span style={{color:"#6b7280"}}>Star+: </span><span className="font-bold" style={{color:"#9ca3af"}}>{outc.baseline.star}%</span></div>
-                            <div><span style={{color:"#6b7280"}}>Bust: </span><span className="font-bold" style={{color:"#9ca3af"}}>{outc.baseline.bust}%</span></div>
-                            <div><span style={{color:"#6b7280"}}>μ WA: </span><span className="font-bold" style={{color:"#9ca3af"}}>{outc.baseline.meanWA}</span></div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Validators */}
-                    <div className="text-[11px]" style={{color:"#6b7280"}}>
-                      <span style={{color:"#475569"}}>Historic above-avg validators:</span> <span style={{color:"#94a3b8"}}>{pair.validators}</span>
-                    </div>
-                  </div>
+                  </Tip>
                 );
               })}
             </div>
 
-            {/* Rejected pairs — transparency footer */}
-            <div className="mt-5 rounded-xl p-4" style={{background:"#0d111766",border:"1px solid #1f2937"}}>
-              <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#6b7280"}}>Also Tested — Not Significant</div>
-              <div className="text-[11px] mb-3" style={{color:"#94a3b8"}}>
-                These pairs we hypothesized as anti-correlated trade-offs and tested with the same z-score regression. None hit p &lt; 0.05 with a slope &gt; +1.5 WA/+1σ.
-              </div>
-              <div className="space-y-2">
+            {/* Rejected pairs — transparency footer (light) */}
+            <div className="mt-5 pt-4 border-t" style={{borderColor:"#1f2937"}}>
+              <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#6b7280"}}>Also Tested — No Signal</div>
+              <div className="space-y-1.5">
                 {SKILL_INTERSECTIONS.rejected.map((r,i)=>(
-                  <div key={i} className="text-[11px] flex gap-2 items-baseline">
-                    <span style={{color:"#ef4444"}}>✗</span>
-                    <span><span className="font-semibold" style={{color:"#cbd5e1"}}>{r.name}</span> <span style={{color:"#6b7280"}}>— {r.reason}</span></span>
+                  <div key={i} className="text-[11px]" style={{color:"#9ca3af"}}>
+                    <span style={{color:"#475569"}}>·</span> <span className="font-semibold" style={{color:"#cbd5e1"}}>{r.name}</span> — {r.reason}
                   </div>
                 ))}
               </div>
