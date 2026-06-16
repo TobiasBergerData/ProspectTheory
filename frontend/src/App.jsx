@@ -541,10 +541,12 @@ const BADGE_DEFS = {
 // p < 0.05 with slope > +1.5 WA/+1σ ONLY for these two pairs. The four rejected
 // pairs are listed transparently in the UI footer.
 const SKILL_INTERSECTIONS = {
+  // Plus key names = frontend player-object keys (orbP/astP/blkP from
+  // inject_season_advanced.py), NOT the raw CSV column names.
   pos_stats: {
-    Playmaker: {ORB_per: {mu: 3.050,  sig: 1.487}, AST_per: {mu: 27.189, sig: 8.393}, blk_per: {mu: 0.924, sig: 0.777}},
-    Wing:      {ORB_per: {mu: 6.269,  sig: 3.582}, AST_per: {mu: 13.227, sig: 5.517}, blk_per: {mu: 2.244, sig: 1.924}},
-    Big:       {ORB_per: {mu: 10.871, sig: 3.047}, AST_per: {mu: 9.001,  sig: 4.628}, blk_per: {mu: 5.575, sig: 3.112}},
+    Playmaker: {orbP: {mu: 3.050,  sig: 1.487}, astP: {mu: 27.189, sig: 8.393}, blkP: {mu: 0.924, sig: 0.777}},
+    Wing:      {orbP: {mu: 6.269,  sig: 3.582}, astP: {mu: 13.227, sig: 5.517}, blkP: {mu: 2.244, sig: 1.924}},
+    Big:       {orbP: {mu: 10.871, sig: 3.047}, astP: {mu: 9.001,  sig: 4.628}, blkP: {mu: 5.575, sig: 3.112}},
   },
   outcomes: {
     crasher_distributor: {
@@ -562,8 +564,8 @@ const SKILL_INTERSECTIONS = {
     {
       id: "crasher_distributor",
       label: "Crasher + Distributor (ORB% × AST%)",
-      statA: "ORB_per", statB: "AST_per",
-      aLabel: "ORB%",   bLabel: "AST%",
+      statA: "orbP", statB: "astP",
+      aLabel: "ORB%", bLabel: "AST%",
       color: "#a78bfa",
       hypothesis: "Bigs rarely pass, point guards rarely crash. A player above his position's average in BOTH breaks a structural trade-off. Historically a Jokic / Blake Griffin / Haliburton signal.",
       validators: "Nikola Jokic · Karl-Anthony Towns · Blake Griffin · Tyrese Haliburton · Ja Morant · Draymond Green · Kawhi Leonard",
@@ -571,8 +573,8 @@ const SKILL_INTERSECTIONS = {
     {
       id: "two_way_skill",
       label: "Two-Way Skill (AST% × BLK%)",
-      statA: "AST_per", statB: "blk_per",
-      aLabel: "AST%",   bLabel: "BLK%",
+      statA: "astP", statB: "blkP",
+      aLabel: "AST%", bLabel: "BLK%",
       color: "#22c55e",
       hypothesis: "Point guards don't block shots, rim protectors don't run the offense. A player above his position's average in BOTH signals rare two-way utility — Embiid / KAT / Paul George / Draymond territory.",
       validators: "Joel Embiid · Karl-Anthony Towns · Paul George · Draymond Green · Klay Thompson · John Wall · Tyrese Haliburton",
