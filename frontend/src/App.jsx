@@ -1784,6 +1784,8 @@ function mapProfile(d) {
     skillCurve: d.skillCurve ?? null,
     // Mind-Tab Mental-Resilience metrics (Tobias 2026-05-09)
     mindMetrics: d.mindMetrics ?? null,
+    // Sprint-3.41 (2026-06-16): H1/H2 Box-Score Splits (stamina/concentration)
+    halfSplits: d.halfSplits ?? null,
     // Sprint-3.25 (#19, 2026-06-14): Usage Reaction Strahl
     usageReaction: d.usageReaction ?? null,
     // Sprint-3.29 (2026-06-15): Functional Size — predicted height/wingspan
@@ -5129,9 +5131,226 @@ function MindTab({p}) {
       })()}
 
       {/* ── Sequential Resilience entfernt 2026-05-09 (User: Mental Resilience deckt das ab) ── */}
+
+      {/* ── Sprint-3.41: H1/H2 Box-Score Splits (Stamina + Concentration) ── */}
+      <HalfSplitSection p={p}/>
     </div>
   );
 }
+
+
+// ═══════════════════════════════════════════════════════════
+// Sprint-3.41 — H1/H2 Box-Score Splits (Tobias 2026-06-16)
+// 13 rate-Stats H1 vs H2 from PBP (garbage time excluded).
+// Source: p.halfSplits = {season, h1: {counts}, h2: {counts}, sample_floor_pass}
+// ═══════════════════════════════════════════════════════════
+function HalfSplitSection({p}) {
+  const hs = p?.halfSplits;
+  if (!hs || !hs.h1 || !hs.h2) return null;
+
+  const h1 = hs.h1, h2 = hs.h2;
+
+  // 13 stat computations — all robust to minutes-tracking imperfection by
+  // using FGA-normalised or self-contained rates.
+  const pts = (h) => 2*(h.FGM - (h.TPM||0)) + 3*(h.TPM||0) + (h.FTM||0);
+  const tsa = (h) => h.FGA + 0.44 * h.FTA;
+  const poss = (h) => h.FGA + 0.44 * h.FTA + h.TO;
+
+  const HALF_STATS = [
+    { id: "ts",      label: "True Shooting %",      fmt: "pct",   good: "up",
+      desc: "Points per scoring attempt — combines FG and FT efficiency.",
+      val: (h)=> tsa(h) > 0 ? pts(h) / (2*tsa(h)) * 100 : null },
+    { id: "efg",     label: "Effective FG %",       fmt: "pct",   good: "up",
+      desc: "FG % adjusted for 3-point value.",
+      val: (h)=> h.FGA > 0 ? (h.FGM + 0.5*(h.TPM||0)) / h.FGA * 100 : null },
+    { id: "fg",      label: "Field Goal %",         fmt: "pct",   good: "up",
+      desc: "Raw FGM / FGA. Concentration / shot quality.",
+      val: (h)=> h.FGA > 0 ? h.FGM / h.FGA * 100 : null },
+    { id: "ft",      label: "Free Throw %",         fmt: "pct",   good: "up",
+      desc: "Free throw conversion. Sensitive to focus + fatigue.",
+      val: (h)=> h.FTA > 0 ? h.FTM / h.FTA * 100 : null },
+    { id: "ftr",     label: "Free Throw Rate",      fmt: "ratio", good: "up",
+      desc: "FTA / FGA — how often he gets to the line.",
+      val: (h)=> h.FGA > 0 ? h.FTA / h.FGA : null },
+    { id: "usg",     label: "Possession Volume",    fmt: "int",   good: "neutral",
+      desc: "FGA + 0.44·FTA + TO. Raw load — drop in H2 may signal role-shift, not fatigue.",
+      val: (h)=> poss(h) },
+    { id: "ast_fga", label: "Assists per FGA",      fmt: "ratio", good: "up",
+      desc: "Distribution rate per shot attempt.",
+      val: (h)=> h.FGA > 0 ? h.AST / h.FGA : null },
+    { id: "stl_fga", label: "Steals per FGA",       fmt: "ratio", good: "up",
+      desc: "Defensive activity normalized to involvement.",
+      val: (h)=> h.FGA > 0 ? h.STL / h.FGA : null },
+    { id: "blk_fga", label: "Blocks per FGA",       fmt: "ratio", good: "up",
+      desc: "Rim-protection activity normalized to involvement.",
+      val: (h)=> h.FGA > 0 ? h.BLK / h.FGA : null },
+    { id: "to_pct",  label: "Turnover Rate",        fmt: "pct",   good: "down",
+      desc: "TO / (FGA + 0.44·FTA + TO). Concentration metric — rises with fatigue.",
+      val: (h)=> poss(h) > 0 ? h.TO / poss(h) * 100 : null },
+    { id: "orb_fga", label: "Off Rebounds per FGA", fmt: "ratio", good: "up",
+      desc: "Crashing-the-boards activity per shot.",
+      val: (h)=> h.FGA > 0 ? h.ORB / h.FGA : null },
+    { id: "drb_fga", label: "Def Rebounds per FGA", fmt: "ratio", good: "up",
+      desc: "Defensive rebounding involvement.",
+      val: (h)=> h.FGA > 0 ? h.DRB / h.FGA : null },
+    { id: "ppp",     label: "Points per Possession",fmt: "ratio", good: "up",
+      desc: "Offensive Rtg proxy — pts produced per possession used.",
+      val: (h)=> poss(h) > 0 ? pts(h) / poss(h) : null },
+  ];
+
+  // Compute deltas + direction
+  const computed = HALF_STATS.map(s => {
+    const v1 = s.val(h1);
+    const v2 = s.val(h2);
+    if (v1 == null || v2 == null) return {...s, v1: null, v2: null, delta: null, direction: 0};
+    const delta = v2 - v1;
+    // direction = +1 if shift is favourable for the player, -1 if unfavourable, 0 if neutral
+    let direction = 0;
+    if (s.good === "up")   direction = delta > 0 ? +1 : (delta < 0 ? -1 : 0);
+    if (s.good === "down") direction = delta < 0 ? +1 : (delta > 0 ? -1 : 0);
+    // neutral remains 0
+    return {...s, v1, v2, delta, direction};
+  });
+
+  // Verdict logic: count directional stats
+  const directional = computed.filter(s => s.good !== "neutral" && s.delta !== null);
+  const score = directional.reduce((acc, s) => acc + s.direction, 0);
+  const total = directional.length || 1;
+  let verdict = "Stable across halves";
+  let verdictColor = "#9ca3af";
+  if (score >= Math.ceil(total * 0.35)) {
+    verdict = "Late-game riser — efficiency and activity tick up in H2";
+    verdictColor = "#22c55e";
+  } else if (score <= -Math.ceil(total * 0.35)) {
+    verdict = "Mid-game peaker — efficiency and activity drop in H2";
+    verdictColor = "#ef4444";
+  } else if (score > 0) {
+    verdict = "Slightly improves in H2 (mixed signal)";
+    verdictColor = "#86efac";
+  } else if (score < 0) {
+    verdict = "Slightly fades in H2 (mixed signal)";
+    verdictColor = "#fbbf24";
+  }
+
+  const fmtVal = (v, fmt) => {
+    if (v == null) return "—";
+    if (fmt === "pct")   return `${v.toFixed(1)}%`;
+    if (fmt === "ratio") return v.toFixed(2);
+    if (fmt === "int")   return Math.round(v).toString();
+    return v;
+  };
+  const fmtDelta = (d, fmt) => {
+    if (d == null) return "—";
+    const sign = d > 0 ? "+" : "";
+    if (fmt === "pct")   return `${sign}${d.toFixed(1)}pp`;
+    if (fmt === "ratio") return `${sign}${d.toFixed(2)}`;
+    if (fmt === "int")   return `${sign}${Math.round(d)}`;
+    return `${sign}${d}`;
+  };
+
+  return (
+    <Sec icon="🌡" title="First vs Second Half — Stamina & Concentration"
+         sub={`Box-stat split across both halves of this season's games. Garbage time (lead >20 in last 5 min, or >12 in last 2 min) excluded. Rates use possession or FGA normalisation, so minute-tracking noise doesn't bias the signal.`}>
+      {!hs.sample_floor_pass && (
+        <div className="rounded-lg p-3 mb-4 text-xs"
+             style={{background:"#fbbf2411",border:"1px solid #fbbf2444",color:"#fcd34d"}}>
+          ⚠ Limited sample: H1 {h1.min?.toFixed?.(0) ?? "?"} min, H2 {h2.min?.toFixed?.(0) ?? "?"} min recorded (floor: 10 min each). Treat splits as directional only.
+        </div>
+      )}
+
+      {/* Verdict pill */}
+      <div className="rounded-xl p-4 mb-4 flex items-center justify-between"
+           style={{background:"#0d111788",border:`1px solid ${verdictColor}55`}}>
+        <div>
+          <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#9ca3af"}}>Verdict</div>
+          <div className="text-base font-semibold" style={{color:verdictColor}}>{verdict}</div>
+        </div>
+        <div className="text-right text-xs" style={{color:"#6b7280"}}>
+          <div>Directional score</div>
+          <div className="text-xl font-bold" style={{color:verdictColor,fontFamily:"'Oswald',sans-serif"}}>
+            {score >= 0 ? "+" : ""}{score} / {total}
+          </div>
+        </div>
+      </div>
+
+      {/* 13 stat rows */}
+      <div className="space-y-3">
+        {computed.map(s => {
+          if (s.v1 == null || s.v2 == null) {
+            return (
+              <div key={s.id}>
+                <div className="flex justify-between text-sm mb-1">
+                  <span style={{color:"#cbd5e1"}}>{s.label}</span>
+                  <span style={{color:"#475569"}} className="italic">— no data</span>
+                </div>
+                <div className="h-7 rounded" style={{background:"#0d1117",border:"1px solid #1f2937"}}/>
+              </div>
+            );
+          }
+
+          // Bar magnitude: normalize per stat type so all bars are comparable
+          let normMax;
+          if (s.fmt === "pct")   normMax = 8;     // 8pp is a "big" half-to-half delta
+          else if (s.fmt === "ratio") normMax = 0.15;
+          else normMax = Math.max(10, Math.abs(s.delta) * 1.5);
+          const barPct = Math.min(Math.abs(s.delta) / normMax * 50, 50);
+
+          const color = s.direction > 0 ? "#22c55e"
+                       : s.direction < 0 ? "#ef4444"
+                       : "#9ca3af";
+
+          return (
+            <Tip key={s.id} block wide content={
+              <div>
+                <div className="font-bold mb-1" style={{color:color}}>{s.label}</div>
+                <div className="text-xs" style={{color:"#cbd5e1"}}>{s.desc}</div>
+                <div className="text-[11px] mt-2" style={{color:"#9ca3af"}}>
+                  "Up" interpretation: {s.good === "up" ? "higher = better (stamina + execution)"
+                                       : s.good === "down" ? "higher = WORSE (fatigue / focus loss)"
+                                       : "neutral — depends on role"}
+                </div>
+              </div>
+            }>
+              <div className="cursor-help">
+                <div className="flex items-center justify-between text-sm mb-1">
+                  <span style={{color:"#cbd5e1"}}>{s.label} <span style={{color:"#475569"}}>ⓘ</span></span>
+                  <div className="flex items-center gap-3 text-xs">
+                    <span style={{color:"#9ca3af"}}>H1 <span style={{color:"#e5e7eb"}}>{fmtVal(s.v1, s.fmt)}</span></span>
+                    <span style={{color:"#475569"}}>→</span>
+                    <span style={{color:"#9ca3af"}}>H2 <span style={{color:"#e5e7eb"}}>{fmtVal(s.v2, s.fmt)}</span></span>
+                    <span className="font-bold text-base" style={{color:color, minWidth:60, textAlign:"right",fontFamily:"'Oswald',sans-serif"}}>
+                      {fmtDelta(s.delta, s.fmt)}
+                    </span>
+                  </div>
+                </div>
+                <div className="relative h-7 rounded overflow-hidden" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+                  <div className="absolute top-0 bottom-0 w-0.5 z-10" style={{left:"50%", background:"#ffffff22"}}/>
+                  {s.delta >= 0 ? (
+                    <div className="absolute top-1 bottom-1 rounded-r"
+                         style={{left:"50%", width:`${barPct}%`, background:`linear-gradient(90deg,${color}33,${color})`}}/>
+                  ) : (
+                    <div className="absolute top-1 bottom-1 rounded-l"
+                         style={{right:"50%", width:`${barPct}%`, background:`linear-gradient(270deg,${color}33,${color})`}}/>
+                  )}
+                  <div className="absolute inset-0 flex items-center justify-between px-2 text-[10px]" style={{color:"#ffffff22"}}>
+                    <span>H2 down</span><span>H2 up</span>
+                  </div>
+                </div>
+              </div>
+            </Tip>
+          );
+        })}
+      </div>
+
+      {/* Footer caveat */}
+      <div className="mt-4 text-[11px]" style={{color:"#6b7280"}}>
+        Sample: {h1.min?.toFixed?.(0) || "?"} min H1 · {h2.min?.toFixed?.(0) || "?"} min H2 ({hs.season || "this season"})
+        · {h1.FGA + h2.FGA} total FGA · {h1.AST + h2.AST} assists · {h1.TO + h2.TO} turnovers (garbage time excluded)
+      </div>
+    </Sec>
+  );
+}
+
 
 // ═══════════════════════════════════════════════════════════
 // TAB: DEVELOPMENT TRAJECTORY

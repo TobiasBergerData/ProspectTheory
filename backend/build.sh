@@ -66,6 +66,7 @@ INJECT_STEPS=(
   "inject_season_advanced.py"          # astP/toP/stlP/blkP/ftr in seasonLines
   "inject_game_logs.py"                # Per-Game Stats für Scouting-Skill-Curve
   "inject_usage_reaction.py"           # Sprint-3.25 (#19): Scorer/Passer Slope vs USG
+  "inject_half_box_split.py"           # Sprint-3.41: H1/H2 Box-Score Splits (stamina+focus)
   "inject_draft_risk.py"               # Risk-Profile (Market/Merit/Bust/Star)
   "inject_nba_role.py"                 # NBA-Rollen-Projektion (pre→post + Floor)
   "inject_added_wins.py"               # Added Wins (P(NBA) × E[AW|NBA])
