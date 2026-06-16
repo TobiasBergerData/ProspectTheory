@@ -11091,6 +11091,384 @@ function TierBoardView({ players, onSelect }) {
 
 
 // ═══════════════════════════════════════════════════════════
+// STATS LAB — Sprint-4.1 (Tobias 2026-06-16)
+// Filter + sort + multi-column compare across all profile stats.
+// Data: GET /api/stats_lab + /api/stats_lab/meta (static FileResponse).
+// ═══════════════════════════════════════════════════════════
+function StatsLabView({onSelect}) {
+  const [meta, setMeta] = useState(null);
+  const [rows, setRows] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState(null);
+
+  // Filters
+  const [yearFilter, setYearFilter]   = useState([2026]);
+  const [posFilter,  setPosFilter]    = useState(["Playmaker","Wing","Big"]);
+  const [srcFilter,  setSrcFilter]    = useState(["ncaa","intl"]);
+  const [search,     setSearch]       = useState("");
+
+  // Columns + sort + pagination
+  const [presetId,     setPresetId]   = useState("default");
+  const [selectedCols, setSelectedCols] = useState(null);
+  const [pickerOpen,   setPickerOpen] = useState(false);
+  const [sortKey,      setSortKey]    = useState("war");
+  const [sortDir,      setSortDir]    = useState("desc");
+  const [page,         setPage]       = useState(0);
+  const [pageSize,     setPageSize]   = useState(50);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([
+      fetch("/api/stats_lab").then(r => {
+        if (!r.ok) throw new Error(`stats_lab fetch failed: ${r.status}`);
+        return r.json();
+      }),
+      fetch("/api/stats_lab/meta").then(r => {
+        if (!r.ok) throw new Error(`stats_lab/meta fetch failed: ${r.status}`);
+        return r.json();
+      }),
+    ]).then(([data, m]) => {
+      if (cancelled) return;
+      setRows(data.rows || []);
+      setMeta(m);
+      const preset = (m.presets || []).find(p => p.id === "default");
+      if (preset) setSelectedCols(preset.cols);
+      if (m.filter_defaults?.year && Array.isArray(m.filter_defaults.year)) {
+        setYearFilter(m.filter_defaults.year);
+      }
+      setLoading(false);
+    }).catch(e => {
+      if (cancelled) return;
+      setErr(String(e));
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  // ── Derived data ────────────────────────────────────────────
+  const colsByKey = useMemo(() => {
+    const m = {};
+    (meta?.cols || []).forEach(c => { m[c.k] = c; });
+    return m;
+  }, [meta]);
+
+  const allYears = useMemo(() => {
+    if (!rows) return [];
+    return Array.from(new Set(rows.map(r => r.year).filter(Boolean))).sort((a,b)=>b-a);
+  }, [rows]);
+
+  const filtered = useMemo(() => {
+    if (!rows) return [];
+    const q = search.trim().toLowerCase();
+    return rows.filter(r => {
+      if (yearFilter.length && !yearFilter.includes(r.year)) return false;
+      if (posFilter.length && r.pos && !posFilter.includes(r.pos)) return false;
+      if (srcFilter.length && r.source && !srcFilter.includes(r.source)) return false;
+      if (q && !(r.name || "").toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [rows, yearFilter, posFilter, srcFilter, search]);
+
+  const sorted = useMemo(() => {
+    if (!filtered.length) return filtered;
+    const dir = sortDir === "desc" ? -1 : 1;
+    const fmt = colsByKey[sortKey]?.fmt;
+    const isNumeric = fmt && fmt !== "str" && fmt !== "name" && fmt !== "bool";
+    return [...filtered].sort((a, b) => {
+      const va = a[sortKey], vb = b[sortKey];
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;            // nulls always sink
+      if (vb == null) return -1;
+      if (isNumeric) return (va - vb) * dir;
+      return String(va).localeCompare(String(vb)) * dir;
+    });
+  }, [filtered, sortKey, sortDir, colsByKey]);
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const safePage = Math.min(page, totalPages - 1);
+  const pageRows = sorted.slice(safePage * pageSize, (safePage + 1) * pageSize);
+
+  // ── Helpers ────────────────────────────────────────────────
+  const applyPreset = (id) => {
+    setPresetId(id);
+    const p = (meta?.presets || []).find(x => x.id === id);
+    if (p) setSelectedCols(p.cols);
+  };
+
+  const toggleCol = (key) => {
+    setSelectedCols(prev => {
+      const list = prev || [];
+      if (list.includes(key)) return list.filter(k => k !== key);
+      return [...list, key];
+    });
+    setPresetId("custom");
+  };
+
+  const flipMulti = (state, setState, value) => {
+    if (state.includes(value)) setState(state.filter(x => x !== value));
+    else setState([...state, value]);
+  };
+
+  const onSortClick = (key) => {
+    if (key === sortKey) {
+      setSortDir(d => d === "desc" ? "asc" : "desc");
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+  };
+
+  const fmtCell = (val, col) => {
+    if (val == null) return <span style={{color:"#475569"}}>—</span>;
+    if (col?.fmt === "bool") return val ? "✓" : "—";
+    if (col?.fmt === "pct") return `${val}%`;
+    if (col?.fmt === "dec1") return Number(val).toFixed(1);
+    if (col?.fmt === "dec2") return Number(val).toFixed(2);
+    if (col?.fmt === "int") return Math.round(val);
+    return val;
+  };
+
+  // Color z-score-style cells (range from meta)
+  const cellStyle = (val, col) => {
+    if (val == null || !col?.range) return {};
+    const [lo, hi] = col.range;
+    if (lo == null || hi == null || hi <= lo) return {};
+    const t = Math.max(0, Math.min(1, (val - lo) / (hi - lo)));
+    // diverging if range crosses 0 OR is z-like
+    const isZ = lo < 0 && hi > 0;
+    if (isZ) {
+      // -3 = red, 0 = neutral, +3 = green
+      const z = val;
+      if (z >= 0) {
+        const a = Math.min(1, z / Math.abs(hi));
+        return { background: `rgba(34,197,94,${0.10 + 0.30*a})`, color: "#dcfce7" };
+      } else {
+        const a = Math.min(1, -z / Math.abs(lo));
+        return { background: `rgba(239,68,68,${0.10 + 0.30*a})`, color: "#fee2e2" };
+      }
+    }
+    return { background: `rgba(249,115,22,${0.06 + 0.20*t})`, color: "#fef3c7" };
+  };
+
+  // ── Render ────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <div className="w-12 h-12 rounded-full border-4 border-t-transparent animate-spin mb-4" style={{borderColor:"#f97316",borderTopColor:"transparent"}}/>
+        <p className="text-sm" style={{color:"#6b7280"}}>Loading stats lab... (~2 MB)</p>
+      </div>
+    );
+  }
+  if (err) {
+    return (
+      <div className="p-6 rounded-xl text-center" style={{background:"#ef444411",border:"1px solid #ef444444",color:"#fca5a5"}}>
+        <div className="font-semibold mb-1">Stats Lab failed to load</div>
+        <div className="text-xs" style={{color:"#fca5a5cc"}}>{err}</div>
+        <div className="text-xs mt-2" style={{color:"#9ca3af"}}>If the deploy is still building, try again in a minute.</div>
+      </div>
+    );
+  }
+
+  const colObj = (key) => colsByKey[key] || {k: key, label: key, fmt: "str"};
+  const visibleCols = (selectedCols || []).map(colObj);
+
+  // Group columns by category for the picker
+  const colsByGroup = {};
+  (meta?.cols || []).forEach(c => {
+    if (!colsByGroup[c.g]) colsByGroup[c.g] = [];
+    colsByGroup[c.g].push(c);
+  });
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
+      {/* ── Sidebar ── */}
+      <aside className="space-y-4">
+        <div className="rounded-xl p-4" style={{background:"#0d111766",border:"1px solid #1f2937"}}>
+          <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#9ca3af"}}>Class (draft year)</div>
+          <div className="space-y-1">
+            {allYears.map(y => (
+              <label key={y} className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="checkbox" checked={yearFilter.includes(y)} onChange={()=>flipMulti(yearFilter, setYearFilter, y)} />
+                <span style={{color: yearFilter.includes(y) ? "#f1f5f9" : "#6b7280"}}>{y}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-xl p-4" style={{background:"#0d111766",border:"1px solid #1f2937"}}>
+          <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#9ca3af"}}>Position</div>
+          <div className="space-y-1">
+            {["Playmaker","Wing","Big"].map(p => (
+              <label key={p} className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="checkbox" checked={posFilter.includes(p)} onChange={()=>flipMulti(posFilter, setPosFilter, p)} />
+                <span style={{color: posFilter.includes(p) ? "#f1f5f9" : "#6b7280"}}>{p}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-xl p-4" style={{background:"#0d111766",border:"1px solid #1f2937"}}>
+          <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#9ca3af"}}>Source</div>
+          <div className="space-y-1">
+            {["ncaa","intl"].map(s => (
+              <label key={s} className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="checkbox" checked={srcFilter.includes(s)} onChange={()=>flipMulti(srcFilter, setSrcFilter, s)} />
+                <span style={{color: srcFilter.includes(s) ? "#f1f5f9" : "#6b7280"}}>{s.toUpperCase()}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-xl p-4" style={{background:"#0d111766",border:"1px solid #1f2937"}}>
+          <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#9ca3af"}}>Search</div>
+          <input
+            type="text" value={search} onChange={e=>setSearch(e.target.value)}
+            placeholder="Player name…"
+            className="w-full px-3 py-2 rounded text-sm"
+            style={{background:"#0a0e16", color:"#f1f5f9", border:"1px solid #1f2937"}}
+          />
+        </div>
+
+        <div className="rounded-xl p-4 text-xs" style={{background:"#0d111733",color:"#6b7280"}}>
+          <div>{filtered.length.toLocaleString()} of {rows.length.toLocaleString()} players</div>
+        </div>
+      </aside>
+
+      {/* ── Main Table Area ── */}
+      <section className="space-y-3">
+        {/* Preset chips */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {(meta?.presets || []).map(p => (
+            <button key={p.id}
+              onClick={()=>applyPreset(p.id)}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
+              style={{
+                background: presetId===p.id ? "#f9731622" : "transparent",
+                color:      presetId===p.id ? "#f97316"   : "#9ca3af",
+                border: `1px solid ${presetId===p.id ? "#f97316" : "#374151"}`,
+              }}>
+              {p.label}
+            </button>
+          ))}
+          {presetId === "custom" && (
+            <span className="px-3 py-1.5 rounded-lg text-xs italic" style={{color:"#fbbf24"}}>· Custom</span>
+          )}
+          <div className="flex-1"/>
+          <button
+            onClick={()=>setPickerOpen(o=>!o)}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+            style={{background:"transparent", color:"#9ca3af", border:"1px solid #374151"}}>
+            ⊕ Columns ({(selectedCols||[]).length})
+          </button>
+        </div>
+
+        {/* Column picker */}
+        {pickerOpen && (
+          <div className="rounded-xl p-4 max-h-96 overflow-y-auto" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+            {(meta?.groups || []).map(g => (
+              <div key={g.id} className="mb-3">
+                <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#f97316"}}>{g.label}</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {(colsByGroup[g.id] || []).map(c => {
+                    const on = (selectedCols||[]).includes(c.k);
+                    return (
+                      <button key={c.k} onClick={()=>toggleCol(c.k)}
+                        className="px-2 py-1 rounded text-[11px]"
+                        style={{
+                          background: on ? "#f9731622" : "#0a0e16",
+                          color: on ? "#fcd34d" : "#9ca3af",
+                          border: `1px solid ${on ? "#f97316" : "#1f2937"}`,
+                        }}>
+                        {c.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Table */}
+        <div className="rounded-xl overflow-x-auto" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+          <table className="w-full text-sm" style={{borderCollapse:"separate",borderSpacing:0}}>
+            <thead>
+              <tr style={{background:"#11151c"}}>
+                {visibleCols.map((c, i) => (
+                  <th key={c.k}
+                    onClick={()=>onSortClick(c.k)}
+                    className="px-3 py-2 text-left text-xs font-semibold cursor-pointer select-none whitespace-nowrap"
+                    style={{
+                      color: sortKey===c.k ? "#f97316" : "#cbd5e1",
+                      borderBottom:"1px solid #1f2937",
+                      position: i===0 ? "sticky" : undefined,
+                      left:     i===0 ? 0 : undefined,
+                      background: i===0 ? "#11151c" : undefined,
+                      zIndex: i===0 ? 5 : undefined,
+                    }}>
+                    {c.label}{sortKey===c.k ? (sortDir==="desc" ? " ↓" : " ↑") : ""}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {pageRows.map((r,ri) => (
+                <tr key={r.slug || ri} className="hover:bg-white hover:bg-opacity-5">
+                  {visibleCols.map((c, i) => {
+                    const val = r[c.k];
+                    const isName = c.k === "name";
+                    return (
+                      <td key={c.k}
+                        onClick={isName && r.slug ? ()=>onSelect(r.slug) : undefined}
+                        className="px-3 py-1.5 whitespace-nowrap text-xs"
+                        style={{
+                          ...cellStyle(val, c),
+                          color: isName ? "#fcd34d" : (c.fmt==="str" ? "#cbd5e1" : "#e5e7eb"),
+                          cursor: isName && r.slug ? "pointer" : "default",
+                          borderBottom: "1px solid #11151c",
+                          position: i===0 ? "sticky" : undefined,
+                          left:     i===0 ? 0 : undefined,
+                          background: i===0 ? "#0d1117" : undefined,
+                          fontWeight: isName ? 600 : 400,
+                        }}>
+                        {fmtCell(val, c)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+              {pageRows.length === 0 && (
+                <tr><td colSpan={visibleCols.length} className="px-3 py-8 text-center text-xs" style={{color:"#6b7280"}}>No players match the current filters.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination */}
+        <div className="flex items-center gap-3 text-xs" style={{color:"#9ca3af"}}>
+          <button onClick={()=>setPage(p=>Math.max(0,p-1))} disabled={safePage===0}
+            className="px-3 py-1.5 rounded"
+            style={{background:"transparent", color: safePage===0 ? "#475569" : "#cbd5e1", border:"1px solid #374151", cursor: safePage===0 ? "not-allowed":"pointer"}}>← Prev</button>
+          <span>Page {safePage+1} of {totalPages}</span>
+          <button onClick={()=>setPage(p=>Math.min(totalPages-1,p+1))} disabled={safePage>=totalPages-1}
+            className="px-3 py-1.5 rounded"
+            style={{background:"transparent", color: safePage>=totalPages-1 ? "#475569" : "#cbd5e1", border:"1px solid #374151", cursor: safePage>=totalPages-1 ? "not-allowed":"pointer"}}>Next →</button>
+          <div className="flex-1"/>
+          <span>Rows per page:</span>
+          {[25,50,100,200].map(n => (
+            <button key={n} onClick={()=>{setPageSize(n); setPage(0);}}
+              className="px-2 py-1 rounded"
+              style={{background:pageSize===n?"#f9731622":"transparent", color: pageSize===n?"#f97316":"#9ca3af", border:`1px solid ${pageSize===n?"#f97316":"#374151"}`}}>{n}</button>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════
 // BIG BOARD (No class overview — single view)
 // ═══════════════════════════════════════════════════════════
 function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, availableYears, yearFilter, setYearFilter}) {
@@ -11900,9 +12278,9 @@ export default function App() {
       <main className="max-w-7xl mx-auto px-4 md:px-8 py-6">
         {!sel ? (
           <>
-            {/* Meta-level navigation: Big Board (default) · Research · Methods */}
+            {/* Meta-level navigation: Big Board (default) · Stats Lab · Research · Methods */}
             <div className="flex gap-2 mb-6 flex-wrap">
-              {[["bigboard","Big Board","▦"],["research","Research","🔬"],["methods","Methods","📖"]].map(([id,label,icon])=>(
+              {[["bigboard","Big Board","▦"],["lab","Stats Lab","🧪"],["research","Research","🔬"],["methods","Methods","📖"]].map(([id,label,icon])=>(
                 <button key={id} onClick={()=>setBoardView(id)}
                   className="px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
                   style={{background: boardView===id?"#f97316":"transparent",
@@ -11921,6 +12299,8 @@ export default function App() {
               ) : (
                 <BigBoardView onSelect={selectPlayer} boardData={boardData} setBoardData={setBoardData} loading={loading} setLoading={setLoading} availableYears={availableYears} yearFilter={yearFilter} setYearFilter={setYearFilter}/>
               )
+            ) : boardView==="lab" ? (
+              <StatsLabView onSelect={selectPlayer}/>
             ) : boardView==="research" ? (
               <ResearchTab p={null}/>
             ) : (
