@@ -7508,7 +7508,36 @@ function BodyTab({p}) {
               positiveLabel: "paint-oriented", negativeLabel: "perimeter/stretch" };
 
         const FrameBar = ({label, sublabel, actual, predicted, delta, residual, semantics, unit = '"', range = 5}) => {
-          if (predicted == null || delta == null) return null;
+          if (predicted == null) return null;
+          // Sprint-3.37.J (Tobias 2026-06-16): Predicted-only Modus wenn kein
+          // Measurement existiert. Plus Vor dem Fix wurde der Balken komplett
+          // ausgeblendet (delta == null → return null) — bei 2026er prospects
+          // fehlt das Combine-Weight fast immer, dadurch verschwand der Weight-
+          // Strahl. Plus jetzt: zeige predicted-only Banner mit dashed border,
+          // ohne Δ-Visualisierung. Sentence-Form statt Vergleichs-Bar.
+          if (delta == null) {
+            return (
+              <div style={{width:"100%",marginBottom:10}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:3}}>
+                  <div style={{display:"flex",flexDirection:"column"}}>
+                    <span style={{fontSize:11,fontWeight:600,color:"#e5e7eb"}}>{label}</span>
+                    <span style={{fontSize:9,color:"#6b7280"}}>{sublabel}</span>
+                  </div>
+                  <span style={{fontSize:10,color:"#64748b",fontStyle:"italic"}}>
+                    no measurement on file
+                  </span>
+                </div>
+                <div style={{background:"#0a1424",border:"1px dashed #1e3a5f",
+                              borderRadius:4,padding:"5px 10px",fontSize:11,
+                              color:"#cbd5e1",textAlign:"center",lineHeight:1.4}}>
+                  Plays as if he were{" "}
+                  <strong style={{color:"#93c5fd",fontWeight:600,fontFamily:"Oswald,sans-serif",fontSize:13}}>
+                    {unit === '"' ? inchesToFt(predicted) : `${Math.round(predicted)} lbs`}
+                  </strong>
+                </div>
+              </div>
+            );
+          }
           const clamp = Math.max(-range, Math.min(range, delta));
           const pct = ((clamp + range) / (2 * range)) * 100;
           const color = Math.abs(delta) < 0.3 ? "#9ca3af" :
