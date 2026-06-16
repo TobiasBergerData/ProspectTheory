@@ -1298,6 +1298,46 @@ def _serve_static_or_none(filename: str, response: Response, max_age: int = 600)
     )
 
 
+def _serve_static_gz_or_none(filename: str, response: Response, max_age: int = 600) -> Optional[FileResponse]:
+    """Sprint-4.0: serviert pre-gzippte Datei mit Content-Encoding: gzip.
+    Browser dekodiert transparent — wir sparen ~80% Bandbreite vs raw JSON,
+    ohne uvicorn-CPU für on-the-fly-gzip zu kosten."""
+    fpath = STATIC_DIR / f"{filename}.gz"
+    if not fpath.exists():
+        return None
+    return FileResponse(
+        fpath,
+        media_type="application/json",
+        headers={
+            "Cache-Control": f"public, max-age={max_age}, stale-while-revalidate=3600",
+            "Content-Encoding": "gzip",
+            "X-Source": "static-gz",
+        },
+    )
+
+
+@app.get("/api/stats_lab")
+async def get_stats_lab(response: Response):
+    """Sprint-4.0: Static rows + columns for the Stats Lab page.
+    ~2 MB gzipped, ~7.6k rows × ~100 cols. Cached aggressively client-side."""
+    static = _serve_static_gz_or_none("stats_lab.json", response, max_age=600)
+    if static:
+        return static
+    static = _serve_static_or_none("stats_lab.json", response, max_age=600)
+    if static:
+        return static
+    raise HTTPException(status_code=503, detail="stats_lab.json not yet built — run export_stats_lab.py")
+
+
+@app.get("/api/stats_lab/meta")
+async def get_stats_lab_meta(response: Response):
+    """Column definitions + filter ranges + presets for the Stats Lab."""
+    static = _serve_static_or_none("stats_lab_meta.json", response, max_age=3600)
+    if static:
+        return static
+    raise HTTPException(status_code=503, detail="stats_lab_meta.json not yet built")
+
+
 @app.get("/api/years")
 async def get_years(response: Response):
     """Available draft years, sorted descending. Returns latest year for default view."""

@@ -1,0 +1,1147 @@
+{
+  "groups": [
+    {
+      "id": "identity",
+      "label": "Identity"
+    },
+    {
+      "id": "projection",
+      "label": "Projections"
+    },
+    {
+      "id": "pillars",
+      "label": "5 Pillars"
+    },
+    {
+      "id": "box",
+      "label": "Box Stats"
+    },
+    {
+      "id": "pctl",
+      "label": "Position Percentiles"
+    },
+    {
+      "id": "roles",
+      "label": "Role Inference (z)"
+    },
+    {
+      "id": "ff",
+      "label": "Four Factors (CFFR)"
+    },
+    {
+      "id": "skill_int",
+      "label": "Skill Intersections (z)"
+    },
+    {
+      "id": "mind",
+      "label": "Mind Metrics"
+    },
+    {
+      "id": "archetype",
+      "label": "Archetype + Badges"
+    }
+  ],
+  "cols": [
+    {
+      "k": "name",
+      "label": "Player",
+      "g": "identity",
+      "fmt": "name",
+      "pinned": true
+    },
+    {
+      "k": "year",
+      "label": "Class",
+      "g": "identity",
+      "fmt": "int"
+    },
+    {
+      "k": "cls",
+      "label": "Yr",
+      "g": "identity",
+      "fmt": "str"
+    },
+    {
+      "k": "pos",
+      "label": "Pos",
+      "g": "identity",
+      "fmt": "str"
+    },
+    {
+      "k": "pos2",
+      "label": "Pos Det.",
+      "g": "identity",
+      "fmt": "str"
+    },
+    {
+      "k": "source",
+      "label": "Src",
+      "g": "identity",
+      "fmt": "str"
+    },
+    {
+      "k": "team",
+      "label": "Team",
+      "g": "identity",
+      "fmt": "str"
+    },
+    {
+      "k": "conf",
+      "label": "Conf",
+      "g": "identity",
+      "fmt": "str"
+    },
+    {
+      "k": "age",
+      "label": "Age",
+      "g": "identity",
+      "fmt": "dec1",
+      "range": [
+        16,
+        24
+      ]
+    },
+    {
+      "k": "ht",
+      "label": "Ht (in)",
+      "g": "identity",
+      "fmt": "dec1",
+      "range": [
+        70,
+        90
+      ]
+    },
+    {
+      "k": "war",
+      "label": "Proj WAR",
+      "g": "projection",
+      "fmt": "dec1",
+      "range": [
+        -5,
+        20
+      ]
+    },
+    {
+      "k": "pie",
+      "label": "Proj PIE",
+      "g": "projection",
+      "fmt": "dec1",
+      "range": [
+        -5,
+        25
+      ]
+    },
+    {
+      "k": "ceil",
+      "label": "Ceiling",
+      "g": "projection",
+      "fmt": "dec1"
+    },
+    {
+      "k": "floor",
+      "label": "Floor",
+      "g": "projection",
+      "fmt": "dec1"
+    },
+    {
+      "k": "sigma",
+      "label": "Sigma",
+      "g": "projection",
+      "fmt": "dec2"
+    },
+    {
+      "k": "p_super",
+      "label": "P(Super) %",
+      "g": "projection",
+      "fmt": "pct",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "p_all",
+      "label": "P(All-Star) %",
+      "g": "projection",
+      "fmt": "pct",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "p_start",
+      "label": "P(Starter) %",
+      "g": "projection",
+      "fmt": "pct",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "p_role",
+      "label": "P(Role) %",
+      "g": "projection",
+      "fmt": "pct",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "p_repl",
+      "label": "P(Repl) %",
+      "g": "projection",
+      "fmt": "pct",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "p_out",
+      "label": "P(Out) %",
+      "g": "projection",
+      "fmt": "pct",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "p_nba",
+      "label": "P(NBA) %",
+      "g": "projection",
+      "fmt": "pct",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "tier",
+      "label": "Tier",
+      "g": "projection",
+      "fmt": "str"
+    },
+    {
+      "k": "ups",
+      "label": "Upside",
+      "g": "projection",
+      "fmt": "dec1"
+    },
+    {
+      "k": "made_nba",
+      "label": "Made NBA",
+      "g": "projection",
+      "fmt": "bool"
+    },
+    {
+      "k": "feel",
+      "label": "Feel",
+      "g": "pillars",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "shoot",
+      "label": "Shooting",
+      "g": "pillars",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "def",
+      "label": "Defense",
+      "g": "pillars",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "athl",
+      "label": "Func. Athl",
+      "g": "pillars",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "ovr",
+      "label": "Overall",
+      "g": "pillars",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "create",
+      "label": "Creation",
+      "g": "pillars",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "box_cre",
+      "label": "Box Creation",
+      "g": "pillars",
+      "fmt": "dec2",
+      "range": [
+        0,
+        50
+      ]
+    },
+    {
+      "k": "bpm",
+      "label": "BPM",
+      "g": "box",
+      "fmt": "dec1",
+      "range": [
+        -5,
+        20
+      ]
+    },
+    {
+      "k": "obpm",
+      "label": "OBPM",
+      "g": "box",
+      "fmt": "dec1"
+    },
+    {
+      "k": "dbpm",
+      "label": "DBPM",
+      "g": "box",
+      "fmt": "dec1"
+    },
+    {
+      "k": "ts",
+      "label": "TS%",
+      "g": "box",
+      "fmt": "dec1",
+      "range": [
+        40,
+        75
+      ]
+    },
+    {
+      "k": "usg",
+      "label": "USG%",
+      "g": "box",
+      "fmt": "dec1",
+      "range": [
+        10,
+        40
+      ]
+    },
+    {
+      "k": "ast_p",
+      "label": "AST%",
+      "g": "box",
+      "fmt": "dec1"
+    },
+    {
+      "k": "to_p",
+      "label": "TO%",
+      "g": "box",
+      "fmt": "dec1"
+    },
+    {
+      "k": "orb_p",
+      "label": "ORB%",
+      "g": "box",
+      "fmt": "dec1"
+    },
+    {
+      "k": "drb_p",
+      "label": "DRB%",
+      "g": "box",
+      "fmt": "dec1"
+    },
+    {
+      "k": "stl_p",
+      "label": "STL%",
+      "g": "box",
+      "fmt": "dec1"
+    },
+    {
+      "k": "blk_p",
+      "label": "BLK%",
+      "g": "box",
+      "fmt": "dec1"
+    },
+    {
+      "k": "ftr",
+      "label": "FTr",
+      "g": "box",
+      "fmt": "dec1"
+    },
+    {
+      "k": "rim_f",
+      "label": "Rim Freq",
+      "g": "box",
+      "fmt": "dec1"
+    },
+    {
+      "k": "mid_f",
+      "label": "Mid Freq",
+      "g": "box",
+      "fmt": "dec1"
+    },
+    {
+      "k": "three_f",
+      "label": "3PAr",
+      "g": "box",
+      "fmt": "dec1"
+    },
+    {
+      "k": "dunk_r",
+      "label": "Dunk Rate",
+      "g": "box",
+      "fmt": "dec1"
+    },
+    {
+      "k": "rim_pct",
+      "label": "Rim FG%",
+      "g": "box",
+      "fmt": "dec1"
+    },
+    {
+      "k": "mid_pct",
+      "label": "Mid FG%",
+      "g": "box",
+      "fmt": "dec1"
+    },
+    {
+      "k": "tp_pct",
+      "label": "3P%",
+      "g": "box",
+      "fmt": "dec1"
+    },
+    {
+      "k": "fg_pct",
+      "label": "FG%",
+      "g": "box",
+      "fmt": "dec1"
+    },
+    {
+      "k": "ft_pct",
+      "label": "FT%",
+      "g": "box",
+      "fmt": "dec1"
+    },
+    {
+      "k": "efg",
+      "label": "eFG%",
+      "g": "box",
+      "fmt": "dec1"
+    },
+    {
+      "k": "ortg",
+      "label": "ORtg",
+      "g": "box",
+      "fmt": "dec1"
+    },
+    {
+      "k": "fouls_40",
+      "label": "PF/40",
+      "g": "box",
+      "fmt": "dec1"
+    },
+    {
+      "k": "pts",
+      "label": "PPG",
+      "g": "box",
+      "fmt": "dec1"
+    },
+    {
+      "k": "reb",
+      "label": "RPG",
+      "g": "box",
+      "fmt": "dec1"
+    },
+    {
+      "k": "ast",
+      "label": "APG",
+      "g": "box",
+      "fmt": "dec1"
+    },
+    {
+      "k": "stl",
+      "label": "SPG",
+      "g": "box",
+      "fmt": "dec1"
+    },
+    {
+      "k": "blk",
+      "label": "BPG",
+      "g": "box",
+      "fmt": "dec1"
+    },
+    {
+      "k": "gp",
+      "label": "GP",
+      "g": "box",
+      "fmt": "int"
+    },
+    {
+      "k": "mp",
+      "label": "MPG",
+      "g": "box",
+      "fmt": "dec1"
+    },
+    {
+      "k": "pp_bpm",
+      "label": "Pctl BPM",
+      "g": "pctl",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "pp_usg",
+      "label": "Pctl USG",
+      "g": "pctl",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "pp_ts",
+      "label": "Pctl TS",
+      "g": "pctl",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "pp_ast",
+      "label": "Pctl AST",
+      "g": "pctl",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "pp_to",
+      "label": "Pctl TO",
+      "g": "pctl",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "pp_orb",
+      "label": "Pctl ORB",
+      "g": "pctl",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "pp_drb",
+      "label": "Pctl DRB",
+      "g": "pctl",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "pp_stl",
+      "label": "Pctl STL",
+      "g": "pctl",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "pp_blk",
+      "label": "Pctl BLK",
+      "g": "pctl",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "pp_ftr",
+      "label": "Pctl FTr",
+      "g": "pctl",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "pp_obpm",
+      "label": "Pctl OBPM",
+      "g": "pctl",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "pp_dbpm",
+      "label": "Pctl DBPM",
+      "g": "pctl",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "pp_ast_to",
+      "label": "Pctl AST:TO",
+      "g": "pctl",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "rz_play",
+      "label": "Playmaker Pctl",
+      "g": "roles",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "rz_score",
+      "label": "Scorer Pctl",
+      "g": "roles",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "rz_space",
+      "label": "Spacer Pctl",
+      "g": "roles",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "rz_drive",
+      "label": "Driver Pctl",
+      "g": "roles",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "rz_crash",
+      "label": "Crasher Pctl",
+      "g": "roles",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "rz_onball",
+      "label": "On-Ball D Pctl",
+      "g": "roles",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "rz_switch",
+      "label": "Switch Pctl",
+      "g": "roles",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "rz_rim",
+      "label": "Rim Prot Pctl",
+      "g": "roles",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "rz_zone",
+      "label": "Zone Pctl",
+      "g": "roles",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "rz_connect",
+      "label": "Connector Pctl",
+      "g": "roles",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "rz_helio",
+      "label": "Helio Pctl",
+      "g": "roles",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "rz_reb",
+      "label": "Rebounder Pctl",
+      "g": "roles",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "rz_micro",
+      "label": "Micro Space Pctl",
+      "g": "roles",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "rz_event",
+      "label": "Event Crtr Pctl",
+      "g": "roles",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "rz_versat",
+      "label": "Versatility",
+      "g": "roles",
+      "fmt": "int",
+      "range": [
+        0,
+        13
+      ]
+    },
+    {
+      "k": "ff_efg",
+      "label": "FF eFG Pctl",
+      "g": "ff",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "ff_tov",
+      "label": "FF TO Pctl",
+      "g": "ff",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "ff_orb",
+      "label": "FF ORB Pctl",
+      "g": "ff",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "ff_ftr",
+      "label": "FF FTr Pctl",
+      "g": "ff",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "ff_comp",
+      "label": "NPV (CFFR)",
+      "g": "ff",
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "k": "zi_orb",
+      "label": "Z ORB% (Pos)",
+      "g": "skill_int",
+      "fmt": "dec2",
+      "range": [
+        -3,
+        3
+      ]
+    },
+    {
+      "k": "zi_ast",
+      "label": "Z AST% (Pos)",
+      "g": "skill_int",
+      "fmt": "dec2",
+      "range": [
+        -3,
+        3
+      ]
+    },
+    {
+      "k": "zi_blk",
+      "label": "Z BLK% (Pos)",
+      "g": "skill_int",
+      "fmt": "dec2",
+      "range": [
+        -3,
+        3
+      ]
+    },
+    {
+      "k": "zi_cd",
+      "label": "Crasher+Distributor",
+      "g": "skill_int",
+      "fmt": "dec2",
+      "range": [
+        -3,
+        3
+      ]
+    },
+    {
+      "k": "zi_tw",
+      "label": "Two-Way Skill",
+      "g": "skill_int",
+      "fmt": "dec2",
+      "range": [
+        -3,
+        3
+      ]
+    },
+    {
+      "k": "m_aggr",
+      "label": "Z Aggressor",
+      "g": "mind",
+      "fmt": "dec2",
+      "range": [
+        -3,
+        3
+      ]
+    },
+    {
+      "k": "m_aggr_idx",
+      "label": "Aggressor Idx",
+      "g": "mind",
+      "fmt": "dec2"
+    },
+    {
+      "k": "m_overd",
+      "label": "Z Overdriver",
+      "g": "mind",
+      "fmt": "dec2",
+      "range": [
+        -3,
+        3
+      ]
+    },
+    {
+      "k": "m_hothead",
+      "label": "Z Hothead",
+      "g": "mind",
+      "fmt": "dec2",
+      "range": [
+        -3,
+        3
+      ]
+    },
+    {
+      "k": "m_passive",
+      "label": "Z Passive",
+      "g": "mind",
+      "fmt": "dec2",
+      "range": [
+        -3,
+        3
+      ]
+    },
+    {
+      "k": "m_bounce",
+      "label": "Z Bounceback",
+      "g": "mind",
+      "fmt": "dec2",
+      "range": [
+        -3,
+        3
+      ]
+    },
+    {
+      "k": "m_stam",
+      "label": "Stamina Idx",
+      "g": "mind",
+      "fmt": "dec2",
+      "range": [
+        0,
+        2
+      ]
+    },
+    {
+      "k": "m_drift",
+      "label": "Adverse Drift",
+      "g": "mind",
+      "fmt": "dec2",
+      "range": [
+        -0.3,
+        0.3
+      ]
+    },
+    {
+      "k": "m_clutch",
+      "label": "Clutch WP",
+      "g": "mind",
+      "fmt": "dec2"
+    },
+    {
+      "k": "m_late",
+      "label": "Late Clock",
+      "g": "mind",
+      "fmt": "dec2"
+    },
+    {
+      "k": "m_streaks",
+      "label": "Mind Streaks",
+      "g": "mind",
+      "fmt": "int"
+    },
+    {
+      "k": "m_sample",
+      "label": "Limited Sample",
+      "g": "mind",
+      "fmt": "bool"
+    },
+    {
+      "k": "arch",
+      "label": "Archetype",
+      "g": "archetype",
+      "fmt": "str"
+    },
+    {
+      "k": "badges_n",
+      "label": "Badges (n)",
+      "g": "archetype",
+      "fmt": "int"
+    },
+    {
+      "k": "redflag_n",
+      "label": "Red Flags",
+      "g": "archetype",
+      "fmt": "int"
+    },
+    {
+      "k": "conf_lvl",
+      "label": "Confidence",
+      "g": "archetype",
+      "fmt": "str"
+    },
+    {
+      "k": "peak_pie",
+      "label": "Peak PIE (act.)",
+      "g": "projection",
+      "fmt": "dec1"
+    },
+    {
+      "k": "peak_war",
+      "label": "Peak WA (act.)",
+      "g": "projection",
+      "fmt": "dec1"
+    }
+  ],
+  "presets": [
+    {
+      "id": "default",
+      "label": "Default",
+      "cols": [
+        "name",
+        "year",
+        "pos",
+        "age",
+        "ht",
+        "war",
+        "p_super",
+        "p_all",
+        "feel",
+        "shoot",
+        "def",
+        "athl",
+        "arch"
+      ]
+    },
+    {
+      "id": "shooters",
+      "label": "Shooters Audit",
+      "cols": [
+        "name",
+        "pos",
+        "year",
+        "shoot",
+        "ts",
+        "tp_pct",
+        "three_f",
+        "ftr",
+        "p_super",
+        "p_all"
+      ]
+    },
+    {
+      "id": "defenders",
+      "label": "All-Defensive",
+      "cols": [
+        "name",
+        "pos",
+        "year",
+        "def",
+        "dbpm",
+        "blk_p",
+        "stl_p",
+        "drb_p",
+        "rz_rim",
+        "rz_onball",
+        "rz_switch"
+      ]
+    },
+    {
+      "id": "skill_int",
+      "label": "Skill Intersections",
+      "cols": [
+        "name",
+        "pos",
+        "year",
+        "zi_orb",
+        "zi_ast",
+        "zi_blk",
+        "zi_cd",
+        "zi_tw",
+        "war"
+      ]
+    },
+    {
+      "id": "mind",
+      "label": "Mind / Resilience",
+      "cols": [
+        "name",
+        "pos",
+        "year",
+        "m_aggr",
+        "m_overd",
+        "m_hothead",
+        "m_bounce",
+        "m_stam",
+        "m_drift",
+        "m_clutch"
+      ]
+    },
+    {
+      "id": "roles",
+      "label": "Role Versatility",
+      "cols": [
+        "name",
+        "pos",
+        "year",
+        "rz_versat",
+        "rz_play",
+        "rz_score",
+        "rz_space",
+        "rz_drive",
+        "rz_crash",
+        "rz_onball",
+        "rz_rim"
+      ]
+    },
+    {
+      "id": "validation",
+      "label": "Validation (Historic)",
+      "cols": [
+        "name",
+        "year",
+        "pos",
+        "war",
+        "p_super",
+        "p_all",
+        "peak_pie",
+        "peak_war"
+      ]
+    }
+  ],
+  "filter_defaults": {
+    "year": [
+      2026
+    ]
+  },
+  "schema_version": 1
+}

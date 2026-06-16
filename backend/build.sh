@@ -91,6 +91,11 @@ done
 log_step "STEP 16/16: Export static board JSONs (Render OOM root-cause fix)"
 python -u export_board_static.py
 
+# Plus Sprint-4.0: Stats Lab pre-computed data (~10 MB raw / ~2 MB gz)
+# Served as static file by /api/stats_lab — no SQL hot-path, same OOM-safe pattern.
+log_step "Sprint-4.0 — Stats Lab pre-compute (rows + meta)"
+python -u export_stats_lab.py
+
 # ─── Build-Validation ───
 log_step "BUILD COMPLETE — Validation"
 if [[ ! -f "data/processed/prospecttheory.db" ]]; then
