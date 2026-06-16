@@ -47,11 +47,11 @@ cd "$SCRIPT_DIR"
 echo "[build.sh] Working directory: $(pwd)"
 
 # ─── Step 1: Python Dependencies ───
-log_step "STEP 1/15: Install Python dependencies"
+log_step "STEP 1/16: Install Python dependencies"
 pip install -r requirements.txt
 
 # ─── Step 2: Build SQLite DB aus api_profiles_part*.json ───
-log_step "STEP 2/15: Build prospecttheory.db from api_profiles"
+log_step "STEP 2/16: Build prospecttheory.db from api_profiles"
 python -u build_db.py
 
 # ─── Steps 3-13: Inject-Pipeline ───
@@ -75,7 +75,7 @@ INJECT_STEPS=(
 
 STEP=3
 for script in "${INJECT_STEPS[@]}"; do
-  log_step "STEP $STEP/15: $script"
+  log_step "STEP $STEP/16: $script"
   if [[ ! -f "$script" ]]; then
     echo "[build.sh] FATAL: $script not found in $(pwd)"
     exit 1
@@ -84,12 +84,25 @@ for script in "${INJECT_STEPS[@]}"; do
   STEP=$((STEP + 1))
 done
 
+# ─── Step 16: Static Pre-Computed Responses (Sprint-3.36 Render OOM fix) ───
+# Materialisiert /api/board, /api/years, /api/combine als JSON-Files in
+# data/processed/static/. Endpoints servieren sie per FileResponse → Peak-Memory
+# fällt von ~30 MB/Request auf ~0 MB. Wurzelfix für den 9:05-9:23 AM Crash-Loop.
+log_step "STEP 16/16: Export static board JSONs (Render OOM root-cause fix)"
+python -u export_board_static.py
+
 # ─── Build-Validation ───
-log_step "BUILD COMPLETE — Validation (Step 15/15)"
+log_step "BUILD COMPLETE — Validation"
 if [[ ! -f "data/processed/prospecttheory.db" ]]; then
   echo "[build.sh] FATAL: prospecttheory.db not created — build pipeline broken"
   exit 1
 fi
+if [[ ! -f "data/processed/static/board_all.json" ]]; then
+  echo "[build.sh] FATAL: board_all.json not created — static export step failed"
+  exit 1
+fi
 DB_SIZE=$(du -h data/processed/prospecttheory.db | cut -f1)
+STATIC_SIZE=$(du -sh data/processed/static/ | cut -f1)
 echo "[build.sh] prospecttheory.db: $DB_SIZE"
+echo "[build.sh] static/*.json:     $STATIC_SIZE"
 echo "[build.sh] Pipeline finished successfully."

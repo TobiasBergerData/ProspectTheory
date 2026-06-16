@@ -786,10 +786,17 @@ def _load_combine_data():
 
 
 @app.get("/api/combine")
-async def get_combine_data():
+async def get_combine_data(response: Response):
     """NBA Anthropometrik (Wingspan-DB 1.835 Spieler + Combine-Weights).
     Höhe IMMER mit Schuhen (Wingspan-CSV no-shoes + SHOE_LIFT_INCHES Standard-Lift).
-    Weight-Daten aus Combine wenn vorhanden, sonst null (Frontend imputiert)."""
+    Weight-Daten aus Combine wenn vorhanden, sonst null (Frontend imputiert).
+
+    Sprint-3.36: Static-File-Pfad als Hot-Path, SQL-Fallback wenn fehlt.
+    Combine ändert sich pro Deploy einmal → CDN-Cache 1h."""
+    static = _serve_static_or_none("combine.json", response, max_age=3600)
+    if static:
+        return static
+    response.headers["X-Source"] = "sql-fallback"
     return {"players": _load_combine_data()}
 
 
@@ -1262,10 +1269,44 @@ async def get_tiers(slug: str):
     }
 
 
+# ═══════════════════════════════════════════════════════════
+# Sprint-3.36: Static pre-computed responses (Render Free Tier OOM fix)
+# ═══════════════════════════════════════════════════════════
+# Wurzel: /api/board?n=200 verbrauchte ~30-40 MB Peak-Memory pro Request
+# (zlib-decompress + JSON-Serialization). Bei concurrent requests → OOM-Loop.
+# Lösung: export_board_static.py schreibt die Responses einmal pro Deploy in
+# data/processed/static/. Endpoint serviert per FileResponse → ~0 MB Memory.
+# Fallback auf SQL-Pfad wenn Static-File fehlt (defensive).
+STATIC_DIR = Path(os.environ.get("DATA_DIR", "data/processed")) / "static"
+# Muss mit export_board_static.BOARD_N übereinstimmen (Hot-Path-Default).
+BOARD_N_STATIC = 200
+
+
+def _serve_static_or_none(filename: str, response: Response, max_age: int = 600) -> Optional[FileResponse]:
+    """Serviert eine Datei aus STATIC_DIR mit Cache-Control. Returns None falls
+    die Datei fehlt — Caller fällt dann auf SQL-Pfad zurück (graceful)."""
+    fpath = STATIC_DIR / filename
+    if not fpath.exists():
+        return None
+    return FileResponse(
+        fpath,
+        media_type="application/json",
+        headers={
+            "Cache-Control": f"public, max-age={max_age}, stale-while-revalidate=3600",
+            "X-Source": "static",  # Plus für Debugging: ist die Response pre-computed?
+        },
+    )
+
+
 @app.get("/api/years")
-async def get_years():
+async def get_years(response: Response):
     """Available draft years, sorted descending. Returns latest year for default view."""
+    static = _serve_static_or_none("years.json", response, max_age=3600)
+    if static:
+        return static
+    # Fallback: SQL-Pfad
     years = _get_years()
+    response.headers["X-Source"] = "sql-fallback"
     return {
         "years": years,
         "latest": years[0] if years else 2026,
@@ -1284,9 +1325,21 @@ async def get_board(
     Big Board: top N players sorted by ppWA (or pred_mu fallback).
     Returns rich profile data so the frontend does NOT need a second fetch.
     Default n=200 (down from 500) — frontend shows ≤60, this covers all filter combos.
+
+    Sprint-3.36: Wenn n==200 und position is None → serviert die statische
+    Pre-Computed Datei (Memory <1MB). Sonst → SQL-Fallback (Filter-Edge-Case).
     """
-    # Cache-Control: allow CDN/browser to cache for 10 min, serve stale for 1h while revalidating
+    # Plus Static-Path nur für den Hot-Path (n=200, kein position-Filter).
+    # Filter wie position=Wing sind selten und lohnen sich nicht zum Materialisieren.
+    if n == BOARD_N_STATIC and position is None:
+        filename = f"board_{year}.json" if year else "board_all.json"
+        static = _serve_static_or_none(filename, response, max_age=600)
+        if static:
+            return static
+
+    # SQL-Fallback (auch wenn static fehlt oder Filter aktiv ist)
     response.headers["Cache-Control"] = "public, max-age=600, stale-while-revalidate=3600"
+    response.headers["X-Source"] = "sql-fallback"
 
     _ensure_db_present()
 
