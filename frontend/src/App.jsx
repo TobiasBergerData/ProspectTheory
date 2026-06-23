@@ -5140,33 +5140,91 @@ function MindTab({p}) {
 
 
 // ═══════════════════════════════════════════════════════════
-// Sprint-3.41/3.42 — H1/H2 Box-Score Splits (Tobias 2026-06-16)
+// Sprint-3.41/3.42/3.43 — H1/H2 Box-Score Splits (Tobias 2026-06-16/17)
 // 13 rate-Stats H1 vs H2 from PBP (garbage time excluded).
 // Source: p.halfSplits = {season, h1: {counts}, h2: {counts}, sample_floor_pass}
 //
-// Sprint-3.42 (2026-06-16): empirische Percentile-Calibration aus dem
-// 2025-26 NCAA-Pool (n=5483, ≥10 min/half). NCAA-Spieler werden im H2
-// MEISTENS besser (Median Δ TS%=+3.1pp), nicht schlechter — Color-coding
-// muss daher relativ zum Pool sein, nicht naiv sign-of-Δ. "Concerning"
-// heißt unter p10 für upside-stats, über p90 für TO%.
+// Sprint-3.43 (2026-06-17): Position-stratified percentiles from full
+// 9-season NCAA pool (2017-18 through 2025-26, n=35,578 with pos_group +
+// ≥10 min/half). Color-coding now position-aware: a Center with Δ TS% -5pp
+// is a different outlier than a PG with -5pp. Front-office-grade calibration.
 // ═══════════════════════════════════════════════════════════
 const HALF_SPLIT_PERCENTILES = {
-  // Δ (H2 - H1), computed from 2025-26 NCAA pool (n=5483 with ≥10 min/half)
-  ts:       {p10: -19.0, p25: -4.9,  p50: +3.1,  p75: +11.2, p90: +24.0},
-  efg:      {p10: -21.6, p25: -6.9,  p50: +1.7,  p75: +10.9, p90: +25.0},
-  fg:       {p10: -16.7, p25: -5.0,  p50: +2.1,  p75: +9.8,  p90: +21.9},
-  ft:       {p10: -24.9, p25: -9.3,  p50:  0.0,  p75: +10.0, p90: +24.9},
-  ftr:      {p10: -0.17, p25:  0.0,  p50: +0.12, p75: +0.27, p90: +0.45},
-  usg:      {p10: -24.5, p25: -12.7, p50: -3.2,  p75: +2.0,  p90: +12.5},
-  to_pct:   {p10: -11.8, p25: -4.4,  p50: -0.5,  p75: +2.1,  p90: +9.0},
-  ast_fga:  {p10: -0.18, p25: -0.07, p50:  0.0,  p75: +0.07, p90: +0.21},
-  stl_fga:  {p10: -0.13, p25: -0.05, p50:  0.0,  p75: +0.04, p90: +0.15},
-  blk_fga:  {p10: -0.08, p25: -0.02, p50:  0.0,  p75: +0.02, p90: +0.08},
-  orb_fga:  {p10: -0.14, p25: -0.03, p50:  0.0,  p75: +0.06, p90: +0.18},
-  drb_fga:  {p10: -0.30, p25: -0.12, p50: -0.01, p75: +0.10, p90: +0.29},
-  ppp:      {p10: -0.34, p25: -0.08, p50: +0.07, p75: +0.22, p90: +0.45},
+  // Δ (H2 - H1) per position group. Source: 9-season NCAA pool, ≥10 min/half.
+  Playmaker: {
+    n: 8172,
+    ts:       {p10: -12.12, p25:  -3.22, p50: +3.38, p75: +9.89,  p90: +18.59},
+    efg:      {p10: -14.42, p25:  -5.85, p50: +1.06, p75: +8.33,  p90: +17.79},
+    fg:       {p10: -10.86, p25:  -3.99, p50: +1.49, p75: +7.46,  p90: +15.13},
+    ft:       {p10: -20.00, p25:  -9.36, p50:  0.00, p75: +9.60,  p90: +21.79},
+    ftr:      {p10:  -0.05, p25:  +0.03, p50: +0.15, p75: +0.26,  p90: +0.39},
+    usg:      {p10: -23.24, p25: -10.89, p50: -1.36, p75: +8.44,  p90: +25.56},
+    to_pct:   {p10: -10.57, p25:  -5.21, p50: -1.39, p75: +2.06,  p90:  +7.10},
+    ast_fga:  {p10:  -0.18, p25:  -0.08, p50: -0.00, p75: +0.07,  p90:  +0.18},
+    stl_fga:  {p10:  -0.10, p25:  -0.05, p50: -0.00, p75: +0.04,  p90:  +0.10},
+    blk_fga:  {p10:  -0.03, p25:  -0.01, p50:  0.00, p75: +0.01,  p90:  +0.03},
+    orb_fga:  {p10:  -0.05, p25:  -0.02, p50: +0.00, p75: +0.03,  p90:  +0.08},
+    drb_fga:  {p10:  -0.21, p25:  -0.10, p50: -0.02, p75: +0.05,  p90:  +0.15},
+    ppp:      {p10:  -0.20, p25:  -0.05, p50: +0.07, p75: +0.19,  p90:  +0.34},
+  },
+  Wing: {
+    n: 23590,
+    ts:       {p10: -16.82, p25:  -4.07, p50: +3.55, p75: +11.79, p90: +23.97},
+    efg:      {p10: -19.39, p25:  -6.05, p50: +2.13, p75: +11.39, p90: +25.00},
+    fg:       {p10: -15.79, p25:  -4.67, p50: +2.05, p75: +10.00, p90: +21.62},
+    ft:       {p10: -25.00, p25:  -8.94, p50:  0.00, p75: +10.84, p90: +25.00},
+    ftr:      {p10:  -0.15, p25:  +0.00, p50: +0.12, p75: +0.27,  p90: +0.46},
+    usg:      {p10: -22.83, p25: -11.27, p50: -3.49, p75: +1.88,  p90: +12.83},
+    to_pct:   {p10: -11.95, p25:  -4.49, p50: -0.43, p75: +2.43,  p90: +10.06},
+    ast_fga:  {p10:  -0.17, p25:  -0.07, p50:  0.00, p75: +0.07,  p90: +0.20},
+    stl_fga:  {p10:  -0.13, p25:  -0.05, p50:  0.00, p75: +0.04,  p90: +0.15},
+    blk_fga:  {p10:  -0.07, p25:  -0.02, p50:  0.00, p75: +0.02,  p90: +0.07},
+    orb_fga:  {p10:  -0.14, p25:  -0.03, p50: +0.00, p75: +0.06,  p90: +0.18},
+    drb_fga:  {p10:  -0.30, p25:  -0.12, p50: -0.01, p75: +0.10,  p90: +0.29},
+    ppp:      {p10:  -0.36, p25:  -0.09, p50: +0.07, p75: +0.22,  p90: +0.46},
+  },
+  Big: {
+    n: 3816,
+    ts:       {p10: -25.31, p25:  -8.41, p50: +1.83, p75: +12.27, p90: +29.55},
+    efg:      {p10: -25.00, p25:  -8.97, p50: +0.79, p75: +12.50, p90: +28.57},
+    fg:       {p10: -21.79, p25:  -7.55, p50: +1.43, p75: +11.41, p90: +25.74},
+    ft:       {p10: -33.33, p25: -13.84, p50: -0.79, p75: +13.05, p90: +29.41},
+    ftr:      {p10:  -0.31, p25:  -0.10, p50: +0.04, p75: +0.20,  p90: +0.43},
+    usg:      {p10: -20.96, p25:  -7.16, p50: -1.32, p75: +3.40,  p90: +14.36},
+    to_pct:   {p10: -14.54, p25:  -6.87, p50: -1.86, p75: +2.63,  p90: +9.24},
+    ast_fga:  {p10:  -0.15, p25:  -0.06, p50:  0.00, p75: +0.05,  p90: +0.14},
+    stl_fga:  {p10:  -0.12, p25:  -0.04, p50:  0.00, p75: +0.04,  p90: +0.11},
+    blk_fga:  {p10:  -0.16, p25:  -0.05, p50:  0.00, p75: +0.08,  p90: +0.20},
+    orb_fga:  {p10:  -0.20, p25:  -0.06, p50: +0.03, p75: +0.12,  p90: +0.28},
+    drb_fga:  {p10:  -0.39, p25:  -0.14, p50: +0.01, p75: +0.16,  p90: +0.40},
+    ppp:      {p10:  -0.24, p25:  -0.06, p50: +0.08, p75: +0.22,  p90: +0.39},
+  },
+  // Plus globaler Fallback wenn pos_group fehlt
+  Global: {
+    n: 56263,
+    ts:       {p10: -28.81, p25:  -6.49, p50: +2.67, p75: +12.22, p90: +31.66},
+    efg:      {p10: -30.56, p25:  -8.29, p50: +0.93, p75: +11.66, p90: +32.85},
+    fg:       {p10: -25.00, p25:  -6.23, p50: +1.32, p75: +10.33, p90: +27.78},
+    ft:       {p10: -25.00, p25: -10.00, p50:  0.00, p75: +10.98, p90: +25.52},
+    ftr:      {p10:  -0.19, p25:  +0.00, p50: +0.09, p75: +0.25,  p90: +0.47},
+    usg:      {p10: -22.40, p25:  -9.56, p50: -2.00, p75: +1.00,  p90:  +9.19},
+    to_pct:   {p10: -20.00, p25:  -6.91, p50: -0.80, p75: +3.33,  p90: +17.01},
+    ast_fga:  {p10:  -0.21, p25:  -0.07, p50:  0.00, p75: +0.06,  p90: +0.22},
+    stl_fga:  {p10:  -0.15, p25:  -0.04, p50:  0.00, p75: +0.04,  p90: +0.14},
+    blk_fga:  {p10:  -0.06, p25:  -0.01, p50:  0.00, p75: +0.01,  p90: +0.07},
+    orb_fga:  {p10:  -0.16, p25:  -0.03, p50:  0.00, p75: +0.06,  p90: +0.20},
+    drb_fga:  {p10:  -0.40, p25:  -0.14, p50:  0.00, p75: +0.11,  p90: +0.35},
+    ppp:      {p10:  -0.50, p25:  -0.11, p50: +0.06, p75: +0.23,  p90: +0.54},
+  },
 };
-const HALF_SPLIT_POOL_N = 5483;
+const HALF_SPLIT_POOL_N_TOTAL = 35578;   // pos_group-known players
+const HALF_SPLIT_POOL_N_GLOBAL = 56263;  // all players (incl. no pos)
+
+// Plus picks the right pool (Position or Global fallback) for percentile lookup
+function _halfSplitPool(posGroup) {
+  if (posGroup && HALF_SPLIT_PERCENTILES[posGroup]) return HALF_SPLIT_PERCENTILES[posGroup];
+  return HALF_SPLIT_PERCENTILES.Global;
+}
 
 // Plus computes the player's empirical percentile rank (0-100) for a
 // given Δ — linear interpolation between p10/p25/p50/p75/p90.
@@ -5245,13 +5303,19 @@ function HalfSplitSection({p}) {
       val: (h)=> poss(h) > 0 ? pts(h) / poss(h) : null },
   ];
 
-  // Compute deltas, percentile rank vs NCAA pool, direction-score
+  // Plus pick the position-stratified percentile pool (Sprint-3.43)
+  const posGroup = p?.pos || p?.pos_group;
+  const pool = _halfSplitPool(posGroup);
+  const poolLabel = HALF_SPLIT_PERCENTILES[posGroup] ? posGroup : "Global";
+  const poolN = pool.n;
+
+  // Compute deltas, percentile rank vs NCAA-pos pool, direction-score
   const computed = HALF_STATS.map(s => {
     const v1 = s.val(h1);
     const v2 = s.val(h2);
     if (v1 == null || v2 == null) return {...s, v1: null, v2: null, delta: null, pctl: null, dirScore: 0};
     const delta = v2 - v1;
-    const pcts = HALF_SPLIT_PERCENTILES[s.id];
+    const pcts = pool[s.id];
     const rawPctl = _halfSplitPercentile(delta, pcts);  // 0-100 of raw Δ
     // For "down is good" stats, flip the percentile (high Δ TO% = bad direction)
     const pctl = (s.good === "down" && rawPctl != null) ? 100 - rawPctl : rawPctl;
@@ -5310,11 +5374,11 @@ function HalfSplitSection({p}) {
 
   return (
     <Sec icon="🌡" title="First vs Second Half — Stamina & Concentration"
-         sub={`Box-stat split across this season's games. NCAA players typically improve in H2 (median TS% +3pp) once they've read the defence and warmed up. Color is relative to the 2025-26 NCAA pool (n=${HALF_SPLIT_POOL_N.toLocaleString()}, ≥10 min/half): green = above-typical lift, red = unusual fade vs peers. Garbage time excluded.`}>
+         sub={`Box-stat split across this player's ${hs.season || "NCAA"} season. NCAA players typically improve in H2 (median TS% +3pp) once they've read the defence and warmed up. Color is relative to the ${poolLabel}-pool over 9 NCAA seasons 2017-18 → 2025-26 (n=${poolN.toLocaleString()}, ≥10 min/half): green = above-typical lift, red = unusual fade vs peers. Historical validation: tier-correlations are weak (|r|<0.10 with peak WA, n=182 NBA-careered) — treat as scout-eye signal, not predictor. Garbage time excluded.`}>
       {!hs.sample_floor_pass && (
         <div className="rounded-lg p-3 mb-4 text-xs"
              style={{background:"#fbbf2411",border:"1px solid #fbbf2444",color:"#fcd34d"}}>
-          ⚠ Limited sample: H1 {h1.min?.toFixed?.(0) ?? "?"} min, H2 {h2.min?.toFixed?.(0) ?? "?"} min recorded (floor: 10 min each). Treat splits as directional only.
+          ⚠ Limited sample: H1 {h1.min?.toFixed?.(0) ?? "?"} min, H2 {h2.min?.toFixed?.(0) ?? "?"} min recorded ({hs.season || "?"}, floor: 10 min/half). Treat splits as directional only.
         </div>
       )}
 
@@ -5378,8 +5442,8 @@ function HalfSplitSection({p}) {
             else if (pctl <= 25) tail = {label: "Below-typical", color: "#fca5a5"};
           }
 
-          // Peer-typical Δ reference (median of pool)
-          const peerMedian = HALF_SPLIT_PERCENTILES[s.id]?.p50;
+          // Peer-typical Δ reference (median of position pool)
+          const peerMedian = pool[s.id]?.p50;
 
           return (
             <Tip key={s.id} block wide content={

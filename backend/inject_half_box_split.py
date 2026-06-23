@@ -31,11 +31,13 @@ import pandas as pd
 BASE = Path(__file__).resolve().parent
 DB = BASE / "data" / "processed" / "prospecttheory.db"
 
-SEASON = "2025-26"
-CSV_LOCAL    = BASE / "data" / "processed" / f"pbp_half_box_split_{SEASON}.csv"
-CSV_PIPELINE = BASE.parent.parent / "data-pipeline" / "data" / "processed" / f"pbp_half_box_split_{SEASON}.csv"
-
-SAMPLE_MIN_FLOOR_MIN = 10.0
+# Sprint-3.43 (Tobias 2026-06-17): scan all 9 NCAA seasons available.
+# Per-player: pick LATEST season where both halves ≥ 10 min recorded.
+# Fallback: lower threshold (5 min) if no valid latest exists.
+SEASONS = ["2017-18", "2018-19", "2019-20", "2020-21", "2021-22",
+           "2022-23", "2023-24", "2024-25", "2025-26"]
+SAMPLE_MIN_FLOOR_MIN     = 10.0   # primary floor
+SAMPLE_RELAXED_FLOOR_MIN = 5.0    # fallback floor for older / limited samples
 BATCH_COMMIT = 500
 
 
@@ -76,43 +78,80 @@ def build_player_payload(row: pd.Series, season: str) -> dict:
 
 
 def main():
-    csv_path = CSV_LOCAL if CSV_LOCAL.exists() else CSV_PIPELINE
-    if not csv_path.exists():
-        print(f"[inject_half_box_split] CSV not found at:")
-        print(f"  - {CSV_LOCAL}")
-        print(f"  - {CSV_PIPELINE}")
-        print(f"  Skipping injection.")
-        return
     if not DB.exists():
         sys.exit(f"ERROR: {DB} not found")
 
-    print(f"[inject_half_box_split] Loading {csv_path}")
-    df = pd.read_csv(csv_path, low_memory=False)
-    print(f"  {len(df):,} PBP-aggregate rows loaded")
+    # Load each season's CSV that exists (local first, pipeline fallback)
+    print(f"[inject_half_box_split] Scanning {len(SEASONS)} seasons:")
+    season_dfs = {}
+    for season in SEASONS:
+        local = BASE / "data" / "processed" / f"pbp_half_box_split_{season}.csv"
+        pipeline = BASE.parent.parent / "data-pipeline" / "data" / "processed" / f"pbp_half_box_split_{season}.csv"
+        path = local if local.exists() else pipeline
+        if not path.exists():
+            print(f"  {season}: not found, skip")
+            continue
+        df = pd.read_csv(path, low_memory=False)
+        season_dfs[season] = df
+        print(f"  {season}: {len(df):,} rows")
+    if not season_dfs:
+        print("  No CSVs found at all — skipping injection.")
+        return
 
-    # NFKD-normalised name lookup (diacritic-resilient)
-    name_map = {}
-    for _, r in df.iterrows():
-        name = r.get("player_name")
-        if not isinstance(name, str) or not name.strip():
+    # Per-player season selection: latest with ≥10 min/half, fallback to ≥5 min.
+    # Iterate seasons newest-to-oldest, pick first that passes the floor.
+    name_map = {}  # clean_name -> (chosen_season, payload, floor_passed)
+    passed_strict = set()
+    passed_relaxed = set()
+    for season in reversed(SEASONS):
+        df = season_dfs.get(season)
+        if df is None:
             continue
-        clean = _nfkd(name)
-        if not clean:
-            continue
-        payload = build_player_payload(r, SEASON)
-        existing = name_map.get(clean)
-        if existing is None:
-            name_map[clean] = payload
-        else:
-            ex_h1, ex_h2 = existing["h1"], existing["h2"]
-            ex_tot = (ex_h1["FGA"]+ex_h1["AST"]+ex_h1["STL"]+ex_h1["BLK"]
-                      +ex_h2["FGA"]+ex_h2["AST"]+ex_h2["STL"]+ex_h2["BLK"])
-            n_h1, n_h2 = payload["h1"], payload["h2"]
-            n_tot = (n_h1["FGA"]+n_h1["AST"]+n_h1["STL"]+n_h1["BLK"]
-                     +n_h2["FGA"]+n_h2["AST"]+n_h2["STL"]+n_h2["BLK"])
-            if n_tot > ex_tot:
+        for _, r in df.iterrows():
+            name = r.get("player_name")
+            if not isinstance(name, str) or not name.strip():
+                continue
+            clean = _nfkd(name)
+            if not clean or clean in passed_strict:
+                continue
+            h1m = float(r.get("h1_min", 0) or 0)
+            h2m = float(r.get("h2_min", 0) or 0)
+            if h1m >= SAMPLE_MIN_FLOOR_MIN and h2m >= SAMPLE_MIN_FLOOR_MIN:
+                payload = build_player_payload(r, season)
                 name_map[clean] = payload
-    print(f"  {len(name_map):,} unique players")
+                passed_strict.add(clean)
+    # Pass 2: relaxed floor for those not yet picked
+    for season in reversed(SEASONS):
+        df = season_dfs.get(season)
+        if df is None:
+            continue
+        for _, r in df.iterrows():
+            name = r.get("player_name")
+            if not isinstance(name, str) or not name.strip():
+                continue
+            clean = _nfkd(name)
+            if not clean or clean in passed_strict or clean in passed_relaxed:
+                continue
+            h1m = float(r.get("h1_min", 0) or 0)
+            h2m = float(r.get("h2_min", 0) or 0)
+            if h1m >= SAMPLE_RELAXED_FLOOR_MIN and h2m >= SAMPLE_RELAXED_FLOOR_MIN:
+                payload = build_player_payload(r, season)
+                # Plus mark sample_floor_pass=False so frontend shows caveat
+                payload["sample_floor_pass"] = False
+                name_map[clean] = payload
+                passed_relaxed.add(clean)
+
+    print(f"\n  Strict-floor pass (≥10 min/half): {len(passed_strict):,}")
+    print(f"  Relaxed-floor pass (≥5 min/half):  {len(passed_relaxed):,}")
+    print(f"  Total unique players: {len(name_map):,}")
+
+    # Plus per-season distribution of picks (sanity)
+    from collections import Counter
+    season_counts = Counter(p["season"] for p in name_map.values())
+    print(f"\n  Season distribution of picks:")
+    for season in SEASONS:
+        if season in season_counts:
+            print(f"    {season}: {season_counts[season]:,}")
 
     conn = sqlite3.connect(DB)
     cur = conn.cursor()
