@@ -239,40 +239,48 @@ const pct = (v) => v!=null?(v*100).toFixed(1)+"%":"—";
 // ── Anthropometric NBA-Tier-Median Schwellen (Tobias 2026-05-09 v2) ───────
 // 5-Position-Klassifikation (PG/SG/SF/PF/C) — präziser als 3-Position-System
 // weil "Wing" zu breit war (umfasste SG 6'5" und SF 6'8" gleichzeitig).
-// Quelle: NBA Combine Database 2010-2024 (1835 Spieler), gefiltert nach
-// Career-Outcome-Tier (peak_pie ≥40/25/15/8 = Sup/AS/St/RP) × NBA-Position.
-//   ht = Höhe mit Schuhen (NBA-Convention, +1.25″ shoe-lift)
+// Quelle (Tobias 2026-06-23, recalibrate_anthro_tier_medians.py): per-cell
+// MEDIAN aus NBA Combine 2000-2022 × nba_added_wins_peak (n=231 joined),
+// gebucketed in 4 Career-Tiers via peak_wa-Quantilen
+// (Replacement≤0.8 / RP≤3.3 / Starter≤10.1 / All-Star>10.1). Monotonisiert
+// entlang der Tier-Achse (jedes höhere Tier ≥ vorheriges).
+//   ht = Höhe mit Schuhen (NBA-Convention: combine_hgt_no_shoes + 1.25″)
 //   wt = Gewicht (lbs)
 //   ws = Wingspan (inches)
 //   sr = Standing Reach (inches)
+// Caveat: Wingspan/Standing-Reach zeigen non-monoton im Raw — All-Star-Pool
+// hat Selection-Bias (Top-Picks skippen Combine), und Skill schlägt Anthro
+// bei den absoluten Outliers (Brunson 75″ ws, Trae 75″ ws sind All-Stars).
+// Monotonisierung trägt diese Information explizit, aber die Tier-Marker
+// sind reference, kein outcome predictor. Siehe Methods Tab.
 const ANTHRO_TIER_THRESHOLDS = {
   Replacement: {
-    PG: {ht:74.5, wt:185, ws:77.5, sr:97.5},
-    SG: {ht:76.5, wt:195, ws:80.5, sr:101.0},
-    SF: {ht:79.0, wt:210, ws:82.5, sr:104.5},
-    PF: {ht:81.5, wt:228, ws:85.0, sr:107.0},
-    C:  {ht:83.0, wt:243, ws:87.5, sr:110.5},
+    PG: {ht:74.38, wt:196, ws:76.5,  sr:97.25},
+    SG: {ht:77.25, wt:199, ws:81.0,  sr:102.0},
+    SF: {ht:80.0,  wt:218, ws:82.75, sr:105.0},
+    PF: {ht:81.25, wt:236, ws:85.0,  sr:106.5},
+    C:  {ht:84.5,  wt:247, ws:87.5,  sr:110.5},
   },
   "Role Player": {
-    PG: {ht:75.0, wt:190, ws:79.0, sr:99.0},
-    SG: {ht:77.0, wt:200, ws:81.5, sr:102.0},
-    SF: {ht:79.5, wt:215, ws:84.0, sr:105.5},
-    PF: {ht:82.0, wt:235, ws:87.0, sr:108.5},
-    C:  {ht:83.5, wt:250, ws:89.0, sr:112.0},
+    PG: {ht:75.0,  wt:196, ws:78.0,  sr:97.5},
+    SG: {ht:77.25, wt:211, ws:81.0,  sr:102.0},
+    SF: {ht:80.0,  wt:223, ws:84.0,  sr:105.0},
+    PF: {ht:81.25, wt:241, ws:86.0,  sr:106.5},
+    C:  {ht:84.5,  wt:247, ws:87.62, sr:110.5},
   },
   Starter: {
-    PG: {ht:75.5, wt:195, ws:80.5, sr:100.5},
-    SG: {ht:77.5, wt:205, ws:82.5, sr:103.5},
-    SF: {ht:80.0, wt:220, ws:85.0, sr:106.5},
-    PF: {ht:82.5, wt:245, ws:88.5, sr:110.5},
-    C:  {ht:84.0, wt:255, ws:90.5, sr:113.5},
+    PG: {ht:75.38, wt:196, ws:78.0,  sr:97.5},
+    SG: {ht:77.25, wt:211, ws:81.0,  sr:102.0},
+    SF: {ht:80.0,  wt:228, ws:84.0,  sr:105.0},
+    PF: {ht:81.25, wt:241, ws:86.0,  sr:107.5},
+    C:  {ht:84.5,  wt:255, ws:90.5,  sr:113.5},
   },
   "All-Star": {
-    PG: {ht:75.5, wt:198, ws:81.0, sr:101.0},
-    SG: {ht:78.0, wt:210, ws:84.0, sr:105.0},
-    SF: {ht:80.5, wt:225, ws:86.0, sr:107.5},
-    PF: {ht:82.5, wt:250, ws:89.5, sr:112.0},
-    C:  {ht:84.5, wt:260, ws:92.0, sr:115.0},
+    PG: {ht:75.38, wt:196, ws:79.62, sr:98.25},
+    SG: {ht:77.75, wt:211, ws:81.5,  sr:102.75},
+    SF: {ht:80.5,  wt:228, ws:84.0,  sr:105.0},
+    PF: {ht:81.75, wt:247, ws:86.25, sr:108.5},
+    C:  {ht:84.5,  wt:257, ws:90.5,  sr:113.5},
   },
 };
 
@@ -11013,6 +11021,7 @@ function MethodologyTab() {
     {cat:"Development Tab — Season-by-Season Breakdown",items:[],desc:"Per-season table of all seasons with meaningful playing time (≥8% USG). Columns: Year, USG%, AdjOrtg (BartTorvik opponent-adjusted offensive rating), vs. Peer (delta from cross-sectional peer curve), TS%, AST%, TO%, BPM. Δ markers show year-over-year change. Multi-season improvement is one of the strongest NBA success signals."},
     {cat:"Roles & Archetypes Tab",items:[],desc:"Two-stage role inference. Stage 1 — Role Inference Matrix: 14 NBA roles scored as z-scores relative to position peers. Offensive: Scorer, Playmaker, Spacer, Driver, Crasher. Defensive: On-Ball, Switch Potential, Rim Protect, Rebounder. Hybrid: Connector, Helio-Scorer, Event Creator, Zone Pressure, Micro-Spacer. Each role combines 2-4 statistical inputs weighted by NBA translation research. Z≥+2.0 = Elite, ≥+1.0 = Impact, <-1.0 = Liability. Stage 2 — NBA Archetype Fit: 19 NBA archetypes per position, sorted left→right by empirical rarity (most common to rarest, computed from the actual frequency in 46k player-seasons). The pipeline assigns a primary, secondary, and tertiary archetype based on dominant role scores. Rarity = how strict are the position-specific role thresholds — rare archetypes are objectively harder to find on draft day."},
     {cat:"Body Tab — Anthropometrics + Wingspan/Height Scatter",items:[],desc:"Height (with shoes, +1.25\"-NBA-standard), Weight, Wingspan, and Wingspan Delta (wingspan − height). For Combine-tested players (1.835 NBA players in our database), measurements are sourced directly. For others, we use stats-enriched imputation: a multivariate Ridge regression trained on 1.266 NBA players for Wingspan (R²=0.735, MAE 1.56\") and 528 for Weight (R²=0.614, MAE 11.7 lbs), using player height + position group + box-score stats (BLK%, STL%, ORB%, DRB%, BPM components). Imputed values are flagged with badges. The scatter plot shows 1.835 NBA Combine participants as gray dots colored by position; the selected prospect is overlaid in orange. Use it to find physical comps within a realistic body-type band."},
+    {cat:"Body Tab — Anthro vs. NBA-Tier Comparison",items:[],desc:"Reference markers for height, weight, wingspan, and standing reach grouped by NBA career tier (Replacement / Role Player / Starter / All-Star) × 5-position (PG / SG / SF / PF / C). Tier boundaries are fixed peak-Wins-Added quantiles (Replacement ≤ 0.8, RP 0.8-3.3, Starter 3.3-10.1, All-Star > 10.1) chosen so the buckets describe realized NBA outcomes, not subjective \"Starter\"-vs-\"All-Star\" labels. Within each (tier × position) cell, the marker value is the per-cell MEDIAN from the joined Combine × NBA pool (NBA Combine 2000-2022 inner-joined with the nba_added_wins_peak.csv pool by NFKD-normalized name — n=231 players with all four measurements + peak_wa). The medians are then monotonized along the tier axis so every higher tier is ≥ the previous (small distortion to keep the picture monotone-readable). Three caveats matter for reading these markers correctly: (1) SELECTION-BIAS in the All-Star cell — many All-Star-level prospects (Top-5 picks) skip the NBA Combine entirely, so the Combine-pool All-Stars are a non-random subset; (2) SAMPLE THIN at Role Player and Starter (per-cell n typically 5-13, single-cell minimum n=1 for Starter/C → kept current value as fallback); (3) NON-MONOTONICITY in raw wingspan and standing reach across tiers — in the joined raw data several All-Star cells have LOWER wingspan medians than the Starter cells of the same position, because skill outweighs reach among the absolute outliers (Brunson 75″ wingspan and Trae 75″ wingspan are All-Stars). The monotonization step hides that in the displayed values; the Methods Tab makes it explicit. CONSEQUENCE: treat these markers as DESCRIPTIVE reference (\"where does this prospect's height sit vs. NBA pool of position-X Role Players?\") not as PREDICTIVE thresholds (\"if he hits this number he's an All-Star\"). The recalibration is reproducible via data-pipeline/scripts/recalibrate_anthro_tier_medians.py; the full per-cell n + raw vs monotonized table lives in data-pipeline/data/processed/anthro_tier_medians_recalibrated.json. Re-run this script when the NBA-careered pool gets refreshed (new draft classes mature) — the tier boundaries stay fixed, only the per-cell medians shift."},
     {cat:"Body Tab — Functional Frame v2 (NBA-Pro architecture)",items:[],desc:"Answers 'does he play bigger than his measured size?' across three anthro dimensions (height, wingspan, weight) × two sides (defensive, offensive) — 6 separate Ridge regressions. ARCHITECTURE: Each model takes its OWN feature set (a player's stat profile) and predicts what anthropometric value an NBA-careered player with THAT stat profile typically had. The Δ (predicted − listed) then quantifies whether his stats look like a bigger or smaller player. POOL: NBA-careered players from college draft years 2008–2020 (n=644 with measured height, 485 with wingspan, 87 with weight). FEATURE SELECTION (Sprint-3.38, June 2026): Originally hand-picked from domain knowledge. Re-audited via NBA-Pro empirical workflow: LassoCV with CV-tuned λ (free feature count, no manual cap), Bootstrap-Stability over 100 resamples (⭐ if ≥80% selection frequency), Permutation Importance cross-check, 5-fold Out-of-Sample R² comparison. Result: 4 of 6 targets switched to empirically-selected feature sets, +0.04 to +0.14 OOS R² improvement; 2 kept (where empirical selection was statistically equivalent). CURRENT FEATURE SETS: DEF Height = BLK%, STL%, DRB%, Rim Protection (R²=0.62, residual SD 2.02\"); DEF Wingspan = STL%, DRB%, BLK% (R²=0.61, kept from v1); DEF Weight = STL%, DRB%, DBPM, Rim Protection (R²=0.52, residual SD 16.22 lbs, directional only); OFF Height = dunks, rim%, mid%, 3P%, ORB%, ff_orb, AST%, FTR, OBPM, Rebounder role (R²=0.68, residual SD 1.88\" — biggest gain); OFF Wingspan = identical LASSO selection to OFF Height (R²=0.62, residual SD 2.26\"); OFF Weight = ORB%, AST% (R²=0.64, residual SD 14.00 lbs, directional only). 95% CONFIDENCE CORRIDOR: shaded band on each FrameBar = ±1.96 × in-sample residual SD. DRIVERS PER DIMENSION: top-3 contributing features per model (capped per-dim so each dim is always represented even when one model dominates), shown grouped under Height / Wingspan / Weight headers. Each driver tile shows the contribution magnitude in the unit of the predicted dimension. Green/+ = stat pushed prediction above pool average; red/− = below. IMPORTANT: drivers explain why the prediction differs from the POOL AVERAGE — they do NOT explain the Δ vs. the player's listed measurement (that's a separate comparison shown in each dim-header). 3D COMP MATCHING: nearest-neighbour search in normalized (height, wingspan, weight) space; defensive and offensive lists are cross-list deduplicated (Sprint-3.37.F) so a single pool player can appear in at most one of the two sides for the same prospect. CONDITIONAL PATTERNS (Sprint-3.31/3.33): aggregate correlation of reach Δ with NBA peak Wins Added is just r=+0.04 across the historic pool (n=861) — so the metric does NOT linearly predict star/bust outcomes. HOWEVER, segmenting by frame size reveals three positive sub-segments: SMALL-GIANT (≤6'5\" + plays bigger defensively) → Star+ rate 25% vs 14–21% baseline (Kemba/VanVleet/Lawson archetype); WING-BIG (6'6–6'8\" + plays much bigger) → Bust rate drops to 19% from Wing-mean 41%, strongest stick signal in the analysis (Clarke/Collins archetype); SKILLED-BIG (≥7'0\" + plays smaller offensively) → Star+ 44% + Stick 64% (Wembanyama/Embiid/Markkanen/Porzingis archetype). EFFECTIVE FRAME (Sprint-3.37.G): when a player has no combine measurement on file (most 2026er prospects), the body tab additionally shows a sentence summarizing the predicted-only inference (\"plays as if he were ~X wingspan / Y lbs\") plus a pool-range scale visualization. POSITION-AWARE VERDICTS (Sprint-3.37.D): the textual style/tone label under each Side card switches vocabulary based on the player's position group (Playmaker, Wing, Big) — so a small Playmaker no longer accidentally gets a \"stretch-Big pattern\" label. USE: style-mapping, comp-matching, extreme-pattern detection. For projection see Tier Probabilities, Star+ Creator, and Added Wins on the Projection tab. WHY NOT A PREDICTOR: with aggregate r=+0.04 the metric carries almost no linear outcome signal — the conditional patterns are the right way to read it."},
     {cat:"Shooting Tab — Diss-M1/M4 (Berger 2022) NBA shooter projection",items:[],desc:"Three-stage model from Berger (2022) Chapter 7, modified for role neutrality. STAGE 1 — Pre-draft 3P% estimate via empirical Bayes shrinkage: p̂ᵢ = (α₀ + 3PMᵢ) / (α₀ + β₀ + 3PAᵢ), with α₀ and β₀ fitted from the NCAA league-wide distribution via method-of-moments (16,771 NCAA players ≥20 3PA → α₀=23.89, β₀=44.67, μ₀=34.8%, κ=69). Small 3PA samples are pulled toward the league median (Boozer 0%/2 attempts → 38.2%). STAGE 2 — M1 for NBA 3P%: logit(NBA 3P%) = β₀ + β₁·FT% + β₂·2PJ% + β₃·3P-Estimate. NCAA n=675 RMSE=0.0380 (beats the dissertation value 0.0559); intl n=383 RMSE=0.0367 (M1-light without 2PJ%, NO imputation for missing PBP). STAGE 3 — M4 for NBA 3PAr (3PA/FGA): logit(NBA 3PAr) = β₀ + β₁·NCAA-3PAr + β₂·2PJ% + β₃·FT% + β₄·3P-Estimate. NCAA n=662 RMSE=0.130, intl n=383 RMSE=0.126. IMPORTANT: the dissertation's original M4 projected 3PAp40 (role-dependent — driven by possessions and minutes). We switched the target to 3PAr (3PA/FGA), a pure shooter signature that's independent of role and playing time. Together 3P% (efficiency) and 3PAr (tendency) describe the shooter completely without any role assumption. ALL values data-driven, no hand-tuning."},
     {cat:"Possession Impact (CFFR)",items:["fourFactors"],desc:"Context-Free Four Factor Rating measuring possession efficiency per Dean Oliver's Four Factors framework. Usage-role adjusted: Primary (USG≥28%), Secondary (≥22%), Finisher (≥15%), Low-Usage (<15%). Each factor (eFG% 40%, TO% 25%, ORB% 20%, FTr 15%) is percentiled WITHIN the player's usage bucket — so a primary scorer with 52% eFG rates against fellow primaries, not against low-usage finishers. Composite: Net Possession Value (0–100). Verdict tiers: Elite Floor Raiser (≥70), Winning Piece (55–70), Role Dependent (45–55), High Maintenance (<45)."},
