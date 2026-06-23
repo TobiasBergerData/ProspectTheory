@@ -5253,13 +5253,42 @@ function HalfSplitSection({p}) {
   const hs = p?.halfSplits;
   if (!hs || !hs.h1 || !hs.h2) return null;
 
-  const h1 = hs.h1, h2 = hs.h2;
+  // Sprint-3.44 Pro-Mode: career default + season-picker
+  // Available views: "career" (if 2+ seasons), each individual season
+  const hasCareer = !!hs.career && (hs.seasons_n || 0) >= 2;
+  const availableSeasons = hs.seasons ? Object.keys(hs.seasons).sort() : [];
+  const defaultView = hasCareer ? "career" : (hs.primary_season || availableSeasons[availableSeasons.length-1] || null);
+  const [view, setView] = useState(defaultView);
+
+  // Resolve h1/h2/team based on current view selection
+  let h1, h2, viewLabel, viewSeasons, viewTeam, viewSamplePass;
+  if (view === "career" && hs.career) {
+    h1 = hs.career.h1; h2 = hs.career.h2;
+    viewLabel = "NCAA Career";
+    viewSeasons = hs.career.seasons || availableSeasons;
+    viewTeam = (hs.career.teams || []).join(" · ");
+    viewSamplePass = hs.career.sample_floor_pass;
+  } else if (view && hs.seasons && hs.seasons[view]) {
+    const s = hs.seasons[view];
+    h1 = s.h1; h2 = s.h2;
+    viewLabel = view;
+    viewSeasons = [view];
+    viewTeam = s.team || "";
+    viewSamplePass = s.sample_floor_pass;
+  } else {
+    // Fallback to top-level (legacy)
+    h1 = hs.h1; h2 = hs.h2;
+    viewLabel = hs.season || "single season";
+    viewSeasons = [hs.season];
+    viewTeam = hs.team || "";
+    viewSamplePass = hs.sample_floor_pass;
+  }
 
   // 13 stat computations — all robust to minutes-tracking imperfection by
   // using FGA-normalised or self-contained rates.
-  const pts = (h) => 2*(h.FGM - (h.TPM||0)) + 3*(h.TPM||0) + (h.FTM||0);
-  const tsa = (h) => h.FGA + 0.44 * h.FTA;
-  const poss = (h) => h.FGA + 0.44 * h.FTA + h.TO;
+  const pts = (h) => 2*((h?.FGM||0) - (h?.TPM||0)) + 3*(h?.TPM||0) + (h?.FTM||0);
+  const tsa = (h) => (h?.FGA||0) + 0.44 * (h?.FTA||0);
+  const poss = (h) => (h?.FGA||0) + 0.44 * (h?.FTA||0) + (h?.TO||0);
 
   const HALF_STATS = [
     { id: "ts",      label: "True Shooting %",      fmt: "pct",   good: "up",
@@ -5309,23 +5338,34 @@ function HalfSplitSection({p}) {
   const poolLabel = HALF_SPLIT_PERCENTILES[posGroup] ? posGroup : "Global";
   const poolN = pool.n;
 
-  // Compute deltas, percentile rank vs NCAA-pos pool, direction-score
+  // Sample-Size für Bayesian Shrinkage: TSA = FGA + 0.44 × FTA
+  // (tsa-Helper schon weiter oben deklariert für trajectory points)
+  const tsa1 = tsa(h1), tsa2 = tsa(h2);
+  const tsaMin = Math.min(tsa1, tsa2);
+  const PRIOR_N = 60;   // equivalent of half-a-season of TSA per half — Bayesian prior weight
+  const shrinkAlpha = tsaMin / (tsaMin + PRIOR_N);  // 0 = full shrinkage, 1 = no shrinkage
+
+  // Compute deltas + shrunken delta + percentile rank vs NCAA-pos pool
   const computed = HALF_STATS.map(s => {
     const v1 = s.val(h1);
     const v2 = s.val(h2);
-    if (v1 == null || v2 == null) return {...s, v1: null, v2: null, delta: null, pctl: null, dirScore: 0};
-    const delta = v2 - v1;
+    if (v1 == null || v2 == null) return {...s, v1: null, v2: null, delta: null, shrunkDelta: null, pctl: null, dirScore: 0};
+    const rawDelta = v2 - v1;
     const pcts = pool[s.id];
-    const rawPctl = _halfSplitPercentile(delta, pcts);  // 0-100 of raw Δ
+    const peerMedian = pcts?.p50 ?? 0;
+    // Bayesian shrinkage: pull raw Δ toward peer-median by (1 - alpha)
+    const shrunkDelta = shrinkAlpha * rawDelta + (1 - shrinkAlpha) * peerMedian;
+    // Use shrunken delta for percentile + color (less false-positive on small samples)
+    const rawPctl = _halfSplitPercentile(shrunkDelta, pcts);
     // For "down is good" stats, flip the percentile (high Δ TO% = bad direction)
     const pctl = (s.good === "down" && rawPctl != null) ? 100 - rawPctl : rawPctl;
-    // dirScore in [-1, +1]: how far above (good) / below (bad) the typical NCAA pattern
+    // dirScore in [-1, +1]
     let dirScore = 0;
     if (pctl != null) {
-      dirScore = (pctl - 50) / 50;   // -1 = p0 (worst), +1 = p100 (best)
+      dirScore = (pctl - 50) / 50;
     }
     if (s.good === "neutral") dirScore = 0;
-    return {...s, v1, v2, delta, pctl, dirScore};
+    return {...s, v1, v2, delta: rawDelta, shrunkDelta, pctl, dirScore};
   });
 
   // Verdict: average dirScore over the directional stats
@@ -5372,32 +5412,142 @@ function HalfSplitSection({p}) {
     return `${sign}${d}`;
   };
 
+  // Trajectory: compute career arc of "avg peer percentile" if 2+ seasons
+  // Each season's avg-pctl is its own dirScore mean.
+  const trajectoryPoints = [];
+  if (hasCareer && availableSeasons.length >= 2) {
+    for (const season of availableSeasons) {
+      const sObj = hs.seasons[season];
+      if (!sObj?.h1 || !sObj?.h2) continue;
+      const sH1 = sObj.h1, sH2 = sObj.h2;
+      const sTsaMin = Math.min(tsa(sH1), tsa(sH2));
+      const sAlpha = sTsaMin / (sTsaMin + PRIOR_N);
+      const scores = [];
+      for (const stat of HALF_STATS) {
+        if (stat.good === "neutral") continue;
+        const v1 = stat.val(sH1), v2 = stat.val(sH2);
+        if (v1 == null || v2 == null) continue;
+        const sDelta = v2 - v1;
+        const pcts = pool[stat.id];
+        const peerMed = pcts?.p50 ?? 0;
+        const shrunk = sAlpha * sDelta + (1 - sAlpha) * peerMed;
+        const rawP = _halfSplitPercentile(shrunk, pcts);
+        if (rawP == null) continue;
+        const flipped = stat.good === "down" ? 100 - rawP : rawP;
+        scores.push(flipped);
+      }
+      if (scores.length > 0) {
+        const avgPctl = scores.reduce((a,b) => a+b, 0) / scores.length;
+        trajectoryPoints.push({season, avgPctl, sample_pass: sObj.sample_floor_pass, team: sObj.team});
+      }
+    }
+  }
+
   return (
     <Sec icon="🌡" title="First vs Second Half — Stamina & Concentration"
-         sub={`Box-stat split across this player's ${hs.season || "NCAA"} season. NCAA players typically improve in H2 (median TS% +3pp) once they've read the defence and warmed up. Color is relative to the ${poolLabel}-pool over 9 NCAA seasons 2017-18 → 2025-26 (n=${poolN.toLocaleString()}, ≥10 min/half): green = above-typical lift, red = unusual fade vs peers. Historical validation: tier-correlations are weak (|r|<0.10 with peak WA, n=182 NBA-careered) — treat as scout-eye signal, not predictor. Garbage time excluded.`}>
-      {!hs.sample_floor_pass && (
-        <div className="rounded-lg p-3 mb-4 text-xs"
-             style={{background:"#fbbf2411",border:"1px solid #fbbf2444",color:"#fcd34d"}}>
-          ⚠ Limited sample: H1 {h1.min?.toFixed?.(0) ?? "?"} min, H2 {h2.min?.toFixed?.(0) ?? "?"} min recorded ({hs.season || "?"}, floor: 10 min/half). Treat splits as directional only.
+         sub={`Box-stat split across NCAA play. NCAA players typically improve in H2 (median TS% +3pp) once they've read the defence and warmed up. Color is relative to the ${poolLabel}-pool over 9 NCAA seasons (n=${poolN.toLocaleString()}, ≥30 TSA/half). Small-sample players are Bayesian-shrunken toward peer-median to reduce false positives. Historical validation: tier-correlations weak (|r|<0.10 with peak WA, n=182 NBA-careered) — treat as scout-eye signal, not predictor. Garbage time excluded.`}>
+      {/* Season-picker (Career default + per-season tabs) */}
+      {(hasCareer || availableSeasons.length >= 1) && (
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>View:</span>
+          {hasCareer && (
+            <button onClick={()=>setView("career")}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
+              style={{background:view==="career"?"#f9731622":"transparent", color:view==="career"?"#f97316":"#9ca3af", border:`1px solid ${view==="career"?"#f97316":"#374151"}`}}>
+              NCAA Career ({hs.seasons_n}s)
+            </button>
+          )}
+          {availableSeasons.map(s => {
+            const sPass = hs.seasons?.[s]?.sample_floor_pass;
+            return (
+              <button key={s} onClick={()=>setView(s)}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
+                style={{background:view===s?"#f9731622":"transparent", color:view===s?"#f97316":(sPass?"#9ca3af":"#6b7280"), border:`1px solid ${view===s?"#f97316":"#374151"}`}}>
+                {s}{!sPass && <span className="ml-1 text-[10px]" style={{color:"#fbbf24"}}>·sm</span>}
+              </button>
+            );
+          })}
         </div>
       )}
 
-      {/* Verdict pill */}
-      <div className="rounded-xl p-4 mb-4 flex items-center justify-between"
+      {!viewSamplePass && (
+        <div className="rounded-lg p-3 mb-4 text-xs"
+             style={{background:"#fbbf2411",border:"1px solid #fbbf2444",color:"#fcd34d"}}>
+          ⚠ Limited sample: {tsa1.toFixed(0)} TSA H1 · {tsa2.toFixed(0)} TSA H2 ({viewLabel}, floor: 30/half). Bayesian-shrunken toward peer-median — directional only.
+        </div>
+      )}
+
+      {/* Verdict pill + (optional) career-trajectory mini-chart */}
+      <div className="rounded-xl p-4 mb-4"
            style={{background:"#0d111788",border:`1px solid ${verdictColor}55`}}>
-        <div>
-          <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#9ca3af"}}>Verdict (vs NCAA peers)</div>
-          <div className="text-base font-semibold" style={{color:verdictColor}}>{verdict}</div>
-          <div className="text-[11px] mt-1" style={{color:"#6b7280"}}>
-            {strongPos} stat{strongPos===1?"":"s"} above peer-typical (≥p75) · {strongNeg} below (≤p25)
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#9ca3af"}}>
+              Verdict ({viewLabel}, vs NCAA peers)
+              {shrinkAlpha < 0.7 && (
+                <span className="ml-2 px-1.5 py-0.5 rounded text-[9px]" style={{background:"#fbbf2422",color:"#fbbf24",border:"1px solid #fbbf2444"}}>
+                  shrunken {Math.round((1-shrinkAlpha)*100)}%
+                </span>
+              )}
+            </div>
+            <div className="text-base font-semibold" style={{color:verdictColor}}>{verdict}</div>
+            <div className="text-[11px] mt-1" style={{color:"#6b7280"}}>
+              {strongPos} stat{strongPos===1?"":"s"} above peer-typical (≥p75) · {strongNeg} below (≤p25)
+            </div>
+          </div>
+          <div className="text-right text-xs" style={{color:"#6b7280"}}>
+            <div>Avg peer percentile</div>
+            <div className="text-2xl font-bold" style={{color:verdictColor,fontFamily:"'Oswald',sans-serif"}}>
+              {Math.round(50 + avgDir * 50)}<span className="text-sm" style={{color:"#6b7280"}}>th</span>
+            </div>
           </div>
         </div>
-        <div className="text-right text-xs" style={{color:"#6b7280"}}>
-          <div>Avg peer percentile</div>
-          <div className="text-2xl font-bold" style={{color:verdictColor,fontFamily:"'Oswald',sans-serif"}}>
-            {Math.round(50 + avgDir * 50)}<span className="text-sm" style={{color:"#6b7280"}}>th</span>
+
+        {/* Trajectory mini-chart — career arc of avg-peer-percentile over seasons */}
+        {trajectoryPoints.length >= 2 && (
+          <div className="mt-3 pt-3" style={{borderTop:"1px solid #1f2937"}}>
+            <div className="flex items-center justify-between text-[10px] mb-1.5" style={{color:"#6b7280"}}>
+              <span className="uppercase tracking-wider">Career trajectory (avg peer percentile per season)</span>
+              <span>Hover for season</span>
+            </div>
+            <div className="relative h-10" style={{background:"#0a0e16",border:"1px solid #1f2937", borderRadius:6}}>
+              {/* 50th-percentile reference line */}
+              <div className="absolute left-0 right-0 h-px" style={{top:"50%", background:"#ffffff22"}}/>
+              {/* Connect points with a polyline */}
+              {(() => {
+                const minS = 0, maxS = trajectoryPoints.length - 1;
+                const xPct = (i) => maxS === 0 ? 50 : (i / maxS) * 90 + 5;  // 5-95% padded
+                const yPct = (pctl) => 90 - (pctl / 100) * 80;  // 10-90% padded (invert: high pctl up)
+                let path = "";
+                trajectoryPoints.forEach((pt, i) => {
+                  const x = xPct(i), y = yPct(pt.avgPctl);
+                  path += (i === 0 ? "M" : "L") + `${x.toFixed(1)} ${y.toFixed(1)} `;
+                });
+                return (
+                  <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    <path d={path} stroke={verdictColor} strokeWidth="1.5" fill="none" vectorEffect="non-scaling-stroke"/>
+                    {trajectoryPoints.map((pt, i) => (
+                      <g key={pt.season}>
+                        <circle cx={xPct(i)} cy={yPct(pt.avgPctl)} r="2" fill={verdictColor} vectorEffect="non-scaling-stroke"/>
+                      </g>
+                    ))}
+                  </svg>
+                );
+              })()}
+              {/* Season labels */}
+              {trajectoryPoints.map((pt, i) => {
+                const xPct = trajectoryPoints.length === 1 ? 50 : (i / (trajectoryPoints.length - 1)) * 90 + 5;
+                return (
+                  <div key={pt.season} className="absolute text-[9px]"
+                    title={`${pt.season}: ${Math.round(pt.avgPctl)}th pctl${pt.team ? " · " + pt.team : ""}`}
+                    style={{left:`${xPct}%`, bottom:0, transform:"translateX(-50%)", color: pt.sample_pass ? "#cbd5e1" : "#fbbf24"}}>
+                    {pt.season.split("-")[0].slice(-2)}
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* 13 stat rows */}
@@ -5450,10 +5600,11 @@ function HalfSplitSection({p}) {
               <div>
                 <div className="font-bold mb-1" style={{color:color}}>{s.label}</div>
                 <div className="text-xs mb-2" style={{color:"#cbd5e1"}}>{s.desc}</div>
-                <div className="text-[11px]" style={{color:"#94a3b8"}}>
-                  Player Δ: <span style={{color:"#e5e7eb"}}>{fmtDelta(s.delta, s.fmt)}</span>
-                  &nbsp;·&nbsp;
-                  NCAA median Δ: <span style={{color:"#e5e7eb"}}>{fmtDelta(peerMedian, s.fmt)}</span>
+                <div className="text-[11px] leading-relaxed" style={{color:"#94a3b8"}}>
+                  Raw Δ: <span style={{color:"#e5e7eb"}}>{fmtDelta(s.delta, s.fmt)}</span>
+                  {shrinkAlpha < 0.95 && (<>&nbsp;·&nbsp;Shrunken Δ: <span style={{color:"#fcd34d"}}>{fmtDelta(s.shrunkDelta, s.fmt)}</span></>)}
+                  <br/>
+                  NCAA median Δ ({poolLabel}): <span style={{color:"#e5e7eb"}}>{fmtDelta(peerMedian, s.fmt)}</span>
                   &nbsp;·&nbsp;
                   Percentile vs peers: <span style={{color:color}}>{Math.round(pctl)}th</span>
                 </div>
@@ -5497,10 +5648,11 @@ function HalfSplitSection({p}) {
         })}
       </div>
 
-      {/* Footer caveat */}
+      {/* Footer caveat: TSA-based (consistent across all seasons regardless of sub-tracking) */}
       <div className="mt-4 text-[11px]" style={{color:"#6b7280"}}>
-        Sample: {h1.min?.toFixed?.(0) || "?"} min H1 · {h2.min?.toFixed?.(0) || "?"} min H2 ({hs.season || "this season"})
-        · {h1.FGA + h2.FGA} total FGA · {h1.AST + h2.AST} assists · {h1.TO + h2.TO} turnovers (garbage time excluded)
+        Sample ({viewLabel}{viewTeam ? " · " + viewTeam : ""}): {tsa1.toFixed(0)} TSA H1 · {tsa2.toFixed(0)} TSA H2
+        · {(h1.FGA||0) + (h2.FGA||0)} total FGA · {(h1.AST||0) + (h2.AST||0)} assists · {(h1.TO||0) + (h2.TO||0)} turnovers
+        · garbage time excluded · TSA = FGA + 0.44·FTA
       </div>
     </Sec>
   );

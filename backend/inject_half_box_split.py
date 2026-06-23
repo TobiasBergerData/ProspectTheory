@@ -31,14 +31,30 @@ import pandas as pd
 BASE = Path(__file__).resolve().parent
 DB = BASE / "data" / "processed" / "prospecttheory.db"
 
-# Sprint-3.43 (Tobias 2026-06-17): scan all 9 NCAA seasons available.
-# Per-player: pick LATEST season where both halves ≥ 10 min recorded.
-# Fallback: lower threshold (5 min) if no valid latest exists.
+# Sprint-3.43/3.44 (Tobias 2026-06-17): scan all 9 NCAA seasons available.
+# Per-player: pick LATEST season with sufficient sample. Build full multi-season
+# payload with career-aggregate as default view (Pro-grade).
+#
+# Sample-Floor uses TRUE SHOT ATTEMPTS (TSA = FGA + 0.44·FTA) instead of minutes,
+# weil pre-2025-26 PBP keine Substitution-Events hat und min-tracking dort
+# unreliable ist (siehe Boxer/Haliburton-Audit). TSA arbeitet konsistent.
 SEASONS = ["2017-18", "2018-19", "2019-20", "2020-21", "2021-22",
            "2022-23", "2023-24", "2024-25", "2025-26"]
-SAMPLE_MIN_FLOOR_MIN     = 10.0   # primary floor
-SAMPLE_RELAXED_FLOOR_MIN = 5.0    # fallback floor for older / limited samples
+SAMPLE_TSA_FLOOR_STRICT  = 30.0   # ~30 attempts per half (rotation player season)
+SAMPLE_TSA_FLOOR_RELAXED = 12.0   # fallback for limited samples
 BATCH_COMMIT = 500
+
+
+def _tsa(h: dict) -> float:
+    return h.get("FGA", 0) + 0.44 * h.get("FTA", 0)
+
+
+def _sample_floor_strict(h1: dict, h2: dict) -> bool:
+    return _tsa(h1) >= SAMPLE_TSA_FLOOR_STRICT and _tsa(h2) >= SAMPLE_TSA_FLOOR_STRICT
+
+
+def _sample_floor_relaxed(h1: dict, h2: dict) -> bool:
+    return _tsa(h1) >= SAMPLE_TSA_FLOOR_RELAXED and _tsa(h2) >= SAMPLE_TSA_FLOOR_RELAXED
 
 
 def _nfkd(s: str) -> str:
@@ -48,32 +64,104 @@ def _nfkd(s: str) -> str:
                    if not unicodedata.combining(c)).lower().strip()
 
 
+def _half_from_row(row: pd.Series, h: int) -> dict:
+    return {
+        "min":  float(row.get(f"h{h}_min", 0) or 0),
+        "FGM":  int(row.get(f"h{h}_FGM", 0) or 0),
+        "FGA":  int(row.get(f"h{h}_FGA", 0) or 0),
+        "TPM":  int(row.get(f"h{h}_3PM", 0) or 0),
+        "TPA":  int(row.get(f"h{h}_3PA", 0) or 0),
+        "FTM":  int(row.get(f"h{h}_FTM", 0) or 0),
+        "FTA":  int(row.get(f"h{h}_FTA", 0) or 0),
+        "AST":  int(row.get(f"h{h}_AST", 0) or 0),
+        "STL":  int(row.get(f"h{h}_STL", 0) or 0),
+        "BLK":  int(row.get(f"h{h}_BLK", 0) or 0),
+        "ORB":  int(row.get(f"h{h}_ORB", 0) or 0),
+        "DRB":  int(row.get(f"h{h}_DRB", 0) or 0),
+        "TO":   int(row.get(f"h{h}_TO",  0) or 0),
+    }
+
+
+def _sum_halves(halves: list[dict]) -> dict:
+    """Sum a list of per-season half dicts into a single career-aggregate dict."""
+    out = {k: 0 for k in ["min","FGM","FGA","TPM","TPA","FTM","FTA",
+                          "AST","STL","BLK","ORB","DRB","TO"]}
+    for h in halves:
+        for k in out:
+            out[k] += h.get(k, 0) or 0
+    out["min"] = round(out["min"], 1)
+    return out
+
+
 def build_player_payload(row: pd.Series, season: str) -> dict:
-    def _half(h: int) -> dict:
-        return {
-            "min":  float(row.get(f"h{h}_min", 0) or 0),
-            "FGM":  int(row.get(f"h{h}_FGM", 0) or 0),
-            "FGA":  int(row.get(f"h{h}_FGA", 0) or 0),
-            "TPM":  int(row.get(f"h{h}_3PM", 0) or 0),
-            "TPA":  int(row.get(f"h{h}_3PA", 0) or 0),
-            "FTM":  int(row.get(f"h{h}_FTM", 0) or 0),
-            "FTA":  int(row.get(f"h{h}_FTA", 0) or 0),
-            "AST":  int(row.get(f"h{h}_AST", 0) or 0),
-            "STL":  int(row.get(f"h{h}_STL", 0) or 0),
-            "BLK":  int(row.get(f"h{h}_BLK", 0) or 0),
-            "ORB":  int(row.get(f"h{h}_ORB", 0) or 0),
-            "DRB":  int(row.get(f"h{h}_DRB", 0) or 0),
-            "TO":   int(row.get(f"h{h}_TO",  0) or 0),
-        }
-    h1 = _half(1)
-    h2 = _half(2)
+    """Legacy single-season payload (kept for backward compat)."""
+    h1 = _half_from_row(row, 1)
+    h2 = _half_from_row(row, 2)
     return {
         "season": season,
         "team":   row.get("team"),
         "h1": h1,
         "h2": h2,
-        "sample_floor_pass": bool(h1["min"] >= SAMPLE_MIN_FLOOR_MIN
-                                  and h2["min"] >= SAMPLE_MIN_FLOOR_MIN),
+        "sample_floor_pass": _sample_floor_strict(h1, h2),
+    }
+
+
+def build_multi_season_payload(season_rows: list[tuple[str, pd.Series]]) -> dict:
+    """Sprint-3.44 Pro-Mode: build multi-season payload with career aggregate.
+
+    Plus seasons = sorted list of (season, row) tuples (oldest → newest).
+    Plus output: {primary_season, has_career, career, seasons: {season: {...}}}
+    """
+    seasons = {}
+    h1_halves, h2_halves = [], []
+    teams_seen = set()
+    for season, row in season_rows:
+        h1 = _half_from_row(row, 1)
+        h2 = _half_from_row(row, 2)
+        team = row.get("team")
+        if isinstance(team, str) and team:
+            teams_seen.add(team)
+        seasons[season] = {
+            "team": team,
+            "h1": h1,
+            "h2": h2,
+            "sample_floor_pass": _sample_floor_strict(h1, h2),
+        }
+        h1_halves.append(h1)
+        h2_halves.append(h2)
+
+    # Career aggregate: sum counts across seasons
+    career_h1 = _sum_halves(h1_halves)
+    career_h2 = _sum_halves(h2_halves)
+
+    # Primary season = the most recent one that passes sample-floor
+    primary = None
+    for season in sorted(seasons.keys(), reverse=True):
+        if seasons[season]["sample_floor_pass"]:
+            primary = season
+            break
+    if primary is None and seasons:
+        primary = sorted(seasons.keys())[-1]   # fallback: most recent regardless
+
+    return {
+        "primary_season": primary,
+        "has_career": len(seasons) >= 2,
+        "seasons_n": len(seasons),
+        "career": {
+            "seasons_n": len(seasons),
+            "seasons": sorted(seasons.keys()),
+            "teams": sorted(teams_seen),
+            "h1": career_h1,
+            "h2": career_h2,
+            "sample_floor_pass": _sample_floor_strict(career_h1, career_h2),
+        },
+        "seasons": seasons,
+        # Plus für Backward-Compat: top-level h1/h2 = primary season (legacy frontend reads these)
+        "season": primary,
+        "team":   seasons.get(primary, {}).get("team") if primary else None,
+        "h1": seasons.get(primary, {}).get("h1") if primary else career_h1,
+        "h2": seasons.get(primary, {}).get("h2") if primary else career_h2,
+        "sample_floor_pass": seasons.get(primary, {}).get("sample_floor_pass", False) if primary else False,
     }
 
 
@@ -98,60 +186,50 @@ def main():
         print("  No CSVs found at all — skipping injection.")
         return
 
-    # Per-player season selection: latest with ≥10 min/half, fallback to ≥5 min.
-    # Iterate seasons newest-to-oldest, pick first that passes the floor.
-    name_map = {}  # clean_name -> (chosen_season, payload, floor_passed)
-    passed_strict = set()
-    passed_relaxed = set()
-    for season in reversed(SEASONS):
-        df = season_dfs.get(season)
-        if df is None:
-            continue
-        for _, r in df.iterrows():
-            name = r.get("player_name")
-            if not isinstance(name, str) or not name.strip():
-                continue
-            clean = _nfkd(name)
-            if not clean or clean in passed_strict:
-                continue
-            h1m = float(r.get("h1_min", 0) or 0)
-            h2m = float(r.get("h2_min", 0) or 0)
-            if h1m >= SAMPLE_MIN_FLOOR_MIN and h2m >= SAMPLE_MIN_FLOOR_MIN:
-                payload = build_player_payload(r, season)
-                name_map[clean] = payload
-                passed_strict.add(clean)
-    # Pass 2: relaxed floor for those not yet picked
-    for season in reversed(SEASONS):
-        df = season_dfs.get(season)
-        if df is None:
-            continue
-        for _, r in df.iterrows():
-            name = r.get("player_name")
-            if not isinstance(name, str) or not name.strip():
-                continue
-            clean = _nfkd(name)
-            if not clean or clean in passed_strict or clean in passed_relaxed:
-                continue
-            h1m = float(r.get("h1_min", 0) or 0)
-            h2m = float(r.get("h2_min", 0) or 0)
-            if h1m >= SAMPLE_RELAXED_FLOOR_MIN and h2m >= SAMPLE_RELAXED_FLOOR_MIN:
-                payload = build_player_payload(r, season)
-                # Plus mark sample_floor_pass=False so frontend shows caveat
-                payload["sample_floor_pass"] = False
-                name_map[clean] = payload
-                passed_relaxed.add(clean)
-
-    print(f"\n  Strict-floor pass (≥10 min/half): {len(passed_strict):,}")
-    print(f"  Relaxed-floor pass (≥5 min/half):  {len(passed_relaxed):,}")
-    print(f"  Total unique players: {len(name_map):,}")
-
-    # Plus per-season distribution of picks (sanity)
-    from collections import Counter
-    season_counts = Counter(p["season"] for p in name_map.values())
-    print(f"\n  Season distribution of picks:")
+    # Sprint-3.44 Pro-Mode: collect ALL seasons per player, then build
+    # multi-season payload with career aggregate + per-season detail.
+    from collections import defaultdict
+    player_seasons = defaultdict(list)  # clean_name -> [(season, row), ...]
     for season in SEASONS:
-        if season in season_counts:
-            print(f"    {season}: {season_counts[season]:,}")
+        df = season_dfs.get(season)
+        if df is None:
+            continue
+        for _, r in df.iterrows():
+            name = r.get("player_name")
+            if not isinstance(name, str) or not name.strip():
+                continue
+            clean = _nfkd(name)
+            if not clean:
+                continue
+            # Plus TSA-based pre-filter (works across all seasons)
+            h1_tsa = float(r.get("h1_FGA", 0) or 0) + 0.44 * float(r.get("h1_FTA", 0) or 0)
+            h2_tsa = float(r.get("h2_FGA", 0) or 0) + 0.44 * float(r.get("h2_FTA", 0) or 0)
+            if h1_tsa < SAMPLE_TSA_FLOOR_RELAXED or h2_tsa < SAMPLE_TSA_FLOOR_RELAXED:
+                continue  # skip seasons with effectively zero playing time
+            player_seasons[clean].append((season, r))
+
+    name_map = {}
+    seasons_n_dist = []
+    for clean, season_rows in player_seasons.items():
+        # Sort by season (chronological)
+        season_rows.sort(key=lambda x: x[0])
+        payload = build_multi_season_payload(season_rows)
+        name_map[clean] = payload
+        seasons_n_dist.append(len(season_rows))
+
+    from collections import Counter
+    n_dist = Counter(seasons_n_dist)
+    print(f"\n  Total unique players (1+ seasons ≥5 min/half): {len(name_map):,}")
+    print(f"  Seasons-per-player distribution:")
+    for n in sorted(n_dist.keys()):
+        print(f"    {n} season(s): {n_dist[n]:,}")
+
+    # Plus primary-season distribution
+    primary_counts = Counter(p["primary_season"] for p in name_map.values() if p.get("primary_season"))
+    print(f"\n  Primary-season distribution:")
+    for season in SEASONS:
+        if season in primary_counts:
+            print(f"    {season}: {primary_counts[season]:,}")
 
     conn = sqlite3.connect(DB)
     cur = conn.cursor()
