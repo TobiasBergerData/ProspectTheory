@@ -83,6 +83,11 @@ def build_lookup() -> dict:
             "ceilingWA": _num(r.ceiling_wa),
             "bustRisk": _num(r.bust_risk),
             "starUpside": _num(r.star_upside),
+            # Sprint-3.0.G (#70, Tobias 2026-06-23): methodisch saubere
+            # Steal-Probability vom Backend, kernel-gewichtet aus dem
+            # historischen Comp-Pool (statt nur Merit↔Market-Gap-Heuristik).
+            "stealProb":       _num(getattr(r, "steal_prob",        None)),
+            "stealTargetSlot": _num(getattr(r, "steal_target_slot", None)),
             "compStrength": _num(r.comp_strength),
             "upsideFactors": _factors(getattr(r, "upside_factors", "")),
             "riskFactors": _factors(getattr(r, "risk_factors", "")),
