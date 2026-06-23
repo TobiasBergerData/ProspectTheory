@@ -5663,6 +5663,79 @@ function HalfSplitSection({p}) {
 // TAB: DEVELOPMENT TRAJECTORY
 // Season-by-Season table + Class Scatter + In-Season DevTrajectory
 // ═══════════════════════════════════════════════════════════
+// Sprint-3.45 (Tobias 2026-06-17): Trajectory validation constants from NCAA
+// multi-season pool (n=14,281; NBA-careered subset n=518 for outcome anchors).
+// IMPORTANT: only USG slope shows a moderate signal — BPM and TS% slopes are
+// essentially flat across quartiles, so the Methods note flags that explicitly.
+const TRAJECTORY_VALIDATION = {
+  poolNote: "Slopes computed across all NCAA multi-season players 2008-2026 (n=14,281). Outcome rates pulled from the NBA-careered sub-sample (n=518) bucketed into quartiles by per-stat slope.",
+  percentiles: {
+    bpm: {p10:-1.78, p25:-0.54, p50:+0.45, p75:+1.41, p90:+2.46},
+    ts:  {p10:-4.19, p25:-1.42, p50:+0.57, p75:+2.57, p90:+5.03},
+    usg: {p10:-2.13, p25:-0.72, p50:+0.55, p75:+2.00, p90:+3.55},
+    ast: {p10:-2.60, p25:-0.80, p50:+0.60, p75:+2.20, p90:+4.30},
+    to:  {p10:-4.30, p25:-2.40, p50:-0.80, p75:+0.70, p90:+2.50},
+    blk: {p10:-0.75, p25:-0.27, p50: 0.00, p75:+0.20, p90:+0.60},
+    stl: {p10:-0.50, p25:-0.20, p50:+0.01, p75:+0.22, p90:+0.50},
+  },
+  // Per-stat slope-quartile outcome cohorts. Each Q stores: range, n, bust%, starter+%, star+%
+  cohorts: {
+    bpm: {
+      Q1:{lo:-4.47, hi:+0.28, n:130, bust:50.0, starter:31.5, star:14.6},
+      Q2:{lo:+0.30, hi:+1.27, n:129, bust:45.7, starter:34.1, star:15.5},
+      Q3:{lo:+1.27, hi:+2.12, n:129, bust:53.5, starter:25.6, star:14.0},
+      Q4:{lo:+2.13, hi:+8.76, n:130, bust:43.8, starter:32.3, star:10.8},
+    },
+    ts: {
+      Q1:{lo:-12.12, hi:-0.35, n:130, bust:50.0, starter:35.4, star:16.2},
+      Q2:{lo: -0.35, hi:+1.11, n:129, bust:46.5, starter:31.0, star:11.6},
+      Q3:{lo:+1.11,  hi:+2.98, n:129, bust:50.4, starter:22.5, star:13.2},
+      Q4:{lo:+2.98,  hi:+14.88,n:130, bust:46.2, starter:34.6, star:13.8},
+    },
+    usg: {
+      Q1:{lo:-5.50, hi:+0.35, n:130, bust:54.6, starter:26.9, star:12.3},
+      Q2:{lo:+0.37, hi:+1.77, n:129, bust:53.5, starter:26.4, star: 9.3},
+      Q3:{lo:+1.80, hi:+3.40, n:129, bust:44.2, starter:31.8, star:12.4},
+      Q4:{lo:+3.40, hi:+15.10,n:130, bust:40.8, starter:38.5, star:20.8},
+    },
+  },
+  notes: {
+    bpm: "BPM slope is a weak predictor by itself — all quartiles produce Star+ at ~11-16% and Bust at ~44-54%. A rising BPM curve is a positive signal but not a star differentiator on its own.",
+    ts:  "TS% slope is a weak predictor by itself — similar flat outcome distribution across quartiles. Translation of a rising shooter curve depends heavily on shot type (rim vs three) and is better captured by the Shooting Projection (Diss-M1) on the Projection tab.",
+    usg: "USG slope carries a moderate signal — top quartile players (USG rising by +3.4 to +15 percentage points per year) reach Star+ at 20.8% vs bottom quartile 12.3%, and Bust drops from 54.6% to 40.8%. Players who EXPAND their offensive load over their career are more often legit lottery-tier prospects than developers who plateau.",
+  },
+};
+
+function _percentileFor(value, pcts) {
+  if (value == null || !pcts) return null;
+  const xs = [pcts.p10, pcts.p25, pcts.p50, pcts.p75, pcts.p90];
+  const ys = [10, 25, 50, 75, 90];
+  if (value <= xs[0]) return Math.max(0, 10 * (1 - (xs[0] - value) / Math.max(0.01, xs[1] - xs[0])));
+  if (value >= xs[4]) return Math.min(100, 90 + 10 * (value - xs[4]) / Math.max(0.01, xs[4] - xs[3]));
+  for (let i = 0; i < xs.length - 1; i++) {
+    if (value <= xs[i+1]) {
+      const t = (value - xs[i]) / Math.max(0.001, xs[i+1] - xs[i]);
+      return ys[i] + t * (ys[i+1] - ys[i]);
+    }
+  }
+  return 50;
+}
+
+function _quartileFor(slope, cohorts) {
+  for (const [q, c] of Object.entries(cohorts)) {
+    if (slope >= c.lo && slope <= c.hi) return {q, ...c};
+  }
+  // fallback: nearest by midpoint
+  let best = null, bestD = Infinity;
+  for (const [q, c] of Object.entries(cohorts)) {
+    const mid = (c.lo + c.hi) / 2;
+    const d = Math.abs(slope - mid);
+    if (d < bestD) { bestD = d; best = {q, ...c}; }
+  }
+  return best;
+}
+
+
 function DevTrajectoryTab({p}) {
   if (!p) return null;
 
@@ -5922,9 +5995,113 @@ function DevTrajectoryTab({p}) {
     );
   };
 
+  // Sprint-3.45: Trajectory validation — compute slopes from p.seasonLines and
+  // show percentile + cohort outcome distribution for the 3 covered stats.
+  const TrajectoryValidation = () => {
+    const lines = (p.seasonLines || []).filter(s => s.yr && (s.gp == null || s.gp >= 8));
+    if (lines.length < 2) return null;
+    const STATS = [
+      { id: "bpm", label: "BPM",  getter: s => s.bpm },
+      { id: "ts",  label: "TS%",  getter: s => s.ts  },
+      { id: "usg", label: "USG%", getter: s => s.usg },
+    ];
+    const computed = STATS.map(stat => {
+      const pts = lines.map((s,i) => ({i, y: stat.getter(s), yr: s.yr})).filter(d => d.y != null && isFinite(d.y));
+      if (pts.length < 2) return {...stat, slope:null};
+      // Use year-based slope (per year, matches the pool calculation method)
+      const yrs = pts.map(d => Number(d.yr));
+      const ys  = pts.map(d => d.y);
+      const xm = yrs.reduce((a,b)=>a+b,0) / yrs.length;
+      const ym = ys.reduce((a,b)=>a+b,0)  / ys.length;
+      const num = yrs.reduce((s,x,i) => s + (x-xm)*(ys[i]-ym), 0);
+      const den = yrs.reduce((s,x)   => s + (x-xm)*(x-xm), 0);
+      const slope = den === 0 ? 0 : num/den;
+      return {...stat, slope, n: pts.length};
+    });
+
+    return (
+      <Sec icon="🧭" title="Trajectory Validation"
+           sub="How does the year-over-year change in each headline stat compare to the historical NCAA pool, and what did players with similar slopes typically become in the NBA?">
+        <div className="rounded-lg p-3 mb-3 text-[11px]" style={{background:"#fbbf2411",border:"1px solid #fbbf2444",color:"#fcd34d"}}>
+          ⚠ Caveats this section can't fix on its own: (1) slope quartiles are POOLED across positions — a Playmaker's USG-slope distribution differs from a Big's, so the global percentile is a rough anchor not a position-fair rank; (2) outcome rates are CONDITIONAL on reaching the NBA (n=518), so the Bust% you see is "bust among NBA-careered with this slope", not unconditional. Read the cohort as scout-eye context.
+        </div>
+        <div className="text-[11px] mb-3" style={{color:"#6b7280"}}>
+          {TRAJECTORY_VALIDATION.poolNote}
+        </div>
+        <div className="space-y-3">
+          {computed.map(stat => {
+            if (stat.slope == null) return (
+              <div key={stat.id} className="rounded-lg p-3 text-xs" style={{background:"#0d1117",border:"1px solid #1f2937",color:"#475569"}}>
+                {stat.label}: not enough data
+              </div>
+            );
+            const pcts = TRAJECTORY_VALIDATION.percentiles[stat.id];
+            const cohorts = TRAJECTORY_VALIDATION.cohorts[stat.id];
+            const pctl = _percentileFor(stat.slope, pcts);
+            const cohort = _quartileFor(stat.slope, cohorts);
+            const note = TRAJECTORY_VALIDATION.notes[stat.id];
+            const dirColor = pctl >= 75 ? "#22c55e" : pctl >= 50 ? "#86efac" : pctl >= 25 ? "#fbbf24" : "#ef4444";
+            return (
+              <div key={stat.id} className="rounded-lg p-4" style={{background:"#0d111788",border:"1px solid #1f2937"}}>
+                {/* Header row: stat name + slope + percentile rank */}
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <div className="text-sm font-semibold" style={{color:"#cbd5e1"}}>{stat.label} Slope <span style={{color:"#6b7280", fontWeight:400}}>· {stat.n} seasons</span></div>
+                    <div className="text-[11px] mt-0.5" style={{color:"#6b7280"}}>
+                      NCAA pool median: {pcts.p50 >= 0 ? "+" : ""}{pcts.p50.toFixed(2)} / yr · p10–p90 range {pcts.p10.toFixed(2)} → +{pcts.p90.toFixed(2)}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xl font-bold" style={{color:dirColor, fontFamily:"'Oswald',sans-serif"}}>
+                      {stat.slope >= 0 ? "+" : ""}{stat.slope.toFixed(2)} <span className="text-xs" style={{color:"#6b7280"}}>/ yr</span>
+                    </div>
+                    <div className="text-[11px]" style={{color:dirColor}}>
+                      {Math.round(pctl)}th percentile
+                    </div>
+                  </div>
+                </div>
+
+                {/* Cohort outcome anchor */}
+                {cohort && (
+                  <div className="rounded-md p-3 mb-2" style={{background:"#0a0e16", border:"1px solid #1f2937"}}>
+                    <div className="text-[10px] uppercase tracking-wider mb-1.5" style={{color:"#9ca3af"}}>
+                      Players in {cohort.q} of {stat.label} slope ({cohort.lo>=0?"+":""}{cohort.lo.toFixed(1)} to {cohort.hi>=0?"+":""}{cohort.hi.toFixed(1)} per yr, n={cohort.n})
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div>
+                        <div style={{color:"#6b7280"}}>Star+ rate</div>
+                        <div className="font-bold" style={{color:"#22c55e"}}>{cohort.star.toFixed(0)}%</div>
+                      </div>
+                      <div>
+                        <div style={{color:"#6b7280"}}>Starter+ rate</div>
+                        <div className="font-bold" style={{color:"#86efac"}}>{cohort.starter.toFixed(0)}%</div>
+                      </div>
+                      <div>
+                        <div style={{color:"#6b7280"}}>Bust rate</div>
+                        <div className="font-bold" style={{color:"#ef4444"}}>{cohort.bust.toFixed(0)}%</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Honest note about predictor strength */}
+                {note && (
+                  <div className="text-[11px]" style={{color:"#9ca3af"}}>
+                    <span style={{color:"#fbbf24", fontWeight:600}}>How to read it: </span>{note}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </Sec>
+    );
+  };
+
   return (
     <div className="flex flex-col gap-4">
       <SeasonLineChart />
+      <TrajectoryValidation />
       <SeasonTable />
       <ClassScatterAndDev p={p} />
       <FibaCard />
@@ -7020,18 +7197,55 @@ function ScoutingTab({p, mode="scouting"}) {
   const secondaryArch = triggeredNotPrimary[0]?.name || posFilteredArchs[0]?.name;
   const tertiaryArch = triggeredNotPrimary[1]?.name || (triggeredNotPrimary[0] ? posFilteredArchs[0]?.name : posFilteredArchs[1]?.name);
 
-  // ── CFFR / Possession Impact ──
+  // ── CFFR / Possession Impact (NetPV v2 — Bayesian-shrunken position weights) ──
+  // OLS regression peak_pie ~ FF z-scores in NBA-careered pool (n=892).
+  // RAW empirical magnitudes (|coefficient|, normalized to sum 1) per position,
+  // then BAYESIAN-SHRUNKEN toward the pool default: α = R² / (R² + r²_prior),
+  // r²_prior = 0.03. This is the standard NBA-quant move: high-R² positions
+  // get most of their position-specific signal through; low-R² positions
+  // shrink back to the pool because their per-factor coefficients are barely
+  // distinguishable from noise. Result is conservative + honest:
+  //   PM (R²=0.09, α=0.75) keeps most empirical signal → ORB+ remains visible
+  //   Big (R²=0.01, α=0.25) shrinks heavily toward default
+  //   Wing (R²=0.004, α=0.12) shrinks ~88% to default — essentially the pool
+  // DIRECTION stays classic Dean-Oliver for all positions (magnitude-only use).
+  const NETPV_WEIGHTS = {
+    // Bayesian-shrunken final weights:
+    Playmaker: {efg: 0.36, tov: 0.15, orb: 0.25, ftr: 0.24, n: 180, r2: 0.090, alpha: 0.75},
+    Wing:      {efg: 0.39, tov: 0.13, orb: 0.19, ftr: 0.28, n: 526, r2: 0.004, alpha: 0.12},
+    Big:       {efg: 0.36, tov: 0.14, orb: 0.23, ftr: 0.27, n: 186, r2: 0.010, alpha: 0.25},
+    Default:   {efg: 0.39, tov: 0.14, orb: 0.20, ftr: 0.28, n: 892, r2: 0.015, alpha: 0.00},
+    Legacy:    {efg: 0.40, tov: 0.25, orb: 0.20, ftr: 0.15},   // Dean Oliver original, display only
+  };
+  const posGroupForFF = p.pos || p.pos_group;
+  const ffW = NETPV_WEIGHTS[posGroupForFF] || NETPV_WEIGHTS.Default;
+  const ffWLabel = posGroupForFF && NETPV_WEIGHTS[posGroupForFF]
+    ? `${posGroupForFF}-empirical, ${Math.round(ffW.alpha * 100)}% data weight`
+    : "Pool default";
+
   const ffEfg = p.ff?.efg ?? 50, ffTov = p.ff?.tov ?? 50, ffOrb = p.ff?.orb ?? 50, ffFtr = p.ff?.ftr ?? 50;
-  const npv = p.ff?.comp ?? 50;
+  // NetPV v2: recompute NPV client-side as position-weighted sum of percentiles
+  // (centered on 50, scaled 0-100). Falls back to backend p.ff.comp if all FF percentiles missing.
+  const npvV2 = (() => {
+    if (p.ff?.efg == null && p.ff?.tov == null && p.ff?.orb == null && p.ff?.ftr == null) {
+      return p.ff?.comp ?? 50;
+    }
+    return Math.round(
+      (ffEfg * ffW.efg) + (ffTov * ffW.tov) + (ffOrb * ffW.orb) + (ffFtr * ffW.ftr)
+    );
+  })();
+  const npv = npvV2;
+
   const pToZ = (pctl) => pctl == null ? 0 : Math.max(-3, Math.min(3, (pctl - 50) / 16.67));
+  const pctOf = (w) => `${Math.round(w * 100)}%`;
   const ffFactors = [
-    {key:"efg",label:"Shot Quality (eFG%)",z:pToZ(ffEfg),pctl:ffEfg,weight:"40%",color:"#fbbf24",
+    {key:"efg",label:"Shot Quality (eFG%)",z:pToZ(ffEfg),pctl:ffEfg,weight:pctOf(ffW.efg),color:"#fbbf24",
      desc:"Shooting efficiency adjusted for 3-point value. Positive = better than role-peers."},
-    {key:"tov",label:"Ball Security (TO%)",z:pToZ(ffTov),pctl:ffTov,weight:"25%",color:"#3b82f6",
+    {key:"tov",label:"Ball Security (TO%)",z:pToZ(ffTov),pctl:ffTov,weight:pctOf(ffW.tov),color:"#3b82f6",
      desc:"Turnover control inverted: positive = fewer turnovers than peers."},
-    {key:"orb",label:"Extra Possessions (ORB%)",z:pToZ(ffOrb),pctl:ffOrb,weight:"20%",color:"#06b6d4",
+    {key:"orb",label:"Extra Possessions (ORB%)",z:pToZ(ffOrb),pctl:ffOrb,weight:pctOf(ffW.orb),color:"#06b6d4",
      desc:"Offensive rebounding creates second-chance points."},
-    {key:"ftr",label:"Foul Pressure (FTr)",z:pToZ(ffFtr),pctl:ffFtr,weight:"15%",color:"#8b5cf6",
+    {key:"ftr",label:"Foul Pressure (FTr)",z:pToZ(ffFtr),pctl:ffFtr,weight:pctOf(ffW.ftr),color:"#8b5cf6",
      desc:"Drawing fouls generates free points and creates foul trouble."},
   ];
   const npvZ = pToZ(npv);
@@ -7118,7 +7332,7 @@ function ScoutingTab({p, mode="scouting"}) {
       </Sec>
 
       {/* ── POSSESSION IMPACT (CFFR) — wider bars, usage role prominent ── */}
-      <Sec icon="↗" title="Possession Impact (Four Factors)" sub="How efficiently does this player use possessions, given his offensive role? We compare him only to other players with similar usage (Primary/Secondary/Finisher/Low-Usage) — so a primary scorer is rated against fellow primaries, not against low-usage finishers. Built on the four classic offensive efficiency drivers: shooting (eFG%), ball security (TO%), offensive rebounding, and free-throw generation.">
+      <Sec icon="↗" title="Possession Impact (Four Factors)" sub={`How efficiently does this player use possessions, given his offensive role? Compared only to peers with similar usage (Primary/Secondary/Finisher/Low-Usage), so a primary scorer is rated against fellow primaries. Weights are ${ffWLabel} — magnitudes derived from how each factor's percentile predicts peak Wins Added in the NBA-careered pool, then Bayesian-shrunken toward the pool default by α = R² / (R² + 0.03). High-confidence positions (Playmaker R²=0.09, α=75%) keep most of their position-specific signal; low-confidence positions (Big R²=0.01, α=25% · Wing R²=0.004, α=12%) shrink back to the pool because per-factor coefficients aren't distinguishable from noise. Direction stays classic Dean Oliver (eFG↑, low-TO↑, ORB↑, FTr↑ = better) for every position — the data confirms the prior, it doesn't override it.`}>
         <Tip wide content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>{METHODS.fourFactors?.name||"Four Factors"}</div>{METHODS.fourFactors?.formula&&<div className="mb-1"><code className="text-xs" style={{color:"#7dd3fc"}}>{METHODS.fourFactors.formula}</code></div>}<div style={{color:"#cbd5e1"}}>{METHODS.fourFactors?.desc||"Dean Oliver's Four Factors adjusted for usage role. Measures net possession quality relative to role-peers."}</div></div>}>
           <div className="text-xs mb-4 cursor-help" style={{color:"#6b7280"}}>Efficiency index: how much value this player creates per possession, relative to his usage role. <span style={{color:"#475569"}}>ⓘ</span></div>
         </Tip>
@@ -7206,7 +7420,7 @@ function ScoutingTab({p, mode="scouting"}) {
           return (raw - m.mu) / m.sig;
         };
         return (
-          <Sec icon="◈" title="Skill Intersections" sub="Two stat pairs that don't usually go together at the college level. A player above his position's average in BOTH carries a meaningful peak-outcome lift — bigs who pass like guards, point guards who block like rim protectors. The bar shows the weaker of the two stats, because the intersection only counts when both are above average.">
+          <Sec icon="◈" title="Skill Intersections" sub="Two stat pairs that don't usually go together at the college level. A player above his position's average in BOTH historically carried a peak-Wins-Added lift — bigs who pass like guards, point guards who block like rim protectors. The bar shows the weaker of the two stats, because the intersection only counts when both are above average. Validation pool is conditional on reaching the NBA (n=919), so the lift you read is 'lift among NBA-careered with this profile', not unconditional. Use as scout-eye context, not a stand-alone predictor.">
             <div className="space-y-4">
               {SKILL_INTERSECTIONS.pairs.map(pair => {
                 const za = zVal(pair.statA);
@@ -10783,11 +10997,17 @@ function MethodologyTab() {
     {cat:"The 5 Pillars (DNA Scores)",items:["feel","shootScore","defScore","funcAth","selfCreation","overall"],desc:"Position-adjusted percentile scores (0–100) capturing the fundamental dimensions of prospect evaluation. Each pillar uses era-adjusted percentiles computed against ~34k college + ~9k international players since 2008. ALL FIVE PILLARS MEASURE CURRENT SKILL — what the prospect actually does now — not projections of future NBA outcomes. NBA outcome forecasts live in the NBA Projections section (Tier Probabilities, Star+ Creator Projection, etc.). For example: the Creation pillar measures Self-Adjusted Box Creation = Self-Created Scoring (USG × TS × Self-Share) + Passing Creation (AST% × clamp(AST/TO,0.5,2.5)/2.5), position-weighted. The separate Star+ Creator Projection answers a different question — will this skill translate into a Star+ Creator role in the NBA — via a calibrated Logistic Regression model."},
     {cat:"Shooting Projection (Diss-M1/M4, Berger 2022)",items:["projNba3p","projNba3pa","projNba3par","touchPrior"],desc:"Two-stage model from the underlying dissertation (Ch. 7). Stage 1: empirical Bayes shrinkage of college 3P% against the NCAA league-wide distribution (α₀, β₀ fitted via method-of-moments from 16,771 NCAA players ≥20 3PA — league median μ₀=34.8%, effective κ=69). Small samples (Boozer 0%/2 attempts, Saraf 0%/2) get pulled toward the league median. Stage 2: beta regression M1 for NBA 3P% translation = FT% + 2PJ% (PBP, NCAA only) + pre-draft 3P% estimate. Coefficients freshly fitted on the resolved holdout (n=675 NCAA RMSE 0.0380, n=392 intl RMSE 0.0367). Intl gets M1-light without 2PJ% — NO imputation for missing PBP. All values data-driven, no hand-tuning."},
     {cat:"Possession Impact (CFFR)",items:["fourFactors"],desc:"Context-Free Four Factor Rating measuring possession efficiency per Dean Oliver's framework. Usage-role adjusted: Primary (USG≥28%), Secondary (≥22%), Finisher (≥15%), Low-Usage (<15%). Each factor (eFG% 40%, TO% 25%, ORB% 20%, FTr 15%) is percentiled WITHIN the player's usage bucket, so a primary scorer with 52% eFG rates correctly against peers, not low-usage finishers."},
+    {cat:"Possession Impact — Position-Aware Weights (NetPV v2)",items:[],desc:"The four-factor weights used in the Net Possession Value composite are no longer the legacy Dean Oliver defaults (40 / 25 / 20 / 15) but derived empirically and then Bayesian-shrunken toward the pool default. The starting point is OLS regression of peak Wins Added on each Four Factor's percentile in the NBA-careered pool (n=892), separately per position group. The raw empirical magnitudes (|coefficient|, normalized to sum 1): Playmakers (R²=0.09, n=180) eFG 35 / TO 16 / ORB 27 / FTr 23 — robust signal, ORB% materially higher than the pool. Bigs (R²=0.01, n=186) eFG 26 / TO 17 / ORB 32 / FTr 26 — directionally sensible but per-factor coefficients sit close to noise. Wings (R²=0.004, n=526) eFG 43 / TO 5 / ORB 17 / FTr 35 — pattern is statistically indistinguishable from random within the four-factor model. Pool default (R²=0.015, n=892) eFG 39 / TO 14 / ORB 20 / FTr 28. To avoid surfacing position-specific noise as if it were signal, the displayed weights are α × empirical + (1-α) × default, with α = R² / (R² + r²_prior) and r²_prior = 0.03. Effective data weight per position: PM α=0.75 (most empirical signal survives), Big α=0.25 (shrinks heavily toward default), Wing α=0.12 (essentially the pool defaults). FINAL WEIGHTS used in the composite: Playmaker eFG 36 / TO 15 / ORB 25 / FTr 24 — the position-specific story (Playmakers weight ORB more than pool) survives intact. Big eFG 36 / TO 14 / ORB 23 / FTr 27 — ORB still nudged above pool, eFG slightly below, but the position-specific deviation softens. Wing eFG 39 / TO 13 / ORB 19 / FTr 28 — essentially identical to pool, which is the honest read of the Wing data. DIRECTION stays classic Dean Oliver for every position — eFG up, low-TO up, ORB up, FTr up = better. We use magnitudes only, not OLS signs, because the raw OLS sign on TO% inverts for several positions: high z_tov (= low raw TO%) correlates with LOW peak Wins Added, but only because low-usage specialists post lower TO% than high-usage initiators within the same usage bucket — a sample artifact, not a basketball signal. Treating TO% as a magnitude-only weight on the classical direction is the cleanest call. The Possession Impact section sub-line tells you which weight set is in use plus the data-weight α; the per-factor tooltip carries the position-specific weight directly. R² of the position-specific regressions remains modest in absolute terms — the Four Factors alone explain a small share of peak-WA variance — so the composite serves its original purpose: a position-fair efficiency snapshot for scout reading, not a stand-alone outcome predictor."},
+    {cat:"Pool & Era Caveats (Honest Framing)",items:[],desc:"Several sections in this tool use NBA-careered pools as the validation anchor — Skill Intersections (n=919), NetPV v2 weights (n=892), Half-Split tier-correlations (n=182), and Trajectory Validation cohorts (n=518). All of these are CONDITIONAL on the player reaching the NBA. So when we say 'players above-average in both ORB% and AST% reached Star+ at 47.7% in the Playmaker pool', that means 47.7% of those who made it to the NBA and shared this pre-draft profile — not 47.7% of all college players. The unconditional Star+ rate from a random pre-draft sample is far lower. Read every NBA-careered cohort number as 'conditional on making it' — that's still useful (the profile correlates with star outcomes among NBA-careered peers) but it doesn't translate to the broader prospect pool without further adjustment. We deliberately don't do that adjustment in the section UI because the conditional rate is the cleaner scout-eye comparison. Era and pace also matter: NCAA pace rose from ~67 to ~70 possessions/game between 2017 and 2025, and 3PA rose meaningfully too, so cross-era pooling for half-split or trajectory metrics quietly favours recent seasons. Where we pool across eras (Half-Split percentiles, Trajectory slopes), the median values are dominated by the more frequent recent seasons. We accept this trade-off because the sample-size lift from pooling beats the era-correction precision we could realistically achieve here. Position classification matters too: the Playmaker / Wing / Big groups use height-based rules (Big ≥84\" unconditional, ≥82\" with non-wing usage profile, ≥80\" with elite shot-blocking; Playmaker high-AST short; Wing everything else), so a 6'10\" stretch forward sits in 'Wing' even if he plays Big in some lineups. Every position-stratified analysis inherits this classification and its edge-case behaviour."},
+    {cat:"Development Tab — Trajectory Validation",items:[],desc:"For each headline stat with a multi-season trajectory (BPM, TS%, USG%), the slope per year is compared to the historical NCAA pool of multi-season players (n=14,281). Each slope is rendered as a value (+0.45 BPM per year, e.g.), a percentile rank vs the pool, and a cohort outcome anchor: 'players in this slope-quartile reached Star+ at X%, Bust at Y%' built from the NBA-careered subset (n=518). HONEST FRAMING: BPM and TS% slopes are weak predictors by themselves — every slope quartile produces Star+ at 11–16% and Bust at 44–54%. A rising BPM curve is a positive signal but not a star differentiator on its own. USG slope carries a moderate signal: top quartile (USG rising +3.4 to +15 points/yr) reaches Star+ at 20.8% vs 12.3% in the bottom quartile, and Bust drops from 54.6% to 40.8%. Players who EXPAND their offensive load over their NCAA career are more often legit lottery-tier prospects than developers who plateau. Section header explicitly says which signal carries weight; each stat row has its own caveat sentence so the reader knows when to push hard on the cohort number and when to treat it as context."},
+    {cat:"Scouting Tab — Skill Intersections",items:[],desc:"Two stat pairs that don't usually go together at the college level — bigs who pass like guards, point guards who block like rim protectors. Being above the position average in BOTH is structurally rare and historically tied to a meaningful peak Wins Added lift. Two pairs are surfaced: Crasher + Distributor (ORB% × AST%) and Two-Way Skill (AST% × BLK%). Per pair, two z-score bars (one per stat) are rendered Four-Factors-style. A status pill at the top reads 'Above-Avg in BOTH', 'Below avg in one', or 'Insufficient data'. The hover tooltip carries the hypothesis in plain English plus historical validators — Jokic · KAT · Blake Griffin · Haliburton · Ja Morant · Draymond Green · Kawhi Leonard for Crasher + Distributor; Joel Embiid · KAT · Paul George · Draymond Green · Klay Thompson · John Wall · Tyrese Haliburton for Two-Way Skill. POOL: 919 NBA-careered players from draft years 2008–2020 with known peak outcome, joined with 224 international stars (Jokic, Doncic, Embiid, Porzingis, Gasol, Ginobili and others) via diacritic-resilient name matching, so the comparison anchor reflects the modern global player pool. METHODOLOGY: each pair is validated three ways — (1) Pearson/Spearman global correlation to confirm the anti-correlated trade-off (Crasher+Distributor r=−0.55, Two-Way Skill r=−0.42); (2) position-stratified above-average lift (z≥0 in both stats vs the position pool); (3) continuous z-score regression peak WA ~ min(z_a, z_b), reporting slope + 95% CI + p-value (Crasher+Distributor +2.03 WA per +1σ, p=0.002; Two-Way Skill +2.88 WA per +1σ, p<0.001). REJECTED PAIRS (listed transparently in the footer): 3PAr × ORB% (Wing dropper signal negative), 3PAr × FTR (sample too small), Rim Frequency × Low TO% (rim-frequency mixes rolling bigs, cutting wings, and actual drivers), Rim Pressure × Low TO% (the 'driving leads to turnovers' assumption doesn't show up in pre-NBA data). HONEST FRAMING: these are scout-eye intersections that historically tie to outcome lift — not deterministic NBA predictors. A player can be above-average in both and still bust; a player can fail both and still star. The section sits under Possession Impact precisely to be read alongside the Four Factors, not as a standalone projection."},
+    {cat:"Stats Lab Section",items:[],desc:"A filterable, sortable lab table over ~7,600 players — current draft classes 2024–26 plus the historical reference pool of NBA-careered players — with 119 columns spanning every section of the player profile. Lets you ask quantitative questions across the board: who has the highest AST per FGA among 2026 Wings? Which Bigs hit the Two-Way Skill threshold? Where do the Star+ Creator projections cluster relative to consensus rank? FILTERS in the sidebar: draft class year, position group (Playmaker / Wing / Big), source (NCAA / international), search-by-name, plus sample-size range filters (min/max games played and minutes per game) to drop low-sample noise. PRESETS for one-click view switching: Default · Shooters Audit · All-Defensive · Skill Intersections · Mind / Resilience · Role Versatility · Historical Validation. COLUMN PICKER groups the 119 columns into ten categories (Identity, Projections, 5 Pillars, Box Stats, Position Percentiles, Role Inference, Four Factors, Skill Intersections, Mind Metrics, Archetype + Badges) — toggle any combination. SORT by any header (null values always sink to the bottom). PAGINATION at 25 / 50 / 100 / 200 rows per page. Cell coloring uses position-stratified z-score gradients for stat columns whose typical range crosses zero, and warm orange gradients for percentile columns. Click any player name to jump straight into their profile. ⌬ LINK builds a shareable URL that reproduces the exact view — every filter, sort, column selection, page, and compare-slot is encoded so a teammate opening the link sees the same table you do. ↓ CSV downloads every row currently passing your filters (all pages, with the columns you have visible, in current sort order) — header row plus a UTF-8 BOM so Excel and Sheets read it cleanly. The file name carries the filter context so multiple exports don't collide (e.g. stats_lab_2026_Wing-Big_182rows_20260623.csv). ★ SAVE VIEW stores the current filter+column+sort combination as a named preset in your browser; the preset appears as a cyan chip next to the built-in presets and applies in one click. Saved presets live in localStorage only (browser-local, not synced across devices), and the × button on each chip deletes it."},
     {cat:"Role Inference Matrix",items:[],desc:"14 NBA roles scored as z-scores relative to position peers. Offensive: Scorer, Playmaker, Spacer, Driver, Crasher. Defensive: On-Ball, Switch Potential, Rim Protect, Rebounder. Hybrid: Connector, Helio-Scorer, Event Creator, Zone Pressure, Micro-Spacer. Each role combines 2-4 statistical inputs weighted by NBA translation research. Z≥+2.0 = Elite, ≥+1.0 = Impact, <-1.0 = Liability."},
     {cat:"Archetype Classification",items:[],desc:"18 NBA archetypes assigned by position + dominant role scores. Playmaker archetypes: Scoring Playmaker, Floor General, Spacing Guard, Defensive Guard, Non-Specialized Playmaker. Wing: Initiator Wing, Scoring Wing, 3-and-D, Defensive Wing, Point Forward, Slashing Wing, Non-Specialized Wing. Big: Stretch Big, Stretch Rim Protector, Rim Protector, Short Roll Playmaker, Passing Hub, Glass Cleaner, Scoring Big, Non-Specialized Big. Primary archetype from pipeline, secondary/tertiary from role-score matching within position."},
     {cat:"Tier Feasibility (vs NBA)",items:[],desc:"How does this prospect stack up against the actual pre-draft college numbers of players who reached each NBA tier? Built from the mature draft cohort 2008-2018 (n=353 NBA players with realized peak Wins Added). We grouped them by their realized NBA outcome — Replacement, Role Player, Starter, All-Star — using peak-WA percentile cuts (10/30/60/85). For each (tier × position) we then took the MEDIAN of every pre-draft college stat (BPM, USG%, TS%, AST%, TO%, STL%, BLK%, ORB%, DRB%, AdjOE) and used that as the in-range center. Frontend automatically derives p25 = median × 0.75 and p75 = median × 1.30 around it: above median is green (In-Range), below median is orange (Below Median), below p25 is red (Critical Gap) — or yellow (Compensated) if a position-core metric is elite enough to offset (Wings core = TS% + 3P%; Playmakers core = AST% + TO%; Bigs core = BLK% + ORB%). Thresholds are MONOTONIZED along the tier axis (a higher tier's threshold never sits below a lower tier's; TO% inverse), at the cost of small distortion — pre-draft college stats only weakly separate Starter from All-Star, because the real talent spike happens AFTER the draft via role + minutes + team context. So a player can clear all Starter thresholds and still NOT clear All-Star simply because the Starter and All-Star pre-draft stats overlap. Read this view as a diagnostic — how many tier markers does he hit — not as a forecast."},
     {cat:"Mind Tab — Self-Sufficiency Profile",items:[],desc:"Four sequential questions answered with a final verdict: (1) HOW OFTEN does he create his own shot? — share of made FGs that were unassisted, with position-peer percentile. (2) HOW EFFICIENT when self-creating? — Self-Created eFG% vs. Assisted eFG%, with a Difficulty Premium indicator (positive = better on hard shots). (3) HOW DOES PRESSURE affect efficiency? — three pressure contexts from PBP data: Close Late-Game (win prob 20–80% in 2nd half), Late Shot Clock (≥22 secs into possession), and Clutch Free Throws (last 5 min Half 2 with score-diff ≤5). (4) WHERE does he succeed? — per-zone eFG%/self%/asst% breakdown (Rim/Mid/3pt/Dunk). Verdict combines all four into one of seven profile labels: Self-Sufficient Star, Self-Sufficient Scorer, High Volume / Low Efficiency, Off-Ball Clutch Performer, Off-Ball Beneficiary, Pressure-Sensitive Creator, or Balanced Creator."},
     {cat:"Mind Tab — Mental Resilience (NEW)",items:[],desc:"Quantifies behavioral tendencies after adverse-event streaks from raw play-by-play data. We define an adverse-event streak as ≥3 negative events (missed FG, turnover, foul, missed FT trip) in a player's last 4 actions; we then track how he behaves in his next 4 actions. Five tendency indices, each shown as point-estimate + 95% confidence interval + within-position z-score: (a) Hothead = post-streak foul-rate / baseline; (b) Overdriver = TO-rate change; (c) Engagement (Passive) = action volume change; (d) Shot-Seeking (Aggressor) = FGA-rate change; (e) Bounceback eFG = made/FGA change. Plus a Match-Phase-Drift block: stamina_idx + overdriver_drift + hothead_drift compare 1st-half streaks vs 2nd-half streaks (mental fatigue signal). Bayesian-Shrinkage applied: posterior = (n × raw + 30 × 1.0) / (n + 30) — small samples shrink toward the population mean. CRITICAL CAVEAT: these are quantitative tendencies observed in PBP data, not deterministic claims. ~88-95% of the league has CIs that include 1.0 (= no detectable effect). Trust extreme z-scores (|z|>1.5) and CIs that exclude 1.0. Always verify with film."},
+    {cat:"Mind Tab — First vs Second Half",items:[],desc:"Box-stat split across both halves of the player's NCAA games, garbage time excluded (last 5 min with lead >20, or last 2 min with lead >12). Thirteen rate stats are shown side-by-side as H1 → H2 with the Δ, color-coded relative to the player's position-pool over 9 NCAA seasons (Playmaker n≈8.2k, Wing n≈23.6k, Big n≈3.8k): TS%, eFG%, FG%, FT%, FT rate, possession volume, AST per FGA, STL per FGA, BLK per FGA, TO%, ORB per FGA, DRB per FGA, Points-per-Possession. Rates are normalized by FGA or possessions rather than minutes, so the signal is consistent across seasons regardless of substitution data quality. A view picker at the top of the section toggles between 'NCAA Career' (the default — sum across all the player's eligible seasons, most stable sample) and each individual season. Multi-season players also get a career trajectory mini-chart showing the average peer percentile per season against the 50th-percentile reference, so improvement or regression as the player matures is visible at a glance. SAMPLE-SIZE HANDLING: each half needs at least 30 True Shot Attempts (TSA = FGA + 0.44 × FTA) for a strict pass; smaller samples get a yellow caveat banner and are Bayesian-shrunken toward the position-pool median, reducing false-positive 'concerning fade' readings on noisy data. The shrinkage strength is shown as a badge in the verdict pill when relevant. VERDICT pill turns green ('Late-game riser') when the average peer percentile across the 12 directional stats is ≥65, yellow/red when ≤45, neutral grey in between. Each stat row has a percentile-rank badge ('Top 10%', 'Above-typical', 'Below-typical', 'Bottom 10%') and a hover tooltip with raw Δ, shrunken Δ, position-pool median Δ, and an explanation of which direction is favourable for that stat. CONTEXT: median Δ TS% across NCAA is +3pp — most players IMPROVE in H2 once they've read the defense, so the baseline a player is measured against is a positive lift, not zero. The section is positioned as a scout-eye context tool (extreme tails worth a film review), not a Bust/Star predictor — historical tier-correlations are weak (|r| < 0.10 with peak Wins Added across the NBA-careered sub-sample)."},
     {cat:"Scouting Tab — Game-by-Game Skill Curve",items:[],desc:"Per-game scatter plot of every game the player has on file (multi-season aggregated when available): x-axis = Usage% per game (share of team possessions consumed), y-axis = Individual Offensive Rating per game (= (PTS + 0.5×AST) / Possessions × 100). A LOWESS curve with tricubic weights (Bart-Torvik-style smoothing) is fitted across the full usage range — the shaded ±1 SD band shows the local spread of per-game ORtg at each load. Dot color encodes opponent strength when available (T/M/L tertiles from BartTorvik AdjOE−AdjD per team×season), else a chronological gradient blue→orange. Hover any dot for date, opponent, season, full stat-line. Used to read where the player stops scaling: a flat or rising curve at high USG = he holds up under load (no shrinking from defenses), a downward-bending curve = a soft ceiling on how much he can carry. USG-proxy is approximate (% of team possessions, not the standard NBA-USG with minutes adjustment)."},
     {cat:"Development Tab — In-Season Trajectory (NEW)",items:[],desc:"Multi-stat overlay plot for ANY game-log player: 6 indicators on rolling K-game means (K = max(3, min(7, N/5))) over the season. Stats: Usage% (role expansion), eFG% (efficiency growth), Assists (developing playmaking), 3PT Attempts (expanding shooting range), Stocks = STL+BLK (defensive growth), and Personal Fouls (discipline — falling = good, inverted color). OLS slopes per stat shown as season-scale trends. The single-stat 'Rolling Trend' below uses an alternate game-log source for multi-season players when available."},
     {cat:"Development Tab — Season-by-Season Breakdown",items:[],desc:"Per-season table of all seasons with meaningful playing time (≥8% USG). Columns: Year, USG%, AdjOrtg (BartTorvik opponent-adjusted offensive rating), vs. Peer (delta from cross-sectional peer curve), TS%, AST%, TO%, BPM. Δ markers show year-over-year change. Multi-season improvement is one of the strongest NBA success signals."},
@@ -11621,32 +11841,102 @@ function TierBoardView({ players, onSelect }) {
 // Filter + sort + multi-column compare across all profile stats.
 // Data: GET /api/stats_lab + /api/stats_lab/meta (static FileResponse).
 // ═══════════════════════════════════════════════════════════
+// Sprint-4.3 (Tobias 2026-06-23) — Permalink: URL <-> state sync
+// All Stats-Lab params live in window.location.search with `sl_` prefix so
+// they coexist with /player/<slug> routing. On mount we hydrate state from
+// URL; on each state change we replaceState. Leaving Stats Lab clears them.
+const SL_URL_PREFIX = "sl_";
+const _slParseUrl = () => {
+  if (typeof window === "undefined") return {};
+  const p = new URLSearchParams(window.location.search);
+  const get = (k) => p.get(SL_URL_PREFIX + k);
+  const arr = (k) => get(k)?.split(",").filter(Boolean) || null;
+  return {
+    y:    arr("y")?.map(Number).filter(n => !isNaN(n)),
+    pos:  arr("pos"),
+    src:  arr("src"),
+    q:    get("q") || "",
+    mpmin:get("mpmin") || "",
+    mpmax:get("mpmax") || "",
+    gpmin:get("gpmin") || "",
+    gpmax:get("gpmax") || "",
+    pre:  get("pre"),
+    c:    arr("c"),
+    sk:   get("sk"),
+    sd:   get("sd") === "asc" ? "asc" : (get("sd") === "desc" ? "desc" : null),
+    ps:   Number(get("ps")) || null,
+    pg:   Number(get("pg")) || 0,
+    cmp:  arr("cmp") || [],
+    open: get("open") === "1",
+  };
+};
+
+// Sprint-4.3: Saved Presets (localStorage)
+const SL_PRESETS_KEY = "prospecttheory_stats_lab_user_presets_v1";
+const _slLoadUserPresets = () => {
+  try {
+    const raw = typeof window !== "undefined" ? window.localStorage.getItem(SL_PRESETS_KEY) : null;
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
+  } catch { return []; }
+};
+const _slSaveUserPresets = (presets) => {
+  try {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(SL_PRESETS_KEY, JSON.stringify(presets));
+    }
+  } catch { /* quota / disabled — silently fail */ }
+};
+
 function StatsLabView({onSelect}) {
+  // Sprint-4.3: capture URL params once on first render (lazy state init)
+  const URL_INIT = useMemo(() => _slParseUrl(), []);
+
   const [meta, setMeta] = useState(null);
   const [rows, setRows] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
 
-  // Filters
-  const [yearFilter, setYearFilter]   = useState([2026]);
-  const [posFilter,  setPosFilter]    = useState(["Playmaker","Wing","Big"]);
-  const [srcFilter,  setSrcFilter]    = useState(["ncaa","intl"]);
-  const [search,     setSearch]       = useState("");
+  // Filters — initial values come from URL if present, else sane defaults
+  const [yearFilter, setYearFilter]   = useState(URL_INIT.y || [2026]);
+  const [posFilter,  setPosFilter]    = useState(URL_INIT.pos || ["Playmaker","Wing","Big"]);
+  const [srcFilter,  setSrcFilter]    = useState(URL_INIT.src || ["ncaa","intl"]);
+  const [search,     setSearch]       = useState(URL_INIT.q || "");
   // Sample-size Range-Filter (Tobias 2026-06-16): MP and GP minima
   // to drop noise (n=2 GP "prospects"). Empty string = no bound.
-  const [mpMin, setMpMin] = useState("");
-  const [mpMax, setMpMax] = useState("");
-  const [gpMin, setGpMin] = useState("");
-  const [gpMax, setGpMax] = useState("");
+  const [mpMin, setMpMin] = useState(URL_INIT.mpmin);
+  const [mpMax, setMpMax] = useState(URL_INIT.mpmax);
+  const [gpMin, setGpMin] = useState(URL_INIT.gpmin);
+  const [gpMax, setGpMax] = useState(URL_INIT.gpmax);
 
   // Columns + sort + pagination
-  const [presetId,     setPresetId]   = useState("default");
-  const [selectedCols, setSelectedCols] = useState(null);
+  const [presetId,     setPresetId]   = useState(URL_INIT.pre || "default");
+  const [selectedCols, setSelectedCols] = useState(URL_INIT.c || null);
   const [pickerOpen,   setPickerOpen] = useState(false);
-  const [sortKey,      setSortKey]    = useState("war");
-  const [sortDir,      setSortDir]    = useState("desc");
-  const [page,         setPage]       = useState(0);
-  const [pageSize,     setPageSize]   = useState(50);
+  const [sortKey,      setSortKey]    = useState(URL_INIT.sk || "war");
+  const [sortDir,      setSortDir]    = useState(URL_INIT.sd || "desc");
+  const [page,         setPage]       = useState(URL_INIT.pg || 0);
+  const [pageSize,     setPageSize]   = useState(URL_INIT.ps || 50);
+
+  // Sprint-4.2: Compare Mode (2-5 players side by side with z-score bars)
+  const [compareSlugs, setCompareSlugs] = useState(URL_INIT.cmp || []);   // ordered slug array
+  const [compareOpen,  setCompareOpen]  = useState(URL_INIT.open || false);
+
+  // Sprint-4.3: user-saved presets (localStorage, additive to backend presets)
+  const [userPresets, setUserPresets] = useState(() => _slLoadUserPresets());
+  const [linkCopied,  setLinkCopied]  = useState(false);
+  const [savePromptOpen, setSavePromptOpen] = useState(false);
+  const [presetNameDraft, setPresetNameDraft] = useState("");
+  const MAX_COMPARE = 5;
+  const toggleCompare = (slug) => {
+    setCompareSlugs(prev => {
+      if (prev.includes(slug)) return prev.filter(s => s !== slug);
+      if (prev.length >= MAX_COMPARE) return prev;
+      return [...prev, slug];
+    });
+  };
+  const clearCompare = () => setCompareSlugs([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -11664,9 +11954,16 @@ function StatsLabView({onSelect}) {
       if (cancelled) return;
       setRows(data.rows || []);
       setMeta(m);
-      const preset = (m.presets || []).find(p => p.id === "default");
-      if (preset) setSelectedCols(preset.cols);
-      if (m.filter_defaults?.year && Array.isArray(m.filter_defaults.year)) {
+      // Sprint-4.3: only apply preset/year defaults if URL didn't supply them
+      if (!URL_INIT.c && !URL_INIT.pre) {
+        const preset = (m.presets || []).find(p => p.id === "default");
+        if (preset) setSelectedCols(preset.cols);
+      } else if (URL_INIT.pre && !URL_INIT.c) {
+        // URL named a backend preset but no explicit cols → hydrate from preset
+        const preset = (m.presets || []).find(p => p.id === URL_INIT.pre);
+        if (preset) setSelectedCols(preset.cols);
+      }
+      if (!URL_INIT.y && m.filter_defaults?.year && Array.isArray(m.filter_defaults.year)) {
         setYearFilter(m.filter_defaults.year);
       }
       setLoading(false);
@@ -11676,6 +11973,60 @@ function StatsLabView({onSelect}) {
       setLoading(false);
     });
     return () => { cancelled = true; };
+  }, []);
+
+  // Sprint-4.3: URL <-> state sync (replaceState on each change so back-button
+  // doesn't fill up with every filter tweak). Skip until rows are loaded so
+  // we don't blow away URL state before hydration finished.
+  useEffect(() => {
+    if (loading || !rows) return;
+    const p = new URLSearchParams(window.location.search);
+    // Wipe previous sl_ params, then re-set whatever's non-default
+    Array.from(p.keys()).forEach(k => { if (k.startsWith(SL_URL_PREFIX)) p.delete(k); });
+    const set = (k, v) => p.set(SL_URL_PREFIX + k, v);
+    if (yearFilter?.length && (yearFilter.length !== allYears.length || allYears.length === 0)) {
+      // only encode if not full-set
+      const allSet = allYears.length > 0 && yearFilter.length === allYears.length;
+      if (!allSet) set("y", yearFilter.join(","));
+    }
+    if (posFilter && posFilter.length < 3) set("pos", posFilter.join(","));
+    if (srcFilter && srcFilter.length < 2) set("src", srcFilter.join(","));
+    if (search)   set("q",     search);
+    if (mpMin)    set("mpmin", mpMin);
+    if (mpMax)    set("mpmax", mpMax);
+    if (gpMin)    set("gpmin", gpMin);
+    if (gpMax)    set("gpmax", gpMax);
+    if (presetId && presetId !== "default") set("pre", presetId);
+    // Only persist explicit cols if we're in custom mode (other presets are
+    // re-hydrated from meta.presets by id, no need to bloat URL).
+    if (presetId === "custom" && selectedCols?.length) set("c", selectedCols.join(","));
+    if (sortKey !== "war")   set("sk", sortKey);
+    if (sortDir !== "desc")  set("sd", sortDir);
+    if (pageSize !== 50)     set("ps", String(pageSize));
+    if (page > 0)            set("pg", String(page));
+    if (compareSlugs?.length) set("cmp", compareSlugs.join(","));
+    if (compareOpen)          set("open", "1");
+    const next = p.toString();
+    const path = window.location.pathname + (next ? "?" + next : "") + window.location.hash;
+    window.history.replaceState(window.history.state || {}, "", path);
+  }, [loading, rows, yearFilter, posFilter, srcFilter, search,
+      mpMin, mpMax, gpMin, gpMax, presetId, selectedCols, sortKey, sortDir,
+      page, pageSize, compareSlugs, compareOpen]);
+
+  // Sprint-4.3: clear sl_ params on unmount so going back to /player/<x>
+  // or the Board view doesn't carry stale Stats-Lab state.
+  useEffect(() => () => {
+    if (typeof window === "undefined") return;
+    const p = new URLSearchParams(window.location.search);
+    let changed = false;
+    Array.from(p.keys()).forEach(k => {
+      if (k.startsWith(SL_URL_PREFIX)) { p.delete(k); changed = true; }
+    });
+    if (changed) {
+      const next = p.toString();
+      const path = window.location.pathname + (next ? "?" + next : "") + window.location.hash;
+      window.history.replaceState(window.history.state || {}, "", path);
+    }
   }, []);
 
   // ── Derived data ────────────────────────────────────────────
@@ -11741,6 +12092,105 @@ function StatsLabView({onSelect}) {
     setPresetId(id);
     const p = (meta?.presets || []).find(x => x.id === id);
     if (p) setSelectedCols(p.cols);
+  };
+
+  // Sprint-4.3: apply a user-saved preset (localStorage)
+  const applyUserPreset = (uid) => {
+    const up = userPresets.find(p => p.id === uid);
+    if (!up) return;
+    // Restore everything saved
+    setYearFilter(up.state.yearFilter ?? yearFilter);
+    setPosFilter(up.state.posFilter ?? posFilter);
+    setSrcFilter(up.state.srcFilter ?? srcFilter);
+    setSearch(up.state.search ?? "");
+    setMpMin(up.state.mpMin ?? "");
+    setMpMax(up.state.mpMax ?? "");
+    setGpMin(up.state.gpMin ?? "");
+    setGpMax(up.state.gpMax ?? "");
+    setSelectedCols(up.state.selectedCols || selectedCols);
+    setSortKey(up.state.sortKey || "war");
+    setSortDir(up.state.sortDir || "desc");
+    setPageSize(up.state.pageSize || 50);
+    setPresetId("user:" + up.id);
+    setPage(0);
+  };
+
+  // Sprint-4.3: persist current view as named preset
+  const saveAsUserPreset = (name) => {
+    const clean = (name || "").trim().slice(0, 40);
+    if (!clean) return;
+    const id = "u_" + Date.now().toString(36);
+    const snap = {
+      id, name: clean, savedAt: new Date().toISOString(),
+      state: {
+        yearFilter, posFilter, srcFilter, search,
+        mpMin, mpMax, gpMin, gpMax,
+        selectedCols, sortKey, sortDir, pageSize,
+      },
+    };
+    const next = [...userPresets, snap];
+    setUserPresets(next);
+    _slSaveUserPresets(next);
+    setPresetId("user:" + id);
+    setSavePromptOpen(false);
+    setPresetNameDraft("");
+  };
+
+  const deleteUserPreset = (uid) => {
+    const next = userPresets.filter(p => p.id !== uid);
+    setUserPresets(next);
+    _slSaveUserPresets(next);
+    if (presetId === "user:" + uid) setPresetId("default");
+  };
+
+  // Sprint-4.3: copy current permalink to clipboard
+  const copyPermalink = async () => {
+    try {
+      const url = window.location.origin + window.location.pathname + window.location.search;
+      await navigator.clipboard.writeText(url);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 1500);
+    } catch {
+      // Fallback: select-in-prompt
+      try { window.prompt("Copy this URL", window.location.href); } catch { /* nope */ }
+    }
+  };
+
+  // Sprint-4.3: export *currently sorted+filtered* rows (no pagination)
+  // with the currently visible columns. RFC-4180 escaping for safety.
+  const _csvEscape = (val) => {
+    if (val == null) return "";
+    const s = String(val);
+    if (s.includes(",") || s.includes('"') || s.includes("\n") || s.includes("\r")) {
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+  };
+  const exportCsv = () => {
+    if (!sorted?.length || !visibleCols?.length) return;
+    const header = visibleCols.map(c => _csvEscape(c.label || c.k)).join(",");
+    const lines = sorted.map(r =>
+      visibleCols.map(c => {
+        const v = r[c.k];
+        // Keep numerics raw so they parse cleanly in Excel/Sheets
+        if (v == null) return "";
+        if (typeof v === "number") return String(v);
+        return _csvEscape(v);
+      }).join(",")
+    );
+    const body = [header, ...lines].join("\r\n") + "\r\n";
+    // Filter-context filename: e.g. stats_lab_2026_Wing_Big_182rows_20260623.csv
+    const ymd = new Date().toISOString().slice(0,10).replace(/-/g, "");
+    const ytxt = (yearFilter && yearFilter.length ? yearFilter.join("-") : "all");
+    const ptxt = (posFilter && posFilter.length < 3 ? posFilter.join("-") : "AllPos");
+    const fname = `stats_lab_${ytxt}_${ptxt}_${sorted.length}rows_${ymd}.csv`;
+    // BOM so Excel reads UTF-8 correctly
+    const blob = new Blob(["﻿" + body], {type: "text/csv;charset=utf-8"});
+    const a = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    a.href = url; a.download = fname;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const toggleCol = (key) => {
@@ -11925,7 +12375,7 @@ function StatsLabView({onSelect}) {
 
       {/* ── Main Table Area ── */}
       <section className="space-y-3">
-        {/* Preset chips */}
+        {/* Preset chips (backend) */}
         <div className="flex items-center gap-2 flex-wrap">
           {(meta?.presets || []).map(p => (
             <button key={p.id}
@@ -11939,10 +12389,66 @@ function StatsLabView({onSelect}) {
               {p.label}
             </button>
           ))}
+          {/* Sprint-4.3: User-saved preset chips */}
+          {userPresets.map(up => {
+            const active = presetId === "user:" + up.id;
+            return (
+              <span key={up.id} className="inline-flex items-center rounded-lg text-xs font-semibold"
+                style={{
+                  background: active ? "#22d3ee22" : "transparent",
+                  color:      active ? "#22d3ee"   : "#9ca3af",
+                  border: `1px solid ${active ? "#22d3ee" : "#374151"}`,
+                }}>
+                <button onClick={()=>applyUserPreset(up.id)} className="px-3 py-1.5"
+                  title={`Saved ${new Date(up.savedAt).toLocaleDateString()}`}>
+                  ★ {up.name}
+                </button>
+                <button onClick={()=>deleteUserPreset(up.id)} className="px-2 py-1.5 opacity-60 hover:opacity-100"
+                  title="Delete preset" style={{color:"#94a3b8"}}>×</button>
+              </span>
+            );
+          })}
           {presetId === "custom" && (
             <span className="px-3 py-1.5 rounded-lg text-xs italic" style={{color:"#fbbf24"}}>· Custom</span>
           )}
           <div className="flex-1"/>
+          {compareSlugs.length > 0 && (
+            <>
+              <button onClick={()=>setCompareOpen(true)}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold"
+                style={{background:"#f97316", color:"#000", border:"1px solid #f97316"}}>
+                ⇄ Compare ({compareSlugs.length})
+              </button>
+              <button onClick={clearCompare}
+                className="px-2 py-1.5 rounded-lg text-xs"
+                style={{background:"transparent", color:"#9ca3af", border:"1px solid #374151"}}>
+                Clear
+              </button>
+            </>
+          )}
+          {/* Sprint-4.3 actions: Save preset, CSV, Link, Columns */}
+          <button onClick={()=>{ setSavePromptOpen(o=>!o); setPresetNameDraft(""); }}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+            title="Save current filters, columns & sort as a named preset (stored in your browser)"
+            style={{background:"transparent", color:"#9ca3af", border:"1px solid #374151"}}>
+            ★ Save view
+          </button>
+          <button onClick={exportCsv}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+            title={`Download current ${sorted.length.toLocaleString()} rows × ${visibleCols.length} columns as CSV`}
+            style={{background:"transparent", color:"#9ca3af", border:"1px solid #374151"}}>
+            ↓ CSV
+          </button>
+          <button onClick={copyPermalink}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+            title="Copy a link that reproduces this exact view (filters, sort, columns, compare slots)"
+            style={{
+              background: linkCopied ? "#22c55e22" : "transparent",
+              color:      linkCopied ? "#22c55e"   : "#9ca3af",
+              border: `1px solid ${linkCopied ? "#22c55e" : "#374151"}`,
+            }}>
+            {linkCopied ? "✓ Copied" : "⌬ Link"}
+          </button>
           <button
             onClick={()=>setPickerOpen(o=>!o)}
             className="px-3 py-1.5 rounded-lg text-xs font-semibold"
@@ -11950,6 +12456,31 @@ function StatsLabView({onSelect}) {
             ⊕ Columns ({(selectedCols||[]).length})
           </button>
         </div>
+
+        {/* Sprint-4.3: inline name-prompt for Save-as-preset */}
+        {savePromptOpen && (
+          <div className="rounded-xl p-3 flex items-center gap-2" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+            <span className="text-xs" style={{color:"#9ca3af"}}>Name this view:</span>
+            <input autoFocus type="text" value={presetNameDraft}
+              onChange={e=>setPresetNameDraft(e.target.value)}
+              onKeyDown={e=>{ if (e.key === "Enter") saveAsUserPreset(presetNameDraft); if (e.key === "Escape") setSavePromptOpen(false); }}
+              placeholder="e.g. 2026 Wings ≥ 20 MP"
+              className="flex-1 px-3 py-1.5 rounded text-sm"
+              style={{background:"#0a0e16", color:"#f1f5f9", border:"1px solid #1f2937"}}/>
+            <button onClick={()=>saveAsUserPreset(presetNameDraft)}
+              disabled={!presetNameDraft.trim()}
+              className="px-3 py-1.5 rounded text-xs font-bold"
+              style={{
+                background: presetNameDraft.trim() ? "#22d3ee" : "#374151",
+                color: presetNameDraft.trim() ? "#000" : "#6b7280",
+                cursor: presetNameDraft.trim() ? "pointer" : "not-allowed",
+                border: "none",
+              }}>Save</button>
+            <button onClick={()=>setSavePromptOpen(false)}
+              className="px-3 py-1.5 rounded text-xs"
+              style={{background:"transparent",color:"#9ca3af",border:"1px solid #374151"}}>Cancel</button>
+          </div>
+        )}
 
         {/* Column picker */}
         {pickerOpen && (
@@ -11983,6 +12514,9 @@ function StatsLabView({onSelect}) {
           <table className="w-full text-sm" style={{borderCollapse:"separate",borderSpacing:0}}>
             <thead>
               <tr style={{background:"#11151c"}}>
+                <th className="px-2 py-2 text-center" style={{borderBottom:"1px solid #1f2937", position:"sticky", left:0, background:"#11151c", zIndex:6, width:36}}>
+                  <span title="Select to compare" className="text-[10px]" style={{color:"#6b7280"}}>⊕</span>
+                </th>
                 {visibleCols.map((c, i) => (
                   <th key={c.k}
                     onClick={()=>onSortClick(c.k)}
@@ -11991,7 +12525,7 @@ function StatsLabView({onSelect}) {
                       color: sortKey===c.k ? "#f97316" : "#cbd5e1",
                       borderBottom:"1px solid #1f2937",
                       position: i===0 ? "sticky" : undefined,
-                      left:     i===0 ? 0 : undefined,
+                      left:     i===0 ? 36 : undefined,
                       background: i===0 ? "#11151c" : undefined,
                       zIndex: i===0 ? 5 : undefined,
                     }}>
@@ -12001,8 +12535,18 @@ function StatsLabView({onSelect}) {
               </tr>
             </thead>
             <tbody>
-              {pageRows.map((r,ri) => (
-                <tr key={r.slug || ri} className="hover:bg-white hover:bg-opacity-5">
+              {pageRows.map((r,ri) => {
+                const isChecked = r.slug && compareSlugs.includes(r.slug);
+                const canCheck = r.slug && (isChecked || compareSlugs.length < MAX_COMPARE);
+                return (
+                <tr key={r.slug || ri} className="hover:bg-white hover:bg-opacity-5" style={isChecked ? {background:"#f9731611"} : undefined}>
+                  <td className="px-2 py-1.5 text-center" style={{position:"sticky", left:0, background: isChecked ? "#1a0f08" : "#0d1117", borderBottom:"1px solid #11151c", zIndex:3, width:36}}>
+                    {r.slug && (
+                      <input type="checkbox" checked={isChecked} disabled={!canCheck && !isChecked}
+                        onChange={()=>toggleCompare(r.slug)}
+                        style={{accentColor:"#f97316", cursor: canCheck ? "pointer" : "not-allowed"}}/>
+                    )}
+                  </td>
                   {visibleCols.map((c, i) => {
                     const val = r[c.k];
                     const isName = c.k === "name";
@@ -12016,8 +12560,8 @@ function StatsLabView({onSelect}) {
                           cursor: isName && r.slug ? "pointer" : "default",
                           borderBottom: "1px solid #11151c",
                           position: i===0 ? "sticky" : undefined,
-                          left:     i===0 ? 0 : undefined,
-                          background: i===0 ? "#0d1117" : undefined,
+                          left:     i===0 ? 36 : undefined,
+                          background: i===0 ? (isChecked ? "#1a0f08" : "#0d1117") : undefined,
                           fontWeight: isName ? 600 : 400,
                         }}>
                         {fmtCell(val, c)}
@@ -12025,9 +12569,10 @@ function StatsLabView({onSelect}) {
                     );
                   })}
                 </tr>
-              ))}
+                );
+              })}
               {pageRows.length === 0 && (
-                <tr><td colSpan={visibleCols.length} className="px-3 py-8 text-center text-xs" style={{color:"#6b7280"}}>No players match the current filters.</td></tr>
+                <tr><td colSpan={visibleCols.length + 1} className="px-3 py-8 text-center text-xs" style={{color:"#6b7280"}}>No players match the current filters.</td></tr>
               )}
             </tbody>
           </table>
@@ -12051,6 +12596,178 @@ function StatsLabView({onSelect}) {
           ))}
         </div>
       </section>
+
+      {/* ── Sprint-4.2 Compare Modal ── */}
+      {compareOpen && compareSlugs.length > 0 && (
+        <CompareModal
+          slugs={compareSlugs}
+          rows={rows}
+          meta={meta}
+          colsByKey={colsByKey}
+          fmtCell={fmtCell}
+          onClose={()=>setCompareOpen(false)}
+          onRemove={(slug)=>{
+            setCompareSlugs(prev => prev.filter(s => s !== slug));
+          }}
+          onSelect={(slug)=>{ setCompareOpen(false); onSelect(slug); }}
+        />
+      )}
+    </div>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════
+// Sprint-4.2 — Stats Lab Compare Modal
+// Player-as-column layout: 2-5 players × ~30 essential stats.
+// Stat values shown with z-score bars (position-stratified where applicable).
+// ═══════════════════════════════════════════════════════════
+function CompareModal({slugs, rows, meta, colsByKey, fmtCell, onClose, onRemove, onSelect}) {
+  // Resolve player rows from slugs
+  const players = useMemo(() => {
+    const out = [];
+    for (const slug of slugs) {
+      const p = rows.find(r => r.slug === slug);
+      if (p) out.push(p);
+    }
+    return out;
+  }, [slugs, rows]);
+
+  // Build compare stat-blocks: groups of stat keys with meaningful side-by-side compare.
+  // For each stat we compute a per-pool min/max from the visible compare-set so bars
+  // are meaningful relative to THIS comparison (not against the global pool).
+  const STAT_GROUPS = [
+    { id: "id",   label: "Identity",     keys: ["year","pos","age","ht","team","conf"], dirs: {} },
+    { id: "proj", label: "Projection",   keys: ["war","pie","p_super","p_all","p_start","p_role","p_repl","p_out","ceil","floor"], dirs: {war:"up",pie:"up",p_super:"up",p_all:"up",p_start:"up",p_role:"up",p_repl:"down",p_out:"down"} },
+    { id: "pill", label: "5 Pillars",    keys: ["feel","shoot","def","athl","ovr","create"], dirs: {feel:"up",shoot:"up",def:"up",athl:"up",ovr:"up",create:"up"} },
+    { id: "box",  label: "Box Headlines",keys: ["ts","usg","bpm","obpm","dbpm","ftr"], dirs: {ts:"up",bpm:"up",obpm:"up",dbpm:"up",ftr:"up"} },
+    { id: "rate", label: "Rate Stats",   keys: ["ast_p","to_p","orb_p","drb_p","stl_p","blk_p","three_f","rim_f"], dirs: {ast_p:"up",to_p:"down",orb_p:"up",drb_p:"up",stl_p:"up",blk_p:"up"} },
+    { id: "role", label: "Role Inference",keys: ["rz_versat","rz_play","rz_score","rz_drive","rz_crash","rz_onball","rz_rim","rz_switch"], dirs: {} },
+    { id: "skil", label: "Skill Intersections",keys: ["zi_cd","zi_tw","zi_orb","zi_ast","zi_blk"], dirs: {zi_cd:"up",zi_tw:"up",zi_orb:"up",zi_ast:"up",zi_blk:"up"} },
+    { id: "mind", label: "Mind Metrics",  keys: ["m_aggr","m_overd","m_bounce","m_stam","m_clutch","m_drift"], dirs: {} },
+    { id: "arch", label: "Archetype + Badges",keys: ["arch","badges_n","redflag_n","conf_lvl"], dirs: {} },
+  ];
+
+  // Color palette for player columns (max 5)
+  const PLAYER_COLORS = ["#f97316","#a78bfa","#22c55e","#3b82f6","#fbbf24"];
+
+  // Per stat: find best/worst across compared players, render bar
+  const renderCell = (player, key, dir) => {
+    const c = colsByKey[key];
+    const val = player[key];
+    if (val == null) return <div className="text-xs" style={{color:"#475569"}}>—</div>;
+    if (!c || c.fmt === "str" || c.fmt === "bool") {
+      return <div className="text-xs" style={{color:"#e5e7eb"}}>{fmtCell(val, c)}</div>;
+    }
+    // For numeric, compute relative position in this compare set
+    const vals = players.map(p => p[key]).filter(v => v != null);
+    if (vals.length < 2) {
+      return <div className="text-xs" style={{color:"#e5e7eb"}}>{fmtCell(val, c)}</div>;
+    }
+    const mn = Math.min(...vals), mx = Math.max(...vals);
+    const range = mx - mn;
+    const isLeader = (dir === "up" && val === mx) || (dir === "down" && val === mn);
+    const isWorst  = (dir === "up" && val === mn) || (dir === "down" && val === mx);
+    const t = range === 0 ? 0.5 : (val - mn) / range;
+    return (
+      <div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs whitespace-nowrap" style={{color: isLeader && dir ? "#22c55e" : isWorst && dir ? "#ef4444" : "#e5e7eb", fontWeight: isLeader || isWorst ? 700 : 500}}>
+            {fmtCell(val, c)}
+          </span>
+        </div>
+        <div className="relative h-1.5 mt-1 rounded-full overflow-hidden" style={{background:"#1f2937"}}>
+          <div className="absolute top-0 left-0 h-full rounded-full"
+            style={{width:`${Math.round(t*100)}%`,
+                    background: isLeader && dir ? "#22c55e" : isWorst && dir ? "#ef4444" : "#9ca3af"}}/>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:"#000000cc", backdropFilter:"blur(4px)"}}>
+      <div className="w-full max-w-7xl max-h-[92vh] flex flex-col rounded-2xl overflow-hidden"
+           style={{background:"#0d1117", border:"1px solid #1f2937"}}>
+        {/* Header */}
+        <div className="flex items-center justify-between p-5" style={{borderBottom:"1px solid #1f2937", background:"#11151c"}}>
+          <div>
+            <div className="text-xl font-bold" style={{color:"#f1f5f9"}}>Compare {players.length} Players</div>
+            <div className="text-xs" style={{color:"#9ca3af"}}>Bars are relative to this comparison set · Green = best in set · Red = worst</div>
+          </div>
+          <button onClick={onClose}
+            className="px-4 py-2 rounded-lg text-sm font-semibold"
+            style={{background:"transparent", color:"#e5e7eb", border:"1px solid #374151"}}>
+            Close ✕
+          </button>
+        </div>
+
+        {/* Cross-position compare warning (NBA-quant style honesty) */}
+        {(() => {
+          const positions = new Set(players.map(p => p.pos).filter(Boolean));
+          if (positions.size <= 1) return null;
+          return (
+            <div className="px-5 py-2 text-[11px]" style={{background:"#fbbf2411", color:"#fcd34d", borderBottom:"1px solid #fbbf2444"}}>
+              ⚠ Cross-position comparison: this set mixes {Array.from(positions).join(" · ")}. Raw value bars favour positions whose role inflates a given stat (Bigs at ORB%, Playmakers at AST%, etc.). For position-fair comparison, open each player's profile separately and read the position-stratified percentiles there.
+            </div>
+          );
+        })()}
+
+        {/* Player headers row */}
+        <div className="px-5 py-3 grid" style={{gridTemplateColumns:`160px repeat(${players.length}, 1fr)`, gap:12, borderBottom:"1px solid #1f2937", background:"#0a0e16"}}>
+          <div className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Stat</div>
+          {players.map((p, idx) => (
+            <div key={p.slug} className="relative">
+              <div className="flex items-center justify-between">
+                <button onClick={()=>onSelect(p.slug)}
+                  className="text-sm font-bold text-left hover:underline truncate"
+                  style={{color: PLAYER_COLORS[idx], fontFamily:"'Oswald',sans-serif"}}>
+                  {p.name}
+                </button>
+                <button onClick={()=>onRemove(p.slug)}
+                  className="text-xs ml-2"
+                  style={{color:"#6b7280", border:"1px solid #1f2937", padding:"2px 6px", borderRadius:4}}>
+                  ✕
+                </button>
+              </div>
+              <div className="text-[10px] mt-0.5" style={{color:"#9ca3af"}}>
+                {p.pos} · {p.year} · age {p.age || "—"} · {p.team || "—"}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Scrollable stat grid */}
+        <div className="flex-1 overflow-y-auto px-5 py-3 space-y-5">
+          {STAT_GROUPS.map(group => {
+            // Only include keys that exist in meta and have at least one value present
+            const validKeys = group.keys.filter(k => {
+              if (!colsByKey[k]) return false;
+              return players.some(p => p[k] != null);
+            });
+            if (validKeys.length === 0) return null;
+            return (
+              <div key={group.id}>
+                <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#f97316"}}>{group.label}</div>
+                <div className="space-y-1.5">
+                  {validKeys.map(k => (
+                    <div key={k} className="grid items-center" style={{gridTemplateColumns:`160px repeat(${players.length}, 1fr)`, gap:12, padding:"4px 0", borderBottom:"1px solid #11151c"}}>
+                      <div className="text-xs" style={{color:"#cbd5e1"}}>{colsByKey[k]?.label || k}</div>
+                      {players.map(p => (
+                        <div key={p.slug}>{renderCell(p, k, group.dirs[k])}</div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="px-5 py-3 text-[11px]" style={{color:"#6b7280", borderTop:"1px solid #1f2937", background:"#0a0e16"}}>
+          Click player name to open profile · Bars compare values within this set (not vs global pool) · For position-aware percentile context, see the player profile pages.
+        </div>
+      </div>
     </div>
   );
 }
