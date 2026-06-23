@@ -11020,7 +11020,7 @@ function MethodologyTab() {
     {cat:"Pool & Era Caveats (Honest Framing)",items:[],desc:"Several sections in this tool use NBA-careered pools as the validation anchor — Skill Intersections (n=919), NetPV v2 weights (n=892), Half-Split tier-correlations (n=182), and Trajectory Validation cohorts (n=518). All of these are CONDITIONAL on the player reaching the NBA. So when we say 'players above-average in both ORB% and AST% reached Star+ at 47.7% in the Playmaker pool', that means 47.7% of those who made it to the NBA and shared this pre-draft profile — not 47.7% of all college players. The unconditional Star+ rate from a random pre-draft sample is far lower. Read every NBA-careered cohort number as 'conditional on making it' — that's still useful (the profile correlates with star outcomes among NBA-careered peers) but it doesn't translate to the broader prospect pool without further adjustment. We deliberately don't do that adjustment in the section UI because the conditional rate is the cleaner scout-eye comparison. Era and pace also matter: NCAA pace rose from ~67 to ~70 possessions/game between 2017 and 2025, and 3PA rose meaningfully too, so cross-era pooling for half-split or trajectory metrics quietly favours recent seasons. Where we pool across eras (Half-Split percentiles, Trajectory slopes), the median values are dominated by the more frequent recent seasons. We accept this trade-off because the sample-size lift from pooling beats the era-correction precision we could realistically achieve here. Position classification matters too: the Playmaker / Wing / Big groups use height-based rules (Big ≥84\" unconditional, ≥82\" with non-wing usage profile, ≥80\" with elite shot-blocking; Playmaker high-AST short; Wing everything else), so a 6'10\" stretch forward sits in 'Wing' even if he plays Big in some lineups. Every position-stratified analysis inherits this classification and its edge-case behaviour."},
     {cat:"Development Tab — Trajectory Validation",items:[],desc:"For each headline stat with a multi-season trajectory (BPM, TS%, USG%), the slope per year is compared to the historical NCAA pool of multi-season players (n=14,281). Each slope is rendered as a value (+0.45 BPM per year, e.g.), a percentile rank vs the pool, and a cohort outcome anchor: 'players in this slope-quartile reached Star+ at X%, Bust at Y%' built from the NBA-careered subset (n=518). HONEST FRAMING: BPM and TS% slopes are weak predictors by themselves — every slope quartile produces Star+ at 11–16% and Bust at 44–54%. A rising BPM curve is a positive signal but not a star differentiator on its own. USG slope carries a moderate signal: top quartile (USG rising +3.4 to +15 points/yr) reaches Star+ at 20.8% vs 12.3% in the bottom quartile, and Bust drops from 54.6% to 40.8%. Players who EXPAND their offensive load over their NCAA career are more often legit lottery-tier prospects than developers who plateau. Section header explicitly says which signal carries weight; each stat row has its own caveat sentence so the reader knows when to push hard on the cohort number and when to treat it as context."},
     {cat:"Scouting Tab — Skill Intersections",items:[],desc:"Two stat pairs that don't usually go together at the college level — bigs who pass like guards, point guards who block like rim protectors. Being above the position average in BOTH is structurally rare and historically tied to a meaningful peak Wins Added lift. Two pairs are surfaced: Crasher + Distributor (ORB% × AST%) and Two-Way Skill (AST% × BLK%). Per pair, two z-score bars (one per stat) are rendered Four-Factors-style. A status pill at the top reads 'Above-Avg in BOTH', 'Below avg in one', or 'Insufficient data'. The hover tooltip carries the hypothesis in plain English plus historical validators — Jokic · KAT · Blake Griffin · Haliburton · Ja Morant · Draymond Green · Kawhi Leonard for Crasher + Distributor; Joel Embiid · KAT · Paul George · Draymond Green · Klay Thompson · John Wall · Tyrese Haliburton for Two-Way Skill. POOL: 919 NBA-careered players from draft years 2008–2020 with known peak outcome, joined with 224 international stars (Jokic, Doncic, Embiid, Porzingis, Gasol, Ginobili and others) via diacritic-resilient name matching, so the comparison anchor reflects the modern global player pool. METHODOLOGY: each pair is validated three ways — (1) Pearson/Spearman global correlation to confirm the anti-correlated trade-off (Crasher+Distributor r=−0.55, Two-Way Skill r=−0.42); (2) position-stratified above-average lift (z≥0 in both stats vs the position pool); (3) continuous z-score regression peak WA ~ min(z_a, z_b), reporting slope + 95% CI + p-value (Crasher+Distributor +2.03 WA per +1σ, p=0.002; Two-Way Skill +2.88 WA per +1σ, p<0.001). REJECTED PAIRS (listed transparently in the footer): 3PAr × ORB% (Wing dropper signal negative), 3PAr × FTR (sample too small), Rim Frequency × Low TO% (rim-frequency mixes rolling bigs, cutting wings, and actual drivers), Rim Pressure × Low TO% (the 'driving leads to turnovers' assumption doesn't show up in pre-NBA data). HONEST FRAMING: these are scout-eye intersections that historically tie to outcome lift — not deterministic NBA predictors. A player can be above-average in both and still bust; a player can fail both and still star. The section sits under Possession Impact precisely to be read alongside the Four Factors, not as a standalone projection."},
-    {cat:"Stats Lab Section",items:[],desc:"A filterable, sortable lab table over ~7,600 players — current draft classes 2024–26 plus the historical reference pool of NBA-careered players — with 119 columns spanning every section of the player profile. Lets you ask quantitative questions across the board: who has the highest AST per FGA among 2026 Wings? Which Bigs hit the Two-Way Skill threshold? Where do the Star+ Creator projections cluster relative to consensus rank? FILTERS in the sidebar: draft class year, position group (Playmaker / Wing / Big), source (NCAA / international), search-by-name, plus sample-size range filters (min/max games played and minutes per game) to drop low-sample noise. PRESETS for one-click view switching: Default · Shooters Audit · All-Defensive · Skill Intersections · Mind / Resilience · Role Versatility · Historical Validation. COLUMN PICKER groups the 119 columns into ten categories (Identity, Projections, 5 Pillars, Box Stats, Position Percentiles, Role Inference, Four Factors, Skill Intersections, Mind Metrics, Archetype + Badges) — toggle any combination. SORT by any header (null values always sink to the bottom). PAGINATION at 25 / 50 / 100 / 200 rows per page. Cell coloring uses position-stratified z-score gradients for stat columns whose typical range crosses zero, and warm orange gradients for percentile columns. Click any player name to jump straight into their profile. ⌬ LINK builds a shareable URL that reproduces the exact view — every filter, sort, column selection, page, and compare-slot is encoded so a teammate opening the link sees the same table you do. ↓ CSV downloads every row currently passing your filters (all pages, with the columns you have visible, in current sort order) — header row plus a UTF-8 BOM so Excel and Sheets read it cleanly. The file name carries the filter context so multiple exports don't collide (e.g. stats_lab_2026_Wing-Big_182rows_20260623.csv). ★ SAVE VIEW stores the current filter+column+sort combination as a named preset in your browser; the preset appears as a cyan chip next to the built-in presets and applies in one click. Saved presets live in localStorage only (browser-local, not synced across devices), and the × button on each chip deletes it."},
+    {cat:"Stats Lab Section",items:[],desc:"A filterable, sortable lab table over ~7,600 players — current draft classes 2024–26 plus the historical reference pool of NBA-careered players — with 119 columns spanning every section of the player profile. Lets you ask quantitative questions across the board: who has the highest AST per FGA among 2026 Wings? Which Bigs hit the Two-Way Skill threshold? Where do the Star+ Creator projections cluster relative to consensus rank? FILTERS in the sidebar: draft class year, position group (Playmaker / Wing / Big), source (NCAA / international), search-by-name, plus sample-size range filters (min/max games played and minutes per game) to drop low-sample noise. PRESETS for one-click view switching: Default · Shooters Audit · All-Defensive · Skill Intersections · Mind / Resilience · Role Versatility · Historical Validation. COLUMN PICKER groups the 119 columns into ten categories (Identity, Projections, 5 Pillars, Box Stats, Position Percentiles, Role Inference, Four Factors, Skill Intersections, Mind Metrics, Archetype + Badges) — toggle any combination. SORT by any header (null values always sink to the bottom). PAGINATION at 25 / 50 / 100 / 200 rows per page. Cell coloring uses position-stratified z-score gradients for stat columns whose typical range crosses zero, and warm orange gradients for percentile columns. Click any player name to jump straight into their profile. DEFAULT VIEW (Sprint-4.4): BartTorvik-Parity preset preselected, sorted by BPM desc on the current 2026 draft class — mirrors the BartTorvik playerstat landing page so anybody familiar with T-Rank starts on familiar ground. The first 35 columns of the preset cover every standard BartTorvik column (Games, MPG, ORtg, USG%, BPM/OBPM/DBPM, TS%, eFG%, FT%, 3P%, AST%, TO%, ORB%, DRB%, STL%, BLK%, FTr, 3PAr, Rim/Mid FG%, Dunk Rate, PF/40); the last 6 columns layer ProspectTheory's proprietary value (Projected WAR, P(All-Star), Feel/Shooting/Defense/Functional Athleticism pillars) on top. Switch presets to flip into Projection Lens (default Projection-focused view), Shooters Audit, All-Defensive, Skill Intersections, Mind / Resilience, Role Versatility, or Validation (Historic). HEADER TOOLTIPS: hover any column header to see its formula, what it measures, what counts as elite vs role-player. ProspectTheory-proprietary columns get a small 'PT' badge so you can tell standard from custom at a glance. SIDEBAR FILTERS: Class (draft year), Position (Playmaker/Wing/Big), Source (NCAA/INTL), Search, Sample Size (MP and GP ranges), plus Class Year (Fr/So/Jr/Sr/5 — BartTorvik parity) and Conference (multi-select dropdown — BartTorvik parity). ⌬ LINK builds a shareable URL that reproduces the exact view — every filter, sort, column selection, page, and compare-slot is encoded so a teammate opening the link sees the same table you do. ↓ CSV downloads every row currently passing your filters (all pages, with the columns you have visible, in current sort order) — header row plus a UTF-8 BOM so Excel and Sheets read it cleanly. The file name carries the filter context so multiple exports don't collide (e.g. stats_lab_2026_Wing-Big_182rows_20260623.csv). ★ SAVE VIEW stores the current filter+column+sort combination as a named preset in your browser; the preset appears as a cyan chip next to the built-in presets and applies in one click. Saved presets live in localStorage only (browser-local, not synced across devices), and the × button on each chip deletes it."},
     {cat:"Role Inference Matrix",items:[],desc:"14 NBA roles scored as z-scores relative to position peers. Offensive: Scorer, Playmaker, Spacer, Driver, Crasher. Defensive: On-Ball, Switch Potential, Rim Protect, Rebounder. Hybrid: Connector, Helio-Scorer, Event Creator, Zone Pressure, Micro-Spacer. Each role combines 2-4 statistical inputs weighted by NBA translation research. Z≥+2.0 = Elite, ≥+1.0 = Impact, <-1.0 = Liability."},
     {cat:"Archetype Classification",items:[],desc:"18 NBA archetypes assigned by position + dominant role scores. Playmaker archetypes: Scoring Playmaker, Floor General, Spacing Guard, Defensive Guard, Non-Specialized Playmaker. Wing: Initiator Wing, Scoring Wing, 3-and-D, Defensive Wing, Point Forward, Slashing Wing, Non-Specialized Wing. Big: Stretch Big, Stretch Rim Protector, Rim Protector, Short Roll Playmaker, Passing Hub, Glass Cleaner, Scoring Big, Non-Specialized Big. Primary archetype from pipeline, secondary/tertiary from role-score matching within position."},
     {cat:"Tier Feasibility (vs NBA)",items:[],desc:"How does this prospect stack up against the actual pre-draft college numbers of players who reached each NBA tier? Built from the mature draft cohort 2008-2018 (n=353 NBA players with realized peak Wins Added). We grouped them by their realized NBA outcome — Replacement, Role Player, Starter, All-Star — using peak-WA percentile cuts (10/30/60/85). For each (tier × position) we then took the MEDIAN of every pre-draft college stat (BPM, USG%, TS%, AST%, TO%, STL%, BLK%, ORB%, DRB%, AdjOE) and used that as the in-range center. Frontend automatically derives p25 = median × 0.75 and p75 = median × 1.30 around it: above median is green (In-Range), below median is orange (Below Median), below p25 is red (Critical Gap) — or yellow (Compensated) if a position-core metric is elite enough to offset (Wings core = TS% + 3P%; Playmakers core = AST% + TO%; Bigs core = BLK% + ORB%). Thresholds are MONOTONIZED along the tier axis (a higher tier's threshold never sits below a lower tier's; TO% inverse), at the cost of small distortion — pre-draft college stats only weakly separate Starter from All-Star, because the real talent spike happens AFTER the draft via role + minutes + team context. So a player can clear all Starter thresholds and still NOT clear All-Star simply because the Starter and All-Star pre-draft stats overlap. Read this view as a diagnostic — how many tier markers does he hit — not as a forecast."},
@@ -11875,6 +11875,8 @@ const _slParseUrl = () => {
     y:    arr("y")?.map(Number).filter(n => !isNaN(n)),
     pos:  arr("pos"),
     src:  arr("src"),
+    conf: arr("conf"),
+    cls:  arr("cls"),
     q:    get("q") || "",
     mpmin:get("mpmin") || "",
     mpmax:get("mpmax") || "",
@@ -11931,11 +11933,17 @@ function StatsLabView({onSelect}) {
   const [gpMax, setGpMax] = useState(URL_INIT.gpmax);
 
   // Columns + sort + pagination
-  const [presetId,     setPresetId]   = useState(URL_INIT.pre || "default");
+  // Sprint-4.4: default preset "bt_standard" + sort by BPM, gespiegelt zur
+  // BartTorvik-playerstat-Landing-View. Backend kann das via meta.filter_defaults
+  // überschreiben (preset / sort_key / sort_dir) — Frontend übernimmt nach load.
+  const [presetId,     setPresetId]   = useState(URL_INIT.pre || "bt_standard");
   const [selectedCols, setSelectedCols] = useState(URL_INIT.c || null);
   const [pickerOpen,   setPickerOpen] = useState(false);
-  const [sortKey,      setSortKey]    = useState(URL_INIT.sk || "war");
+  const [sortKey,      setSortKey]    = useState(URL_INIT.sk || "bpm");
   const [sortDir,      setSortDir]    = useState(URL_INIT.sd || "desc");
+  // Sprint-4.4: Conference + Class-Year filters (BartTorvik-parity)
+  const [confFilter, setConfFilter] = useState(URL_INIT.conf || []);    // empty = all conferences
+  const [classFilter, setClassFilter] = useState(URL_INIT.cls || []);   // empty = all class years (Fr/So/Jr/Sr/5)
   const [page,         setPage]       = useState(URL_INIT.pg || 0);
   const [pageSize,     setPageSize]   = useState(URL_INIT.ps || 50);
 
@@ -11974,15 +11982,21 @@ function StatsLabView({onSelect}) {
       if (cancelled) return;
       setRows(data.rows || []);
       setMeta(m);
-      // Sprint-4.3: only apply preset/year defaults if URL didn't supply them
+      // Sprint-4.4: hydrate preset, sort key + dir from backend filter_defaults
+      // unless URL already supplied a value. URL > filter_defaults > hardcoded.
+      const defPresetId = m.filter_defaults?.preset || "bt_standard";
+      const defSortKey  = m.filter_defaults?.sort_key || "bpm";
+      const defSortDir  = m.filter_defaults?.sort_dir || "desc";
       if (!URL_INIT.c && !URL_INIT.pre) {
-        const preset = (m.presets || []).find(p => p.id === "default");
-        if (preset) setSelectedCols(preset.cols);
+        const preset = (m.presets || []).find(p => p.id === defPresetId);
+        if (preset) { setSelectedCols(preset.cols); setPresetId(preset.id); }
       } else if (URL_INIT.pre && !URL_INIT.c) {
         // URL named a backend preset but no explicit cols → hydrate from preset
         const preset = (m.presets || []).find(p => p.id === URL_INIT.pre);
         if (preset) setSelectedCols(preset.cols);
       }
+      if (!URL_INIT.sk) setSortKey(defSortKey);
+      if (!URL_INIT.sd) setSortDir(defSortDir);
       if (!URL_INIT.y && m.filter_defaults?.year && Array.isArray(m.filter_defaults.year)) {
         setYearFilter(m.filter_defaults.year);
       }
@@ -12011,6 +12025,9 @@ function StatsLabView({onSelect}) {
     }
     if (posFilter && posFilter.length < 3) set("pos", posFilter.join(","));
     if (srcFilter && srcFilter.length < 2) set("src", srcFilter.join(","));
+    // Sprint-4.4: persist Conference + Class-year filters
+    if (confFilter && confFilter.length) set("conf", confFilter.join(","));
+    if (classFilter && classFilter.length) set("cls", classFilter.join(","));
     if (search)   set("q",     search);
     if (mpMin)    set("mpmin", mpMin);
     if (mpMax)    set("mpmax", mpMax);
@@ -12031,7 +12048,7 @@ function StatsLabView({onSelect}) {
     window.history.replaceState(window.history.state || {}, "", path);
   }, [loading, rows, yearFilter, posFilter, srcFilter, search,
       mpMin, mpMax, gpMin, gpMax, presetId, selectedCols, sortKey, sortDir,
-      page, pageSize, compareSlugs, compareOpen]);
+      page, pageSize, compareSlugs, compareOpen, confFilter, classFilter]);
 
   // Sprint-4.3: clear sl_ params on unmount so going back to /player/<x>
   // or the Board view doesn't carry stale Stats-Lab state.
@@ -12061,6 +12078,19 @@ function StatsLabView({onSelect}) {
     return Array.from(new Set(rows.map(r => r.year).filter(Boolean))).sort((a,b)=>b-a);
   }, [rows]);
 
+  // Sprint-4.4: BartTorvik-parity sidebar filters — conferences + class years
+  const allConfs = useMemo(() => {
+    if (!rows) return [];
+    return Array.from(new Set(rows.map(r => r.conf).filter(c => typeof c === "string" && c.trim()))).sort();
+  }, [rows]);
+  const allClasses = useMemo(() => {
+    if (!rows) return [];
+    const seen = new Set(rows.map(r => r.cls).filter(c => typeof c === "string" && c.trim()));
+    // Display order: Fr / So / Jr / Sr / 5
+    const order = ["Fr", "So", "Jr", "Sr", "5"];
+    return [...order.filter(c => seen.has(c)), ...Array.from(seen).filter(c => !order.includes(c))];
+  }, [rows]);
+
   const filtered = useMemo(() => {
     if (!rows) return [];
     const q = search.trim().toLowerCase();
@@ -12072,6 +12102,9 @@ function StatsLabView({onSelect}) {
       if (yearFilter.length && !yearFilter.includes(r.year)) return false;
       if (posFilter.length && r.pos && !posFilter.includes(r.pos)) return false;
       if (srcFilter.length && r.source && !srcFilter.includes(r.source)) return false;
+      // Sprint-4.4: Conference + Class-year filters
+      if (confFilter.length && (!r.conf || !confFilter.includes(r.conf))) return false;
+      if (classFilter.length && (!r.cls || !classFilter.includes(r.cls))) return false;
       if (q && !(r.name || "").toLowerCase().includes(q)) return false;
       // MP / GP range filters: null-row excluded only if a bound is set
       if (mpLo != null || mpHi != null) {
@@ -12086,7 +12119,7 @@ function StatsLabView({onSelect}) {
       }
       return true;
     });
-  }, [rows, yearFilter, posFilter, srcFilter, search, mpMin, mpMax, gpMin, gpMax]);
+  }, [rows, yearFilter, posFilter, srcFilter, search, mpMin, mpMax, gpMin, gpMax, confFilter, classFilter]);
 
   const sorted = useMemo(() => {
     if (!filtered.length) return filtered;
@@ -12337,6 +12370,64 @@ function StatsLabView({onSelect}) {
           </div>
         </div>
 
+        {/* Sprint-4.4: Class-Year Filter (Fr/So/Jr/Sr/5) — BartTorvik parity */}
+        {allClasses.length > 0 && (
+          <div className="rounded-xl p-4" style={{background:"#0d111766",border:"1px solid #1f2937"}}>
+            <div className="text-xs uppercase tracking-wider mb-2 flex items-center justify-between" style={{color:"#9ca3af"}}>
+              <span>Class Year</span>
+              {classFilter.length > 0 && (
+                <button onClick={()=>setClassFilter([])} className="text-[10px] underline" style={{color:"#9ca3af"}}>clear</button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {allClasses.map(c => {
+                const on = classFilter.includes(c);
+                return (
+                  <button key={c} onClick={()=>flipMulti(classFilter, setClassFilter, c)}
+                    className="px-2 py-1 rounded text-[11px]"
+                    style={{
+                      background: on ? "#f9731622" : "#0a0e16",
+                      color:      on ? "#fcd34d"   : "#9ca3af",
+                      border: `1px solid ${on ? "#f97316" : "#1f2937"}`,
+                    }}>{c}</button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Sprint-4.4: Conference Filter — typeahead-style with current selection chips */}
+        {allConfs.length > 0 && (
+          <div className="rounded-xl p-4" style={{background:"#0d111766",border:"1px solid #1f2937"}}>
+            <div className="text-xs uppercase tracking-wider mb-2 flex items-center justify-between" style={{color:"#9ca3af"}}>
+              <span>Conference</span>
+              {confFilter.length > 0 && (
+                <button onClick={()=>setConfFilter([])} className="text-[10px] underline" style={{color:"#9ca3af"}}>clear ({confFilter.length})</button>
+              )}
+            </div>
+            {confFilter.length > 0 && (
+              <div className="flex flex-wrap gap-1 mb-2">
+                {confFilter.map(c => (
+                  <button key={c} onClick={()=>flipMulti(confFilter, setConfFilter, c)}
+                    className="px-2 py-0.5 rounded text-[10px]"
+                    style={{background:"#f9731622", color:"#fcd34d", border:"1px solid #f97316"}}>
+                    {c} ×
+                  </button>
+                ))}
+              </div>
+            )}
+            <select multiple={false} value=""
+              onChange={e=>{ const v = e.target.value; if (v) flipMulti(confFilter, setConfFilter, v); }}
+              className="w-full px-2 py-1.5 rounded text-xs"
+              style={{background:"#0a0e16", color:"#f1f5f9", border:"1px solid #1f2937"}}>
+              <option value="">+ add conference…</option>
+              {allConfs.filter(c => !confFilter.includes(c)).map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <div className="rounded-xl p-4" style={{background:"#0d111766",border:"1px solid #1f2937"}}>
           <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#9ca3af"}}>Search</div>
           <input
@@ -12537,21 +12628,49 @@ function StatsLabView({onSelect}) {
                 <th className="px-2 py-2 text-center" style={{borderBottom:"1px solid #1f2937", position:"sticky", left:0, background:"#11151c", zIndex:6, width:36}}>
                   <span title="Select to compare" className="text-[10px]" style={{color:"#6b7280"}}>⊕</span>
                 </th>
-                {visibleCols.map((c, i) => (
-                  <th key={c.k}
-                    onClick={()=>onSortClick(c.k)}
-                    className="px-3 py-2 text-left text-xs font-semibold cursor-pointer select-none whitespace-nowrap"
-                    style={{
-                      color: sortKey===c.k ? "#f97316" : "#cbd5e1",
-                      borderBottom:"1px solid #1f2937",
-                      position: i===0 ? "sticky" : undefined,
-                      left:     i===0 ? 36 : undefined,
-                      background: i===0 ? "#11151c" : undefined,
-                      zIndex: i===0 ? 5 : undefined,
-                    }}>
-                    {c.label}{sortKey===c.k ? (sortDir==="desc" ? " ↓" : " ↑") : ""}
-                  </th>
-                ))}
+                {visibleCols.map((c, i) => {
+                  // Sprint-4.4: Header tooltip with column explanation (c.tip),
+                  // plus tiny src-badge: "bt" = BartTorvik standard, "pt" =
+                  // ProspectTheory proprietary. Hover header to read formula
+                  // + interpretation, click to sort.
+                  const arrow = sortKey===c.k ? (sortDir==="desc" ? " ↓" : " ↑") : "";
+                  const hdrInner = (
+                    <span className="inline-flex items-center gap-1">
+                      <span>{c.label}{arrow}</span>
+                      {c.src === "pt" && (
+                        <span title="ProspectTheory metric"
+                          className="text-[8px] font-bold px-1 rounded leading-tight"
+                          style={{background:"#f9731622", color:"#fcd34d", border:"1px solid #f97316aa"}}>PT</span>
+                      )}
+                    </span>
+                  );
+                  const tipContent = c.tip ? (
+                    <div>
+                      <div className="font-bold mb-1" style={{color:"#f97316"}}>{c.label}</div>
+                      <div style={{color:"#cbd5e1"}}>{c.tip}</div>
+                      {c.range && (
+                        <div className="mt-1 text-[10px]" style={{color:"#9ca3af"}}>
+                          Color scale: {c.range[0]} → {c.range[1]}
+                        </div>
+                      )}
+                    </div>
+                  ) : null;
+                  return (
+                    <th key={c.k}
+                      onClick={()=>onSortClick(c.k)}
+                      className="px-3 py-2 text-left text-xs font-semibold cursor-pointer select-none whitespace-nowrap"
+                      style={{
+                        color: sortKey===c.k ? "#f97316" : "#cbd5e1",
+                        borderBottom:"1px solid #1f2937",
+                        position: i===0 ? "sticky" : undefined,
+                        left:     i===0 ? 36 : undefined,
+                        background: i===0 ? "#11151c" : undefined,
+                        zIndex: i===0 ? 5 : undefined,
+                      }}>
+                      {tipContent ? <Tip content={tipContent} wide>{hdrInner}</Tip> : hdrInner}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>

@@ -410,20 +410,32 @@ def build_meta() -> dict:
 
     cols = [
         # Identity
-        {"k": "name",   "label": "Player",     "g": G_ID, "fmt": "name", "pinned": True},
-        {"k": "year",   "label": "Class",      "g": G_ID, "fmt": "int"},
-        {"k": "cls",    "label": "Yr",         "g": G_ID, "fmt": "str"},
-        {"k": "pos",    "label": "Pos",        "g": G_ID, "fmt": "str"},
-        {"k": "pos2",   "label": "Pos Det.",   "g": G_ID, "fmt": "str"},
-        {"k": "source", "label": "Src",        "g": G_ID, "fmt": "str"},
-        {"k": "team",   "label": "Team",       "g": G_ID, "fmt": "str"},
-        {"k": "conf",   "label": "Conf",       "g": G_ID, "fmt": "str"},
-        {"k": "age",    "label": "Age",        "g": G_ID, "fmt": "dec1", "range": [16, 24]},
-        {"k": "ht",     "label": "Ht (in)",    "g": G_ID, "fmt": "dec1", "range": [70, 90]},
+        {"k": "name",   "label": "Player",     "g": G_ID, "fmt": "name", "pinned": True, "src": "pt",
+         "tip": "Click to open the player's full profile."},
+        {"k": "year",   "label": "Class",      "g": G_ID, "fmt": "int", "src": "pt",
+         "tip": "Draft Class year — when he's eligible for the NBA Draft."},
+        {"k": "cls",    "label": "Yr",         "g": G_ID, "fmt": "str", "src": "bt",
+         "tip": "College class: Fr/So/Jr/Sr/5 (5th-year senior). Younger players with comparable production have higher upside."},
+        {"k": "pos",    "label": "Pos",        "g": G_ID, "fmt": "str", "src": "pt",
+         "tip": "Position group used across the site: Playmaker / Wing / Big. Height-based with usage + shot-block edge-case rules."},
+        {"k": "pos2",   "label": "Pos Det.",   "g": G_ID, "fmt": "str", "src": "pt",
+         "tip": "Detailed 5-position bucket: PG/SG/SF/PF/C. Used for Body-Tab anthropometric tier comparisons."},
+        {"k": "source", "label": "Src",        "g": G_ID, "fmt": "str", "src": "pt",
+         "tip": "Data source: NCAA (BartTorvik) or INTL (RealGM / Euroleague / EuroCup PBP)."},
+        {"k": "team",   "label": "Team",       "g": G_ID, "fmt": "str", "src": "bt",
+         "tip": "Latest school / club."},
+        {"k": "conf",   "label": "Conf",       "g": G_ID, "fmt": "str", "src": "bt",
+         "tip": "NCAA Conference or international league. Strong conferences = competition-adjusted box stats."},
+        {"k": "age",    "label": "Age",        "g": G_ID, "fmt": "dec1", "range": [16, 24], "src": "pt",
+         "tip": "Age (years) as of June 30 of draft year. Younger = bigger projection upside per equivalent stats."},
+        {"k": "ht",     "label": "Ht (in)",    "g": G_ID, "fmt": "dec1", "range": [70, 90], "src": "bt",
+         "tip": "Height with shoes (inches). 72\" = 6'0\", 84\" = 7'0\"."},
 
         # Projection
-        {"k": "war",     "label": "Proj WAR",     "g": G_PROJ, "fmt": "dec1", "range": [-5, 20]},
-        {"k": "pie",     "label": "Proj PIE",     "g": G_PROJ, "fmt": "dec1", "range": [-5, 25]},
+        {"k": "war",     "label": "Proj WAR",     "g": G_PROJ, "fmt": "dec1", "range": [-5, 20], "src": "pt",
+         "tip": "Projected peak Wins Added — best 3-consecutive-season window in first 8 NBA years. Two-stage hurdle model: P(NBA) × E[WA | NBA]. Sober: a college profile rarely signals stardom — star upside lives in the tier probabilities."},
+        {"k": "pie",     "label": "Proj PIE",     "g": G_PROJ, "fmt": "dec1", "range": [-5, 25], "src": "pt",
+         "tip": "Predicted Peak PIE (Player Impact Estimate) — alternative outcome target on NBA's PIE scale."},
         {"k": "ceil",    "label": "Ceiling",      "g": G_PROJ, "fmt": "dec1"},
         {"k": "floor",   "label": "Floor",        "g": G_PROJ, "fmt": "dec1"},
         {"k": "sigma",   "label": "Sigma",        "g": G_PROJ, "fmt": "dec2"},
@@ -448,37 +460,72 @@ def build_meta() -> dict:
         {"k": "box_cre", "label": "Box Creation",  "g": G_PILL, "fmt": "dec2", "range": [0, 50]},
 
         # Box raw
-        {"k": "bpm",   "label": "BPM",        "g": G_BOX, "fmt": "dec1", "range": [-5, 20]},
-        {"k": "obpm",  "label": "OBPM",       "g": G_BOX, "fmt": "dec1"},
-        {"k": "dbpm",  "label": "DBPM",       "g": G_BOX, "fmt": "dec1"},
-        {"k": "ts",    "label": "TS%",        "g": G_BOX, "fmt": "dec1", "range": [40, 75]},
-        {"k": "usg",   "label": "USG%",       "g": G_BOX, "fmt": "dec1", "range": [10, 40]},
-        {"k": "ast_p", "label": "AST%",       "g": G_BOX, "fmt": "dec1"},
-        {"k": "to_p",  "label": "TO%",        "g": G_BOX, "fmt": "dec1"},
-        {"k": "orb_p", "label": "ORB%",       "g": G_BOX, "fmt": "dec1"},
-        {"k": "drb_p", "label": "DRB%",       "g": G_BOX, "fmt": "dec1"},
-        {"k": "stl_p", "label": "STL%",       "g": G_BOX, "fmt": "dec1"},
-        {"k": "blk_p", "label": "BLK%",       "g": G_BOX, "fmt": "dec1"},
-        {"k": "ftr",   "label": "FTr",        "g": G_BOX, "fmt": "dec1"},
-        {"k": "rim_f", "label": "Rim Freq",   "g": G_BOX, "fmt": "dec1"},
-        {"k": "mid_f", "label": "Mid Freq",   "g": G_BOX, "fmt": "dec1"},
-        {"k": "three_f","label": "3PAr",      "g": G_BOX, "fmt": "dec1"},
-        {"k": "dunk_r","label": "Dunk Rate",  "g": G_BOX, "fmt": "dec1"},
-        {"k": "rim_pct","label": "Rim FG%",   "g": G_BOX, "fmt": "dec1"},
-        {"k": "mid_pct","label": "Mid FG%",   "g": G_BOX, "fmt": "dec1"},
-        {"k": "tp_pct","label": "3P%",        "g": G_BOX, "fmt": "dec1"},
-        {"k": "fg_pct","label": "FG%",        "g": G_BOX, "fmt": "dec1"},
-        {"k": "ft_pct","label": "FT%",        "g": G_BOX, "fmt": "dec1"},
-        {"k": "efg",   "label": "eFG%",       "g": G_BOX, "fmt": "dec1"},
-        {"k": "ortg",  "label": "ORtg",       "g": G_BOX, "fmt": "dec1"},
-        {"k": "fouls_40","label": "PF/40",    "g": G_BOX, "fmt": "dec1"},
-        {"k": "pts",   "label": "PPG",        "g": G_BOX, "fmt": "dec1"},
-        {"k": "reb",   "label": "RPG",        "g": G_BOX, "fmt": "dec1"},
-        {"k": "ast",   "label": "APG",        "g": G_BOX, "fmt": "dec1"},
-        {"k": "stl",   "label": "SPG",        "g": G_BOX, "fmt": "dec1"},
-        {"k": "blk",   "label": "BPG",        "g": G_BOX, "fmt": "dec1"},
-        {"k": "gp",    "label": "GP",         "g": G_BOX, "fmt": "int"},
-        {"k": "mp",    "label": "MPG",        "g": G_BOX, "fmt": "dec1"},
+        # Sprint-4.4: Box stats — `tip` field powers the per-column header
+        # tooltip in the Stats Lab UI. Kept terse (~1 sentence) so hover is
+        # readable. `range` for color-coding (red→neutral→green or 0-100 warm).
+        # `src`: "bt" = BartTorvik standard, "pt" = ProspectTheory proprietary.
+        {"k": "bpm",   "label": "BPM",        "g": G_BOX, "fmt": "dec1", "range": [-5, 20], "src": "bt",
+         "tip": "Box Plus/Minus — single-number all-in offensive+defensive value vs an average D-1 player, per 100 possessions. Higher = better. Elite ≥ 10, NBA-typical 4-9, role-player ≤ 2."},
+        {"k": "obpm",  "label": "OBPM",       "g": G_BOX, "fmt": "dec1", "range": [-5, 15], "src": "bt",
+         "tip": "Offensive Box Plus/Minus — offensive component of BPM. Captures scoring + playmaking impact."},
+        {"k": "dbpm",  "label": "DBPM",       "g": G_BOX, "fmt": "dec1", "range": [-5, 8],  "src": "bt",
+         "tip": "Defensive Box Plus/Minus — defensive component of BPM. Box-based proxy, less reliable than impact stats for guards."},
+        {"k": "ts",    "label": "TS%",        "g": G_BOX, "fmt": "dec1", "range": [40, 75], "src": "bt",
+         "tip": "True Shooting% — points per scoring possession including FTs (PTS / 2·(FGA + 0.44·FTA)). Captures shot quality + free-throw merit. D-1 league average ~ 53%."},
+        {"k": "usg",   "label": "USG%",       "g": G_BOX, "fmt": "dec1", "range": [10, 40], "src": "bt",
+         "tip": "Usage Rate — % of his team's possessions he ends (FGA + 0.44·FTA + TO) while on floor. High-usage = primary option (≥ 25%), low-usage = specialist (< 18%)."},
+        {"k": "ast_p", "label": "AST%",       "g": G_BOX, "fmt": "dec1", "range": [0, 45], "src": "bt",
+         "tip": "Assist Rate — % of teammate FGM he assisted while on floor. Pure playmaking volume. Lead-guard ≥ 25, wing 8-15, big < 8."},
+        {"k": "to_p",  "label": "TO%",        "g": G_BOX, "fmt": "dec1", "range": [5, 30], "src": "bt",
+         "tip": "Turnover Rate — turnovers per 100 possessions used. LOWER is better. High-usage initiators sit naturally higher (16-22)."},
+        {"k": "orb_p", "label": "ORB%",       "g": G_BOX, "fmt": "dec1", "range": [0, 20], "src": "bt",
+         "tip": "Offensive Rebound Rate — % of available ORBs he secured while on floor. Activity + positioning signal. Big ≥ 10, wing 3-8, guard ≤ 3."},
+        {"k": "drb_p", "label": "DRB%",       "g": G_BOX, "fmt": "dec1", "range": [0, 30], "src": "bt",
+         "tip": "Defensive Rebound Rate — % of available DRBs he secured while on floor. Big ≥ 20, wing 12-18, guard 6-10."},
+        {"k": "stl_p", "label": "STL%",       "g": G_BOX, "fmt": "dec1", "range": [0, 5], "src": "bt",
+         "tip": "Steal Rate — % of opp possessions ending in his steal. Anticipation + hand-activity. ≥ 3% is elite event-creator territory."},
+        {"k": "blk_p", "label": "BLK%",       "g": G_BOX, "fmt": "dec1", "range": [0, 14], "src": "bt",
+         "tip": "Block Rate — % of opp 2P attempts he blocked. Bigs ≥ 6 = rim-protector signal. Wing 1.5-3 = vertical contestor."},
+        {"k": "ftr",   "label": "FTr",        "g": G_BOX, "fmt": "dec1", "range": [0, 100], "src": "bt",
+         "tip": "Free-Throw Rate — FTA / FGA × 100. Foul-drawing skill + interior aggression. ≥ 50 = drives + plays through contact, ≤ 25 = jumpshooter."},
+        {"k": "rim_f", "label": "Rim Freq",   "g": G_BOX, "fmt": "dec1", "range": [0, 80], "src": "bt",
+         "tip": "Rim Frequency — % of his FGA at the rim. Shot-distribution signal."},
+        {"k": "mid_f", "label": "Mid Freq",   "g": G_BOX, "fmt": "dec1", "range": [0, 60], "src": "bt",
+         "tip": "Mid-range Frequency — % of his FGA from mid-range (2P, non-rim). Modern NBA discount this — high mid % is usually a red flag for translation."},
+        {"k": "three_f","label": "3PAr",      "g": G_BOX, "fmt": "dec1", "range": [0, 80], "src": "bt",
+         "tip": "Three-Point Attempt Rate — % of his FGA from 3. Shooting volume / range signal. ≥ 45 = modern stretch, ≤ 20 = no-range."},
+        {"k": "dunk_r","label": "Dunk Rate",  "g": G_BOX, "fmt": "dec1", "range": [0, 30], "src": "bt",
+         "tip": "Dunk Rate — % of his FGA that were dunks. Vertical-athlete signal for bigs + cutters."},
+        {"k": "rim_pct","label": "Rim FG%",   "g": G_BOX, "fmt": "dec1", "range": [40, 90], "src": "bt",
+         "tip": "Rim Finishing% — FG% on attempts at the rim. Touch + strength at the basket. ≥ 70 = elite finisher."},
+        {"k": "mid_pct","label": "Mid FG%",   "g": G_BOX, "fmt": "dec1", "range": [20, 60], "src": "bt",
+         "tip": "Mid-range FG% — efficiency in the mid-range zone. D-1 average ~ 38%."},
+        {"k": "tp_pct","label": "3P%",        "g": G_BOX, "fmt": "dec1", "range": [20, 50], "src": "bt",
+         "tip": "Three-point % — raw 3P make rate. ≥ 38 with volume = projectable shooter; ≤ 30 with volume = red flag."},
+        {"k": "fg_pct","label": "FG%",        "g": G_BOX, "fmt": "dec1", "range": [30, 65], "src": "bt",
+         "tip": "Overall FG% — total makes / total attempts. Less informative than eFG/TS because it doesn't credit the extra value of 3s or FTs."},
+        {"k": "ft_pct","label": "FT%",        "g": G_BOX, "fmt": "dec1", "range": [50, 95], "src": "bt",
+         "tip": "Free-Throw % — strong forward-looking signal for shooting translation. ≥ 80 = projectable shooter, ≤ 65 = touch concern."},
+        {"k": "efg",   "label": "eFG%",       "g": G_BOX, "fmt": "dec1", "range": [40, 70], "src": "bt",
+         "tip": "Effective Field Goal % — FG% adjusted for the bonus value of 3s ((FGM + 0.5·3PM) / FGA). Cleaner shot-quality lens than raw FG%."},
+        {"k": "ortg",  "label": "ORtg",       "g": G_BOX, "fmt": "dec1", "range": [80, 130], "src": "bt",
+         "tip": "Offensive Rating — points produced per 100 possessions used. Composite score-and-distribute lens. ≥ 115 with high usage = star territory."},
+        {"k": "fouls_40","label": "PF/40",    "g": G_BOX, "fmt": "dec1", "range": [0, 7], "src": "bt",
+         "tip": "Personal Fouls per 40 minutes. Discipline + defensive footwork signal. ≤ 3 = clean, ≥ 5 = foul-prone."},
+        {"k": "pts",   "label": "PPG",        "g": G_BOX, "fmt": "dec1", "src": "bt",
+         "tip": "Points per game — raw scoring volume. Less context-aware than per-possession metrics."},
+        {"k": "reb",   "label": "RPG",        "g": G_BOX, "fmt": "dec1", "src": "bt",
+         "tip": "Rebounds per game (total)."},
+        {"k": "ast",   "label": "APG",        "g": G_BOX, "fmt": "dec1", "src": "bt",
+         "tip": "Assists per game."},
+        {"k": "stl",   "label": "SPG",        "g": G_BOX, "fmt": "dec1", "src": "bt",
+         "tip": "Steals per game."},
+        {"k": "blk",   "label": "BPG",        "g": G_BOX, "fmt": "dec1", "src": "bt",
+         "tip": "Blocks per game."},
+        {"k": "gp",    "label": "GP",         "g": G_BOX, "fmt": "int", "src": "bt",
+         "tip": "Games Played in the latest season. Sample-size watchdog — single-digit GP makes rate stats noisy."},
+        {"k": "mp",    "label": "MPG",        "g": G_BOX, "fmt": "dec1", "range": [0, 40], "src": "bt",
+         "tip": "Minutes per Game — role-volume signal. ≥ 30 = clear starter, ≤ 18 = rotation depth."},
 
         # Percentiles (position-stratified)
         {"k": "pp_bpm",   "label": "Pctl BPM",   "g": G_PCTL, "fmt": "dec1", "range": [0, 100]},
@@ -566,8 +613,31 @@ def build_meta() -> dict:
         {"id": G_ARCH, "label": "Archetype + Badges"},
     ]
 
+    # Sprint-4.4 (Tobias 2026-06-23): BartTorvik-Parity-Default. Default-Preset
+    # spiegelt die BartTorvik-playerstat-Spalten (Identity + Produktion + Box
+    # Stats + Shooting) plus eine kurze proprietäre Tail-Section am Ende
+    # (Pillars + WAR + P(All-Star)). Default-Sort: BPM descending — analog zu
+    # BartTorvik "T-Rank Player Stats" Standard-View.
     presets = [
-        {"id": "default", "label": "Default", "cols": [
+        {"id": "bt_standard", "label": "BartTorvik Standard", "cols": [
+            # Identity
+            "name", "year", "cls", "pos", "team", "conf",
+            # Production
+            "gp", "mp", "ortg", "usg",
+            # Plus/Minus
+            "bpm", "obpm", "dbpm",
+            # Efficiency
+            "ts", "efg", "ft_pct", "tp_pct",
+            # Box
+            "ast_p", "to_p", "orb_p", "drb_p", "stl_p", "blk_p", "ftr",
+            # Shooting profile
+            "three_f", "rim_pct", "mid_pct", "dunk_r",
+            # Discipline
+            "fouls_40",
+            # ProspectTheory tail — proprietary values that we add to BartTorvik baseline
+            "war", "p_all", "feel", "shoot", "def", "athl",
+        ]},
+        {"id": "default", "label": "Projection Lens", "cols": [
             "name", "year", "pos", "age", "ht", "war", "p_super", "p_all", "feel", "shoot", "def", "athl", "arch"
         ]},
         {"id": "shooters", "label": "Shooters Audit", "cols": [
@@ -594,6 +664,11 @@ def build_meta() -> dict:
     filter_defaults = {
         # Default — only the current draft cycle, in line with what the user asked for.
         "year": [2026],
+        # Sprint-4.4: Default-Preset + Default-Sort gespiegelt zur BartTorvik
+        # playerstat-Landing-View ("T-Rank Player Stats" sortiert nach BPM).
+        "preset":   "bt_standard",
+        "sort_key": "bpm",
+        "sort_dir": "desc",
     }
 
     return {
@@ -601,7 +676,7 @@ def build_meta() -> dict:
         "cols": cols,
         "presets": presets,
         "filter_defaults": filter_defaults,
-        "schema_version": 1,
+        "schema_version": 2,
     }
 
 
