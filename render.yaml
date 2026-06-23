@@ -32,6 +32,10 @@ services:
   - type: web
     name: prospecttheory-api
     runtime: python
+    # HARD CONSTRAINT (Tobias 2026-06-23): Free-Tier non-negotiable.
+    # Kein Upgrade auch nicht "kurzfristig zum Testen". OOM-Probleme
+    # werden in build.sh / streaming-refactor gelöst, NICHT durch
+    # Plan-Wechsel. Siehe docs/RENDER_BLUEPRINT_MIGRATION.md (#61).
     plan: free
     region: oregon
     # Root Directory = backend (Render-Konvention).
