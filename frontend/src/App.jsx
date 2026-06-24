@@ -452,6 +452,176 @@ function asymmetricGaussianPdf(x, peak, sigmaLeft, sigmaRight) {
 }
 
 
+// ═══════════════════════════════════════════════════════════
+// MIXTURE-OF-GAUSSIANS OUTCOME ENGINE (Sprint-5.2)
+// ═══════════════════════════════════════════════════════════
+// Engine refactor: instead of a single asymmetric Gaussian centered on
+// the ppWA-mapped grade, build a Gaussian MIXTURE on the 0-100 grade
+// scale where each model tier (Superstar / All-Star / Starter / Role /
+// Replacement / Negative) contributes one bump weighted by the
+// calibrated tier-probability.
+//
+// Why mixture, not single Gaussian:
+// - The calibrated tier-probabilities ARE the model's distribution. We
+//   shouldn't throw them away to refit a Gaussian on ppWA + sigma.
+// - Real NBA outcomes are categorical (each player lands in one tier).
+//   A mixture follows that structure honestly.
+// - Boom-or-bust profiles (high P(Star) AND high P(Negative)) show as
+//   bimodal curves — instantly visible, where a single Gaussian would
+//   average them out.
+// - Tight high-confidence profiles show as tall narrow peaks because
+//   nearly all mass concentrates in one tier-bump.
+//
+// Tier grade-anchors below position each bump at its tier band midpoint
+// (model tiers ↔ our empirical Coleman grade bands):
+//   Superstar    → grade 94 (Generational + All-NBA Regular bands)
+//   All-Star     → grade 78 (Perennial + Fringe All-Star bands)
+//   Starter      → grade 60 (Good + Average Starter bands)
+//   Role Player  → grade 45 (Impact Role Player band)
+//   Replacement  → grade 30 (Low-End Rotation/Bench band)
+//   Negative     → grade 10 (Non-Rotational Washout band)
+//
+// Sigma per bump is roughly half the band width so 99% of the mass
+// stays inside its tier band.
+const MIXTURE_TIER_ANCHORS = [
+  {key:"Superstar",   grade:94, sigma:5.5, color:"#1d4ed8", letter:"A"},
+  {key:"All-Star",    grade:78, sigma:6.5, color:"#3b82f6", letter:"A"},
+  {key:"Starter",     grade:60, sigma:7.5, color:"#22c55e", letter:"B"},
+  {key:"Role Player", grade:45, sigma:5.0, color:"#fbbf24", letter:"C"},
+  {key:"Replacement", grade:30, sigma:7.5, color:"#f97316", letter:"D"},
+  {key:"Negative",    grade:10, sigma:7.0, color:"#ec4899", letter:"D"},
+];
+
+/** Evaluate the mixture density at grade x.
+ *  components = [{center, sigma, weight}, ...] with weights summing to 1.
+ */
+function mixtureDensity(x, components) {
+  let d = 0;
+  for (const c of components) {
+    const z = (x - c.center) / c.sigma;
+    d += c.weight * Math.exp(-0.5 * z * z);
+  }
+  return d;
+}
+
+/** Build the mixture-of-Gaussians outcome curve for a prospect from his
+ *  calibrated tier probabilities. Returns null if no tier-prob signal.
+ *
+ *  Output:
+ *    components   – [{key,center,sigma,weight,color}, ...]
+ *    peakGrade    – ppWA-mapped grade (consistency with Projection tab)
+ *    modalGrade   – argmax of mixture density (where the most mass sits)
+ *    lLimit       – p10 of mixture distribution
+ *    hLimit       – p90 of mixture distribution
+ *    medianGrade  – p50 of mixture distribution
+ *    tier         – the empirical OUTCOME_GRADE_TIERS entry the PEAK lands in
+ *    predTier     – the model's chosen tier label (from p.predTier)
+ *    tierLetter   – A/B/C/D derived from predTier (Coleman cadence)
+ *    confidence   – 0..1, derived from how concentrated the mixture is
+ *    pNba/madeNba – conditional-on-NBA caveat info
+ */
+function buildOutcomeCurveMixture(p) {
+  if (!p) return null;
+  const tiers = p.tiers || p.v2TierProbs || {};
+  // Probabilities arrive as percentages (0-100). Normalize to 0-1.
+  let totalProb = 0;
+  const rawWeights = MIXTURE_TIER_ANCHORS.map(a => {
+    const w = Math.max(0, Number(tiers[a.key]) || 0) / 100;
+    totalProb += w;
+    return w;
+  });
+  if (totalProb < 0.01) return null;
+  // Normalize so the mixture integrates to 1 across the 6 tiers.
+  const components = MIXTURE_TIER_ANCHORS.map((a, i) => ({
+    key:    a.key,
+    center: a.grade,
+    sigma:  a.sigma,
+    weight: rawWeights[i] / totalProb,
+    color:  a.color,
+    letter: a.letter,
+  })).filter(c => c.weight > 0.001);
+
+  // Peak grade for the headline number stays ppWA-mapped (consistency
+  // with the Projection-tab hero card).
+  const mu = p.ppwa ?? p.war ?? p.pred_mu;
+  const peakMap = peakWaToOutcomeGrade(mu);
+  const peakGrade = peakMap.grade;
+  const tier      = peakMap.tier;
+
+  // Sample the mixture density on a fine grid to compute modal grade,
+  // p10 / p50 / p90 via cumulative integration.
+  const STEPS = 401;
+  const xs = new Array(STEPS);
+  const ds = new Array(STEPS);
+  let total = 0;
+  let modal = peakGrade;
+  let modalD = -1;
+  for (let i = 0; i < STEPS; i++) {
+    const x = (i / (STEPS - 1)) * 100;
+    const d = mixtureDensity(x, components);
+    xs[i] = x;
+    ds[i] = d;
+    total += d;
+    if (d > modalD) { modalD = d; modal = x; }
+  }
+  // Cumulative CDF, then find quantiles
+  const cum = new Array(STEPS);
+  let running = 0;
+  for (let i = 0; i < STEPS; i++) {
+    running += ds[i];
+    cum[i]  = running / total;
+  }
+  const quantile = (q) => {
+    for (let i = 0; i < STEPS; i++) {
+      if (cum[i] >= q) return xs[i];
+    }
+    return xs[STEPS - 1];
+  };
+  const lLimit = Math.max(0, quantile(0.10));
+  const hLimit = Math.min(100, quantile(0.90));
+  const medianGrade = quantile(0.50);
+
+  // Confidence: how concentrated is the mixture?  Spread of p10..p90
+  // band; narrower = more confident. 80 grade-points = 0 conf, 0 = 1.
+  const range = hLimit - lLimit;
+  const confidence = Math.max(0.15, Math.min(1.0, 1 - range / 80));
+
+  // Tier letter from MODEL's predTier, not from peak-grade band — keeps
+  // the Curves board consistent with the Big Board / Projection-tab
+  // tier judgement.
+  const predTier = p.predTier || null;
+  const letterMap = {
+    "Superstar":"A", "All-Star":"A",
+    "Starter":"B",
+    "Role Player":"C",
+    "Replacement":"D", "Negative":"D",
+  };
+  const tierLetter = predTier ? (letterMap[predTier] || "D")
+                    : peakGrade >= 70 ? "A" : peakGrade >= 50 ? "B"
+                    : peakGrade >= 40 ? "C" : "D";
+
+  // pNba: prefer modelled probability, fall back to pElite lift.
+  const pNbaResolved = p.pNba != null
+    ? p.pNba
+    : (p.pElite != null ? Math.min(0.95, p.pElite + 0.25) : null);
+
+  return {
+    components,
+    peakGrade,
+    modalGrade: modal,
+    medianGrade,
+    lLimit, hLimit,
+    tier,
+    predTier,
+    tierLetter,
+    confidence,
+    pNba: pNbaResolved,
+    madeNba: p.madeNba || false,
+    mu, // raw ppWA for the tooltip
+  };
+}
+
+
 // Fallback wenn pos_detailed (PG/SG/SF/PF/C) fehlt — leite aus pos + height ab.
 // Wird genutzt für historische / intl Spieler ohne BartTorvik-role.
 function inferDetailedPos(pos3, htIn, astP) {
@@ -6292,26 +6462,29 @@ function DevTrajectoryTab({p}) {
 // metric is invented.
 // ═══════════════════════════════════════════════════════════
 function OutcomeDistributionCurve({p}) {
-  const params = useMemo(() => buildOutcomeCurveParams(p), [p]);
+  const params = useMemo(() => buildOutcomeCurveMixture(p), [p]);
   if (!params) return null;
-  const {peak, lLimit, hLimit, tier, skew, confidence, pNba, madeNba, mu, sigma} = params;
+  const {components, peakGrade, modalGrade, medianGrade, lLimit, hLimit,
+         tier, predTier, tierLetter, confidence, pNba, madeNba, mu} = params;
 
   // ── SVG geometry ──────────────────────────────────────────
   const W = 700, H = 260;
   const M = { top: 32, right: 24, bottom: 50, left: 24 };
   const px = (g) => M.left + (g / 100) * (W - M.left - M.right);
-  // ── Sample curve at high resolution ──
+  // ── Sample mixture density at high resolution ──
   const N = 240;
-  const sigmaLeft  = Math.max(peak - lLimit, 1);
-  const sigmaRight = Math.max(hLimit - peak, 1);
-  const samples = [];
+  let maxY = 0;
+  const samples = new Array(N + 1);
   for (let i = 0; i <= N; i++) {
     const g = (i / N) * 100;
-    const y = asymmetricGaussianPdf(g, peak, sigmaLeft, sigmaRight);
-    samples.push({g, y});
+    const y = mixtureDensity(g, components);
+    samples[i] = {g, y};
+    if (y > maxY) maxY = y;
   }
+  // Normalize so the tallest bump fills the canvas peak.
+  const yNorm = (y) => maxY > 0 ? y / maxY : 0;
   const peakHeight = (H - M.top - M.bottom) * (0.55 + 0.30 * confidence);
-  const py = (y) => M.top + (peakHeight - y * peakHeight) + (H - M.top - M.bottom - peakHeight);
+  const py = (y) => M.top + (peakHeight - yNorm(y) * peakHeight) + (H - M.top - M.bottom - peakHeight);
   // SVG paths — separate filled area vs. clean outline so the outline
   // doesn't draw the vertical baseline-connectors at the edges.
   const baselineY = H - M.bottom;
@@ -6322,12 +6495,27 @@ function OutcomeDistributionCurve({p}) {
   }
   const pathD = `M ${px(0).toFixed(2)},${baselineY} ` + outlineD.slice(1) + ` L ${px(100).toFixed(2)},${baselineY} Z`;
 
+  // ── Shape vocabulary derived from mixture mass distribution ──
+  // Upside mass = P(Superstar) + P(All-Star); downside = Replacement + Negative.
+  const massBy = Object.fromEntries(components.map(c => [c.key, c.weight]));
+  const upside   = (massBy["Superstar"] || 0) + (massBy["All-Star"] || 0);
+  const downside = (massBy["Replacement"] || 0) + (massBy["Negative"] || 0);
+  const skew = upside - downside;
+  // Bimodal detection: any tier-pair with both > 0.15 weight that aren't adjacent
+  const sorted = components.slice().sort((a,b)=>b.weight-a.weight);
+  const isBimodal = sorted.length >= 2 && sorted[1].weight > 0.18 &&
+                    Math.abs(sorted[0].center - sorted[1].center) > 18;
   // ── Helpers ──
   const gradeFmt = (g) => g == null || !isFinite(g) ? "—" : g.toFixed(0);
-  const skewLabel = Math.abs(skew) < 0.15 ? "Symmetric" :
-                    skew >  0.15 ? "Upside-tilt" : "Downside-tilt";
-  const confLabel = confidence >= 0.75 ? "Confident" :
-                    confidence >= 0.50 ? "Moderate" : "Uncertain";
+  const skewLabel = isBimodal ? "Bimodal (boom/bust)" :
+                    Math.abs(skew) < 0.10 ? "Symmetric" :
+                    skew >  0.10 ? "Upside-tilt" : "Downside-tilt";
+  const confLabel = confidence >= 0.65 ? "Confident" :
+                    confidence >= 0.40 ? "Moderate" : "Uncertain";
+  // For the Peak vs Modal divergence callout
+  const peakModalDiff = Math.abs(peakGrade - modalGrade);
+  // (Kept for backwards-compat in legacy renders, not used below.)
+  const peak = peakGrade;
 
   // ── Render ────────────────────────────────────────────────
   return (
@@ -6418,8 +6606,8 @@ function OutcomeDistributionCurve({p}) {
           <div style={{color:"#6b7280"}}>CONFIDENCE</div>
           <div className="font-semibold mt-0.5" style={{color:"#f1f5f9"}}>{confLabel}</div>
           <div style={{color:"#6b7280", fontSize:"10px"}}>
-            range {(hLimit - lLimit).toFixed(0)} grade points;
-            ppWA {mu?.toFixed(1)} ± {sigma?.toFixed(1)}
+            range {(hLimit - lLimit).toFixed(0)} grade points
+            {mu != null && <> · ppWA {mu.toFixed(1)}</>}
           </div>
         </div>
         <div className="rounded-lg p-2" style={{background:"#0a0e16", border:"1px solid #1f2937"}}>
@@ -11355,7 +11543,8 @@ function MethodologyTab() {
     {cat:"Outcome Distribution Curve — what it is",items:[],desc:"Each prospect's projection rendered as a probability density on a single 0-100 outcome grade scale, shown on his Projection tab. The peak is the single most-likely outcome (his projected grade); the L-Limit and H-Limit cover roughly the p10-p90 band of plausible outcomes; the shape's lean tells you whether the upside or the downside is heavier. Color = tier band. The curve is reasoned from the model's existing ppWA point estimate, uncertainty (sigma), and calibrated tier probabilities — there is NO new metric and no new model: it is a visualization of the risk profile already implicit in the Projection above. Curve shape stays an asymmetric Gaussian in grade space — no single model outputs the density."},
     {cat:"Outcome Grade Scale — what each grade means",items:[],desc:"10-tier taxonomy with Coleman's outcome labels as the vocabulary; tier cutoffs are empirically anchored to the realized peak Wins Added quantiles of our 1,784-player NBA-careered reference pool (NOT pinned to individual comparable players — see honesty note below). Tier · Grade band · Pool share · peak Wins Added cutoff (career best 3-year window) · Comparable historical outcomes. (1) Generational/MVP · 95-100 · top 0.5% of NBA pool · peak WA ≥ 43.9 · Jokić, Dončić, Curry. (2) All-NBA Regular · 88-94 · next 1.5% · peak WA 31.5-43.9 · Edwards, SGA, Tatum. (3) Perennial All-Star · 80-87 · next 3.5% · peak WA 20.9-31.5 · Trae Young, Jaylen Brown, Siakam. (4) Fringe All-Star · 70-79 · next 5% · peak WA 15.1-20.9 · Fox, LaMelo, Mikal Bridges. (5) Good Starter · 60-69 · next 12% · peak WA 7.8-15.1 · Bane, Anunoby, Markkanen. (6) Average Starter · 50-59 · next 18% · peak WA 2.2-7.8 · Okongwu, Avdija, Buddy Hield. (7) Impact Role Player · 40-49 · next 20% · peak WA -0.4 to 2.2 · Toppin, Bruce Brown, Huerter. (8) Low-End Rotation/Bench · 20-39 · next 25% · peak WA -1.8 to -0.4 · Dennis Smith Jr., Ntilikina, Reddish. (9) Non-Rotational Washout · 1-19 · bottom 14.5% · peak WA < -1.8 · Wiseman, Culver, Whitmore. (10) True Null · 0 · never NBA · peak WA = NaN. Within each tier, peak Wins Added is mapped to a grade via linear interpolation."},
     {cat:"Outcome Grade — honesty note on the comparable players",items:[],desc:"The comparable historical outcomes shown next to each tier are LABELS, not anchors. We DELIBERATELY did not pin them as fixed grade values because our peak Wins Added blends xRAPM impact + box production over the best 3-year window, while Coleman's grade weights career-anchored impact + accolades. Run on 27 comparables, only 8/27 land in their Coleman-labeled tier in our scale. The disagreements are a methodological feature, not a bug — examples: Jaylen Brown sits at Coleman's Perennial All-Star (80-87) but lands in our Good Starter band; Desmond Bane sits at Coleman's Good Starter (60-69) but lands in our Fringe All-Star band; James Wiseman agrees with Coleman as a Non-Rotational Washout. The UI surfaces comparable names honestly so a reader can interpret the tier with a familiar reference, without ever forcing an individual NBA career to dictate where a prospect's grade should sit."},
-    {cat:"Outcome Curve — how the shape is computed",items:[],desc:"All curve parameters come from the same ppWA-engine that drives the headline Projection. PEAK = grade-mapped point estimate (ppWA put through the empirical tier mapping). L-LIMIT / H-LIMIT = grade-mapped ppWA ± 1.282 × sigma — the 1.282 z-multiplier gives the p10/p90 band of a standard Normal, and sigma is the calibrated prediction uncertainty from the two-stage value model. SKEW = upside-share P(Superstar)+P(All-Star) minus downside-share P(Replacement)+P(Negative), capped to [-1, +1]. The skew is encoded by asymmetric stretch of the L and H limits (max ±30% of half-range) — positive skew widens the H-side (Star-upside profile), negative skew widens the L-side (bust-risk profile). CONFIDENCE = inverse of total range (narrower = more confident); it drives the rendered peak height, not the grade itself."},
+    {cat:"Outcome Curve — how the shape is computed (Sprint-5.2: mixture engine)",items:[],desc:"The curve is now a MIXTURE of six Gaussians on the 0-100 grade scale, one bump per model tier, each bump's mass set by the calibrated tier-probability. This replaces the earlier asymmetric-Gaussian approach (which centered on the ppWA point and stretched left/right by skew). WHY THE CHANGE: the calibrated tier-probabilities ARE the model's own distribution — refitting a Gaussian on ppWA + sigma threw most of that signal away. Multiple prospects with similar ppWA but different tier-prob shapes were collapsing into near-identical curves. The mixture honours the categorical structure of NBA outcomes and naturally produces narrow tall peaks for confident tier judgements, wide curves when mass spreads across tiers, and BIMODAL shapes for true boom-or-bust profiles — all visually distinct at a glance. TIER GRADE-ANCHORS (bump centers · sigma): Superstar 94 · 5.5; All-Star 78 · 6.5; Starter 60 · 7.5; Role Player 45 · 5.0; Replacement 30 · 7.5; Negative 10 · 7.0. Sigma per bump is roughly half the empirical tier band width so 99% of each bump's mass sits inside its tier. CURVE METRICS: peak grade = ppWA-mapped grade (kept for headline-card consistency with the Projection above); modal grade = argmax of the mixture density; L-Limit / H-Limit = p10 / p90 of the mixture CDF (numerical integration over 401 samples); median grade = p50; confidence = 1 − (range / 80) clipped to [0.15, 1]. SHAPE LABEL: derived from the mixture mass profile — bimodal if the second-heaviest tier has weight > 0.18 and sits at least 18 grade points from the heaviest; symmetric if upside − downside is within ±0.10; otherwise upside-tilt or downside-tilt. TIER LETTER A/B/C/D (Coleman cadence): derived from the model's predTier so the Curves view always agrees with the Big Board and Projection tab (A = Superstar/All-Star, B = Starter, C = Role Player, D = Replacement/Negative)."},
+    {cat:"Outcome Curve — tier letter A/B/C/D consistency (Sprint-5.2)",items:[],desc:"Before Sprint-5.2, the tier letter on the Curves board was derived from the curve peak grade (≥70 = A, ≥50 = B, ≥40 = C, else D). That could disagree with the model's tier judgement: a prospect with peak grade 65 but a cumulative-threshold predTier of 'All-Star' would show as B on the Curves but as All-Star on the Big Board. Fixed in Sprint-5.2: the tier letter now comes from p.predTier directly. A = Superstar or All-Star; B = Starter; C = Role Player; D = Replacement or Negative. The Curves board, the Big Board's table view, and the Projection tab's headline pill all read the same field and always agree."},
     {cat:"Outcome Curve — when to use it vs the Tier-Probability bar chart",items:[],desc:"Both views sit on the Projection tab and they complement each other. The Outcome Distribution Curve is the SHAPE lens — at a glance, is this a tight star-bet, a wide boom-or-bust spread, or a flat replacement-level read? Best for GM-style risk-profile reading: a team with no second-rounders looks for tight, tall peaks; a rebuilding team looks for wide right-skewed shapes. The Tier-Probability bar chart is the PROBABILITY lens — exactly how much of his outcome mass sits in each tier? Best for quantitative decisions: 'what's his All-Star probability', 'what's his bust probability'. Use the curve for narrative + shape, the bars for exact numbers."},
     {cat:"Outcome Curves Big Board (Sprint-5.1 — Coleman-style range view)",items:[],desc:"A second viewing mode for the Big Board, accessed via the '◉ Curves' toggle next to ☰ Table / ◈ Range / ▥ Tier Board. Renders the top 30 prospects of the filtered class as a vertical list — one row per player — with his identity block on the left (rank, tier-letter A/B/C/D, name, school·class·age), his projected grade plus L-H range in the middle, and a MINI density curve on the same shared 0-100 grade x-axis on the right. A sticky tier-anchor scale at the top labels the 0-19 / 20-39 / 40-49 / 50-59 / 60-69 / 70-79 / 80-87 / 88-94 / 95+ bands so a GM can read across rows and instantly see who lives in which tier. The engine is IDENTICAL to the single-player curve on the Projection tab (same buildOutcomeCurveParams, same empirical anchors, same skew + confidence math) — this view just trades one large curve per page for thirty small curves stacked, so cross-prospect risk-profile comparison becomes one glance. Tier-letter pill (A/B/C/D) is added for Coleman-cadence skim-reading: A = grade ≥ 70 (Fringe All-Star and above), B = 50-69 (Average to Good Starter), C = 40-49 (Impact Role), D = below 40 (Bench/Washout). USE CASE: rebuilding team filters top-30, scans for tall right-skewed shapes (high-upside boom/bust); win-now team scans for narrow tall peaks at grade 55-70 (safe-floor starters); generational team scans for any curves with mass crossing 88. Combined with the existing Range view (horizontal p10-p90 bars + GM-risk sort) and Tier Board (Ben-style splits + archetype columns), the Big Board now offers three distinct decision-support lenses on the same underlying ppWA model."},
     {cat:"Outcome Curve — caveats and refresh cadence",items:[],desc:"NBA-CONDITIONAL: the curve shows the outcome distribution CONDITIONAL on him reaching the NBA. For prospects with P(NBA) < 80%, a caveat strip appears under the curve reminding the reader to weight by his realized probability of reaching the league. TAIL HEAVINESS: peak Wins Added has long right-tail outliers (Jokić = 54.76), so the Generational tier's ceiling is the empirical pool top, not a hard cap. POOL ERA: the empirical pool is mature drafts only (≤2020) — recent breakouts (Wembanyama, Edwards' 2024 peak) are reflected via the 1,784 careered players' realized peaks, not their current trajectory. RECOMMENDED REFRESH: re-fit annually after the NBA season closes by re-running data-pipeline/scripts/compute_outcome_grade.py against the refreshed nba_added_wins_peak.csv. The script writes data-pipeline/data/processed/grade_anchors.json (mirrored to the backend) and prints a comparable-validation table so any drift in tier agreement is visible."},
@@ -11835,21 +12024,7 @@ const TIER_STACK = [
 // large curve per page to one small curve per row + a global tier-
 // anchor scale at the top.
 // ═══════════════════════════════════════════════════════════
-function OutcomeCurveBoard({ players, onSelect }) {
-  // Top 30 (one round + change) — Coleman's exact cadence
-  const visible = useMemo(
-    () => (players || []).slice(0, 30),
-    [players],
-  );
-  if (!visible.length) {
-    return (
-      <div className="rounded-xl p-8 text-center text-gray-400"
-        style={{background:"#0d1117",border:"1px solid #1f2937"}}>
-        No prospects to render.
-      </div>
-    );
-  }
-
+function OutcomeCurveBoard({ players, onSelect, gmRisk, setGmRisk }) {
   // Layout dimensions for the per-row mini-curve SVG. Identity column on
   // the left is fixed-width so all curves share the same X-axis at all
   // viewport widths.
@@ -11859,41 +12034,77 @@ function OutcomeCurveBoard({ players, onSelect }) {
   const M = { left: 8, right: 8, top: 4, bottom: 4 };
   const px = (g) => M.left + (g / 100) * (CURVE_W - M.left - M.right);
 
-  // Pre-compute curve params for every visible prospect so the body
-  // doesn't recompute mid-render.
-  const rows = useMemo(
-    () => visible.map((p, i) => {
-      const params = buildOutcomeCurveParams(p);
-      return { p, params, rank: i + 1 };
-    }),
-    [visible],
+  // Pre-compute curve params for every prospect so we can sort the
+  // board by mixture-quantile (matches GM-risk preference).
+  const allWithParams = useMemo(
+    () => (players || []).map(p => ({ p, params: buildOutcomeCurveMixture(p) })),
+    [players],
   );
 
-  // Helper: render the mini density path for one prospect.
+  // Sort by GM Risk Profile:
+  //   ceiling → H-Limit desc (highest ceiling first → rebuilding GM)
+  //   floor   → L-Limit desc (highest floor first   → win-now GM)
+  //   neutral → median grade desc (balanced expected value)
+  const sortedRows = useMemo(() => {
+    const key = gmRisk === "ceiling" ? "hLimit"
+              : gmRisk === "floor"   ? "lLimit"
+              : "medianGrade";
+    const tieFallback = (a, b) => (b.params?.medianGrade ?? -1) - (a.params?.medianGrade ?? -1);
+    return allWithParams.slice().sort((a, b) => {
+      const va = a.params?.[key];
+      const vb = b.params?.[key];
+      if (va == null && vb == null) return tieFallback(a, b);
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      return vb - va || tieFallback(a, b);
+    });
+  }, [allWithParams, gmRisk]);
+
+  // Top 30 (one round + change) — Coleman's exact cadence
+  const rows = useMemo(
+    () => sortedRows.slice(0, 30).map((r, i) => ({ ...r, rank: i + 1 })),
+    [sortedRows],
+  );
+
+  if (!rows.length) {
+    return (
+      <div className="rounded-xl p-8 text-center text-gray-400"
+        style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+        No prospects to render.
+      </div>
+    );
+  }
+
+  // Helper: render the mini mixture-density path for one prospect.
   const renderMiniCurve = (params) => {
     if (!params) return null;
-    const { peak, lLimit, hLimit, tier } = params;
-    const sigmaLeft  = Math.max(peak - lLimit, 1);
-    const sigmaRight = Math.max(hLimit - peak, 1);
+    const { components, tier, lLimit, hLimit, medianGrade } = params;
     const N = 120;
+    let maxY = 0;
+    const ys = new Array(N + 1);
+    for (let i = 0; i <= N; i++) {
+      const g = (i / N) * 100;
+      const y = mixtureDensity(g, components);
+      ys[i] = y;
+      if (y > maxY) maxY = y;
+    }
     let outline = "";
-    let path    = "";
     const baseY = CURVE_H - M.bottom;
     const peakY = M.top;
     for (let i = 0; i <= N; i++) {
       const g = (i / N) * 100;
-      const y = asymmetricGaussianPdf(g, peak, sigmaLeft, sigmaRight);
+      const yN = maxY > 0 ? ys[i] / maxY : 0;
       const X = px(g).toFixed(2);
-      const Y = (baseY - y * (baseY - peakY)).toFixed(2);
+      const Y = (baseY - yN * (baseY - peakY)).toFixed(2);
       outline += (i === 0 ? "M " : " L ") + X + "," + Y;
     }
-    path = `M ${px(0).toFixed(2)},${baseY} ` + outline.slice(1) + ` L ${px(100).toFixed(2)},${baseY} Z`;
+    const path = `M ${px(0).toFixed(2)},${baseY} ` + outline.slice(1) + ` L ${px(100).toFixed(2)},${baseY} Z`;
     return (
       <>
         <path d={path} fill={tier.color} opacity={0.55}/>
         <path d={outline} fill="none" stroke={tier.color} strokeWidth={1.4} opacity={0.95}/>
-        {/* Peak marker — short vertical tick at the most-likely outcome */}
-        <line x1={px(peak)} x2={px(peak)} y1={M.top} y2={baseY}
+        {/* Median marker — short vertical tick where 50% of mixture mass sits below */}
+        <line x1={px(medianGrade)} x2={px(medianGrade)} y1={M.top} y2={baseY}
               stroke={tier.color} strokeWidth={1.2} strokeDasharray="2,2" opacity={0.85}/>
       </>
     );
@@ -11914,20 +12125,41 @@ function OutcomeCurveBoard({ players, onSelect }) {
 
   return (
     <div className="rounded-2xl overflow-hidden" style={{background:"#0a0e16", border:"1px solid #1f2937"}}>
-      {/* Title strip + reading guide */}
+      {/* Title strip + GM Risk Profile + reading guide */}
       <div className="px-5 py-4 border-b" style={{borderColor:"#1f2937"}}>
         <div className="flex items-baseline gap-3 flex-wrap">
           <h2 className="text-lg font-bold" style={{color:"#f1f5f9", fontFamily:"'Oswald', sans-serif", letterSpacing:"0.05em"}}>
             OUTCOME DISTRIBUTIONS
           </h2>
           <span className="text-xs uppercase tracking-widest" style={{color:"#9ca3af"}}>
-            {visible[0]?.p?.year || ""} class · top {visible.length} by Projection
+            {rows[0]?.p?.year || ""} class · top {rows.length}
           </span>
         </div>
-        <p className="text-xs mt-1.5" style={{color:"#9ca3af", lineHeight:1.5}}>
-          Each curve is a probability density on the 0-100 grade scale. <strong style={{color:"#cbd5e1"}}>Peak</strong> = most likely outcome,
-          <strong style={{color:"#cbd5e1"}}> width</strong> = range of plausible ones, <strong style={{color:"#cbd5e1"}}>shape lean</strong> = upside-vs-downside tilt.
-          Same engine as the Projection tab — Coleman-style range view, our ppWA & uncertainty engine underneath.
+        {/* GM Risk Profile sort buttons — migrated from the old Range view */}
+        {setGmRisk && (
+          <div className="flex items-center gap-2 flex-wrap mt-3">
+            <span className="text-[10px] font-semibold uppercase tracking-widest" style={{color:"#4b5563"}}>GM Risk Profile</span>
+            {[
+              ["ceiling","🎰 Ceiling First","Rebuilding · sort by H-Limit (best plausible upside)",      "#f59e0b","#78350f"],
+              ["neutral","⚖️ Balanced",      "Default · sort by median grade (balanced expected value)","#6b7280","#1f2937"],
+              ["floor",  "🛡️ Floor First",   "Win-Now · sort by L-Limit (highest realistic floor)",     "#06b6d4","#0c4a6e"],
+            ].map(([v,l,desc,activeColor,activeBg])=>(
+              <button key={v} onClick={()=>setGmRisk(v)}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold flex flex-col items-start"
+                title={desc}
+                style={{background:gmRisk===v?activeBg:"#111827",color:gmRisk===v?activeColor:"#6b7280",
+                  border:`1px solid ${gmRisk===v?activeColor:"#1f2937"}`}}>
+                {l}
+                <span style={{fontSize:9,opacity:0.7,fontWeight:400,marginTop:1}}>{desc}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        <p className="text-xs mt-3" style={{color:"#9ca3af", lineHeight:1.5}}>
+          Each curve is the model's <strong style={{color:"#cbd5e1"}}>mixture distribution</strong> over its six calibrated outcome tiers,
+          placed on the 0-100 grade scale. Tall narrow peak = confident tier judgement; wide curve = spread across several tiers;
+          bimodal shape = genuine boom-or-bust profile (substantial mass at two non-adjacent tiers). The tier-letter pill (A/B/C/D)
+          is the model's own tier verdict, not derived from the peak position — so it always agrees with the Big Board.
         </p>
       </div>
 
@@ -11982,12 +12214,13 @@ function OutcomeCurveBoard({ players, onSelect }) {
               </div>
             );
           }
-          const { peak, lLimit, hLimit, tier } = params;
-          const grade = peak.toFixed(0);
+          const { peakGrade, lLimit, hLimit, tier, tierLetter: lt } = params;
+          const grade = peakGrade.toFixed(0);
           const ageStr = p.age != null ? `${p.age.toFixed(1)} yrs` : "";
-          const tierTag = tier.name.split("/")[0];
-          // Tier-letter pill A/B/C/D — Coleman cadence
-          const tierLetter = peak >= 70 ? "A" : peak >= 50 ? "B" : peak >= 40 ? "C" : "D";
+          // Tier-letter pill A/B/C/D — comes from the model's predTier
+          // (not the peak grade) so the board agrees with the Big Board
+          // and the Projection tab on tier judgement.
+          const tierLetter = lt || "D";
           return (
             <div key={p.slug || p.name || rank} className="flex items-center gap-4 py-1.5 border-b hover:bg-white hover:bg-opacity-5 transition-colors"
                  style={{borderColor:"#11151c", height: ROW_H, cursor: p.slug ? "pointer" : "default"}}
@@ -13563,16 +13796,13 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
       repl:    (a,b) => (b.tiers?.Replacement ?? 0) - (a.tiers?.Replacement ?? 0),
       tier:    (a,b) => (tierRank[b.predTier]??0) - (tierRank[a.predTier]??0),
     };
-    // ── GM Risk Profile: Expected Utility sort (Option C) ────────────────
-    // Rank players by E[U(ppWA)] where U is the GM-archetype utility function.
-    // See computeGMUtility for the three utility functions.
-    //
-    // Key property: ceiling/floor are applied even in table view (column sort
-    // still works by falling through to sortFn when neither GM mode is active).
-    // In range view with neutral mode → balanced expected-value sort.
-    const utilityMode = gmRisk !== "neutral" ? gmRisk
-      : boardView === "range" ? "neutral"    // balanced = linear E[ppWA] in range
-      : null;                                 // table view → honour column sort
+    // ── GM Risk Profile sort ─────────────────────────────────────────────
+    // Sprint-5.2: Range view was removed; the GM-risk sort now lives inside
+    // OutcomeCurveBoard (which sorts by mixture-distribution quantile, not
+    // by computeGMUtility on tier probabilities). For Table view we honour
+    // the column sort. For Curves / Tier we pass the default ppwa-sorted
+    // list and let the inner view handle any re-sort it needs.
+    const utilityMode = null;
 
     const withRanges = list.map(p => ({
       ...p,
@@ -13657,9 +13887,9 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
             </button>
           ))}
         </div>
-        {/* View toggle */}
+        {/* View toggle (Sprint-5.2: Range view consolidated into Curves) */}
         <div className="flex gap-1 ml-auto">
-          {[["table","☰ Table"],["range","◈ Range"],["curves","◉ Curves"],["tier","▥ Tier Board"]].map(([v,l])=>(
+          {[["table","☰ Table"],["curves","◉ Curves"],["tier","▥ Tier Board"]].map(([v,l])=>(
             <button key={v} onClick={()=>setBoardView(v)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
               style={{background:boardView===v?"#6d28d9":"#1f2937",color:boardView===v?"#e9d5ff":"#9ca3af"}}>
               {l}
@@ -13668,38 +13898,13 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
         </div>
       </div>
 
-      {/* GM Risk Profile — only shown in Range view */}
-      {boardView === "range" && (
-        <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-xs font-semibold uppercase tracking-widest" style={{color:"#4b5563"}}>GM Risk Profile</span>
-          {[
-            ["ceiling","🎰 Ceiling First","Rebuilding · Sort by upside potential","#f59e0b","#78350f"],
-            ["neutral", "⚖️ Balanced",    "Default · Sort by (p10+p90)/2",        "#6b7280","#1f2937"],
-            ["floor",  "🛡️ Floor First",  "Win-Now · Sort by floor reliability",  "#06b6d4","#0c4a6e"],
-          ].map(([v,l,desc,activeColor,activeBg])=>(
-            <button key={v} onClick={()=>setGmRisk(v)}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold flex flex-col items-start"
-              title={desc}
-              style={{background:gmRisk===v?activeBg:"#111827",color:gmRisk===v?activeColor:"#6b7280",
-                border:`1px solid ${gmRisk===v?activeColor:"#1f2937"}`}}>
-              {l}
-              <span style={{fontSize:9,opacity:0.7,fontWeight:400,marginTop:1}}>{desc}</span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Range View */}
-      {boardView === "range" && (
-        <div>
-          <RangeView players={filtered} gmRisk={gmRisk} />
-        </div>
-      )}
-
-      {/* Outcome-Curves View — Sprint-5.1, Coleman-style mini density curves */}
+      {/* Outcome-Curves View — Sprint-5.1, Coleman-style mini density curves.
+          Sprint-5.2: GM Risk Profile sort is rendered inside OutcomeCurveBoard
+          (Range view was removed and the GM-risk control migrated). */}
       {boardView === "curves" && (
         <div>
-          <OutcomeCurveBoard players={filtered} onSelect={onSelect} />
+          <OutcomeCurveBoard players={filtered} onSelect={onSelect}
+                             gmRisk={gmRisk} setGmRisk={setGmRisk}/>
         </div>
       )}
 
