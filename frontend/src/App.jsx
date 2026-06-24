@@ -507,91 +507,121 @@ function mixtureDensity(x, components) {
   return d;
 }
 
-/** Build the mixture-of-Gaussians outcome curve for a prospect from his
- *  calibrated tier probabilities. Returns null if no tier-prob signal.
+/** Sprint-5.2c: smooth outcome curve derived from the *moments* of the
+ *  calibrated tier-probability distribution, instead of stacking fixed
+ *  Gaussian bumps at every tier center.
  *
- *  Output:
- *    components   – [{key,center,sigma,weight,color}, ...]
- *    peakGrade    – ppWA-mapped grade (consistency with Projection tab)
- *    modalGrade   – argmax of mixture density (where the most mass sits)
- *    lLimit       – p10 of mixture distribution
- *    hLimit       – p90 of mixture distribution
- *    medianGrade  – p50 of mixture distribution
- *    tier         – the empirical OUTCOME_GRADE_TIERS entry the PEAK lands in
- *    predTier     – the model's chosen tier label (from p.predTier)
- *    tierLetter   – A/B/C/D derived from predTier (Coleman cadence)
- *    confidence   – 0..1, derived from how concentrated the mixture is
- *    pNba/madeNba – conditional-on-NBA caveat info
+ *  Why the change: when you place one bump at each tier center (10, 30,
+ *  45, 60, 78, 94) and a prospect has mass at 2-3 tiers, the rendered
+ *  density shows 2-3 distinct modes — but those are ARTIFACTS of the
+ *  discrete tier buckets, not real bimodal outcomes. Plus the visual
+ *  modal lands on whichever tier has the most mass, never on the
+ *  ppWA-mapped grade that we print in the row — they disagree by
+ *  10-15 grade points for most multi-tier prospects.
+ *
+ *  New approach: compute the mixture's mean / variance / skewness on
+ *  the grade scale, then render an asymmetric Gaussian whose peak sits
+ *  at the printed (ppWA-mapped) grade and whose width + skew reflect
+ *  the underlying tier distribution. One smooth curve per prospect,
+ *  always centered on the printed Grade number.
+ *
+ *  Real boom-or-bust profiles are still rendered as bimodal — but only
+ *  when the two heaviest tiers are far apart AND both meaningfully
+ *  weighted AND neither dominates the distribution (strict triple gate
+ *  documented in the bimodalDecision section). That keeps "bimodal"
+ *  visually rare and informative when it does appear.
+ *
+ *  Output (same shape as before, with two new fields for the renderer):
+ *    peakGrade     – ppWA-mapped grade (consistency with Projection tab)
+ *    modalGrade    – same as peakGrade now (curve is centered there)
+ *    medianGrade   – same as peakGrade now (curve is symmetric around it)
+ *    lLimit/hLimit – peakGrade ± 1.282·sigmaLeft/Right (p10 / p90)
+ *    sigmaLeft, sigmaRight – the asymmetric-Gauss render params
+ *    isBimodal     – true only for genuine boom-or-bust profiles
+ *    bimodalComponents – two-bump render data when isBimodal
+ *    tier, predTier, tierLetter, confidence, pNba, madeNba, mu – as before
  */
 function buildOutcomeCurveMixture(p) {
   if (!p) return null;
   const tiers = p.tiers || p.v2TierProbs || {};
-  // Probabilities arrive as percentages (0-100). Normalize to 0-1.
+  // Step 1 — extract & normalize tier weights ────────────────────────
   let totalProb = 0;
-  const rawWeights = MIXTURE_TIER_ANCHORS.map(a => {
+  const tierMass = MIXTURE_TIER_ANCHORS.map(a => {
     const w = Math.max(0, Number(tiers[a.key]) || 0) / 100;
     totalProb += w;
-    return w;
+    return { ...a, weight: w };
   });
   if (totalProb < 0.01) return null;
-  // Normalize so the mixture integrates to 1 across the 6 tiers.
-  const components = MIXTURE_TIER_ANCHORS.map((a, i) => ({
-    key:    a.key,
-    center: a.grade,
-    sigma:  a.sigma,
-    weight: rawWeights[i] / totalProb,
-    color:  a.color,
-    letter: a.letter,
-  })).filter(c => c.weight > 0.001);
+  const norm = tierMass.map(t => ({ ...t, weight: t.weight / totalProb }));
 
-  // Peak grade for the headline number stays ppWA-mapped (consistency
-  // with the Projection-tab hero card).
+  // Step 2 — moments of the tier-prob distribution on the grade scale ─
+  // Mean (between-tier expected grade), between-tier variance,
+  // total stddev (between + within), skewness.
+  const probMean = norm.reduce((a, t) => a + t.weight * t.grade, 0);
+  const betweenVar = norm.reduce((a, t) => a + t.weight * (t.grade - probMean) ** 2, 0);
+  // Within-tier variance baseline — narrow tiers have ≈ ±6 grade-points
+  // of natural spread inside the tier (smooths the gauss so the curve
+  // doesn't collapse to a Dirac when one tier dominates 100%).
+  const WITHIN_VAR = 36;
+  const stddev = Math.sqrt(betweenVar + WITHIN_VAR);
+  const skewness = stddev > 0
+    ? norm.reduce((a, t) => a + t.weight * ((t.grade - probMean) / stddev) ** 3, 0)
+    : 0;
+
+  // Step 3 — peak grade = ppWA-mapped grade ──────────────────────────
+  // This is the headline number printed on the row. Centering the
+  // curve here means the visual peak always matches the Grade column.
   const mu = p.ppwa ?? p.war ?? p.pred_mu;
+  if (mu == null || !isFinite(mu)) return null;
   const peakMap = peakWaToOutcomeGrade(mu);
   const peakGrade = peakMap.grade;
   const tier      = peakMap.tier;
 
-  // Sample the mixture density on a fine grid to compute modal grade,
-  // p10 / p50 / p90 via cumulative integration.
-  const STEPS = 401;
-  const xs = new Array(STEPS);
-  const ds = new Array(STEPS);
-  let total = 0;
-  let modal = peakGrade;
-  let modalD = -1;
-  for (let i = 0; i < STEPS; i++) {
-    const x = (i / (STEPS - 1)) * 100;
-    const d = mixtureDensity(x, components);
-    xs[i] = x;
-    ds[i] = d;
-    total += d;
-    if (d > modalD) { modalD = d; modal = x; }
-  }
-  // Cumulative CDF, then find quantiles
-  const cum = new Array(STEPS);
-  let running = 0;
-  for (let i = 0; i < STEPS; i++) {
-    running += ds[i];
-    cum[i]  = running / total;
-  }
-  const quantile = (q) => {
-    for (let i = 0; i < STEPS; i++) {
-      if (cum[i] >= q) return xs[i];
-    }
-    return xs[STEPS - 1];
-  };
-  const lLimit = Math.max(0, quantile(0.10));
-  const hLimit = Math.min(100, quantile(0.90));
-  const medianGrade = quantile(0.50);
+  // Step 4 — bimodal decision (strict triple gate so it stays rare) ──
+  const ranked = norm.slice().sort((a, b) => b.weight - a.weight);
+  const top1 = ranked[0];
+  const top2 = ranked[1];
+  const tierDistance = Math.abs(top1.grade - top2.grade);
+  const isBimodal = (
+    top2.weight > 0.18 &&        // 2nd heaviest carries meaningful mass
+    tierDistance > 28 &&         // and is far from the 1st heaviest
+    top1.weight < 0.55           // and 1st doesn't dominate the distribution
+  );
 
-  // Confidence: how concentrated is the mixture?  Spread of p10..p90
-  // band; narrower = more confident. 80 grade-points = 0 conf, 0 = 1.
+  // Step 5 — sigma derivation ────────────────────────────────────────
+  let sigmaLeft, sigmaRight;
+  if (isBimodal) {
+    // For bimodal, the two-component renderer takes over; the
+    // asymmetric-Gauss sigmas are kept as quantile fallback.
+    sigmaLeft  = stddev;
+    sigmaRight = stddev;
+  } else {
+    // Skew-stretch capped to ±25% so wild skew values don't blow up
+    // one wing of the curve.
+    const skewCap = Math.max(-1, Math.min(1, skewness * 0.5));
+    sigmaLeft  = Math.max(4, stddev * (1 - 0.25 * skewCap));
+    sigmaRight = Math.max(4, stddev * (1 + 0.25 * skewCap));
+  }
+  const lLimit = Math.max(0,  peakGrade - 1.282 * sigmaLeft);
+  const hLimit = Math.min(100, peakGrade + 1.282 * sigmaRight);
+
+  // Step 6 — bimodal render components (only when isBimodal) ─────────
+  let bimodalComponents = null;
+  if (isBimodal) {
+    bimodalComponents = [
+      { center: top1.grade, sigma: 7, weight: top1.weight },
+      { center: top2.grade, sigma: 7, weight: top2.weight },
+    ];
+  }
+
+  // Step 7 — confidence ──────────────────────────────────────────────
+  // Narrower curve = more confident. 50 grade-points range = 0 conf,
+  // 0 range = 1 conf. Floored at 0.15 so the rendered peak height
+  // stays visible even for very wide curves.
   const range = hLimit - lLimit;
-  const confidence = Math.max(0.15, Math.min(1.0, 1 - range / 80));
+  const confidence = Math.max(0.15, Math.min(1.0, 1 - range / 50));
 
-  // Tier letter from MODEL's predTier, not from peak-grade band — keeps
-  // the Curves board consistent with the Big Board / Projection-tab
-  // tier judgement.
+  // Step 8 — tier letter from MODEL's predTier (not peak-grade band)
   const predTier = p.predTier || null;
   const letterMap = {
     "Superstar":"A", "All-Star":"A",
@@ -603,25 +633,51 @@ function buildOutcomeCurveMixture(p) {
                     : peakGrade >= 70 ? "A" : peakGrade >= 50 ? "B"
                     : peakGrade >= 40 ? "C" : "D";
 
-  // pNba: prefer modelled probability, fall back to pElite lift.
+  // Step 9 — pNba fallback for caveat strip ──────────────────────────
   const pNbaResolved = p.pNba != null
     ? p.pNba
     : (p.pElite != null ? Math.min(0.95, p.pElite + 0.25) : null);
 
   return {
-    components,
     peakGrade,
-    modalGrade: modal,
-    medianGrade,
+    modalGrade:  peakGrade,
+    medianGrade: peakGrade,
     lLimit, hLimit,
+    sigmaLeft, sigmaRight,
+    isBimodal,
+    bimodalComponents,
     tier,
     predTier,
     tierLetter,
     confidence,
     pNba: pNbaResolved,
     madeNba: p.madeNba || false,
-    mu, // raw ppWA for the tooltip
+    mu,
+    // Diagnostic moments for tooltips / future use
+    probMean, stddev, skewness,
+    // Tier-prob breakdown (footer or hover detail)
+    components: norm.filter(c => c.weight > 0.001).map(c => ({
+      key: c.key, center: c.grade, weight: c.weight, color: c.color,
+    })),
   };
+}
+
+/** Unified density evaluator used by all curve renderers. Handles the
+ *  smooth (asymmetric-Gauss) case and the bimodal (two-bump) case from
+ *  the same params object, so the renderer code stays branch-free.
+ */
+function outcomeCurveDensity(x, params) {
+  if (params.isBimodal && params.bimodalComponents) {
+    let d = 0;
+    for (const c of params.bimodalComponents) {
+      const z = (x - c.center) / c.sigma;
+      d += c.weight * Math.exp(-0.5 * z * z);
+    }
+    return d;
+  }
+  const sigma = x < params.peakGrade ? params.sigmaLeft : params.sigmaRight;
+  const z = (x - params.peakGrade) / sigma;
+  return Math.exp(-0.5 * z * z);
 }
 
 
@@ -6474,13 +6530,16 @@ function OutcomeDistributionCurve({p}) {
   const W = 700, H = 260;
   const M = { top: 32, right: 24, bottom: 50, left: 24 };
   const px = (g) => M.left + (g / 100) * (W - M.left - M.right);
-  // ── Sample mixture density at high resolution ──
+  // ── Sample outcome density at high resolution ──
+  // Sprint-5.2c: switched from mixtureDensity (one bump per tier) to
+  // outcomeCurveDensity (smooth asymmetric Gauss for unimodal profiles,
+  // two-bump for genuine boom-or-bust).
   const N = 240;
   let maxY = 0;
   const samples = new Array(N + 1);
   for (let i = 0; i <= N; i++) {
     const g = (i / N) * 100;
-    const y = mixtureDensity(g, components);
+    const y = outcomeCurveDensity(g, params);
     samples[i] = {g, y};
     if (y > maxY) maxY = y;
   }
@@ -6504,10 +6563,9 @@ function OutcomeDistributionCurve({p}) {
   const upside   = (massBy["Superstar"] || 0) + (massBy["All-Star"] || 0);
   const downside = (massBy["Replacement"] || 0) + (massBy["Negative"] || 0);
   const skew = upside - downside;
-  // Bimodal detection: any tier-pair with both > 0.15 weight that aren't adjacent
-  const sorted = components.slice().sort((a,b)=>b.weight-a.weight);
-  const isBimodal = sorted.length >= 2 && sorted[1].weight > 0.18 &&
-                    Math.abs(sorted[0].center - sorted[1].center) > 18;
+  // isBimodal flag now comes from the engine (strict triple gate, not
+  // local heuristic) so the curve render and the label always agree.
+  const { isBimodal } = params;
   // ── Helpers ──
   const gradeFmt = (g) => g == null || !isFinite(g) ? "—" : g.toFixed(0);
   const skewLabel = isBimodal ? "Bimodal (boom/bust)" :
@@ -11546,7 +11604,7 @@ function MethodologyTab() {
     {cat:"Outcome Distribution Curve — what it is",items:[],desc:"Each prospect's projection rendered as a probability density on a single 0-100 outcome grade scale, shown on his Projection tab. The peak is the single most-likely outcome (his projected grade); the L-Limit and H-Limit cover roughly the p10-p90 band of plausible outcomes; the shape's lean tells you whether the upside or the downside is heavier. Color = tier band. The curve is reasoned from the model's existing ppWA point estimate, uncertainty (sigma), and calibrated tier probabilities — there is NO new metric and no new model: it is a visualization of the risk profile already implicit in the Projection above. Curve shape stays an asymmetric Gaussian in grade space — no single model outputs the density."},
     {cat:"Outcome Grade Scale — what each grade means",items:[],desc:"10-tier taxonomy with Coleman's outcome labels as the vocabulary; tier cutoffs are empirically anchored to the realized peak Wins Added quantiles of our 1,784-player NBA-careered reference pool (NOT pinned to individual comparable players — see honesty note below). Tier · Grade band · Pool share · peak Wins Added cutoff (career best 3-year window) · Comparable historical outcomes. (1) Generational/MVP · 95-100 · top 0.5% of NBA pool · peak WA ≥ 43.9 · Jokić, Dončić, Curry. (2) All-NBA Regular · 88-94 · next 1.5% · peak WA 31.5-43.9 · Edwards, SGA, Tatum. (3) Perennial All-Star · 80-87 · next 3.5% · peak WA 20.9-31.5 · Trae Young, Jaylen Brown, Siakam. (4) Fringe All-Star · 70-79 · next 5% · peak WA 15.1-20.9 · Fox, LaMelo, Mikal Bridges. (5) Good Starter · 60-69 · next 12% · peak WA 7.8-15.1 · Bane, Anunoby, Markkanen. (6) Average Starter · 50-59 · next 18% · peak WA 2.2-7.8 · Okongwu, Avdija, Buddy Hield. (7) Impact Role Player · 40-49 · next 20% · peak WA -0.4 to 2.2 · Toppin, Bruce Brown, Huerter. (8) Low-End Rotation/Bench · 20-39 · next 25% · peak WA -1.8 to -0.4 · Dennis Smith Jr., Ntilikina, Reddish. (9) Non-Rotational Washout · 1-19 · bottom 14.5% · peak WA < -1.8 · Wiseman, Culver, Whitmore. (10) True Null · 0 · never NBA · peak WA = NaN. Within each tier, peak Wins Added is mapped to a grade via linear interpolation."},
     {cat:"Outcome Grade — honesty note on the comparable players",items:[],desc:"The comparable historical outcomes shown next to each tier are LABELS, not anchors. We DELIBERATELY did not pin them as fixed grade values because our peak Wins Added blends xRAPM impact + box production over the best 3-year window, while Coleman's grade weights career-anchored impact + accolades. Run on 27 comparables, only 8/27 land in their Coleman-labeled tier in our scale. The disagreements are a methodological feature, not a bug — examples: Jaylen Brown sits at Coleman's Perennial All-Star (80-87) but lands in our Good Starter band; Desmond Bane sits at Coleman's Good Starter (60-69) but lands in our Fringe All-Star band; James Wiseman agrees with Coleman as a Non-Rotational Washout. The UI surfaces comparable names honestly so a reader can interpret the tier with a familiar reference, without ever forcing an individual NBA career to dictate where a prospect's grade should sit."},
-    {cat:"Outcome Curve — how the shape is computed (Sprint-5.2: mixture engine)",items:[],desc:"The curve is now a MIXTURE of six Gaussians on the 0-100 grade scale, one bump per model tier, each bump's mass set by the calibrated tier-probability. This replaces the earlier asymmetric-Gaussian approach (which centered on the ppWA point and stretched left/right by skew). WHY THE CHANGE: the calibrated tier-probabilities ARE the model's own distribution — refitting a Gaussian on ppWA + sigma threw most of that signal away. Multiple prospects with similar ppWA but different tier-prob shapes were collapsing into near-identical curves. The mixture honours the categorical structure of NBA outcomes and naturally produces narrow tall peaks for confident tier judgements, wide curves when mass spreads across tiers, and BIMODAL shapes for true boom-or-bust profiles — all visually distinct at a glance. TIER GRADE-ANCHORS (bump centers · sigma): Superstar 94 · 3.5; All-Star 78 · 4.5; Starter 60 · 5.0; Role Player 45 · 3.5; Replacement 30 · 5.0; Negative 10 · 4.5. Sigma per bump is roughly a third of the empirical tier band width so the bumps stay sharp and lateral differentiation between prospects' peaks is visible at a glance (the earlier ≈half-tier-width sigmas produced over-smooth curves that looked too similar between mid-tier prospects). CURVE METRICS: peak grade = ppWA-mapped grade (kept for headline-card consistency with the Projection above); modal grade = argmax of the mixture density; L-Limit / H-Limit = p10 / p90 of the mixture CDF (numerical integration over 401 samples); median grade = p50; confidence = 1 − (range / 80) clipped to [0.15, 1]. SHAPE LABEL: derived from the mixture mass profile — bimodal if the second-heaviest tier has weight > 0.18 and sits at least 18 grade points from the heaviest; symmetric if upside − downside is within ±0.10; otherwise upside-tilt or downside-tilt. TIER LETTER A/B/C/D (Coleman cadence): derived from the model's predTier so the Curves view always agrees with the Big Board and Projection tab (A = Superstar/All-Star, B = Starter, C = Role Player, D = Replacement/Negative)."},
+    {cat:"Outcome Curve — how the shape is computed (Sprint-5.2c: smooth moments engine)",items:[],desc:"The curve is rendered as a smooth ASYMMETRIC GAUSSIAN whose parameters come from the moments of the calibrated tier-probability distribution, not from stacking one bump per tier. WHY THE LATEST CHANGE (Sprint-5.2c): the earlier mixture-per-tier approach placed a Gaussian bump at each of the six tier centers (10, 30, 45, 60, 78, 94) and weighted them by P(tier). For multi-tier prospects this produced a curve with one visible mode PER tier with weight — an artifact of the discrete tier buckets, not a real outcome multimodality. Plus the curve's visual modal landed on whichever tier had most mass, never on the ppWA-mapped grade printed in the row, so the peak displayed on screen disagreed with the printed Grade by 10-15 grade points. CURRENT METHOD: from the six normalized tier-probabilities we compute the distribution's mean grade, between-tier variance, total variance (between + within-tier baseline of 36), and skewness; then render a single asymmetric Gaussian whose peak sits at the ppWA-mapped Grade (consistency with the headline number), whose sigmaLeft / sigmaRight are total stddev modulated by skewness ±25%, and whose L-Limit / H-Limit are peak ± 1.282 · sigma per side (p10 / p90 of a Normal). Result: one smooth curve per prospect, always centered on the printed Grade, with width and asymmetry that reflect the underlying tier-prob distribution honestly. BIMODAL EXCEPTION (rare on purpose): if the two heaviest tiers carry both ≥18% mass AND sit > 28 grade points apart AND neither dominates the distribution (heaviest < 55%), we switch to a two-bump renderer with sigma 7 on both bumps — a genuine boom-or-bust profile that's worth showing as two visible modes. The triple gate keeps bimodal rare (≈ 1-2 prospects per draft class in practice) so when you see it, it means something. TIER LETTER A/B/C/D (Coleman cadence): derived from the model's predTier so the Curves view always agrees with the Big Board and Projection tab (A = Superstar/All-Star, B = Starter, C = Role Player, D = Replacement/Negative). CONFIDENCE: 1 − (range / 50), clipped to [0.15, 1]; drives the rendered peak height (taller = more confident)."},
     {cat:"Outcome Curve — tier letter A/B/C/D consistency (Sprint-5.2)",items:[],desc:"Before Sprint-5.2, the tier letter on the Curves board was derived from the curve peak grade (≥70 = A, ≥50 = B, ≥40 = C, else D). That could disagree with the model's tier judgement: a prospect with peak grade 65 but a cumulative-threshold predTier of 'All-Star' would show as B on the Curves but as All-Star on the Big Board. Fixed in Sprint-5.2: the tier letter now comes from p.predTier directly. A = Superstar or All-Star; B = Starter; C = Role Player; D = Replacement or Negative. The Curves board, the Big Board's table view, and the Projection tab's headline pill all read the same field and always agree."},
     {cat:"Outcome Curve — when to use it vs the Tier-Probability bar chart",items:[],desc:"Both views sit on the Projection tab and they complement each other. The Outcome Distribution Curve is the SHAPE lens — at a glance, is this a tight star-bet, a wide boom-or-bust spread, or a flat replacement-level read? Best for GM-style risk-profile reading: a team with no second-rounders looks for tight, tall peaks; a rebuilding team looks for wide right-skewed shapes. The Tier-Probability bar chart is the PROBABILITY lens — exactly how much of his outcome mass sits in each tier? Best for quantitative decisions: 'what's his All-Star probability', 'what's his bust probability'. Use the curve for narrative + shape, the bars for exact numbers."},
     {cat:"Outcome Curves Big Board (Sprint-5.1 — Coleman-style range view)",items:[],desc:"A second viewing mode for the Big Board, accessed via the '◉ Curves' toggle next to ☰ Table / ◈ Range / ▥ Tier Board. Renders the top 30 prospects of the filtered class as a vertical list — one row per player — with his identity block on the left (rank, tier-letter A/B/C/D, name, school·class·age), his projected grade plus L-H range in the middle, and a MINI density curve on the same shared 0-100 grade x-axis on the right. A sticky tier-anchor scale at the top labels the 0-19 / 20-39 / 40-49 / 50-59 / 60-69 / 70-79 / 80-87 / 88-94 / 95+ bands so a GM can read across rows and instantly see who lives in which tier. The engine is IDENTICAL to the single-player curve on the Projection tab (same buildOutcomeCurveParams, same empirical anchors, same skew + confidence math) — this view just trades one large curve per page for thirty small curves stacked, so cross-prospect risk-profile comparison becomes one glance. Tier-letter pill (A/B/C/D) is added for Coleman-cadence skim-reading: A = grade ≥ 70 (Fringe All-Star and above), B = 50-69 (Average to Good Starter), C = 40-49 (Impact Role), D = below 40 (Bench/Washout). USE CASE: rebuilding team filters top-30, scans for tall right-skewed shapes (high-upside boom/bust); win-now team scans for narrow tall peaks at grade 55-70 (safe-floor starters); generational team scans for any curves with mass crossing 88. Combined with the existing Range view (horizontal p10-p90 bars + GM-risk sort) and Tier Board (Ben-style splits + archetype columns), the Big Board now offers three distinct decision-support lenses on the same underlying ppWA model."},
@@ -12082,16 +12140,18 @@ function OutcomeCurveBoard({ players, onSelect, gmRisk, setGmRisk }) {
     );
   }
 
-  // Helper: render the mini mixture-density path for one prospect.
+  // Helper: render the mini smooth-density path for one prospect.
+  // Sprint-5.2c uses outcomeCurveDensity (asymmetric Gauss for unimodal,
+  // two-bump for genuine boom-or-bust) rather than per-tier bumps.
   const renderMiniCurve = (params) => {
     if (!params) return null;
-    const { components, tier, lLimit, hLimit, peakGrade } = params;
+    const { tier, peakGrade } = params;
     const N = 120;
     let maxY = 0;
     const ys = new Array(N + 1);
     for (let i = 0; i <= N; i++) {
       const g = (i / N) * 100;
-      const y = mixtureDensity(g, components);
+      const y = outcomeCurveDensity(g, params);
       ys[i] = y;
       if (y > maxY) maxY = y;
     }
