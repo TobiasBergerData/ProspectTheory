@@ -568,33 +568,57 @@ function buildOutcomeCurveMixture(p) {
     ? norm.reduce((a, t) => a + t.weight * ((t.grade - probMean) / stddev) ** 3, 0)
     : 0;
 
-  // Step 3 — peak grade = Tier-Prob distribution MEAN (Sprint-5.2d) ──
-  // Earlier Sprint-5.2c used ppWA-mapped grade as the peak. That created
-  // an internal inconsistency: the curve's SHAPE (sigma, skew) came from
-  // the tier-prob distribution, but the PEAK came from the ppWA point
-  // estimate, which is a separate model output. When the two disagreed,
-  // the rendered peak landed away from the visible mass — exactly the
-  // "peak matcht nicht" issue Tobias flagged.
+  // Step 3 — peak grade = ppWA-mapped grade, CLAMPED to predTier band
+  // (Sprint-5.2e). Both prior approaches missed the right constraint:
+  //   - Sprint-5.2c used ppWA-mapped grade unconstrained → curve peak
+  //     could fall outside the model's own tier verdict.
+  //   - Sprint-5.2d used probMean (tier-prob distribution mean) → curve
+  //     peak frequently landed in a different tier band than predTier,
+  //     so the colour/comparables and the A/B/C/D letter disagreed.
   //
-  // The Curve is fundamentally a visualization of the OUTCOME
-  // distribution. Its peak therefore belongs to that distribution's
-  // center of mass — probMean. predTier (cumulative-threshold tier
-  // verdict) is derived from the same tier-probs, so the curve, the
-  // displayed Grade, and the A/B/C/D letter all align automatically.
+  // The model's predTier verdict (cumulative-threshold tier label) is
+  // the source of truth for WHICH BAND the peak belongs to. ppWA then
+  // sets the WITHIN-BAND position, giving real sub-tier differentiation.
+  // When ppWA-mapped grade falls outside predTier's band, the peak is
+  // clamped to the nearest band edge — that respects the model's tier
+  // judgement while still using ppWA for ordering within the tier.
   //
-  // ppWA stays the headline projection on the Big Board (table view's
-  // WAR column, Projection-tab hero card) — separate signal, separate
-  // place.
-  const peakGrade = probMean;
-  // Tier derived from the peak's position on the empirical grade scale
-  // so the color and comparable labels match where the curve actually
-  // sits. ppWA-mapped tier is no longer the source of truth here.
+  // Result: tier letter, displayed Grade, curve colour, comparables,
+  // and visual peak position all agree with predTier. Sigma + skew
+  // still come from the tier-prob moments (Step 5 below) so the curve
+  // SHAPE reflects the underlying uncertainty / skew honestly.
+  const TIER_PEAK_BANDS = {
+    "Superstar":   {center: 94, lo: 88, hi: 100},
+    "All-Star":    {center: 78, lo: 70, hi:  87},
+    "Starter":     {center: 60, lo: 50, hi:  69},
+    "Role Player": {center: 45, lo: 40, hi:  49},
+    "Replacement": {center: 30, lo: 20, hi:  39},
+    "Negative":    {center: 10, lo:  1, hi:  19},
+  };
+  const mu = p.ppwa ?? p.war ?? p.pred_mu;
+  const predTierLabel = p.predTier || null;
+  const band = predTierLabel && TIER_PEAK_BANDS[predTierLabel];
+
+  let peakGrade;
+  if (band) {
+    if (mu != null && isFinite(mu)) {
+      const ppwaMapped = peakWaToOutcomeGrade(mu).grade;
+      peakGrade = Math.max(band.lo, Math.min(band.hi, ppwaMapped));
+    } else {
+      peakGrade = band.center;
+    }
+  } else if (mu != null && isFinite(mu)) {
+    peakGrade = peakWaToOutcomeGrade(mu).grade;
+  } else {
+    peakGrade = probMean;
+  }
+  // Tier derived from peakGrade band so the colour + comparables line
+  // up with where the peak actually sits (which is inside predTier's
+  // band by construction).
   let tier = OUTCOME_GRADE_TIERS[OUTCOME_GRADE_TIERS.length - 1];
   for (const t of OUTCOME_GRADE_TIERS) {
     if (peakGrade >= t.grade_lo && peakGrade <= t.grade_hi) { tier = t; break; }
   }
-  // For the diagnostic tooltip
-  const mu = p.ppwa ?? p.war ?? p.pred_mu;
 
   // Step 4 — bimodal decision (strict triple gate so it stays rare) ──
   const ranked = norm.slice().sort((a, b) => b.weight - a.weight);
@@ -11623,7 +11647,7 @@ function MethodologyTab() {
     {cat:"Outcome Distribution Curve — what it is",items:[],desc:"Each prospect's projection rendered as a probability density on a single 0-100 outcome grade scale, shown on his Projection tab. The peak is the single most-likely outcome (his projected grade); the L-Limit and H-Limit cover roughly the p10-p90 band of plausible outcomes; the shape's lean tells you whether the upside or the downside is heavier. Color = tier band. The curve is reasoned from the model's existing ppWA point estimate, uncertainty (sigma), and calibrated tier probabilities — there is NO new metric and no new model: it is a visualization of the risk profile already implicit in the Projection above. Curve shape stays an asymmetric Gaussian in grade space — no single model outputs the density."},
     {cat:"Outcome Grade Scale — what each grade means",items:[],desc:"10-tier taxonomy with Coleman's outcome labels as the vocabulary; tier cutoffs are empirically anchored to the realized peak Wins Added quantiles of our 1,784-player NBA-careered reference pool (NOT pinned to individual comparable players — see honesty note below). Tier · Grade band · Pool share · peak Wins Added cutoff (career best 3-year window) · Comparable historical outcomes. (1) Generational/MVP · 95-100 · top 0.5% of NBA pool · peak WA ≥ 43.9 · Jokić, Dončić, Curry. (2) All-NBA Regular · 88-94 · next 1.5% · peak WA 31.5-43.9 · Edwards, SGA, Tatum. (3) Perennial All-Star · 80-87 · next 3.5% · peak WA 20.9-31.5 · Trae Young, Jaylen Brown, Siakam. (4) Fringe All-Star · 70-79 · next 5% · peak WA 15.1-20.9 · Fox, LaMelo, Mikal Bridges. (5) Good Starter · 60-69 · next 12% · peak WA 7.8-15.1 · Bane, Anunoby, Markkanen. (6) Average Starter · 50-59 · next 18% · peak WA 2.2-7.8 · Okongwu, Avdija, Buddy Hield. (7) Impact Role Player · 40-49 · next 20% · peak WA -0.4 to 2.2 · Toppin, Bruce Brown, Huerter. (8) Low-End Rotation/Bench · 20-39 · next 25% · peak WA -1.8 to -0.4 · Dennis Smith Jr., Ntilikina, Reddish. (9) Non-Rotational Washout · 1-19 · bottom 14.5% · peak WA < -1.8 · Wiseman, Culver, Whitmore. (10) True Null · 0 · never NBA · peak WA = NaN. Within each tier, peak Wins Added is mapped to a grade via linear interpolation."},
     {cat:"Outcome Grade — honesty note on the comparable players",items:[],desc:"The comparable historical outcomes shown next to each tier are LABELS, not anchors. We DELIBERATELY did not pin them as fixed grade values because our peak Wins Added blends xRAPM impact + box production over the best 3-year window, while Coleman's grade weights career-anchored impact + accolades. Run on 27 comparables, only 8/27 land in their Coleman-labeled tier in our scale. The disagreements are a methodological feature, not a bug — examples: Jaylen Brown sits at Coleman's Perennial All-Star (80-87) but lands in our Good Starter band; Desmond Bane sits at Coleman's Good Starter (60-69) but lands in our Fringe All-Star band; James Wiseman agrees with Coleman as a Non-Rotational Washout. The UI surfaces comparable names honestly so a reader can interpret the tier with a familiar reference, without ever forcing an individual NBA career to dictate where a prospect's grade should sit."},
-    {cat:"Outcome Curve — peak source (Sprint-5.2d: tier-prob distribution mean)",items:[],desc:"The displayed Grade and the curve's peak position are now both derived from the tier-probability distribution's MEAN — the expected outcome grade weighted across the six tiers. This replaces the earlier choice of ppWA-mapped grade as the peak. Why the change: ppWA (the point-estimate from the regression value model) and the tier-prob distribution (the calibrated outcome probabilities from isotonic calibration) are two different model outputs. They usually agree but can diverge by several grade points — when they did, the curve's visual peak sat at the ppWA-mapped grade while the visible mass concentrated where the tier-probs said it should be. That made the curve look like its peak was wrong. Tier-Probs are the natural source for an OUTCOME distribution visualization, so the curve, the displayed Grade, the A/B/C/D tier letter (via predTier, which is derived from the same tier-probs), and the curve color (via the tier band the Grade lands in) are now all consistent — they all read the same signal. ppWA is still the headline projection on the Big Board table view and the Projection-tab hero card; it's the value-rank we use to order the class. The Outcome Curve uses the outcome distribution. Two views of the same model, using the right output for each."},
+    {cat:"Outcome Curve — peak source (Sprint-5.2e: predTier band, ppWA position within)",items:[],desc:"The curve peak is now PINNED to the model's predTier band — Superstar 88-100 / All-Star 70-87 / Starter 50-69 / Role Player 40-49 / Replacement 20-39 / Negative 1-19 — and ppWA sets the within-band position. When ppWA's empirical mapping falls outside predTier's band, the peak is clamped to the nearest band edge. This guarantees the Curves view never disagrees with the model's tier verdict: the peak position, the displayed Grade, the curve colour, the comparable players, and the A/B/C/D letter all read the same source (predTier) and therefore always agree. The peak source has changed three times across the Sprint-5.2 series — Sprint-5.2c centered on ppWA-mapped grade (could fall outside predTier band → tier-letter / colour mismatch); Sprint-5.2d centered on the tier-prob distribution mean (frequently landed in a different band than predTier → same mismatch in the other direction); Sprint-5.2e clamps ppWA-mapped grade to predTier's band, which honours both signals where they agree and falls back to the model's tier judgement when they don't. CURVE SHAPE (width + asymmetry + bimodal) still comes from the tier-prob moments — the peak position is anchored to the model's tier verdict but the spread + lean honestly reflects the underlying uncertainty. Why the change: ppWA (the point-estimate from the regression value model) and the tier-prob distribution (the calibrated outcome probabilities from isotonic calibration) are two different model outputs. They usually agree but can diverge by several grade points — when they did, the curve's visual peak sat at the ppWA-mapped grade while the visible mass concentrated where the tier-probs said it should be. That made the curve look like its peak was wrong. Tier-Probs are the natural source for an OUTCOME distribution visualization, so the curve, the displayed Grade, the A/B/C/D tier letter (via predTier, which is derived from the same tier-probs), and the curve color (via the tier band the Grade lands in) are now all consistent — they all read the same signal. ppWA is still the headline projection on the Big Board table view and the Projection-tab hero card; it's the value-rank we use to order the class. The Outcome Curve uses the outcome distribution. Two views of the same model, using the right output for each."},
     {cat:"Outcome Curve — how the shape is computed (Sprint-5.2c/d: smooth moments engine)",items:[],desc:"The curve is rendered as a smooth ASYMMETRIC GAUSSIAN whose parameters come from the moments of the calibrated tier-probability distribution, not from stacking one bump per tier. WHY THE LATEST CHANGE (Sprint-5.2c): the earlier mixture-per-tier approach placed a Gaussian bump at each of the six tier centers (10, 30, 45, 60, 78, 94) and weighted them by P(tier). For multi-tier prospects this produced a curve with one visible mode PER tier with weight — an artifact of the discrete tier buckets, not a real outcome multimodality. Plus the curve's visual modal landed on whichever tier had most mass, never on the ppWA-mapped grade printed in the row, so the peak displayed on screen disagreed with the printed Grade by 10-15 grade points. CURRENT METHOD: from the six normalized tier-probabilities we compute the distribution's mean grade, between-tier variance, total variance (between + within-tier baseline of 36), and skewness; then render a single asymmetric Gaussian whose peak sits at the ppWA-mapped Grade (consistency with the headline number), whose sigmaLeft / sigmaRight are total stddev modulated by skewness ±25%, and whose L-Limit / H-Limit are peak ± 1.282 · sigma per side (p10 / p90 of a Normal). Result: one smooth curve per prospect, always centered on the printed Grade, with width and asymmetry that reflect the underlying tier-prob distribution honestly. BIMODAL EXCEPTION (rare on purpose): if the two heaviest tiers carry both ≥18% mass AND sit > 28 grade points apart AND neither dominates the distribution (heaviest < 55%), we switch to a two-bump renderer with sigma 7 on both bumps — a genuine boom-or-bust profile that's worth showing as two visible modes. The triple gate keeps bimodal rare (≈ 1-2 prospects per draft class in practice) so when you see it, it means something. TIER LETTER A/B/C/D (Coleman cadence): derived from the model's predTier so the Curves view always agrees with the Big Board and Projection tab (A = Superstar/All-Star, B = Starter, C = Role Player, D = Replacement/Negative). CONFIDENCE: 1 − (range / 50), clipped to [0.15, 1]; drives the rendered peak height (taller = more confident)."},
     {cat:"Outcome Curve — tier letter A/B/C/D consistency (Sprint-5.2)",items:[],desc:"Before Sprint-5.2, the tier letter on the Curves board was derived from the curve peak grade (≥70 = A, ≥50 = B, ≥40 = C, else D). That could disagree with the model's tier judgement: a prospect with peak grade 65 but a cumulative-threshold predTier of 'All-Star' would show as B on the Curves but as All-Star on the Big Board. Fixed in Sprint-5.2: the tier letter now comes from p.predTier directly. A = Superstar or All-Star; B = Starter; C = Role Player; D = Replacement or Negative. The Curves board, the Big Board's table view, and the Projection tab's headline pill all read the same field and always agree."},
     {cat:"Outcome Curve — when to use it vs the Tier-Probability bar chart",items:[],desc:"Both views sit on the Projection tab and they complement each other. The Outcome Distribution Curve is the SHAPE lens — at a glance, is this a tight star-bet, a wide boom-or-bust spread, or a flat replacement-level read? Best for GM-style risk-profile reading: a team with no second-rounders looks for tight, tall peaks; a rebuilding team looks for wide right-skewed shapes. The Tier-Probability bar chart is the PROBABILITY lens — exactly how much of his outcome mass sits in each tier? Best for quantitative decisions: 'what's his All-Star probability', 'what's his bust probability'. Use the curve for narrative + shape, the bars for exact numbers."},
