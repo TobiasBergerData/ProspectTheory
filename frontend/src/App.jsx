@@ -483,13 +483,16 @@ function asymmetricGaussianPdf(x, peak, sigmaLeft, sigmaRight) {
 //
 // Sigma per bump is roughly half the band width so 99% of the mass
 // stays inside its tier band.
+// Sprint-5.2b: Sigma straffer (≈ 0.6× alt) damit die Bumps spitzer
+// werden — visuelle Versetzung der peaks zwischen Spielern wird stärker,
+// statt dass alle Curves zu einer breiten Mitte verschmieren.
 const MIXTURE_TIER_ANCHORS = [
-  {key:"Superstar",   grade:94, sigma:5.5, color:"#1d4ed8", letter:"A"},
-  {key:"All-Star",    grade:78, sigma:6.5, color:"#3b82f6", letter:"A"},
-  {key:"Starter",     grade:60, sigma:7.5, color:"#22c55e", letter:"B"},
-  {key:"Role Player", grade:45, sigma:5.0, color:"#fbbf24", letter:"C"},
-  {key:"Replacement", grade:30, sigma:7.5, color:"#f97316", letter:"D"},
-  {key:"Negative",    grade:10, sigma:7.0, color:"#ec4899", letter:"D"},
+  {key:"Superstar",   grade:94, sigma:3.5, color:"#1d4ed8", letter:"A"},
+  {key:"All-Star",    grade:78, sigma:4.5, color:"#3b82f6", letter:"A"},
+  {key:"Starter",     grade:60, sigma:5.0, color:"#22c55e", letter:"B"},
+  {key:"Role Player", grade:45, sigma:3.5, color:"#fbbf24", letter:"C"},
+  {key:"Replacement", grade:30, sigma:5.0, color:"#f97316", letter:"D"},
+  {key:"Negative",    grade:10, sigma:4.5, color:"#ec4899", letter:"D"},
 ];
 
 /** Evaluate the mixture density at grade x.
@@ -11543,7 +11546,7 @@ function MethodologyTab() {
     {cat:"Outcome Distribution Curve — what it is",items:[],desc:"Each prospect's projection rendered as a probability density on a single 0-100 outcome grade scale, shown on his Projection tab. The peak is the single most-likely outcome (his projected grade); the L-Limit and H-Limit cover roughly the p10-p90 band of plausible outcomes; the shape's lean tells you whether the upside or the downside is heavier. Color = tier band. The curve is reasoned from the model's existing ppWA point estimate, uncertainty (sigma), and calibrated tier probabilities — there is NO new metric and no new model: it is a visualization of the risk profile already implicit in the Projection above. Curve shape stays an asymmetric Gaussian in grade space — no single model outputs the density."},
     {cat:"Outcome Grade Scale — what each grade means",items:[],desc:"10-tier taxonomy with Coleman's outcome labels as the vocabulary; tier cutoffs are empirically anchored to the realized peak Wins Added quantiles of our 1,784-player NBA-careered reference pool (NOT pinned to individual comparable players — see honesty note below). Tier · Grade band · Pool share · peak Wins Added cutoff (career best 3-year window) · Comparable historical outcomes. (1) Generational/MVP · 95-100 · top 0.5% of NBA pool · peak WA ≥ 43.9 · Jokić, Dončić, Curry. (2) All-NBA Regular · 88-94 · next 1.5% · peak WA 31.5-43.9 · Edwards, SGA, Tatum. (3) Perennial All-Star · 80-87 · next 3.5% · peak WA 20.9-31.5 · Trae Young, Jaylen Brown, Siakam. (4) Fringe All-Star · 70-79 · next 5% · peak WA 15.1-20.9 · Fox, LaMelo, Mikal Bridges. (5) Good Starter · 60-69 · next 12% · peak WA 7.8-15.1 · Bane, Anunoby, Markkanen. (6) Average Starter · 50-59 · next 18% · peak WA 2.2-7.8 · Okongwu, Avdija, Buddy Hield. (7) Impact Role Player · 40-49 · next 20% · peak WA -0.4 to 2.2 · Toppin, Bruce Brown, Huerter. (8) Low-End Rotation/Bench · 20-39 · next 25% · peak WA -1.8 to -0.4 · Dennis Smith Jr., Ntilikina, Reddish. (9) Non-Rotational Washout · 1-19 · bottom 14.5% · peak WA < -1.8 · Wiseman, Culver, Whitmore. (10) True Null · 0 · never NBA · peak WA = NaN. Within each tier, peak Wins Added is mapped to a grade via linear interpolation."},
     {cat:"Outcome Grade — honesty note on the comparable players",items:[],desc:"The comparable historical outcomes shown next to each tier are LABELS, not anchors. We DELIBERATELY did not pin them as fixed grade values because our peak Wins Added blends xRAPM impact + box production over the best 3-year window, while Coleman's grade weights career-anchored impact + accolades. Run on 27 comparables, only 8/27 land in their Coleman-labeled tier in our scale. The disagreements are a methodological feature, not a bug — examples: Jaylen Brown sits at Coleman's Perennial All-Star (80-87) but lands in our Good Starter band; Desmond Bane sits at Coleman's Good Starter (60-69) but lands in our Fringe All-Star band; James Wiseman agrees with Coleman as a Non-Rotational Washout. The UI surfaces comparable names honestly so a reader can interpret the tier with a familiar reference, without ever forcing an individual NBA career to dictate where a prospect's grade should sit."},
-    {cat:"Outcome Curve — how the shape is computed (Sprint-5.2: mixture engine)",items:[],desc:"The curve is now a MIXTURE of six Gaussians on the 0-100 grade scale, one bump per model tier, each bump's mass set by the calibrated tier-probability. This replaces the earlier asymmetric-Gaussian approach (which centered on the ppWA point and stretched left/right by skew). WHY THE CHANGE: the calibrated tier-probabilities ARE the model's own distribution — refitting a Gaussian on ppWA + sigma threw most of that signal away. Multiple prospects with similar ppWA but different tier-prob shapes were collapsing into near-identical curves. The mixture honours the categorical structure of NBA outcomes and naturally produces narrow tall peaks for confident tier judgements, wide curves when mass spreads across tiers, and BIMODAL shapes for true boom-or-bust profiles — all visually distinct at a glance. TIER GRADE-ANCHORS (bump centers · sigma): Superstar 94 · 5.5; All-Star 78 · 6.5; Starter 60 · 7.5; Role Player 45 · 5.0; Replacement 30 · 7.5; Negative 10 · 7.0. Sigma per bump is roughly half the empirical tier band width so 99% of each bump's mass sits inside its tier. CURVE METRICS: peak grade = ppWA-mapped grade (kept for headline-card consistency with the Projection above); modal grade = argmax of the mixture density; L-Limit / H-Limit = p10 / p90 of the mixture CDF (numerical integration over 401 samples); median grade = p50; confidence = 1 − (range / 80) clipped to [0.15, 1]. SHAPE LABEL: derived from the mixture mass profile — bimodal if the second-heaviest tier has weight > 0.18 and sits at least 18 grade points from the heaviest; symmetric if upside − downside is within ±0.10; otherwise upside-tilt or downside-tilt. TIER LETTER A/B/C/D (Coleman cadence): derived from the model's predTier so the Curves view always agrees with the Big Board and Projection tab (A = Superstar/All-Star, B = Starter, C = Role Player, D = Replacement/Negative)."},
+    {cat:"Outcome Curve — how the shape is computed (Sprint-5.2: mixture engine)",items:[],desc:"The curve is now a MIXTURE of six Gaussians on the 0-100 grade scale, one bump per model tier, each bump's mass set by the calibrated tier-probability. This replaces the earlier asymmetric-Gaussian approach (which centered on the ppWA point and stretched left/right by skew). WHY THE CHANGE: the calibrated tier-probabilities ARE the model's own distribution — refitting a Gaussian on ppWA + sigma threw most of that signal away. Multiple prospects with similar ppWA but different tier-prob shapes were collapsing into near-identical curves. The mixture honours the categorical structure of NBA outcomes and naturally produces narrow tall peaks for confident tier judgements, wide curves when mass spreads across tiers, and BIMODAL shapes for true boom-or-bust profiles — all visually distinct at a glance. TIER GRADE-ANCHORS (bump centers · sigma): Superstar 94 · 3.5; All-Star 78 · 4.5; Starter 60 · 5.0; Role Player 45 · 3.5; Replacement 30 · 5.0; Negative 10 · 4.5. Sigma per bump is roughly a third of the empirical tier band width so the bumps stay sharp and lateral differentiation between prospects' peaks is visible at a glance (the earlier ≈half-tier-width sigmas produced over-smooth curves that looked too similar between mid-tier prospects). CURVE METRICS: peak grade = ppWA-mapped grade (kept for headline-card consistency with the Projection above); modal grade = argmax of the mixture density; L-Limit / H-Limit = p10 / p90 of the mixture CDF (numerical integration over 401 samples); median grade = p50; confidence = 1 − (range / 80) clipped to [0.15, 1]. SHAPE LABEL: derived from the mixture mass profile — bimodal if the second-heaviest tier has weight > 0.18 and sits at least 18 grade points from the heaviest; symmetric if upside − downside is within ±0.10; otherwise upside-tilt or downside-tilt. TIER LETTER A/B/C/D (Coleman cadence): derived from the model's predTier so the Curves view always agrees with the Big Board and Projection tab (A = Superstar/All-Star, B = Starter, C = Role Player, D = Replacement/Negative)."},
     {cat:"Outcome Curve — tier letter A/B/C/D consistency (Sprint-5.2)",items:[],desc:"Before Sprint-5.2, the tier letter on the Curves board was derived from the curve peak grade (≥70 = A, ≥50 = B, ≥40 = C, else D). That could disagree with the model's tier judgement: a prospect with peak grade 65 but a cumulative-threshold predTier of 'All-Star' would show as B on the Curves but as All-Star on the Big Board. Fixed in Sprint-5.2: the tier letter now comes from p.predTier directly. A = Superstar or All-Star; B = Starter; C = Role Player; D = Replacement or Negative. The Curves board, the Big Board's table view, and the Projection tab's headline pill all read the same field and always agree."},
     {cat:"Outcome Curve — when to use it vs the Tier-Probability bar chart",items:[],desc:"Both views sit on the Projection tab and they complement each other. The Outcome Distribution Curve is the SHAPE lens — at a glance, is this a tight star-bet, a wide boom-or-bust spread, or a flat replacement-level read? Best for GM-style risk-profile reading: a team with no second-rounders looks for tight, tall peaks; a rebuilding team looks for wide right-skewed shapes. The Tier-Probability bar chart is the PROBABILITY lens — exactly how much of his outcome mass sits in each tier? Best for quantitative decisions: 'what's his All-Star probability', 'what's his bust probability'. Use the curve for narrative + shape, the bars for exact numbers."},
     {cat:"Outcome Curves Big Board (Sprint-5.1 — Coleman-style range view)",items:[],desc:"A second viewing mode for the Big Board, accessed via the '◉ Curves' toggle next to ☰ Table / ◈ Range / ▥ Tier Board. Renders the top 30 prospects of the filtered class as a vertical list — one row per player — with his identity block on the left (rank, tier-letter A/B/C/D, name, school·class·age), his projected grade plus L-H range in the middle, and a MINI density curve on the same shared 0-100 grade x-axis on the right. A sticky tier-anchor scale at the top labels the 0-19 / 20-39 / 40-49 / 50-59 / 60-69 / 70-79 / 80-87 / 88-94 / 95+ bands so a GM can read across rows and instantly see who lives in which tier. The engine is IDENTICAL to the single-player curve on the Projection tab (same buildOutcomeCurveParams, same empirical anchors, same skew + confidence math) — this view just trades one large curve per page for thirty small curves stacked, so cross-prospect risk-profile comparison becomes one glance. Tier-letter pill (A/B/C/D) is added for Coleman-cadence skim-reading: A = grade ≥ 70 (Fringe All-Star and above), B = 50-69 (Average to Good Starter), C = 40-49 (Impact Role), D = below 40 (Bench/Washout). USE CASE: rebuilding team filters top-30, scans for tall right-skewed shapes (high-upside boom/bust); win-now team scans for narrow tall peaks at grade 55-70 (safe-floor starters); generational team scans for any curves with mass crossing 88. Combined with the existing Range view (horizontal p10-p90 bars + GM-risk sort) and Tier Board (Ben-style splits + archetype columns), the Big Board now offers three distinct decision-support lenses on the same underlying ppWA model."},
@@ -12044,12 +12047,16 @@ function OutcomeCurveBoard({ players, onSelect, gmRisk, setGmRisk }) {
   // Sort by GM Risk Profile:
   //   ceiling → H-Limit desc (highest ceiling first → rebuilding GM)
   //   floor   → L-Limit desc (highest floor first   → win-now GM)
-  //   neutral → median grade desc (balanced expected value)
+  //   neutral → peakGrade desc (sort by the headline Grade number shown
+  //             on the row — Tobias 2026-06-23: the visible grade IS the
+  //             ppWA-mapped peak; sorting by median was confusing because
+  //             it differed from the displayed number for multi-modal
+  //             prospects).
   const sortedRows = useMemo(() => {
     const key = gmRisk === "ceiling" ? "hLimit"
               : gmRisk === "floor"   ? "lLimit"
-              : "medianGrade";
-    const tieFallback = (a, b) => (b.params?.medianGrade ?? -1) - (a.params?.medianGrade ?? -1);
+              : "peakGrade";
+    const tieFallback = (a, b) => (b.params?.peakGrade ?? -1) - (a.params?.peakGrade ?? -1);
     return allWithParams.slice().sort((a, b) => {
       const va = a.params?.[key];
       const vb = b.params?.[key];
@@ -12078,7 +12085,7 @@ function OutcomeCurveBoard({ players, onSelect, gmRisk, setGmRisk }) {
   // Helper: render the mini mixture-density path for one prospect.
   const renderMiniCurve = (params) => {
     if (!params) return null;
-    const { components, tier, lLimit, hLimit, medianGrade } = params;
+    const { components, tier, lLimit, hLimit, peakGrade } = params;
     const N = 120;
     let maxY = 0;
     const ys = new Array(N + 1);
@@ -12103,9 +12110,11 @@ function OutcomeCurveBoard({ players, onSelect, gmRisk, setGmRisk }) {
       <>
         <path d={path} fill={tier.color} opacity={0.55}/>
         <path d={outline} fill="none" stroke={tier.color} strokeWidth={1.4} opacity={0.95}/>
-        {/* Median marker — short vertical tick where 50% of mixture mass sits below */}
-        <line x1={px(medianGrade)} x2={px(medianGrade)} y1={M.top} y2={baseY}
-              stroke={tier.color} strokeWidth={1.2} strokeDasharray="2,2" opacity={0.85}/>
+        {/* Peak marker — vertical tick at the headline Grade so the user can
+            see at-a-glance where each prospect sits laterally on the scale.
+            Aligns with the Grade number printed in the row's grade column. */}
+        <line x1={px(peakGrade)} x2={px(peakGrade)} y1={M.top} y2={baseY}
+              stroke={tier.color} strokeWidth={1.5} strokeDasharray="2,2" opacity={0.95}/>
       </>
     );
   };
@@ -12141,7 +12150,7 @@ function OutcomeCurveBoard({ players, onSelect, gmRisk, setGmRisk }) {
             <span className="text-[10px] font-semibold uppercase tracking-widest" style={{color:"#4b5563"}}>GM Risk Profile</span>
             {[
               ["ceiling","🎰 Ceiling First","Rebuilding · sort by H-Limit (best plausible upside)",      "#f59e0b","#78350f"],
-              ["neutral","⚖️ Balanced",      "Default · sort by median grade (balanced expected value)","#6b7280","#1f2937"],
+              ["neutral","⚖️ Balanced",      "Default · sort by Grade (headline ppWA-mapped peak)",     "#6b7280","#1f2937"],
               ["floor",  "🛡️ Floor First",   "Win-Now · sort by L-Limit (highest realistic floor)",     "#06b6d4","#0c4a6e"],
             ].map(([v,l,desc,activeColor,activeBg])=>(
               <button key={v} onClick={()=>setGmRisk(v)}
