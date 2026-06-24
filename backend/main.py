@@ -1316,6 +1316,19 @@ def _serve_static_gz_or_none(filename: str, response: Response, max_age: int = 6
     )
 
 
+@app.get("/api/outcome_comps/{slug}")
+async def get_outcome_comps(slug: str, response: Response):
+    """Sprint-5.4: per-prospect empirical comp pool for the Outcome-Curve KDE.
+    Lazy-loaded by the frontend when a Player-page mounts the OutcomeDistributionCurve.
+    Pre-computed by export_outcome_comps_static.py during build, served as a
+    static file → zero DB hit, browser/edge cacheable per slug."""
+    from name_utils import norm_name
+    key = norm_name(slug)
+    static = _serve_static_or_none(f"outcome_comps/{key}.json", response, max_age=600)
+    if static:
+        return static
+    raise HTTPException(status_code=404, detail=f"outcome_comps for slug={slug!r} not found")
+
 @app.get("/api/stats_lab")
 async def get_stats_lab(response: Response):
     """Sprint-4.0: Static rows + columns for the Stats Lab page.

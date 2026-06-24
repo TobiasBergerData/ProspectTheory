@@ -97,6 +97,11 @@ python -u export_board_static.py
 log_step "Sprint-4.0 — Stats Lab pre-compute (rows + meta)"
 python -u export_stats_lab.py
 
+# Sprint-5.4 Architecture: per-prospect outcome-comps as static files
+log_step "Sprint-5.4 — Export per-prospect outcome-comps (static files)"
+python -u export_outcome_comps_static.py
+
+
 # ─── Build-Validation ───
 log_step "BUILD COMPLETE — Validation"
 if [[ ! -f "data/processed/prospecttheory.db" ]]; then

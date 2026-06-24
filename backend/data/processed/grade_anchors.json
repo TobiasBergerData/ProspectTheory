@@ -1,0 +1,354 @@
+{
+  "tiers": [
+    {
+      "name": "Generational/MVP",
+      "grade_lo": 95,
+      "grade_hi": 100,
+      "wa_lo": 43.911,
+      "wa_hi": 68.879,
+      "q_lo": 0.995,
+      "q_hi": 1.0,
+      "comparables": [
+        "Nikola Joki\u0107",
+        "Luka Don\u010di\u0107",
+        "Stephen Curry"
+      ]
+    },
+    {
+      "name": "All-NBA Regular",
+      "grade_lo": 88,
+      "grade_hi": 94,
+      "wa_lo": 31.47,
+      "wa_hi": 43.911,
+      "q_lo": 0.98,
+      "q_hi": 0.995,
+      "comparables": [
+        "Anthony Edwards",
+        "Shai Gilgeous-Alexander",
+        "Jayson Tatum"
+      ]
+    },
+    {
+      "name": "Perennial All-Star",
+      "grade_lo": 80,
+      "grade_hi": 87,
+      "wa_lo": 20.883,
+      "wa_hi": 31.47,
+      "q_lo": 0.945,
+      "q_hi": 0.98,
+      "comparables": [
+        "Trae Young",
+        "Jaylen Brown",
+        "Pascal Siakam"
+      ]
+    },
+    {
+      "name": "Fringe All-Star",
+      "grade_lo": 70,
+      "grade_hi": 79,
+      "wa_lo": 15.088,
+      "wa_hi": 20.883,
+      "q_lo": 0.895,
+      "q_hi": 0.945,
+      "comparables": [
+        "De'Aaron Fox",
+        "LaMelo Ball",
+        "Mikal Bridges"
+      ]
+    },
+    {
+      "name": "Good Starter",
+      "grade_lo": 60,
+      "grade_hi": 69,
+      "wa_lo": 7.759,
+      "wa_hi": 15.088,
+      "q_lo": 0.775,
+      "q_hi": 0.895,
+      "comparables": [
+        "Desmond Bane",
+        "OG Anunoby",
+        "Lauri Markkanen"
+      ]
+    },
+    {
+      "name": "Average Starter",
+      "grade_lo": 50,
+      "grade_hi": 59,
+      "wa_lo": 2.236,
+      "wa_hi": 7.759,
+      "q_lo": 0.595,
+      "q_hi": 0.775,
+      "comparables": [
+        "Onyeka Okongwu",
+        "Deni Avdija",
+        "Buddy Hield"
+      ]
+    },
+    {
+      "name": "Impact Role Player",
+      "grade_lo": 40,
+      "grade_hi": 49,
+      "wa_lo": -0.369,
+      "wa_hi": 2.236,
+      "q_lo": 0.395,
+      "q_hi": 0.595,
+      "comparables": [
+        "Obi Toppin",
+        "Bruce Brown",
+        "Kevin Huerter"
+      ]
+    },
+    {
+      "name": "Low-End Rotation/Bench",
+      "grade_lo": 20,
+      "grade_hi": 39,
+      "wa_lo": -1.821,
+      "wa_hi": -0.369,
+      "q_lo": 0.145,
+      "q_hi": 0.395,
+      "comparables": [
+        "Dennis Smith Jr.",
+        "Frank Ntilikina",
+        "Cam Reddish"
+      ]
+    },
+    {
+      "name": "Non-Rotational Washout",
+      "grade_lo": 1,
+      "grade_hi": 19,
+      "wa_lo": -8.637,
+      "wa_hi": -1.821,
+      "q_lo": 0.0,
+      "q_hi": 0.145,
+      "comparables": [
+        "James Wiseman",
+        "Jarrett Culver",
+        "Cam Whitmore"
+      ]
+    }
+  ],
+  "pool_n": 1784,
+  "pool_min": -8.637,
+  "pool_max": 65.599,
+  "pool_median": 0.651,
+  "validation_rows": [
+    {
+      "player": "Nikola Joki\u0107",
+      "coleman_tier": "Generational/MVP",
+      "peak_wa": 54.762,
+      "our_grade": 97.2,
+      "our_tier": "Generational/MVP",
+      "tier_agree": true
+    },
+    {
+      "player": "Luka Don\u010di\u0107",
+      "coleman_tier": "Generational/MVP",
+      "peak_wa": 36.672,
+      "our_grade": 90.5,
+      "our_tier": "All-NBA Regular",
+      "tier_agree": false
+    },
+    {
+      "player": "Stephen Curry",
+      "coleman_tier": "Generational/MVP",
+      "peak_wa": 43.893,
+      "our_grade": 94.0,
+      "our_tier": "All-NBA Regular",
+      "tier_agree": false
+    },
+    {
+      "player": "Anthony Edwards",
+      "coleman_tier": "All-NBA Regular",
+      "peak_wa": 26.53,
+      "our_grade": 83.7,
+      "our_tier": "Perennial All-Star",
+      "tier_agree": false
+    },
+    {
+      "player": "Shai Gilgeous-Alexander",
+      "coleman_tier": "All-NBA Regular",
+      "peak_wa": 46.162,
+      "our_grade": 95.5,
+      "our_tier": "Generational/MVP",
+      "tier_agree": false
+    },
+    {
+      "player": "Jayson Tatum",
+      "coleman_tier": "All-NBA Regular",
+      "peak_wa": 35.325,
+      "our_grade": 89.9,
+      "our_tier": "All-NBA Regular",
+      "tier_agree": true
+    },
+    {
+      "player": "Trae Young",
+      "coleman_tier": "Perennial All-Star",
+      "peak_wa": 22.507,
+      "our_grade": 81.1,
+      "our_tier": "Perennial All-Star",
+      "tier_agree": true
+    },
+    {
+      "player": "Jaylen Brown",
+      "coleman_tier": "Perennial All-Star",
+      "peak_wa": 12.299,
+      "our_grade": 65.6,
+      "our_tier": "Good Starter",
+      "tier_agree": false
+    },
+    {
+      "player": "Pascal Siakam",
+      "coleman_tier": "Perennial All-Star",
+      "peak_wa": 19.988,
+      "our_grade": 77.6,
+      "our_tier": "Fringe All-Star",
+      "tier_agree": false
+    },
+    {
+      "player": "De'Aaron Fox",
+      "coleman_tier": "Fringe All-Star",
+      "peak_wa": 16.777,
+      "our_grade": 72.6,
+      "our_tier": "Fringe All-Star",
+      "tier_agree": true
+    },
+    {
+      "player": "LaMelo Ball",
+      "coleman_tier": "Fringe All-Star",
+      "peak_wa": 9.912,
+      "our_grade": 62.6,
+      "our_tier": "Good Starter",
+      "tier_agree": false
+    },
+    {
+      "player": "Mikal Bridges",
+      "coleman_tier": "Fringe All-Star",
+      "peak_wa": 19.161,
+      "our_grade": 76.3,
+      "our_tier": "Fringe All-Star",
+      "tier_agree": true
+    },
+    {
+      "player": "Desmond Bane",
+      "coleman_tier": "Good Starter",
+      "peak_wa": 16.882,
+      "our_grade": 72.8,
+      "our_tier": "Fringe All-Star",
+      "tier_agree": false
+    },
+    {
+      "player": "OG Anunoby",
+      "coleman_tier": "Good Starter",
+      "peak_wa": 8.362,
+      "our_grade": 60.7,
+      "our_tier": "Good Starter",
+      "tier_agree": true
+    },
+    {
+      "player": "Lauri Markkanen",
+      "coleman_tier": "Good Starter",
+      "peak_wa": 15.255,
+      "our_grade": 70.3,
+      "our_tier": "Fringe All-Star",
+      "tier_agree": false
+    },
+    {
+      "player": "Onyeka Okongwu",
+      "coleman_tier": "Average Starter",
+      "peak_wa": 8.808,
+      "our_grade": 61.3,
+      "our_tier": "Good Starter",
+      "tier_agree": false
+    },
+    {
+      "player": "Deni Avdija",
+      "coleman_tier": "Average Starter",
+      "peak_wa": 9.586,
+      "our_grade": 62.2,
+      "our_tier": "Good Starter",
+      "tier_agree": false
+    },
+    {
+      "player": "Buddy Hield",
+      "coleman_tier": "Average Starter",
+      "peak_wa": 7.748,
+      "our_grade": 59.0,
+      "our_tier": "Average Starter",
+      "tier_agree": true
+    },
+    {
+      "player": "Obi Toppin",
+      "coleman_tier": "Impact Role Player",
+      "peak_wa": 4.677,
+      "our_grade": 54.0,
+      "our_tier": "Average Starter",
+      "tier_agree": false
+    },
+    {
+      "player": "Bruce Brown",
+      "coleman_tier": "Impact Role Player",
+      "peak_wa": 4.272,
+      "our_grade": 53.3,
+      "our_tier": "Average Starter",
+      "tier_agree": false
+    },
+    {
+      "player": "Kevin Huerter",
+      "coleman_tier": "Impact Role Player",
+      "peak_wa": 6.45,
+      "our_grade": 56.9,
+      "our_tier": "Average Starter",
+      "tier_agree": false
+    },
+    {
+      "player": "Dennis Smith Jr.",
+      "coleman_tier": "Low-End Rotation/Bench",
+      "peak_wa": 2.632,
+      "our_grade": 50.6,
+      "our_tier": "Average Starter",
+      "tier_agree": false
+    },
+    {
+      "player": "Frank Ntilikina",
+      "coleman_tier": "Low-End Rotation/Bench",
+      "peak_wa": 1.434,
+      "our_grade": 46.2,
+      "our_tier": "Impact Role Player",
+      "tier_agree": false
+    },
+    {
+      "player": "Cam Reddish",
+      "coleman_tier": "Low-End Rotation/Bench",
+      "peak_wa": -3.703,
+      "our_grade": 14.0,
+      "our_tier": "Non-Rotational Washout",
+      "tier_agree": false
+    },
+    {
+      "player": "James Wiseman",
+      "coleman_tier": "Non-Rotational Washout",
+      "peak_wa": -4.89,
+      "our_grade": 10.9,
+      "our_tier": "Non-Rotational Washout",
+      "tier_agree": true
+    },
+    {
+      "player": "Jarrett Culver",
+      "coleman_tier": "Non-Rotational Washout",
+      "peak_wa": -1.349,
+      "our_grade": 26.2,
+      "our_tier": "Low-End Rotation/Bench",
+      "tier_agree": false
+    },
+    {
+      "player": "Cam Whitmore",
+      "coleman_tier": "Non-Rotational Washout",
+      "peak_wa": 1.407,
+      "our_grade": 46.1,
+      "our_tier": "Impact Role Player",
+      "tier_agree": false
+    }
+  ],
+  "schema_version": 1,
+  "method": "Empirical: tier boundaries derived from NBA-careered pool peak_wa quantiles; Coleman tier labels adopted as UX vocabulary; within-tier linear interpolation maps peak_wa \u2192 grade. Comparables shown in UI as reference, not as pinned anchors."
+}

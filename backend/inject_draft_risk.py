@@ -21,6 +21,7 @@ Feld im Profil: riskProfile {...}
 Run: python inject_draft_risk.py
 """
 
+import gzip
 import sqlite3
 import zlib
 import json
@@ -32,6 +33,8 @@ from name_utils import norm_name
 BASE = Path(__file__).resolve().parent  # backend/ auf Render
 DB_PATH = BASE / "data" / "processed" / "prospecttheory.db"
 CSV = BASE / "data" / "processed" / "draft_risk_all.csv"
+COMP_OUTCOMES_GZ = BASE / "data" / "processed" / "comp_outcomes_all.json.gz"
+COMP_OUTCOMES_JSON = BASE / "data" / "processed" / "comp_outcomes_all.json"  # legacy uncompressed fallback
 
 
 def compress(obj: dict) -> bytes:
@@ -83,11 +86,6 @@ def build_lookup() -> dict:
             "ceilingWA": _num(r.ceiling_wa),
             "bustRisk": _num(r.bust_risk),
             "starUpside": _num(r.star_upside),
-            # Sprint-3.0.G (#70, Tobias 2026-06-23): methodisch saubere
-            # Steal-Probability vom Backend, kernel-gewichtet aus dem
-            # historischen Comp-Pool (statt nur Merit↔Market-Gap-Heuristik).
-            "stealProb":       _num(getattr(r, "steal_prob",        None)),
-            "stealTargetSlot": _num(getattr(r, "steal_target_slot", None)),
             "compStrength": _num(r.comp_strength),
             "upsideFactors": _factors(getattr(r, "upside_factors", "")),
             "riskFactors": _factors(getattr(r, "risk_factors", "")),
@@ -104,9 +102,13 @@ def build_lookup() -> dict:
 
 
 def main():
-    print("[inject_draft_risk] Loading CSV …")
+    print("[inject_draft_risk] Loading CSV ...")
     lookup = build_lookup()
     print(f"[inject_draft_risk] Risk profiles: {len(lookup):,}")
+    # Sprint-5.4 architecture: outcomeComps are NO LONGER injected into the
+    # profile blob. They live as per-prospect static files under
+    # data/processed/static/outcome_comps/ and are served lazily by the
+    # frontend via /api/outcome_comps/{slug}. Keeps the DB schlank.
 
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -135,7 +137,5 @@ def main():
     conn.close()
     print(f"[inject_draft_risk] Updated: {updated:,} | No match: {no_match:,}")
     print("[inject_draft_risk] Done.")
-
-
 if __name__ == "__main__":
     main()

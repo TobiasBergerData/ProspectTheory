@@ -39,7 +39,7 @@ def norm_name(s) -> str:
         return ""
     s = unicodedata.normalize("NFKD", s)
     s = "".join(c for c in s if not unicodedata.combining(c))
-    s = s.lower().replace(".", "").replace("'", "").replace("-", " ")
+    s = s.lower().replace(".", "").replace("'", "").replace('"', "").replace("-", " ")
     s = re.sub(r"\s+", " ", s).strip()
     s = SUFFIX_RX.sub("", s).strip()
     return s
