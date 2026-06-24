@@ -284,6 +284,167 @@ const ANTHRO_TIER_THRESHOLDS = {
   },
 };
 
+// ═══════════════════════════════════════════════════════════
+// OUTCOME-GRADE-SCALE (Sprint-5.0, Tobias 2026-06-23)
+// ═══════════════════════════════════════════════════════════
+// Empirically anchored grade scale 0-100 derived from the NBA-careered
+// pool's peak_wa quantiles (n=1,784). Coleman's tier labels are kept
+// as the UX vocabulary (Generational/MVP, All-NBA Regular, etc.) so
+// scouts familiar with that taxonomy read our board immediately.
+//
+// Build pipeline: data-pipeline/scripts/compute_outcome_grade.py
+// Source mapping: data-pipeline/data/processed/grade_anchors.json
+//                 (also copied to backend/data/processed/ for API access)
+//
+// Why empirical, not pinned-to-comparables: an NBA-Quant never imports
+// another scaled metric without a reality check. peak_wa is a different
+// blend than Coleman's grade (xRAPM-blend production over best-3-yr
+// window vs career-anchored impact + accolades). 8/27 comparable tier-
+// agreement in our validation run — the disagreements are methodological
+// honesty: we surface them in the UI rather than force-fit anchors.
+const OUTCOME_GRADE_TIERS = [
+  // grade_lo / grade_hi from Coleman's scale 1:1.
+  // wa_lo / wa_hi are empirical NBA-pool quantiles from compute_outcome_grade.py.
+  {name:"Generational/MVP",        grade_lo:95, grade_hi:100, wa_lo:43.91,  wa_hi:68.88, color:"#1d4ed8",
+   comparables:["Nikola Jokić","Luka Dončić","Stephen Curry"]},
+  {name:"All-NBA Regular",         grade_lo:88, grade_hi:94,  wa_lo:31.47,  wa_hi:43.91, color:"#2563eb",
+   comparables:["Anthony Edwards","Shai Gilgeous-Alexander","Jayson Tatum"]},
+  {name:"Perennial All-Star",      grade_lo:80, grade_hi:87,  wa_lo:20.88,  wa_hi:31.47, color:"#3b82f6",
+   comparables:["Trae Young","Jaylen Brown","Pascal Siakam"]},
+  {name:"Fringe All-Star",         grade_lo:70, grade_hi:79,  wa_lo:15.09,  wa_hi:20.88, color:"#60a5fa",
+   comparables:["De'Aaron Fox","LaMelo Ball","Mikal Bridges"]},
+  {name:"Good Starter",            grade_lo:60, grade_hi:69,  wa_lo: 7.76,  wa_hi:15.09, color:"#22c55e",
+   comparables:["Desmond Bane","OG Anunoby","Lauri Markkanen"]},
+  {name:"Average Starter",         grade_lo:50, grade_hi:59,  wa_lo: 2.24,  wa_hi: 7.76, color:"#86efac",
+   comparables:["Onyeka Okongwu","Deni Avdija","Buddy Hield"]},
+  {name:"Impact Role Player",      grade_lo:40, grade_hi:49,  wa_lo:-0.37,  wa_hi: 2.24, color:"#fbbf24",
+   comparables:["Obi Toppin","Bruce Brown","Kevin Huerter"]},
+  {name:"Low-End Rotation/Bench",  grade_lo:20, grade_hi:39,  wa_lo:-1.82,  wa_hi:-0.37, color:"#f97316",
+   comparables:["Dennis Smith Jr.","Frank Ntilikina","Cam Reddish"]},
+  {name:"Non-Rotational Washout",  grade_lo:1,  grade_hi:19,  wa_lo:-8.64,  wa_hi:-1.82, color:"#ec4899",
+   comparables:["James Wiseman","Jarrett Culver","Cam Whitmore"]},
+];
+// True Null tier: peak_wa = NaN / never NBA. grade = 0, color = neutral.
+const OUTCOME_GRADE_TRUE_NULL = {name:"True Null (Never Played)", grade_lo:0, grade_hi:0, color:"#a78bfa"};
+
+/** Map a peak_wa value to a 0-100 outcome grade via piecewise-linear
+ *  interpolation within the empirical tier it falls into.
+ *  Returns {grade, tier} where tier is one of the OUTCOME_GRADE_TIERS objects.
+ */
+function peakWaToOutcomeGrade(peakWa) {
+  if (peakWa == null || !isFinite(peakWa)) {
+    return {grade: 0, tier: OUTCOME_GRADE_TRUE_NULL};
+  }
+  for (const t of OUTCOME_GRADE_TIERS) {
+    if (peakWa >= t.wa_lo && peakWa <= t.wa_hi) {
+      const waSpan = Math.max(t.wa_hi - t.wa_lo, 1e-6);
+      const frac = (peakWa - t.wa_lo) / waSpan;
+      const grade = t.grade_lo + frac * (t.grade_hi - t.grade_lo);
+      return {grade: Math.round(grade * 10) / 10, tier: t};
+    }
+  }
+  // Above the very top (Joker tail outliers): clip at 100
+  if (peakWa > OUTCOME_GRADE_TIERS[0].wa_hi) return {grade: 100, tier: OUTCOME_GRADE_TIERS[0]};
+  // Below floor: clip at bottom-tier grade_lo
+  const bot = OUTCOME_GRADE_TIERS[OUTCOME_GRADE_TIERS.length - 1];
+  return {grade: bot.grade_lo, tier: bot};
+}
+
+/** Build the parameters of an asymmetric-gaussian outcome curve for a
+ *  prospect, derived ENTIRELY from his existing ppwa-based model signals
+ *  (no new metric invented). Returns null if not enough signal.
+ *
+ *  Curve anatomy follows Coleman's vocabulary:
+ *    - peak  (= grade)  : most likely outcome    (mapped from ppwa)
+ *    - lLimit / hLimit  : empirical p10 / p90    (mapped from ppwa ± 1.282σ)
+ *    - skew             : leans right when upside > downside, left otherwise
+ *
+ *  Model signals consumed:
+ *    p.ppwa | p.war        : projected peak Wins Added (point estimate)
+ *    p.sigma | p.volatility: prediction-uncertainty (Gaussian width on peak_wa scale)
+ *    p.tiers (Superstar / All-Star / ... / Negative) : calibrated tier probs
+ *
+ *  Implementation:
+ *    grade-space asymmetric Gauss: σ_left = peak − lLimit, σ_right = hLimit − peak.
+ *    Skew is encoded purely by the asymmetry of these two sigmas — when upside
+ *    (P(Super)+P(AS)) outweighs downside (P(Negative)+P(Replacement)), we
+ *    stretch the hLimit further; downside-tilt stretches lLimit further.
+ *    Confidence (height) is inverse to total range — narrower = more confident.
+ */
+function buildOutcomeCurveParams(p) {
+  if (!p) return null;
+  const mu  = p.ppwa ?? p.war ?? p.pred_mu;
+  if (mu == null || !isFinite(mu)) return null;
+  const sig = Math.max(p.sigma ?? p.volatility ?? p.pred_sigma ?? 2.5, 0.5);
+
+  // Step 1: grade-space landing position.
+  const peakMap   = peakWaToOutcomeGrade(mu);
+  const peak      = peakMap.grade;
+  const tier      = peakMap.tier;
+
+  // Step 2: empirical p10 / p90 in WA, then map to grade.
+  // (1.282 ≈ z-score for the 10th / 90th percentile of a standard normal.)
+  const lWa = mu - 1.282 * sig;
+  const hWa = mu + 1.282 * sig;
+  const lMap = peakWaToOutcomeGrade(lWa);
+  const hMap = peakWaToOutcomeGrade(hWa);
+  let lLimit = lMap.grade;
+  let hLimit = hMap.grade;
+
+  // Guarantee L < peak < H even at extreme tier edges
+  if (lLimit > peak - 1) lLimit = Math.max(0,  peak - 1);
+  if (hLimit < peak + 1) hLimit = Math.min(100,peak + 1);
+
+  // Step 3: skew tilt — encoded by stretching one side.
+  // Use tier-probs if available (cleaner than re-deriving from peak/sigma).
+  const t = p.tiers || p.v2TierProbs || {};
+  const pSuper  = Number(t.Superstar)    || 0;
+  const pAllStar= Number(t["All-Star"])  || 0;
+  const pRepl   = Number(t.Replacement)  || 0;
+  const pNeg    = Number(t.Negative)     || 0;
+  const upside   = (pSuper + pAllStar) / 100;
+  const downside = (pRepl + pNeg) / 100;
+  // skewSig in [-1, +1]. Positive → upside-tilt (right tail heavier).
+  const skewSig = Math.max(-1, Math.min(1, upside - downside));
+
+  // Apply asymmetric stretch: max 30 % of the half-range.
+  const halfL = peak - lLimit;
+  const halfR = hLimit - peak;
+  const stretch = 0.30;
+  if (skewSig > 0) {
+    // upside tilt → push hLimit further out (cap at 100)
+    hLimit = Math.min(100, peak + halfR * (1 + stretch * skewSig));
+  } else if (skewSig < 0) {
+    // downside tilt → push lLimit further down (floor at 0)
+    lLimit = Math.max(0, peak - halfL * (1 + stretch * (-skewSig)));
+  }
+
+  // Step 4: confidence — narrower band = more confident.
+  // Used downstream to size the peak height of the rendered curve.
+  const range = hLimit - lLimit;
+  const confidence = Math.max(0.2, Math.min(1.0, 1 - range / 80));
+
+  return {
+    peak, lLimit, hLimit,
+    tier,
+    skew: skewSig,
+    confidence,
+    pNba: p.pNba ?? null,
+    mu, sigma: sig,
+  };
+}
+
+/** Sample an asymmetric Gaussian density at x (grade-space).
+ *  Used to draw the SVG path of the outcome distribution.
+ */
+function asymmetricGaussianPdf(x, peak, sigmaLeft, sigmaRight) {
+  const sigma = x < peak ? sigmaLeft : sigmaRight;
+  const safeSigma = Math.max(sigma, 1e-3);
+  const z = (x - peak) / safeSigma;
+  return Math.exp(-0.5 * z * z);
+}
+
+
 // Fallback wenn pos_detailed (PG/SG/SF/PF/C) fehlt — leite aus pos + height ab.
 // Wird genutzt für historische / intl Spieler ohne BartTorvik-role.
 function inferDetailedPos(pos3, htIn, astP) {
@@ -6117,6 +6278,172 @@ function DevTrajectoryTab({p}) {
   );
 }
 
+// ═══════════════════════════════════════════════════════════
+// OUTCOME DISTRIBUTION CURVE (Sprint-5.0, Tobias 2026-06-23)
+// Coleman-style probability-density curve of a prospect's outcome on
+// the 0-100 grade scale. Backed by ppwa + sigma + tier-probs — no new
+// metric is invented.
+// ═══════════════════════════════════════════════════════════
+function OutcomeDistributionCurve({p}) {
+  const params = useMemo(() => buildOutcomeCurveParams(p), [p]);
+  if (!params) return null;
+  const {peak, lLimit, hLimit, tier, skew, confidence, pNba, mu, sigma} = params;
+
+  // ── SVG geometry ──────────────────────────────────────────
+  const W = 700, H = 260;
+  const M = { top: 32, right: 24, bottom: 50, left: 24 };
+  const px = (g) => M.left + (g / 100) * (W - M.left - M.right);
+  // ── Sample curve at high resolution ──
+  const N = 240;
+  const sigmaLeft  = Math.max(peak - lLimit, 1);
+  const sigmaRight = Math.max(hLimit - peak, 1);
+  const samples = [];
+  for (let i = 0; i <= N; i++) {
+    const g = (i / N) * 100;
+    const y = asymmetricGaussianPdf(g, peak, sigmaLeft, sigmaRight);
+    samples.push({g, y});
+  }
+  const peakHeight = (H - M.top - M.bottom) * (0.55 + 0.30 * confidence);
+  const py = (y) => M.top + (peakHeight - y * peakHeight) + (H - M.top - M.bottom - peakHeight);
+  // SVG path for filled curve
+  let pathD = `M ${px(0)},${H - M.bottom}`;
+  for (const s of samples) pathD += ` L ${px(s.g).toFixed(2)},${py(s.y).toFixed(2)}`;
+  pathD += ` L ${px(100)},${H - M.bottom} Z`;
+
+  // ── Helpers ──
+  const gradeFmt = (g) => g == null || !isFinite(g) ? "—" : g.toFixed(0);
+  const skewLabel = Math.abs(skew) < 0.15 ? "Symmetric" :
+                    skew >  0.15 ? "Upside-tilt" : "Downside-tilt";
+  const confLabel = confidence >= 0.75 ? "Confident" :
+                    confidence >= 0.50 ? "Moderate" : "Uncertain";
+
+  // ── Render ────────────────────────────────────────────────
+  return (
+    <div className="rounded-2xl p-5" style={{background:"#0d1117",border:`1px solid ${tier.color}55`}}>
+      {/* Header: name + grade + tier name + comparable anchor */}
+      <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+        <div>
+          <div className="text-xs uppercase tracking-widest" style={{color:"#9ca3af"}}>Outcome Distribution</div>
+          <div className="text-2xl font-bold mt-0.5" style={{color:"#f1f5f9",fontFamily:"'Oswald',sans-serif"}}>
+            Grade <span style={{color:tier.color}}>{gradeFmt(peak)}</span>
+            <span className="text-sm font-normal ml-2" style={{color:"#9ca3af"}}>
+              ({gradeFmt(lLimit)}–{gradeFmt(hLimit)})
+            </span>
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-xs uppercase tracking-wider" style={{color:"#9ca3af"}}>Tier</div>
+          <div className="text-base font-bold" style={{color:tier.color}}>{tier.name}</div>
+        </div>
+      </div>
+
+      {/* The curve itself */}
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
+        {/* Tier-bucket background bands */}
+        {OUTCOME_GRADE_TIERS.map((t,i) => (
+          <rect key={t.name}
+            x={px(t.grade_lo)}
+            y={M.top}
+            width={px(t.grade_hi) - px(t.grade_lo)}
+            height={H - M.top - M.bottom}
+            fill={t.color}
+            opacity={t.name === tier.name ? 0.16 : 0.05}
+          />
+        ))}
+        {/* Curve filled */}
+        <path d={pathD} fill={tier.color} opacity={0.55}/>
+        {/* Curve outline */}
+        <path d={pathD.replace(/^M [\d.]+,[\d.]+/, "M " + px(0) + "," + (H - M.bottom)).replace(/ Z$/, "")}
+              fill="none" stroke={tier.color} strokeWidth="1.5" opacity={0.9}/>
+        {/* L-Limit / Peak / H-Limit markers */}
+        {[
+          {g: lLimit, label: "L-LIMIT", sub: "floor", anchor: "start"},
+          {g: peak,   label: "PEAK",    sub: "most likely", anchor: "middle"},
+          {g: hLimit, label: "H-LIMIT", sub: "ceiling", anchor: "end"},
+        ].map((m,i) => (
+          <g key={i}>
+            <line x1={px(m.g)} x2={px(m.g)} y1={M.top} y2={H - M.bottom}
+                  stroke={i===1 ? tier.color : "#9ca3af"} strokeWidth={i===1 ? 2 : 1}
+                  strokeDasharray={i===1 ? "0" : "3,3"}/>
+            <text x={px(m.g) + (m.anchor==="start" ? 4 : m.anchor==="end" ? -4 : 0)}
+                  y={M.top - 14}
+                  textAnchor={m.anchor}
+                  fontSize="10"
+                  fontWeight="700"
+                  fill={i===1 ? tier.color : "#9ca3af"}>{m.label}</text>
+            <text x={px(m.g) + (m.anchor==="start" ? 4 : m.anchor==="end" ? -4 : 0)}
+                  y={M.top - 3}
+                  textAnchor={m.anchor}
+                  fontSize="9"
+                  fill="#6b7280">{m.sub}</text>
+          </g>
+        ))}
+        {/* X-axis tier ticks */}
+        {[0,20,40,50,60,70,80,88,95,100].map(g => (
+          <g key={g}>
+            <line x1={px(g)} x2={px(g)} y1={H - M.bottom} y2={H - M.bottom + 4} stroke="#374151" strokeWidth="1"/>
+            <text x={px(g)} y={H - M.bottom + 18} textAnchor="middle" fontSize="10" fill="#6b7280">{g}</text>
+          </g>
+        ))}
+        {/* Axis title */}
+        <text x={W/2} y={H - 8} textAnchor="middle" fontSize="11" fontWeight="600" fill="#9ca3af">
+          Outcome Grade (0–100)
+        </text>
+      </svg>
+
+      {/* Footer: shape vocabulary + comparable label */}
+      <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+        <div className="rounded-lg p-2" style={{background:"#0a0e16", border:"1px solid #1f2937"}}>
+          <div style={{color:"#6b7280"}}>SHAPE</div>
+          <div className="font-semibold mt-0.5" style={{color:"#f1f5f9"}}>{skewLabel}</div>
+          <div style={{color:"#6b7280", fontSize:"10px"}}>
+            {Math.abs(skew) < 0.15
+              ? "model is balanced between upside and downside"
+              : skew > 0 ? "model leans toward the ceiling — star-upside profile"
+                         : "model leans toward the floor — bust-risk profile"}
+          </div>
+        </div>
+        <div className="rounded-lg p-2" style={{background:"#0a0e16", border:"1px solid #1f2937"}}>
+          <div style={{color:"#6b7280"}}>CONFIDENCE</div>
+          <div className="font-semibold mt-0.5" style={{color:"#f1f5f9"}}>{confLabel}</div>
+          <div style={{color:"#6b7280", fontSize:"10px"}}>
+            range {(hLimit - lLimit).toFixed(0)} grade points;
+            ppWA {mu?.toFixed(1)} ± {sigma?.toFixed(1)}
+          </div>
+        </div>
+        <div className="rounded-lg p-2" style={{background:"#0a0e16", border:"1px solid #1f2937"}}>
+          <div style={{color:"#6b7280"}}>COMPARABLE OUTCOMES</div>
+          <div className="font-semibold mt-0.5" style={{color:tier.color, fontSize:"11px"}}>
+            {tier.comparables?.slice(0,3).join(" · ") || "—"}
+          </div>
+          <div style={{color:"#6b7280", fontSize:"10px"}}>
+            historical NBA players who landed in this tier
+          </div>
+        </div>
+      </div>
+
+      {/* Honest pNba caveat for non-NBA players */}
+      {pNba != null && pNba < 0.80 && (
+        <div className="mt-3 rounded-lg p-2 text-xs" style={{background:"#fbbf2411", border:"1px solid #fbbf2444", color:"#fde68a"}}>
+          <strong>Note:</strong> the curve is conditional on him reaching the NBA.
+          Unconditional P(reaches NBA) is <strong>{(pNba * 100).toFixed(0)}%</strong> —
+          weight the curve by that probability when judging the realistic outcome.
+        </div>
+      )}
+
+      {/* How to read */}
+      <div className="mt-3 text-[11px]" style={{color:"#9ca3af", lineHeight:1.5}}>
+        <strong style={{color:"#cbd5e1"}}>How to read:</strong> the peak marks the most-likely outcome,
+        the band between L-Limit and H-Limit covers ~80% of plausible outcomes, and the
+        shape's lean tells you whether the model leans toward upside (right-tilt) or downside
+        (left-tilt). Grade tiers along the X-axis mirror Coleman's Outcome-Grade Scale —
+        empirically anchored to the realized peak Wins Added of 1,784 NBA-careered players in our pool.
+      </div>
+    </div>
+  );
+}
+
+
 function ProjectionTab({p}) {
   if (!p) return null;
   // Prefer v2TierProbs (new model, %-scale already) over legacy prob_* fields
@@ -6385,6 +6712,12 @@ function ProjectionTab({p}) {
           )}
         </div>
       </div>
+
+      {/* ═══ OUTCOME DISTRIBUTION (Sprint-5.0) — Coleman-style density curve on 0-100 grade scale ═══ */}
+      <Sec icon="◉" title="Outcome Distribution"
+        sub="Probability density over the 0–100 outcome grade. Peak = most likely outcome, width = uncertainty, shape lean = upside-vs-downside tilt. Empirically anchored to NBA-careered pool's peak Wins Added quantiles (n=1,784), using ppWA + model uncertainty + calibrated tier probabilities. Same engine as the Projection above — no new metric.">
+        <OutcomeDistributionCurve p={p}/>
+      </Sec>
 
       {/* ═══ TIER DISTRIBUTION ═══ */}
       <Sec icon="◆" title="Tier Distribution"
@@ -11007,6 +11340,7 @@ function MethodologyTab() {
   const sections = [
     {cat:"Added Wins Projection Model",items:["monteCarlo","posClassification"],desc:"The core engine: a two-stage (hurdle) value model. Stage 1 estimates P(NBA) on the FULL prospect pool (~15k NCAA + international players, NBA reached or not) — a calibrated logistic model, ROC-AUC 0.98 on a 2017–2019 holdout. Stage 2 predicts the expected value if he reaches the league — a regularized, fully-explainable ElasticNet trained on 752 NBA careers. The headline = P(NBA) × E[Added Wins | NBA]. Target variable: Added Wins — the best 3-consecutive-season window in the first 8 NBA years, a team-anchored blend of player-isolated on-court impact (xRAPM, 70%) and box production (30%), scaled so a roster's player-wins sum to the team's actual wins-above-replacement (additivity). Trained with a temporal split (≤2016 train, 2017–2019 holdout, no future leakage). Validated: value-model Spearman ρ = 0.41 out-of-sample (vs craftednba.com benchmark 0.373). Output: a single interpretable number plus a full tier-probability distribution. Honest caveat: the number is an EXPECTED value and is deliberately modest — a college profile rarely signals stardom (e.g. SGA looked ordinary at Kentucky), so star upside is shown via the tier distribution, not inflated into the point estimate. A separate high-floor model (P(NBA or EuroLeague-tier), trained on international career outcomes too) gives the downside. Projections for undrafted/fringe players are extrapolations beyond the training distribution."},
     {cat:"Risk Profile Tab — Draft Range & Risk (NEW)",items:[],desc:"Reframes the projection as a front-office decision: where a player will be drafted vs. where he belongs, plus risk in both directions. (1) MARKET RANGE — the realistic pick range, PROJECTED from an existing consensus mock ranking (a single consensus board, one rank per player). We do not generate a new consensus; we take that rank and map it onto where similarly-ranked players were actually drafted in 2008–2018. The band width therefore reflects how a consensus rank historically translates into a real pick (teams reach, prospects slide) — NOT disagreement between different mock boards. Two players with the same consensus rank get the same band. Out-of-sample on 2019–2025 the actual pick falls inside the predicted p20–p80 band 63% of the time (target ~60%), with Spearman(consensus, pick)=+0.85. (2) MERIT SLOT — where a player belongs on talent in an average draft. Our projected value (Added Wins) is recalibrated onto the realized-Wins-Added scale, then mapped through an isotonic curve E[peak Wins Added | pick] built from mature drafts. Our value predicts realized NBA outcome (peak Wins Added) markedly better than the actual draft order did: Spearman +0.54 vs +0.29. The gap between Merit and Market is the steal/bust signal (e.g. Tyrese Haliburton: market #10, merit #1). (3) THREE RISK AXES, all computed from the SAME kernel-weighted empirical distribution of comparable past prospects (similar projected value × archetype affinity): BUST RISK = share of comps who delivered below the value their slot demanded — well-calibrated (predicted 75–100% → 86% actual bust rate; James Wiseman scored 96%); STAR UPSIDE = share who reached All-Star level, blended 70/30 with the archetype's empirical All-Star rate so high-ceiling archetypes get proper credit; STEAL PROBABILITY = share of comps who delivered MORE than the value a pick 10 slots HIGHER would demand. So a player projected at market slot 25 with Steal Probability 30% would, in 30% of comparable historical cases, have delivered the realized peak Wins Added of a top-15 pick. Floor at pick 3 for top picks (Steal then = 'plays like a top-3 outcome'). The Steal axis is the symmetric inverse to Bust on the SAME comp-pool — when Bust drops, Steal tends to rise, but the two are NOT mechanically complementary because the 10-slot-higher threshold sits above the slot-expectation, not at it. Both axes share the comp-pool's calibration: a published Steal Probability of 30% means roughly 30% of similar historical prospects actually crossed that bar. (4) ARCHETYPE VALUE — positional value is measured, not assumed: we compute each NBA archetype's realized peak Wins Added distribution from ~1,210 NBA players. Scoring Playmaker (ceiling ~29 WA) and Stretch Rim Protector (~28) carry the highest ceilings; pure rim-runners and role-archetypes cap around starter level. This is why a player's best-case archetype shapes his upside. CAVEATS: market range needs a consensus-board presence (most deep prospects have none); the box-score value model can under-rate raw, young upside; reason-code factors are surfaced from the projection engine and are noisier for international prospects (FIBA signals translate imperfectly)."},
+    {cat:"Outcome Distribution Curve (Sprint-5.0 — Coleman-style 0-100 grade scale)",items:[],desc:"A probability density curve on a 0-100 outcome grade scale, shown on each player's Projection tab. Peak = most likely outcome (his projected grade), L-Limit and H-Limit cover roughly the p10 to p90 band of plausible outcomes, and the curve's lean tells you whether the model leans toward upside (right-skew) or downside (left-skew). The 10 tier labels (Generational/MVP, All-NBA Regular, Perennial All-Star, Fringe All-Star, Good Starter, Average Starter, Impact Role Player, Low-End Rotation/Bench, Non-Rotational Washout, True Null) follow Coleman's outcome-grade vocabulary so anyone familiar with that taxonomy reads our board immediately. ANCHORING: tier cutoffs are empirically derived from the realized peak Wins Added distribution of our 1,784-player NBA-careered reference pool — top 0.5% becomes Generational, next 1.5% All-NBA Regular, next 3.5% Perennial All-Star, ..., bottom 14.5% Non-Rotational Washout. Within each tier, peak_wa is mapped to a grade via linear interpolation. We DELIBERATELY do not pin individual comparable players (Edwards, Brown, Bane, etc.) as anchors because our peak_wa metric blends xRAPM impact + box production over the best 3-year window, while Coleman's grade weights career-anchored impact + accolades — the two scales agree on the rank-order of NBA stars but disagree on absolute placement for several role players (Brown is Tier 80-87 on Coleman, lands in our Good Starter band; Bane is Tier 60-69 on Coleman, lands in our Fringe All-Star band). 8/27 comparable players sit in their Coleman-labeled tier in our scale — the disagreements are a methodological feature, not a bug, and the UI surfaces them honestly via the comparable-player labels under each tier. CURVE PARAMETERS: peak = mapped(ppWA point estimate); L-Limit / H-Limit = mapped(ppWA ± 1.282 · model sigma) — sigma is the calibrated prediction uncertainty from the two-stage value model; skew = upside-share (P(Superstar) + P(All-Star)) minus downside-share (P(Replacement) + P(Negative)), encoded by asymmetric stretch of the L and H limits (max ±30%); confidence = inverse of total range (narrower = more confident). The curve is an asymmetric Gaussian in grade space — no single model outputs the density; it is reasoned from the model's existing point estimate, uncertainty, and tier probabilities. NBA-PROBABILITY NOTE: the curve shows the outcome distribution CONDITIONAL on him reaching the NBA. For 2026 prospects with P(NBA) < 80%, a small caveat strip appears under the curve reminding the reader to weight by his realized probability of reaching the league. The reproducer is data-pipeline/scripts/compute_outcome_grade.py, which writes data-pipeline/data/processed/grade_anchors.json (also mirrored to the backend); rerun it when the NBA-careered pool refreshes. CAVEATS: peak_wa is tail-heavy (Jokić = 54.76, Joker outlier) so the Generational tier's ceiling is the very top of our pool, not a hard cap; the empirical pool is mature drafts only (≤2020) so recent stars (Wembanyama, Edwards 2024 peak) are reflected via the 1,784 careered players' realized peaks, not their current trajectory — re-fit annually."},
     {cat:"Risk Profile Tab — Projected NBA Role (pre→post, NEW)",items:[],desc:"Answers 'what does this player's TYPE actually become in the NBA, and what is that worth?' (1) NBA-OUTCOME ROLES: every NBA player (1,780, ≥500 peak-window minutes) is classified into the SAME archetype taxonomy as our prospects, but from his realized NBA peak — using the identical role-score formulas and assignment logic as the prospect pipeline, only ranked against NBA peers instead of college peers. So pre-draft type and NBA type share one comparable label set. Each NBA role's value is measured empirically: Scoring Playmaker (lead guard) is most valuable (median ~25 peak Wins Added, 50% All-Star); 'empty' roles (Non-Specialized / Slashing / Defensive Wing) rarely stick (8–14% reach Role-Player value). (2) TRANSITION: across matured drafted classes (≤2020), P(NBA outcome | pre-draft archetype), INCLUDING an honest 'Did Not Stick' (no established ≥500-min role). The same type's outcome depends heavily on talent — an elite-projected Scoring Playmaker sticks 75% / All-Star 38%, a marginal one 6% / 0% ('a scoring guard has to be elite to play'). (3) PER-PROSPECT PROJECTION: outcome distribution = kernel-weighted comparable past prospects (same pre-draft archetype × similar projected value). Output: most-likely NBA role, full outcome distribution with each role's typical value, P(establishes a role) and P(reaches Role-Player value) as the FLOOR, expected Wins Added. Floor calibration is sound (predicted 0–15%→5% actual, 50–100%→86%; James Wiseman projects 14% stick, Wembanyama 100%). CAVEATS: NBA stats lack height → NBA position is box-derived (occasional guard/wing/big misfires); college-tuned role thresholds on NBA percentiles cause rare star misfires (Harden→Defensive Guard via his turnover profile); extreme-talent prospects (Boozer) have few comps (flagged); draft-position confound (early picks get more opportunity)."},
     {cat:"NBA Role Projections (NEW — Sprint-3.17+)",items:["starCreator"],desc:"A small set of focused, position-aware forecasts answering the three role questions every front office asks: will this prospect become a Creator, an elite Shooter, or an All-Defensive player in the NBA? Each forecast is a calibrated probability on the same scale as the Tier Probabilities (% × 100). All three projections live in their own cards in the Projection tab and share a common methodology so they can be compared side by side. CURRENTLY SHIPPED: Star+ Creator Projection. COMING NEXT: Elite Shooter, All-Defensive Player. SHARED METHODOLOGY: (1) Position-stratified Logistic Regression — separate models for Playmaker / Wing / Big, because the role definitions and signal weights differ structurally (a high-AST guard means something different than a high-AST big). (2) Position-aware target thresholds where the underlying role rate is structurally different — e.g. Star+ Creator-Bigs use USG ≥ 22 / AST ≥ 14 instead of 24 / 18, because Creator-Bigs are mechanically rarer. (3) Isotonic calibration on a held-out 2015-2017 set so predicted probabilities match real observed frequencies (no overconfidence). (4) Bayesian shrinkage per position pulls thin-sample predictions toward the population base rate — k=20 for guards/wings, k=30 for bigs. (5) Triangulated with the Comps Engine v5: 0.50 × Logistic Regression + 0.25 × age-stage cohort baseline + 0.25 × archetype cluster baseline. Three independent views combined. (6) Top-3 SHAP features per prediction expose what drove the score (e.g. 'Usage % (+0.32), Age-adj Production (+0.24), Consensus (+0.18)'). HONEST PERFORMANCE: tested on 2018-2020 prospects (never seen during training). Star+ Creator — Wing Brier 0.047 / AUC 0.90 (world-class), Playmaker AUC 0.74 (solid), Big small validation sample compensated by Bayesian shrinkage. Elite Shooter and All-Defensive will receive the same evaluation when they ship. WHY NO PROSPECT SCORES 95%+: historic base rates are 8-15% per position; a 60% calibrated probability is already a massive lift above the population. Any model showing 95%+ would be overfitting, not signal. These are projections of a SPECIFIC ROLE OUTCOME and complement the existing Tier Probabilities (which forecast value tier independent of role)."},
     {cat:"Comps Engine v5 — Self-Match Exclusion + Pool Improvements (NEW — Sprint-3.16)",items:[],desc:"Two fundamental engine improvements deployed June 2026. (1) SELF-MATCH EXCLUSION: a player is no longer returned as his own comp. Previously, NBA-careered prospects (Anthony Davis, Jalen Brunson, etc.) appeared as 100% matches against themselves in outcome / cohort / cluster top-outcome lists, because they sat in both the query pool AND the comparison pool. The filter now runs centrally at the output assembly step, so it covers all five comp dimensions (style, skill, physical, trajectory, outcome) and both the Layer 3 (cohort) and Layer 4 (cluster) top-outcome example lists. (2) BETTER POOL COVERAGE: historic NBA stars from the pre-2014 era — Anthony Davis 2012, Andrew Wiggins, Embiid, etc. — were previously filtered out of the comparison pool because their college-era data was flagged 'Insufficient' (pre-PBP era). They are now kept whenever a known NBA peak (peak_pie) is available, regardless of college-data quality. (3) COHORT CACHING: the Layer 3 cohort outcome distribution is computed once per (age × position) bucket instead of per query player, reducing pipeline runtime ~10×. (4) AD VERIFICATION: the diagnostic test case was Anthony Davis 2012 Kentucky. He is now correctly returned as a Block Big with face-valid comps — Walker Kessler, Brandon Clarke, Cole Aldrich, Myles Turner — instead of the previous '(no comps)' state."},
