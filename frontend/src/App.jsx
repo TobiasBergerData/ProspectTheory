@@ -11357,6 +11357,7 @@ function MethodologyTab() {
     {cat:"Outcome Grade — honesty note on the comparable players",items:[],desc:"The comparable historical outcomes shown next to each tier are LABELS, not anchors. We DELIBERATELY did not pin them as fixed grade values because our peak Wins Added blends xRAPM impact + box production over the best 3-year window, while Coleman's grade weights career-anchored impact + accolades. Run on 27 comparables, only 8/27 land in their Coleman-labeled tier in our scale. The disagreements are a methodological feature, not a bug — examples: Jaylen Brown sits at Coleman's Perennial All-Star (80-87) but lands in our Good Starter band; Desmond Bane sits at Coleman's Good Starter (60-69) but lands in our Fringe All-Star band; James Wiseman agrees with Coleman as a Non-Rotational Washout. The UI surfaces comparable names honestly so a reader can interpret the tier with a familiar reference, without ever forcing an individual NBA career to dictate where a prospect's grade should sit."},
     {cat:"Outcome Curve — how the shape is computed",items:[],desc:"All curve parameters come from the same ppWA-engine that drives the headline Projection. PEAK = grade-mapped point estimate (ppWA put through the empirical tier mapping). L-LIMIT / H-LIMIT = grade-mapped ppWA ± 1.282 × sigma — the 1.282 z-multiplier gives the p10/p90 band of a standard Normal, and sigma is the calibrated prediction uncertainty from the two-stage value model. SKEW = upside-share P(Superstar)+P(All-Star) minus downside-share P(Replacement)+P(Negative), capped to [-1, +1]. The skew is encoded by asymmetric stretch of the L and H limits (max ±30% of half-range) — positive skew widens the H-side (Star-upside profile), negative skew widens the L-side (bust-risk profile). CONFIDENCE = inverse of total range (narrower = more confident); it drives the rendered peak height, not the grade itself."},
     {cat:"Outcome Curve — when to use it vs the Tier-Probability bar chart",items:[],desc:"Both views sit on the Projection tab and they complement each other. The Outcome Distribution Curve is the SHAPE lens — at a glance, is this a tight star-bet, a wide boom-or-bust spread, or a flat replacement-level read? Best for GM-style risk-profile reading: a team with no second-rounders looks for tight, tall peaks; a rebuilding team looks for wide right-skewed shapes. The Tier-Probability bar chart is the PROBABILITY lens — exactly how much of his outcome mass sits in each tier? Best for quantitative decisions: 'what's his All-Star probability', 'what's his bust probability'. Use the curve for narrative + shape, the bars for exact numbers."},
+    {cat:"Outcome Curves Big Board (Sprint-5.1 — Coleman-style range view)",items:[],desc:"A second viewing mode for the Big Board, accessed via the '◉ Curves' toggle next to ☰ Table / ◈ Range / ▥ Tier Board. Renders the top 30 prospects of the filtered class as a vertical list — one row per player — with his identity block on the left (rank, tier-letter A/B/C/D, name, school·class·age), his projected grade plus L-H range in the middle, and a MINI density curve on the same shared 0-100 grade x-axis on the right. A sticky tier-anchor scale at the top labels the 0-19 / 20-39 / 40-49 / 50-59 / 60-69 / 70-79 / 80-87 / 88-94 / 95+ bands so a GM can read across rows and instantly see who lives in which tier. The engine is IDENTICAL to the single-player curve on the Projection tab (same buildOutcomeCurveParams, same empirical anchors, same skew + confidence math) — this view just trades one large curve per page for thirty small curves stacked, so cross-prospect risk-profile comparison becomes one glance. Tier-letter pill (A/B/C/D) is added for Coleman-cadence skim-reading: A = grade ≥ 70 (Fringe All-Star and above), B = 50-69 (Average to Good Starter), C = 40-49 (Impact Role), D = below 40 (Bench/Washout). USE CASE: rebuilding team filters top-30, scans for tall right-skewed shapes (high-upside boom/bust); win-now team scans for narrow tall peaks at grade 55-70 (safe-floor starters); generational team scans for any curves with mass crossing 88. Combined with the existing Range view (horizontal p10-p90 bars + GM-risk sort) and Tier Board (Ben-style splits + archetype columns), the Big Board now offers three distinct decision-support lenses on the same underlying ppWA model."},
     {cat:"Outcome Curve — caveats and refresh cadence",items:[],desc:"NBA-CONDITIONAL: the curve shows the outcome distribution CONDITIONAL on him reaching the NBA. For prospects with P(NBA) < 80%, a caveat strip appears under the curve reminding the reader to weight by his realized probability of reaching the league. TAIL HEAVINESS: peak Wins Added has long right-tail outliers (Jokić = 54.76), so the Generational tier's ceiling is the empirical pool top, not a hard cap. POOL ERA: the empirical pool is mature drafts only (≤2020) — recent breakouts (Wembanyama, Edwards' 2024 peak) are reflected via the 1,784 careered players' realized peaks, not their current trajectory. RECOMMENDED REFRESH: re-fit annually after the NBA season closes by re-running data-pipeline/scripts/compute_outcome_grade.py against the refreshed nba_added_wins_peak.csv. The script writes data-pipeline/data/processed/grade_anchors.json (mirrored to the backend) and prints a comparable-validation table so any drift in tier agreement is visible."},
     {cat:"Risk Profile Tab — Projected NBA Role (pre→post, NEW)",items:[],desc:"Answers 'what does this player's TYPE actually become in the NBA, and what is that worth?' (1) NBA-OUTCOME ROLES: every NBA player (1,780, ≥500 peak-window minutes) is classified into the SAME archetype taxonomy as our prospects, but from his realized NBA peak — using the identical role-score formulas and assignment logic as the prospect pipeline, only ranked against NBA peers instead of college peers. So pre-draft type and NBA type share one comparable label set. Each NBA role's value is measured empirically: Scoring Playmaker (lead guard) is most valuable (median ~25 peak Wins Added, 50% All-Star); 'empty' roles (Non-Specialized / Slashing / Defensive Wing) rarely stick (8–14% reach Role-Player value). (2) TRANSITION: across matured drafted classes (≤2020), P(NBA outcome | pre-draft archetype), INCLUDING an honest 'Did Not Stick' (no established ≥500-min role). The same type's outcome depends heavily on talent — an elite-projected Scoring Playmaker sticks 75% / All-Star 38%, a marginal one 6% / 0% ('a scoring guard has to be elite to play'). (3) PER-PROSPECT PROJECTION: outcome distribution = kernel-weighted comparable past prospects (same pre-draft archetype × similar projected value). Output: most-likely NBA role, full outcome distribution with each role's typical value, P(establishes a role) and P(reaches Role-Player value) as the FLOOR, expected Wins Added. Floor calibration is sound (predicted 0–15%→5% actual, 50–100%→86%; James Wiseman projects 14% stick, Wembanyama 100%). CAVEATS: NBA stats lack height → NBA position is box-derived (occasional guard/wing/big misfires); college-tuned role thresholds on NBA percentiles cause rare star misfires (Harden→Defensive Guard via his turnover profile); extreme-talent prospects (Boozer) have few comps (flagged); draft-position confound (early picks get more opportunity)."},
     {cat:"NBA Role Projections (NEW — Sprint-3.17+)",items:["starCreator"],desc:"A small set of focused, position-aware forecasts answering the three role questions every front office asks: will this prospect become a Creator, an elite Shooter, or an All-Defensive player in the NBA? Each forecast is a calibrated probability on the same scale as the Tier Probabilities (% × 100). All three projections live in their own cards in the Projection tab and share a common methodology so they can be compared side by side. CURRENTLY SHIPPED: Star+ Creator Projection. COMING NEXT: Elite Shooter, All-Defensive Player. SHARED METHODOLOGY: (1) Position-stratified Logistic Regression — separate models for Playmaker / Wing / Big, because the role definitions and signal weights differ structurally (a high-AST guard means something different than a high-AST big). (2) Position-aware target thresholds where the underlying role rate is structurally different — e.g. Star+ Creator-Bigs use USG ≥ 22 / AST ≥ 14 instead of 24 / 18, because Creator-Bigs are mechanically rarer. (3) Isotonic calibration on a held-out 2015-2017 set so predicted probabilities match real observed frequencies (no overconfidence). (4) Bayesian shrinkage per position pulls thin-sample predictions toward the population base rate — k=20 for guards/wings, k=30 for bigs. (5) Triangulated with the Comps Engine v5: 0.50 × Logistic Regression + 0.25 × age-stage cohort baseline + 0.25 × archetype cluster baseline. Three independent views combined. (6) Top-3 SHAP features per prediction expose what drove the score (e.g. 'Usage % (+0.32), Age-adj Production (+0.24), Consensus (+0.18)'). HONEST PERFORMANCE: tested on 2018-2020 prospects (never seen during training). Star+ Creator — Wing Brier 0.047 / AUC 0.90 (world-class), Playmaker AUC 0.74 (solid), Big small validation sample compensated by Bayesian shrinkage. Elite Shooter and All-Defensive will receive the same evaluation when they ship. WHY NO PROSPECT SCORES 95%+: historic base rates are 8-15% per position; a 60% calibrated probability is already a massive lift above the population. Any model showing 95%+ would be overfitting, not signal. These are projections of a SPECIFIC ROLE OUTCOME and complement the existing Tier Probabilities (which forecast value tier independent of role)."},
@@ -11821,6 +11822,246 @@ const TIER_STACK = [
   { name:"All-Star",     color:"#f97316", lo:10,  hi:25  },
   { name:"Superstar",    color:"#fbbf24", lo:25,  hi:50  },
 ];
+
+// ═══════════════════════════════════════════════════════════
+// OUTCOME CURVE BOARD (Sprint-5.1, Tobias 2026-06-23)
+// Coleman-style range-board: every prospect renders as one row with
+// his identity block, grade, and a mini density curve plotted on the
+// shared 0-100 outcome-grade scale.
+//
+// Engine: same buildOutcomeCurveParams used by the Player-Page
+// OutcomeDistributionCurve — same peak Wins Added inputs, same tier
+// mapping, same skew/confidence math. The view only changes from one
+// large curve per page to one small curve per row + a global tier-
+// anchor scale at the top.
+// ═══════════════════════════════════════════════════════════
+function OutcomeCurveBoard({ players, onSelect }) {
+  // Top 30 (one round + change) — Coleman's exact cadence
+  const visible = useMemo(
+    () => (players || []).slice(0, 30),
+    [players],
+  );
+  if (!visible.length) {
+    return (
+      <div className="rounded-xl p-8 text-center text-gray-400"
+        style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+        No prospects to render.
+      </div>
+    );
+  }
+
+  // Layout dimensions for the per-row mini-curve SVG. Identity column on
+  // the left is fixed-width so all curves share the same X-axis at all
+  // viewport widths.
+  const ROW_H = 56;
+  const CURVE_W = 540;
+  const CURVE_H = ROW_H - 12;
+  const M = { left: 8, right: 8, top: 4, bottom: 4 };
+  const px = (g) => M.left + (g / 100) * (CURVE_W - M.left - M.right);
+
+  // Pre-compute curve params for every visible prospect so the body
+  // doesn't recompute mid-render.
+  const rows = useMemo(
+    () => visible.map((p, i) => {
+      const params = buildOutcomeCurveParams(p);
+      return { p, params, rank: i + 1 };
+    }),
+    [visible],
+  );
+
+  // Helper: render the mini density path for one prospect.
+  const renderMiniCurve = (params) => {
+    if (!params) return null;
+    const { peak, lLimit, hLimit, tier } = params;
+    const sigmaLeft  = Math.max(peak - lLimit, 1);
+    const sigmaRight = Math.max(hLimit - peak, 1);
+    const N = 120;
+    let outline = "";
+    let path    = "";
+    const baseY = CURVE_H - M.bottom;
+    const peakY = M.top;
+    for (let i = 0; i <= N; i++) {
+      const g = (i / N) * 100;
+      const y = asymmetricGaussianPdf(g, peak, sigmaLeft, sigmaRight);
+      const X = px(g).toFixed(2);
+      const Y = (baseY - y * (baseY - peakY)).toFixed(2);
+      outline += (i === 0 ? "M " : " L ") + X + "," + Y;
+    }
+    path = `M ${px(0).toFixed(2)},${baseY} ` + outline.slice(1) + ` L ${px(100).toFixed(2)},${baseY} Z`;
+    return (
+      <>
+        <path d={path} fill={tier.color} opacity={0.55}/>
+        <path d={outline} fill="none" stroke={tier.color} strokeWidth={1.4} opacity={0.95}/>
+        {/* Peak marker — short vertical tick at the most-likely outcome */}
+        <line x1={px(peak)} x2={px(peak)} y1={M.top} y2={baseY}
+              stroke={tier.color} strokeWidth={1.2} strokeDasharray="2,2" opacity={0.85}/>
+      </>
+    );
+  };
+
+  // Tier-anchor scale (top sticky header) — Coleman's "0-19 / 20-39 / ... / 95+"
+  const TIER_HEADER = [
+    {lo:1,  hi:19,  label:"0-19",    color:"#ec4899"},
+    {lo:20, hi:39,  label:"20-39",   color:"#f97316"},
+    {lo:40, hi:49,  label:"40-49",   color:"#fbbf24"},
+    {lo:50, hi:59,  label:"50-59",   color:"#86efac"},
+    {lo:60, hi:69,  label:"60-69",   color:"#22c55e"},
+    {lo:70, hi:79,  label:"70-79",   color:"#60a5fa"},
+    {lo:80, hi:87,  label:"80-87",   color:"#3b82f6"},
+    {lo:88, hi:94,  label:"88-94",   color:"#2563eb"},
+    {lo:95, hi:100, label:"95+",     color:"#1d4ed8"},
+  ];
+
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{background:"#0a0e16", border:"1px solid #1f2937"}}>
+      {/* Title strip + reading guide */}
+      <div className="px-5 py-4 border-b" style={{borderColor:"#1f2937"}}>
+        <div className="flex items-baseline gap-3 flex-wrap">
+          <h2 className="text-lg font-bold" style={{color:"#f1f5f9", fontFamily:"'Oswald', sans-serif", letterSpacing:"0.05em"}}>
+            OUTCOME DISTRIBUTIONS
+          </h2>
+          <span className="text-xs uppercase tracking-widest" style={{color:"#9ca3af"}}>
+            {visible[0]?.p?.year || ""} class · top {visible.length} by Projection
+          </span>
+        </div>
+        <p className="text-xs mt-1.5" style={{color:"#9ca3af", lineHeight:1.5}}>
+          Each curve is a probability density on the 0-100 grade scale. <strong style={{color:"#cbd5e1"}}>Peak</strong> = most likely outcome,
+          <strong style={{color:"#cbd5e1"}}> width</strong> = range of plausible ones, <strong style={{color:"#cbd5e1"}}>shape lean</strong> = upside-vs-downside tilt.
+          Same engine as the Projection tab — Coleman-style range view, our ppWA & uncertainty engine underneath.
+        </p>
+      </div>
+
+      {/* Sticky tier-anchor scale header */}
+      <div className="px-5 py-3" style={{background:"#0d1117", borderBottom:"1px solid #1f2937"}}>
+        <div className="flex items-center gap-4">
+          <div style={{width: 36}}/>
+          <div style={{width: 220}}>
+            <div className="text-[10px] uppercase tracking-widest font-semibold" style={{color:"#6b7280"}}>Player</div>
+          </div>
+          <div style={{width: 68}}>
+            <div className="text-[10px] uppercase tracking-widest font-semibold" style={{color:"#6b7280"}}>Grade</div>
+          </div>
+          <div style={{width: CURVE_W, position: "relative", height: 20}}>
+            {/* Tier-anchor labels positioned over the curve area */}
+            {TIER_HEADER.map(t => (
+              <div key={t.label} style={{
+                position: "absolute",
+                left: px(t.lo),
+                width: Math.max(8, px(t.hi) - px(t.lo)),
+                top: 0,
+                textAlign: "center",
+                fontSize: 9,
+                color: t.color,
+                fontWeight: 600,
+                opacity: 0.75,
+              }}>
+                {t.label}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Rows */}
+      <div className="px-5 py-2">
+        {rows.map(({ p, params, rank }) => {
+          if (!params) {
+            // Skip players without enough signal — they still get an identity stub
+            return (
+              <div key={p.slug || p.name || rank} className="flex items-center gap-4 py-2 border-b" style={{borderColor:"#11151c", height: ROW_H}}>
+                <div style={{width:36, textAlign:"right", color:"#4b5563"}} className="text-xs font-bold">{rank}</div>
+                <div style={{width: 220}}>
+                  <div className="text-sm font-semibold cursor-pointer" style={{color:"#f1f5f9"}}
+                       onClick={()=>p.slug && onSelect && onSelect(p.slug)}>
+                    {p.name}
+                  </div>
+                  <div className="text-[10px]" style={{color:"#6b7280"}}>{p.team || "—"} · {p.cls || "—"}</div>
+                </div>
+                <div style={{width: 68, color:"#4b5563"}} className="text-sm">—</div>
+                <div style={{width: CURVE_W, color:"#4b5563"}} className="text-xs italic">insufficient signal</div>
+              </div>
+            );
+          }
+          const { peak, lLimit, hLimit, tier } = params;
+          const grade = peak.toFixed(0);
+          const ageStr = p.age != null ? `${p.age.toFixed(1)} yrs` : "";
+          const tierTag = tier.name.split("/")[0];
+          // Tier-letter pill A/B/C/D — Coleman cadence
+          const tierLetter = peak >= 70 ? "A" : peak >= 50 ? "B" : peak >= 40 ? "C" : "D";
+          return (
+            <div key={p.slug || p.name || rank} className="flex items-center gap-4 py-1.5 border-b hover:bg-white hover:bg-opacity-5 transition-colors"
+                 style={{borderColor:"#11151c", height: ROW_H, cursor: p.slug ? "pointer" : "default"}}
+                 onClick={()=>p.slug && onSelect && onSelect(p.slug)}>
+              {/* Rank */}
+              <div style={{width:36, textAlign:"right"}} className="text-sm font-bold" >
+                <span style={{color:"#9ca3af"}}>{rank}</span>
+              </div>
+              {/* Tier letter + Player identity */}
+              <div className="flex items-center gap-2" style={{width: 220}}>
+                <span style={{
+                  background: tier.color, color:"#fff",
+                  fontSize: 10, fontWeight: 800,
+                  padding: "2px 6px", borderRadius: 4,
+                  letterSpacing: "0.05em",
+                }}>{tierLetter}</span>
+                <div className="overflow-hidden">
+                  <div className="text-sm font-semibold truncate" style={{color:"#f1f5f9", fontFamily:"'Oswald', sans-serif"}}>
+                    {p.name}
+                  </div>
+                  <div className="text-[10px]" style={{color:"#6b7280"}}>
+                    {p.team || "—"} · {p.cls || "—"} · {ageStr}
+                  </div>
+                </div>
+              </div>
+              {/* Grade + Range */}
+              <div style={{width: 68}}>
+                <div className="text-xl font-bold" style={{color: tier.color, lineHeight:1, fontFamily:"'Oswald', sans-serif"}}>{grade}</div>
+                <div className="text-[10px]" style={{color:"#6b7280"}}>{lLimit.toFixed(0)}–{hLimit.toFixed(0)}</div>
+              </div>
+              {/* Mini density curve */}
+              <svg width={CURVE_W} height={CURVE_H}>
+                {/* Tier-bucket faint background bands */}
+                {OUTCOME_GRADE_TIERS.map(t => (
+                  <rect key={`bg-${t.name}-${rank}`}
+                    x={px(t.grade_lo)}
+                    y={M.top}
+                    width={px(t.grade_hi) - px(t.grade_lo)}
+                    height={CURVE_H - M.top - M.bottom}
+                    fill={t.color}
+                    opacity={t.name === tier.name ? 0.12 : 0.04}
+                  />
+                ))}
+                {renderMiniCurve(params)}
+              </svg>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Footer caption + tier legend */}
+      <div className="px-5 py-3" style={{background:"#0d1117", borderTop:"1px solid #1f2937"}}>
+        <div className="flex items-center gap-3 flex-wrap text-[11px]">
+          <span style={{color:"#6b7280"}}>Tiers:</span>
+          {[
+            {l:"A · Star", color:"#3b82f6"},
+            {l:"B · Starter", color:"#22c55e"},
+            {l:"C · Role Player", color:"#fbbf24"},
+            {l:"D · Bench/Washout", color:"#ec4899"},
+          ].map(t => (
+            <span key={t.l} className="inline-flex items-center gap-1">
+              <span style={{background:t.color, width:10, height:10, borderRadius:2, display:"inline-block"}}/>
+              <span style={{color:"#9ca3af"}}>{t.l}</span>
+            </span>
+          ))}
+          <span className="ml-auto" style={{color:"#6b7280"}}>
+            Empirically anchored to NBA-careered pool's peak Wins Added (n=1,784). See Methods → Outcome Grade Scale.
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function RangeView({ players, gmRisk }) {
   // ── Show top 60 (2 full draft rounds) ──
@@ -13418,7 +13659,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
         </div>
         {/* View toggle */}
         <div className="flex gap-1 ml-auto">
-          {[["table","☰ Table"],["range","◈ Range"],["tier","▥ Tier Board"]].map(([v,l])=>(
+          {[["table","☰ Table"],["range","◈ Range"],["curves","◉ Curves"],["tier","▥ Tier Board"]].map(([v,l])=>(
             <button key={v} onClick={()=>setBoardView(v)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
               style={{background:boardView===v?"#6d28d9":"#1f2937",color:boardView===v?"#e9d5ff":"#9ca3af"}}>
               {l}
@@ -13452,6 +13693,13 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
       {boardView === "range" && (
         <div>
           <RangeView players={filtered} gmRisk={gmRisk} />
+        </div>
+      )}
+
+      {/* Outcome-Curves View — Sprint-5.1, Coleman-style mini density curves */}
+      {boardView === "curves" && (
+        <div>
+          <OutcomeCurveBoard players={filtered} onSelect={onSelect} />
         </div>
       )}
 
