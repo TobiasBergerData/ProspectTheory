@@ -6686,6 +6686,28 @@ function DevTrajectoryTab({p}) {
 }
 
 // ═══════════════════════════════════════════════════════════
+// SPRINT-5.5.H — Cumulative-threshold modal-tier helper.
+// Matches the Hero-Card's recalibrateTier logic so both Hero-Card and the
+// RF Proximity display show the same tier. Aspirational/cumulative:
+// highest tier whose cumulative probability clears the calibrated threshold.
+// ═══════════════════════════════════════════════════════════
+function _rfModalTier(tps) {
+  if (!tps) return "intl_career";
+  const pS  = tps.superstar   || 0;
+  const pA  = tps.all_star    || 0;
+  const pSt = tps.starter     || 0;
+  const pR  = tps.roleplayer  || 0;
+  const pRp = tps.replacement || 0;
+  if (pS >= 0.12) return "superstar";
+  if (pS + pA >= 0.18) return "all_star";
+  if (pS + pA + pSt >= 0.26) return "starter";
+  if (pS + pA + pSt + pR >= 0.30) return "roleplayer";
+  if (pS + pA + pSt + pR + pRp >= 0.40) return "replacement";
+  return "intl_career";
+}
+
+
+// ═══════════════════════════════════════════════════════════
 // RF PEAK WINS ADDED CURVE (Sprint-5.5.G)
 // Smooth Gaussian-mixture density on peak_wa axis. Each tier-prob
 // contributes a Gaussian centered at the tier-midpoint, scaled by
@@ -6702,12 +6724,13 @@ function RfPwaCurve({p}) {
   const M = { top: 36, right: 24, bottom: 50, left: 32 };
   const xS = (wa) => M.left + ((wa - X_MIN) / (X_MAX - X_MIN)) * (W - M.left - M.right);
   const TIERS = [
-    {key:"intl_career", color:"#6b7280", lo:X_MIN, hi:0,    center:-2,    sigma:1.5},
-    {key:"replacement", color:"#8b5cf6", lo:0,     hi:0.5,  center:0.25,  sigma:0.4},
-    {key:"roleplayer",  color:"#06b6d4", lo:0.5,   hi:5,    center:2.5,   sigma:1.5},
-    {key:"starter",     color:"#3b82f6", lo:5,     hi:14,   center:9,     sigma:2.5},
-    {key:"all_star",    color:"#f97316", lo:14,    hi:20,   center:17,    sigma:2.0},
-    {key:"superstar",   color:"#fbbf24", lo:20,    hi:X_MAX, center:30,   sigma:5.0},
+    // Sprint-5.5.H: smoother sigmas — original values produced 6 visible per-tier peaks.
+    {key:"intl_career", color:"#6b7280", lo:X_MIN, hi:0,    center:-2,    sigma:3.0},
+    {key:"replacement", color:"#8b5cf6", lo:0,     hi:0.5,  center:0.25,  sigma:1.5},
+    {key:"roleplayer",  color:"#06b6d4", lo:0.5,   hi:5,    center:2.5,   sigma:2.5},
+    {key:"starter",     color:"#3b82f6", lo:5,     hi:14,   center:9,     sigma:3.0},
+    {key:"all_star",    color:"#f97316", lo:14,    hi:20,   center:17,    sigma:3.0},
+    {key:"superstar",   color:"#fbbf24", lo:20,    hi:X_MAX, center:30,   sigma:6.0},
   ];
   const TIER_LABEL = {
     intl_career: "Intl Career", replacement: "Replacement",
@@ -6715,8 +6738,9 @@ function RfPwaCurve({p}) {
     all_star: "All-Star", superstar: "Superstar",
   };
   const total = TIERS.reduce((s,t) => s + (TPS[t.key] || 0), 0) || 1;
-  const modal = TIERS.reduce(
-    (max,t) => (TPS[t.key] || 0) > (TPS[max.key] || 0) ? t : max, TIERS[0]);
+  // Sprint-5.5.H: cumulative-threshold modal (matches Hero-Card recalibrateTier).
+  const modalKey = _rfModalTier(TPS);
+  const modal = TIERS.find(t => t.key === modalKey) || TIERS[0];
 
   // ── Gaussian-mixture density ──
   const N = 240;
@@ -6844,8 +6868,9 @@ function RfTierForecast({p}) {
     {key: "superstar",   label: "Superstar",   color: "#fbbf24", lo: 20,  hi: 40},
   ];
   const total = TIERS.reduce((s,t) => s + (TPS[t.key] || 0), 0) || 1;
-  const modal = TIERS.reduce(
-    (max,t) => (TPS[t.key] || 0) > (TPS[max.key] || 0) ? t : max, TIERS[0]);
+  // Sprint-5.5.H: cumulative-threshold modal (matches Hero-Card recalibrateTier).
+  const modalKey = _rfModalTier(TPS);
+  const modal = TIERS.find(t => t.key === modalKey) || TIERS[0];
   const ax = (wa) => Math.max(0, Math.min(100, ((wa + 8) / 48) * 100));
   const riskColor = rp.outlierRisk === "high" ? "#ef4444"
                   : rp.outlierRisk === "medium" ? "#f59e0b" : "#10b981";
@@ -6855,12 +6880,12 @@ function RfTierForecast({p}) {
     <div className="rounded-2xl p-5" style={{background:"#0d1117",border:`1px solid ${modal.color}55`}}>
       <div className="flex items-baseline justify-between mb-4 flex-wrap gap-2">
         <div>
-          <div className="text-xs uppercase tracking-widest" style={{color:"#9ca3af"}}>Modal Outcome (RF Proximity)</div>
+          <div className="text-xs uppercase tracking-widest" style={{color:"#9ca3af"}}>Projected Tier (RF Proximity)</div>
           <div className="text-2xl font-bold mt-0.5" style={{color:modal.color, fontFamily:"\'Oswald\',sans-serif"}}>
             {modal.label}
           </div>
           <div className="text-xs mt-0.5" style={{color:"#6b7280"}}>
-            {((TPS[modal.key]||0)*100).toFixed(0)}% modal probability
+            {((TPS[modal.key]||0)*100).toFixed(0)}% single-tier mass (projection cumulative-threshold)
           </div>
         </div>
         <div className="text-right">
