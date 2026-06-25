@@ -10761,6 +10761,7 @@ function RiskProfileTab({p}) {
     return (
       <div className="rounded-2xl p-8 text-center text-gray-400"
            style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+      <OutcomeKdeCurve player={p}/>
         No draft risk profile is available for this player yet.
       </div>
     );
