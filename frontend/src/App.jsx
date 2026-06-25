@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, Fragment } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, Cell, ResponsiveContainer, AreaChart, Area, CartesianGrid } from "recharts";
 
 // ═══════════════════════════════════════════════════════════
@@ -107,6 +107,92 @@ const ARCH_COLORS = {
 const valColor = (pctl) => { if(pctl==null)return"#6b7280";if(pctl>=90)return"#22c55e";if(pctl>=75)return"#86efac";if(pctl>=60)return"#a3e635";if(pctl>=40)return"#fbbf24";if(pctl>=25)return"#f97316";return"#ef4444"; };
 const valBg = (pctl) => valColor(pctl)+"18";
 
+// ── Sprint-3.2 v27 Archetype Groups (2026-06-12) ──────────────────────────────
+// Generated from data-pipeline/data/processed/archetype_priors_v27.json.
+// 11 empirically-derived NBA archetype clusters (K-Means on 8 roles + 2 anthro).
+// Each prospect is PLACED into the closest GROUP — the named players below are
+// illustrative MEMBERS of that cluster, NOT individual comparables for the prospect.
+// Star threshold: peak_pie ≥ 18. Color codes: green ≥15%, amber ≥8%, blue ≥4%, gray <4%.
+const ARCHETYPE_V27_PRIORS = {
+  "Two-Way Lead Guard": {
+    pos: "Playmaker", n_nba: 46, starRate: 0.239, median: 5.8, p90: 22.9,
+    groupMembers: ["Shai Gilgeous-Alexander", "James Harden", "Damian Lillard", "Derrick White", "George Hill"],
+    desc: "Cluster of 6'4\"+ lead guards with defensive solidity and scoring volume. Historically the most productive lead-guard archetype.",
+    color: "#22c55e",
+  },
+  "Offensive Lead Guard": {
+    pos: "Playmaker", n_nba: 58, starRate: 0.086, median: 1.8, p90: 15.9,
+    groupMembers: ["Stephen Curry", "Kemba Walker", "Fred VanVleet", "Jalen Brunson", "Trae Young"],
+    desc: "Cluster of 6'2\" lead guards with offense-first skill sets (scoring, shooting, playmaking). Smaller frames, undersized for two-way impact.",
+    color: "#f59e0b",
+  },
+  "Elite Two-Way Forward": {
+    pos: "Wing", n_nba: 81, starRate: 0.148, median: 2.4, p90: 19.7,
+    groupMembers: ["Jayson Tatum", "Paul George", "Draymond Green", "Kawhi Leonard", "Franz Wagner"],
+    desc: "Cluster of 6'8\"+ forwards with complete two-way skill sets (defense, scoring, playmaking). Highest non-guard star rate in the dataset.",
+    color: "#f59e0b",
+  },
+  "Two-Way Wing": {
+    pos: "Wing", n_nba: 128, starRate: 0.062, median: 1.8, p90: 11.7,
+    groupMembers: ["Anthony Edwards", "Donovan Mitchell", "Jimmy Butler", "Khris Middleton", "Josh Hart"],
+    desc: "Cluster of 6'6\" wings with balanced profiles (moderate defense, scoring, spacing). The largest wing cluster — broad distribution from stars to role players.",
+    color: "#3b82f6",
+  },
+  "Combo Scoring Wing": {
+    pos: "Wing", n_nba: 80, starRate: 0.037, median: 1.1, p90: 12.3,
+    groupMembers: ["Russell Westbrook", "Devin Booker", "Immanuel Quickley", "Jamal Murray", "Tyler Herro"],
+    desc: "Cluster of 6'5\" college wings whose careers typically evolve into NBA lead-scorer roles. Pre-draft profile: moderate college USG; NBA outcome: high-volume scoring guards.",
+    color: "#94a3b8",
+    isComboGuard: true,  // pos-disclaimer flag (pre-draft wing → NBA lead guard)
+  },
+  "Power Combo Forward": {
+    pos: "Wing", n_nba: 53, starRate: 0.000, median: 0.1, p90: 11.1,
+    groupMembers: ["Jaylen Brown", "DeMar DeRozan", "Al-Farouq Aminu", "Julius Randle", "Scottie Barnes"],
+    desc: "Cluster of 6'7\"+ physical forwards with defense and rim activity, but limited spacing. Historically below baseline for star outcomes.",
+    color: "#94a3b8",
+  },
+  "3-and-D Specialist Wing": {
+    pos: "Wing", n_nba: 21, starRate: 0.048, median: -0.7, p90: 8.3,
+    groupMembers: ["Jrue Holiday", "Duncan Robinson", "Matisse Thybulle", "Tre Jones", "Kevin Porter Jr."],
+    desc: "Small replacement-level wing cluster (n=21). Mediocre across all skill axes. Historical star rate near zero — most members reach bench-rotation outcomes at best.",
+    color: "#3b82f6",
+    isReplacement: true,
+  },
+  "Two-Way Big": {
+    pos: "Big", n_nba: 40, starRate: 0.050, median: 2.5, p90: 14.8,
+    groupMembers: ["Joel Embiid", "Anthony Davis", "Jaren Jackson Jr.", "DeMarcus Cousins", "Chet Holmgren"],
+    desc: "Cluster of 6'11\" bigs with elite rim protection, defense, and inside scoring. Lower star rate than the skill-big cluster — defensive bigs win less often than offensive ones.",
+    color: "#3b82f6",
+  },
+  "Skilled Offensive Big": {
+    pos: "Big", n_nba: 42, starRate: 0.119, median: 3.7, p90: 23.0,
+    groupMembers: ["Domantas Sabonis", "Kevin Love", "Karl-Anthony Towns", "Blake Griffin", "Evan Mobley"],
+    desc: "Cluster of 6'11\" bigs with elite offensive skill sets (scoring, spacing, playmaking, rebounding). Highest star rate of any big cluster.",
+    color: "#f59e0b",
+  },
+  "Stretch Forward Big": {
+    pos: "Big", n_nba: 23, starRate: 0.000, median: 1.5, p90: 13.8,
+    groupMembers: ["Chandler Parsons", "Michael Porter Jr.", "Lauri Markkanen", "Paolo Banchero", "Luke Kornet"],
+    desc: "Cluster of 6'10\" smaller bigs with spacing profiles but limited defense. Floor-spacing forwards, historically zero star outcomes.",
+    color: "#94a3b8",
+  },
+  "Anchor Rim Big": {
+    pos: "Big", n_nba: 26, starRate: 0.115, median: -0.5, p90: 17.6,
+    groupMembers: ["Jarrett Allen", "Steven Adams", "DeAndre Jordan", "Andre Drummond", "Chris Boucher"],
+    desc: "Cluster of 6'11\" pure rim anchors (high rim protection, no spacing). Traditional rim-rolling centers.",
+    color: "#f59e0b",
+  },
+};
+
+// Confidence buckets — describes how cleanly the prospect's feature vector
+// sits inside one cluster vs. its runner-up. NOT a player-quality judgment.
+function archetypeV27Bucket(conf) {
+  if (conf == null) return null;
+  if (conf >= 0.50) return { label: "Strong fit", color: "#22c55e", bg: "rgba(34,197,94,0.12)" };
+  if (conf >= 0.20) return { label: "Moderate fit", color: "#f59e0b", bg: "rgba(245,158,11,0.12)" };
+  return { label: "Loose fit", color: "#94a3b8", bg: "rgba(148,163,184,0.12)" };
+}
+
 // ── Position-spezifische Empirical-Percentile (BartTorvik 2008-2026) ──
 // Tobias 2026-05-09: Frontend-Fallback wenn API kein pctl_ast / pctl_to liefert.
 // AST% Verteilung pro Position (D1 NCAA, ≥10 GP):
@@ -153,40 +239,48 @@ const pct = (v) => v!=null?(v*100).toFixed(1)+"%":"—";
 // ── Anthropometric NBA-Tier-Median Schwellen (Tobias 2026-05-09 v2) ───────
 // 5-Position-Klassifikation (PG/SG/SF/PF/C) — präziser als 3-Position-System
 // weil "Wing" zu breit war (umfasste SG 6'5" und SF 6'8" gleichzeitig).
-// Quelle: NBA Combine Database 2010-2024 (1835 Spieler), gefiltert nach
-// Career-Outcome-Tier (peak_pie ≥40/25/15/8 = Sup/AS/St/RP) × NBA-Position.
-//   ht = Höhe mit Schuhen (NBA-Convention, +1.25″ shoe-lift)
+// Quelle (Tobias 2026-06-23, recalibrate_anthro_tier_medians.py): per-cell
+// MEDIAN aus NBA Combine 2000-2022 × nba_added_wins_peak (n=231 joined),
+// gebucketed in 4 Career-Tiers via peak_wa-Quantilen
+// (Replacement≤0.8 / RP≤3.3 / Starter≤10.1 / All-Star>10.1). Monotonisiert
+// entlang der Tier-Achse (jedes höhere Tier ≥ vorheriges).
+//   ht = Höhe mit Schuhen (NBA-Convention: combine_hgt_no_shoes + 1.25″)
 //   wt = Gewicht (lbs)
 //   ws = Wingspan (inches)
 //   sr = Standing Reach (inches)
+// Caveat: Wingspan/Standing-Reach zeigen non-monoton im Raw — All-Star-Pool
+// hat Selection-Bias (Top-Picks skippen Combine), und Skill schlägt Anthro
+// bei den absoluten Outliers (Brunson 75″ ws, Trae 75″ ws sind All-Stars).
+// Monotonisierung trägt diese Information explizit, aber die Tier-Marker
+// sind reference, kein outcome predictor. Siehe Methods Tab.
 const ANTHRO_TIER_THRESHOLDS = {
   Replacement: {
-    PG: {ht:74.5, wt:185, ws:77.5, sr:97.5},
-    SG: {ht:76.5, wt:195, ws:80.5, sr:101.0},
-    SF: {ht:79.0, wt:210, ws:82.5, sr:104.5},
-    PF: {ht:81.5, wt:228, ws:85.0, sr:107.0},
-    C:  {ht:83.0, wt:243, ws:87.5, sr:110.5},
+    PG: {ht:74.38, wt:196, ws:76.5,  sr:97.25},
+    SG: {ht:77.25, wt:199, ws:81.0,  sr:102.0},
+    SF: {ht:80.0,  wt:218, ws:82.75, sr:105.0},
+    PF: {ht:81.25, wt:236, ws:85.0,  sr:106.5},
+    C:  {ht:84.5,  wt:247, ws:87.5,  sr:110.5},
   },
   "Role Player": {
-    PG: {ht:75.0, wt:190, ws:79.0, sr:99.0},
-    SG: {ht:77.0, wt:200, ws:81.5, sr:102.0},
-    SF: {ht:79.5, wt:215, ws:84.0, sr:105.5},
-    PF: {ht:82.0, wt:235, ws:87.0, sr:108.5},
-    C:  {ht:83.5, wt:250, ws:89.0, sr:112.0},
+    PG: {ht:75.0,  wt:196, ws:78.0,  sr:97.5},
+    SG: {ht:77.25, wt:211, ws:81.0,  sr:102.0},
+    SF: {ht:80.0,  wt:223, ws:84.0,  sr:105.0},
+    PF: {ht:81.25, wt:241, ws:86.0,  sr:106.5},
+    C:  {ht:84.5,  wt:247, ws:87.62, sr:110.5},
   },
   Starter: {
-    PG: {ht:75.5, wt:195, ws:80.5, sr:100.5},
-    SG: {ht:77.5, wt:205, ws:82.5, sr:103.5},
-    SF: {ht:80.0, wt:220, ws:85.0, sr:106.5},
-    PF: {ht:82.5, wt:245, ws:88.5, sr:110.5},
-    C:  {ht:84.0, wt:255, ws:90.5, sr:113.5},
+    PG: {ht:75.38, wt:196, ws:78.0,  sr:97.5},
+    SG: {ht:77.25, wt:211, ws:81.0,  sr:102.0},
+    SF: {ht:80.0,  wt:228, ws:84.0,  sr:105.0},
+    PF: {ht:81.25, wt:241, ws:86.0,  sr:107.5},
+    C:  {ht:84.5,  wt:255, ws:90.5,  sr:113.5},
   },
   "All-Star": {
-    PG: {ht:75.5, wt:198, ws:81.0, sr:101.0},
-    SG: {ht:78.0, wt:210, ws:84.0, sr:105.0},
-    SF: {ht:80.5, wt:225, ws:86.0, sr:107.5},
-    PF: {ht:82.5, wt:250, ws:89.5, sr:112.0},
-    C:  {ht:84.5, wt:260, ws:92.0, sr:115.0},
+    PG: {ht:75.38, wt:196, ws:79.62, sr:98.25},
+    SG: {ht:77.75, wt:211, ws:81.5,  sr:102.75},
+    SF: {ht:80.5,  wt:228, ws:84.0,  sr:105.0},
+    PF: {ht:81.75, wt:247, ws:86.25, sr:108.5},
+    C:  {ht:84.5,  wt:257, ws:90.5,  sr:113.5},
   },
 };
 
@@ -204,26 +298,38 @@ function inferDetailedPos(pos3, htIn, astP) {
   return "PF";
 }
 
+// TIER_THRESHOLDS — empirically calibrated medians (Tobias 2026-06-02).
+// Method: NBA-drafted players from mature classes 2008-2018 (n=353) grouped by
+// their realized peak Wins Added outcome (NBA tier = percentile-bucket of peak_wa:
+// Replacement≥0.8 / Role Player≥3.3 / Starter≥10.1 / All-Star≥22.5). For each
+// (tier × position) we compute the MEDIAN of each pre-draft college stat across
+// the cohort. The frontend then derives p25 = median*0.75 and p75 = median*1.30
+// for the in-range / below / critical bands. Values are monotonized along the
+// tier axis (higher tier never below lower tier; TO% inverse) — small distortion
+// to avoid the unintuitive case "starter threshold > all-star threshold". The
+// real reason for inversions is that pre-draft college stats only weakly
+// separate Starter and All-Star: the actual talent spike happens AFTER the
+// draft via role + minutes + team context. Caveat in Methods Tab.
 const TIER_THRESHOLDS = {
   Replacement: {
-    Playmaker:{bpm:2.0,usg:20,ts:52,ast_p:22,to_p:16,stl_p:2.0,blk_p:0.5,orb_p:2,drb_p:12,ortg:105},
-    Wing:{bpm:1.5,usg:18,ts:53,ast_p:10,to_p:14,stl_p:1.5,blk_p:1.5,orb_p:3,drb_p:15,ortg:106},
-    Big:{bpm:2.5,usg:19,ts:55,ast_p:8,to_p:14,stl_p:1.0,blk_p:5.0,orb_p:8,drb_p:18,ortg:108},
+    Playmaker:{bpm:8.5,usg:27.2,ts:56.6,ast_p:32.5,to_p:17.3,stl_p:2.3,blk_p:0.7,orb_p:2.0,drb_p:10.4,ortg:131.8},
+    Wing:{bpm:6.8,usg:25.1,ts:56.7,ast_p:13.0,to_p:15.7,stl_p:1.9,blk_p:1.9,orb_p:5.7,drb_p:14.3,ortg:124.6},
+    Big:{bpm:6.2,usg:21.8,ts:58.7,ast_p:6.7,to_p:17.3,stl_p:1.4,blk_p:5.9,orb_p:10.8,drb_p:19.8,ortg:119.2},
   },
   "Role Player": {
-    Playmaker:{bpm:4.5,usg:22,ts:54,ast_p:25,to_p:15,stl_p:2.3,blk_p:0.6,orb_p:2.5,drb_p:13,ortg:108},
-    Wing:{bpm:4.0,usg:20,ts:55,ast_p:12,to_p:13,stl_p:1.8,blk_p:2.0,orb_p:3.5,drb_p:16,ortg:109},
-    Big:{bpm:5.0,usg:21,ts:57,ast_p:10,to_p:13,stl_p:1.2,blk_p:6.0,orb_p:9,drb_p:20,ortg:111},
+    Playmaker:{bpm:9.1,usg:28.7,ts:56.8,ast_p:32.5,to_p:16.7,stl_p:2.8,blk_p:0.7,orb_p:3.2,drb_p:14.3,ortg:133.6},
+    Wing:{bpm:7.5,usg:25.3,ts:57.5,ast_p:13.3,to_p:14.8,stl_p:2.2,blk_p:2.0,orb_p:5.7,drb_p:16.1,ortg:127.2},
+    Big:{bpm:8.6,usg:22.2,ts:58.8,ast_p:9.2,to_p:16.2,stl_p:1.7,blk_p:5.9,orb_p:10.8,drb_p:22.1,ortg:119.9},
   },
   Starter: {
-    Playmaker:{bpm:7.0,usg:25,ts:56,ast_p:28,to_p:14,stl_p:2.5,blk_p:0.8,orb_p:3,drb_p:14,ortg:112},
-    Wing:{bpm:6.5,usg:23,ts:57,ast_p:14,to_p:12,stl_p:2.0,blk_p:2.5,orb_p:4,drb_p:17,ortg:112},
-    Big:{bpm:7.5,usg:23,ts:59,ast_p:12,to_p:12,stl_p:1.5,blk_p:7.0,orb_p:10,drb_p:22,ortg:114},
+    Playmaker:{bpm:9.1,usg:28.7,ts:57.0,ast_p:32.5,to_p:16.7,stl_p:3.0,blk_p:1.1,orb_p:3.7,drb_p:14.3,ortg:133.6},
+    Wing:{bpm:7.6,usg:25.3,ts:58.4,ast_p:14.2,to_p:14.8,stl_p:2.2,blk_p:2.8,orb_p:7.3,drb_p:16.1,ortg:127.2},
+    Big:{bpm:8.6,usg:23.4,ts:62.1,ast_p:9.2,to_p:16.2,stl_p:1.7,blk_p:7.8,orb_p:11.8,drb_p:22.1,ortg:124.0},
   },
   "All-Star": {
-    Playmaker:{bpm:10.0,usg:28,ts:59,ast_p:32,to_p:13,stl_p:2.8,blk_p:1.0,orb_p:3.5,drb_p:15,ortg:118},
-    Wing:{bpm:9.5,usg:26,ts:60,ast_p:16,to_p:11,stl_p:2.3,blk_p:3.0,orb_p:5,drb_p:19,ortg:117},
-    Big:{bpm:10.5,usg:26,ts:62,ast_p:14,to_p:11,stl_p:1.8,blk_p:8.5,orb_p:11,drb_p:24,ortg:119},
+    Playmaker:{bpm:9.1,usg:28.7,ts:59.5,ast_p:32.5,to_p:16.7,stl_p:3.0,blk_p:1.1,orb_p:3.7,drb_p:14.3,ortg:137.3},
+    Wing:{bpm:8.1,usg:26.1,ts:58.4,ast_p:14.4,to_p:14.8,stl_p:2.3,blk_p:2.8,orb_p:7.3,drb_p:18.9,ortg:127.2},
+    Big:{bpm:8.6,usg:23.4,ts:62.1,ast_p:9.2,to_p:16.2,stl_p:1.7,blk_p:10.6,orb_p:13.1,drb_p:22.1,ortg:124.0},
   },
 };
 
@@ -277,10 +383,21 @@ const METHODS = {
     formula: "(pctl(STL%) × 0.35 + pctl(BLK%) × 0.35 + pctl(DBPM) × 0.30) × Intl_Adj",
     desc: "Position-weighted defensive value. International players get a 1.15× uplift as FIBA rules and pace suppress raw defensive stats. Stocks threshold bonus for dual-threat defenders.",
   },
+  // Sprint-3.17 D.7 (2026-06-14): NBA Projection — Star+ Creator probability.
+  // Lives in the Projections section, scored on the same calibrated-probability
+  // scale as the Tier Probabilities around it (NOT the percentile-rank scale
+  // of the skill pillars).
+  starCreator: {
+    name: "Star+ Creator Projection",
+    formula: "Score = calibrated probability × 100  (same scale as Tier Probabilities)\nP(Star+) = 0.50 × LR(features)  +  0.25 × cohort baseline  +  0.25 × archetype cluster\nPosition-aware Bayesian shrinkage + isotonic calibration on a held-out 2015-2017 set.",
+    desc: "A forecast — NOT a current-skill measurement.\n\nTHE QUESTION: what is the probability this prospect becomes a Star+ Creator in the NBA? Star+ Creator = peak All-Star tier (peak_pie ≥ 6.6) AND high on-ball usage (≥24%, Bigs ≥22%) AND high passing involvement (≥18%, Bigs ≥14%).\n\nHOW TO READ THE SCORE:\nThe number is the calibrated probability × 100 — exactly the same scale as the Tier Probabilities ('All-Star: 26%, Starter: 38%, …') displayed around it. A score of 60 means a 60% probability of becoming a Star+ Creator.\n\nThe historic population base rate is only 8-15% per position. Anchors:\n  ≥ 50  exceptional Creator profile — well above the base rate\n  30-50 high Creator potential\n  15-30 average to above-average\n  ≤ 15  unlikely Creator\n\nNo prospect realistically scores 95%+. Anything that high would mean the model is overfitting, not signal.\n\nHOW THE MODEL WORKS:\n1. Position-stratified Logistic Regression — separate models per Playmaker / Wing / Big, trained on 472 historic prospects (2008-2014). 14 input features: USG%, TS%, AST%, height, age-adjusted production, consensus rank, league strength, defensive BPM, AST/USG ratio, scorer-tilt, plus position-specific signals.\n2. Calibrated on a held-out 2015-2017 set so predicted probabilities match real observed frequencies (no overconfidence).\n3. Tested on 2018-2020 prospects (never seen during training). Wing models — Brier 0.047, AUC 0.90, world-class. Playmaker — AUC 0.74, solid. Big — small validation sample (1 Star+ Big in 2018-2020); Bayesian shrinkage compensates.\n4. Triangulated with the Comps Engine v5 — Phase B model + age-stage cohort baseline + archetype cluster baseline. Three independent views of the same question, combined 50/25/25.\n5. Top-3 SHAP features per prediction expose what drove the score (e.g. 'Usage % (+0.32), Age-adjusted Production (+0.24), Consensus (+0.18)').\n\nWHY THE SCORE IS CONSERVATIVE:\nBayesian shrinkage pulls thin-sample predictions toward the population base rate. Triangulation anchors the score to what comparable historic prospects actually achieved. Both prevent overconfidence on small training sets, especially for Bigs (only 16 historic Star+ Big Creators in 12 years).\n\nFor what the prospect produces RIGHT NOW (not the projection), see the Creation skill pillar.",
+  },
+  // Sprint-3.17 D.7 (2026-06-14): Creation = SKILL pillar (current production).
+  // The Star+ Creator PROJECTION lives in a separate field (starCreator).
   selfCreation: {
-    name: "Box Creation",
-    formula: "pctl(USG% × TS%) within position group",
-    desc: "Efficient volume scoring: how much offense does a player create at what efficiency? High USG × high TS = elite shot-creator. Works for both NCAA and international players. Position-percentiled (0-100).",
+    name: "Creation",
+    formula: "L1 Translation:  USG_t = USG × league_strength_combined ;  AST_t = AST% × league_strength_combined\nL2 Composite (same v2 formula with translated inputs):\n   Self-Created Scoring = USG_t × TS × Self-Share\n   Passing Creation     = AST_t × clamp(AST/TO, 0.5, 2.5) ÷ 2.5\n   Position weights: PG 40/60 · Wing 70/30 · Big 80/20 (scoring/passing)\nL3 Anchor: position-stratified percentile rank vs Draft Pool 2008-2020 ∩ peak_pie known (n≈640).",
+    desc: "What the prospect produces RIGHT NOW — a skill measurement, not a forecast.\n\nThis pillar measures total offensive creation, both shots the player generates himself and possessions he creates for teammates. Sprint-3.22 update: a NBA-Stats-Pro three-layer backend (Translation + Composite + Anchored Percentile) produces a single 0-100 number that is comparable across NCAA and international prospects.\n\nWHY THE TRANSLATION:\nRaw college USG and AST do not transfer 1:1 between leagues. A 28% USG in the Euroleague is harder to generate than a 28% USG in a Mid-Major NCAA conference. The Translation layer multiplies USG and AST by `league_strength_combined` (intl = league_weight, NCAA = conf_strength) — putting Doncic at Real Madrid and Boozer at Duke on the same scale.\n\nWHY THE ANCHOR:\nRaw composite values don't have a natural interpretation. The Draft Pool — ~640 historic prospects 2008-2020 with known NBA peak_pie — IS the natural reference. Position-stratified percentile rank against this pool gives a clean reading.\n\nSCALE ANCHORS:\n  50 — average draft prospect\n  75 — solid NBA rotation player\n  85 — All-Star path\n  95+ — Star path\n\nA value of 90 means: 'this prospect creates better than 90% of historic draft prospects at his position'.\n\nTWO COMPONENTS WITHIN THE COMPOSITE (unchanged from v2):\n\n• Self-Created Scoring (USG_t × TS × Self-Share): translated on-ball volume × shot efficiency × the share of shots that are NOT assisted (from play-by-play; box-score proxy for international prospects).\n\n• Passing Creation (AST_t × Quality): translated assist rate, weighted by AST/TO ratio.\n\nPosition weighting (PG 40/60, Wing 70/30, Big 80/20) reflects role expectations.\n\nFor the projection of whether he'll become a Star+ Creator in the NBA (a separate, calibrated probability forecast), see the Star+ Creator Projection in the NBA Projections section.",
   },
   overall: {
     name: "Overall Production Rating",
@@ -332,22 +449,32 @@ const METHODS = {
 // ═══════════════════════════════════════════════════════════
 // BADGE DEFINITIONS (Expanded — 40+ badges with International & Youth Engine)
 // ═══════════════════════════════════════════════════════════
+// BADGE_DEFS — Single Source of Truth for badge tooltips (display layer).
+//
+// Tobias 2026-06-04 (Sprint-1): Konsolidiert. Bis hierhin gab es 9 Duplikate
+// (z.B. "Elite Shooting", "High Feel", "Stocks Machine"), wo die spätere
+// Backend-Pipeline-rule-Definition (10c) die frühere Frontend-Definition
+// stumm überschrieb (JavaScript last-write-wins). Resultat: Tooltip zeigte
+// rule X, aber Badge triggerte rule Y im Backend. Pro Badge ist jetzt EINE
+// canonical Definition aktiv.
+//
+// Architektur — zwei Compute-Quellen liefern Badge-Namen:
+//   (a) FRONTEND-COMPUTED: tmp_/compute-Funktion (this file, Z. ~665+),
+//       rule = die in der Funktion enkodierte Schwellenwerte
+//   (b) BACKEND-COMPUTED:  10c_ml_calibration.py Pipeline, rule = wie in
+//       der Pipeline definiert (canonical, da die "echte" Quelle)
+// Bei Konflikt gewinnt die Backend-rule, weil das Backend die Badges
+// tatsächlich vergibt (Frontend-compute ist Fallback für Spieler ohne
+// Backend-Badges). Frontend-only rules (z.B. "Modern Rim Anchor", die
+// nicht im Backend definiert sind) bleiben mit ihrer Frontend-rule.
 const BADGE_DEFS = {
   // ── YELLOW — Shot profile / style tags (neither good nor bad) ──
   "Moreyballer":            { cat:"yellow", rule:"≥75% of shots from rim + 3P + FTs",   desc:"Shot distribution is heavily skewed toward high-value zones (rim, 3P, free throws) with minimal mid-range. Named after former Rockets GM Daryl Morey who popularized this approach. This reflects shot selection only — not skill level." },
-  // ── GREEN — Elite NBA-scalable skills ──
-  "Elite Shooting":         { cat:"green", rule:"3P%>40 & 3P_Freq>30% & FT%>85",       desc:"Top-tier shooting across both lines + elite volume. Most translatable skill in modern NBA. Berger (2022): FT% is the #1 predictor." },
-  "Floor General":          { cat:"green", rule:"(G/W) AST/TO>2.2 & AST%>25",          desc:"Elite decision-making with vision. Creates for others without turnovers — the rarest guard/wing skill." },
-  "Two-Way Wing":           { cat:"green", rule:"(W) 3P%>35 & (STL%>2.2 OR DBPM>2.0)",desc:"Shooting + perimeter defense. Most coveted role player archetype in modern NBA. Immediate starter value." },
+  // ── GREEN — Frontend-only badges (no backend pipeline counterpart) ──
   "Modern Rim Anchor":      { cat:"green", rule:"(B) BLK%>4.0 & DBPM>2.5",            desc:"Elite rim protection with overall defensive impact. Anchors a top-10 defense by itself." },
-  "Passing Hub":              { cat:"green", rule:"(B) AST%>18 & AST/TO>1.2",            desc:"Playmaking big — Jokic/Draymond archetype. Creates from the post/elbow with low turnovers. Extremely rare." },
-  "Stocks Machine":         { cat:"green", rule:"(STL%+BLK%)>4.8",                     desc:"Defensive disruption at both perimeter and rim. Historically rare combination that warps opposing offense." },
-  "Magnetic Hands":         { cat:"green", rule:"ORB%>12 & DRB%>25",                   desc:"Elite rebounder on both ends of the floor. Offensive rebounds create second chances, defensive boards start transition. This player dominates the glass." },
   "Versatile Stopper":      { cat:"green", rule:"(W/B) Ht>=6'7\" & STL%>1.6 & BLK%>1.8",desc:"Length + perimeter + rim. Can guard 1-through-5 in switching schemes. Premium defensive versatility." },
-  "Transition Terror":      { cat:"green", rule:"(G/W) STL%>2.5 & Dunk%>60th pctl",   desc:"Creates fast breaks via steals and finishes above the rim. Free points in transition. Fallback: STL%>2.8 & 2P%>55 (for intl without dunk data)." },
   "FT Grifter":             { cat:"green", rule:"FTr>45 & (Rim%>40th pctl OR USG%>24)",desc:"Elite at drawing fouls through contact. Free throws = free points. High FTr at volume is extremely valuable." },
   "Efficient High Usage":   { cat:"green", rule:"USG>28 & TO%<12 & TS%>58",            desc:"Handles elite volume without efficiency collapse. The 'carry' badge — this player IS the offense." },
-  "High Feel Athlete":      { cat:"green", rule:"Feel>75 & Func Ath>75",               desc:"Rarest badge — elite IQ + elite athleticism. Almost always translates to NBA." },
   "Lurking Elite":          { cat:"green", rule:"USG%<20 & BPM>7.0 & TS%>62",          desc:"The Haliburton-Effect: Massively underutilized talent. Low usage masks star-level production. Efficiency explodes in a larger NBA role." },
   "Analytics Darling":      { cat:"green", rule:"BPM>8.0 & TS%>60 & USG%<22",          desc:"Maximum efficiency at moderate volume — the analytics dream. Statistical impact far exceeds perception." },
   "Efficiency Monster":     { cat:"green", rule:"eFG%>60 & AST/TO>2.0 & STL%>2.0",    desc:"Elite efficiency + elite decision-making + defensive activity. Multi-pillar excellence that guarantees NBA value." },
@@ -358,14 +485,17 @@ const BADGE_DEFS = {
   "International Prodigy":  { cat:"green", rule:"Age < Avg-1.5yr & EFF top 10 pctl",   desc:"1.5+ years younger than tournament peers while statistically dominating. Historically the strongest predictor of NBA stardom. Precociousness multiplier: 1.5x risk reduction.", icon:"globe" },
   "Pro-Ready Teen":         { cat:"green", rule:"Pro League & Age<19 & BPM>2.0",       desc:"Positive impact as a teenager in a professional men's league (ACB, EuroLeague, BBL). Physically and mentally NBA-ready before most prospects enter college.", icon:"globe" },
 
-  // ── GREEN — Server-generated (10c pipeline) ──
-  "High Feel":                { cat:"green", rule:"Feel Score > 80",                     desc:"Elite basketball IQ. Reads the game ahead of the play — AST/TO ratio, USG efficiency, and BPM all signal processing speed beyond peers." },
+  // ── GREEN — Server-generated, no Frontend-side duplicates ──
+  // "High Feel" lebt jetzt unten im Backend-canonical Block (rule:feel_score>75)
+  // — die alte Definition hier wurde 2026-06-04 entfernt (war "Feel Score > 80",
+  // konfligierte mit der Backend-rule und wurde durch JavaScript last-write-wins
+  // ohnehin stumm überschrieben).
   "Good Defensive Baseline":       { cat:"green", rule:"Def Score > 80",                      desc:"Defensive engine. Elite combination of rim protection, steal rate, and DBPM. Anchors team defense and dictates opponent shot quality." },
   "Rim Protector":          { cat:"green", rule:"BLK% > 5.0 & Height ≥ 6'10\"",       desc:"Elite shot-blocking big. Deters drives and alters shots. The most impactful single defensive skill in basketball." },
   "Self-Creator":           { cat:"green", rule:"Box Creation Percentile > 75",             desc:"Elite offensive creator. High scoring efficiency at volume + generates scoring for teammates. Box Creation = USG×TS + Assist Creation." },
   "Swiss Army Knife":       { cat:"green", rule:"Role Versatility > 75 & 4+ roles > 50", desc:"Elite multi-role utility. Can credibly play 4+ distinct NBA roles. Coaches never have to take this player off the floor — fits every lineup." },
   "Young for Class":        { cat:"green", rule:"Age < expected for class year",         desc:"Younger than classmates. A 17-year-old Freshman, 19-year-old Junior, or any player significantly below the typical age for their class year. More development runway than peers at the same stage." },
-  "Scoring Playmaker":    { cat:"green", rule:"Playmaker & USG>25 & TS%>55",         desc:"Dual-threat point guard. Scores efficiently at high volume while maintaining playmaking. The most coveted archetype in modern NBA." },
+  "Possession Demon":       { cat:"green", rule:"All 4 CFFR Factors positive (min ≥ 55) & mean ≥ 70", desc:"Helps on all four possession dimensions — shoots efficiently (eFG), protects the ball (TO), generates extra possessions (OREB), and draws fouls (FTR). Rare composite of value-per-possession. Role-context-adjusted via CFFR z-scores." },
 
   // ── YELLOW — Potential / Swing skills ──
   "Latent Sniper":          { cat:"yellow", rule:"FT%>85 & 3P%<33",                    desc:"Elite FT% signals neuromuscular shooting consistency that hasn't yet translated to 3P range. Bayesian prior strongly favors breakout — mechanics are there, volume will follow." },
@@ -391,9 +521,82 @@ const BADGE_DEFS = {
   "Passive Defender":       { cat:"red",   rule:"STL%+BLK%<2.5 & PFR<2.5",            desc:"Low stocks AND low fouls = not engaging defensively. This player avoids contact on both ends — no steals, no blocks, no fouls. At the NBA level, passive defenders get targeted in pick-and-roll and isolation." },
   "Old for Class":          { cat:"red",   rule:"Age > 22.5",                          desc:"Older than typical draft prospect. Development runway is shorter; what you see is closer to the ceiling." },
   "Turnover Prone":         { cat:"red",   rule:"TO% > 25",                            desc:"Excessive turnovers at any position. Ball security is a fundamental NBA requirement that doesn't improve easily." },
+
+
+  // ── GREEN — Backend-canonical (10c pipeline rules) ─────────────────────
+  // These badges are emitted by 10c_ml_calibration.py. Their `rule` strings
+  // reflect the actual backend thresholds (verified 2026-06-04). Previously
+  // duplicated in two places with conflicting rules; consolidated here.
+  "Elite Shooting":         { cat:"green", rule:"role_spacer>85 & 3P%>36 (or FT>82 intl)",  desc:"Elite spot-up shooter. Top-percentile spacing role plus efficient three-point conversion. Forces defensive close-outs that bend NBA defenses." },
+  "Floor General":          { cat:"green", rule:"PM/Wing & playmaker>70 & AST%>20 & A/TO>1.8", desc:"Reliable primary or secondary creator with positive decision-making. High assist rate paired with low turnovers signals NBA-ready playmaking." },
+  "Passing Hub":            { cat:"green", rule:"Big & AST%>15",                            desc:"Rare distributing big. Connects offense from the elbow or top of the key. Becomes a half-court engine in 5-out lineups." },
+  "High Feel":              { cat:"green", rule:"feel_score>75",                            desc:"Elite basketball IQ in the box score: efficient touches, low turnovers, smart shot selection. Translates to NBA pace and complexity." },
+  "High Feel Athlete":      { cat:"green", rule:"func_ath>75 & feel>60",                    desc:"Functional athletic profile combined with above-average feel. Tools plus IQ — the most common shared trait among All-Star prospects." },
+  "Stocks Machine":         { cat:"green", rule:"STL% + BLK% > 6.0",                        desc:"High-event defender. Generates extra possessions through deflections and rim contests. The defensive analogue of a self-creator." },
+  "Two-Way Wing":           { cat:"green", rule:"Wing & STL%>2.5 & spacer>65",             desc:"Wing with both defensive activity and floor-spacing range. The most coveted lineup-flex archetype in the modern NBA." },
+  "Magnetic Hands":         { cat:"green", rule:"ORB%>12 & DRB%>25",                        desc:"Elite rebounding profile on both ends. Extends possessions and ends them — a quiet but durable NBA edge." },
+  "Transition Terror":      { cat:"green", rule:"G/W & STL%>2.5 & DunkRate>8 (or 2P%>55 fallback)", desc:"Generates and finishes in transition. High steal rate fueling fast breaks plus efficient open-floor scoring. Hard to scheme against." },
+  "High Maintenance":       { cat:"red",   rule:"CFFR < 40 (deep red zone of Net Possession Value)", desc:"Drains team possessions at a level rarely seen in NBA contributors. Net Possession Value is in the bottom ~8% of college players — multiple Four Factors (eFG / TO / OREB / FTR) are well below role expectation. Historical bust rate at this threshold is ~54% vs ~47% base." },
 };
 
-// ── Position group for badge logic (consistent with resolvePosition) ──
+// ── Sprint-3.40 Skill Intersections (Tobias 2026-06-16) ──────────────────
+// Constants pre-computed from data-pipeline/scripts/16_skill_intersections.py
+// against NBA-careered pool 2008-2020 (n=919, intl-supplemented via NFKD-join
+// on nba_added_wins_peak.csv). To refresh: re-run the script and copy the
+// extracted constants block. See `data/processed/skill_intersections.md`.
+//
+// Why only 2 pairs surfaced: continuous-slope regression (peak WA ~ min(z_a, z_b))
+// p < 0.05 with slope > +1.5 WA/+1σ ONLY for these two pairs. The four rejected
+// pairs are listed transparently in the UI footer.
+const SKILL_INTERSECTIONS = {
+  // Plus key names = frontend player-object keys (orbP/astP/blkP from
+  // inject_season_advanced.py), NOT the raw CSV column names.
+  pos_stats: {
+    Playmaker: {orbP: {mu: 3.050,  sig: 1.487}, astP: {mu: 27.189, sig: 8.393}, blkP: {mu: 0.924, sig: 0.777}},
+    Wing:      {orbP: {mu: 6.269,  sig: 3.582}, astP: {mu: 13.227, sig: 5.517}, blkP: {mu: 2.244, sig: 1.924}},
+    Big:       {orbP: {mu: 10.871, sig: 3.047}, astP: {mu: 9.001,  sig: 4.628}, blkP: {mu: 5.575, sig: 3.112}},
+  },
+  outcomes: {
+    crasher_distributor: {
+      Playmaker: {above: {n: 44, star: 47.7, bust: 22.7, meanWA: 9.06}, baseline: {n: 146, star: 23.3, bust: 43.8, meanWA: 4.23}},
+      Wing:      {above: {n: 62, star: 32.3, bust: 40.3, meanWA: 6.51}, baseline: {n: 479, star: 18.8, bust: 44.9, meanWA: 3.31}},
+      Big:       {above: {n: 36, star: 36.1, bust: 30.6, meanWA: 8.61}, baseline: {n: 152, star: 25.0, bust: 41.4, meanWA: 4.02}},
+    },
+    two_way_skill: {
+      Playmaker: {above: {n: 40, star: 50.0, bust: 20.0, meanWA: 9.70}, baseline: {n: 150, star: 23.3, bust: 44.0, meanWA: 4.19}},
+      Wing:      {above: {n: 70, star: 30.0, bust: 40.0, meanWA: 5.00}, baseline: {n: 471, star: 18.9, bust: 45.0, meanWA: 3.48}},
+      Big:       {above: {n: 27, star: 44.4, bust: 25.9, meanWA: 7.68}, baseline: {n: 161, star: 24.2, bust: 41.6, meanWA: 4.43}},
+    },
+  },
+  pairs: [
+    {
+      id: "crasher_distributor",
+      label: "Crasher + Distributor (ORB% × AST%)",
+      statA: "orbP", statB: "astP",
+      aLabel: "ORB%", bLabel: "AST%",
+      color: "#a78bfa",
+      hypothesis: "Bigs rarely pass, point guards rarely crash. A player above his position's average in BOTH breaks a structural trade-off. Historically a Jokic / Blake Griffin / Haliburton signal.",
+      validators: "Nikola Jokic · Karl-Anthony Towns · Blake Griffin · Tyrese Haliburton · Ja Morant · Draymond Green · Kawhi Leonard",
+    },
+    {
+      id: "two_way_skill",
+      label: "Two-Way Skill (AST% × BLK%)",
+      statA: "astP", statB: "blkP",
+      aLabel: "AST%", bLabel: "BLK%",
+      color: "#22c55e",
+      hypothesis: "Point guards don't block shots, rim protectors don't run the offense. A player above his position's average in BOTH signals rare two-way utility — Embiid / KAT / Paul George / Draymond territory.",
+      validators: "Joel Embiid · Karl-Anthony Towns · Paul George · Draymond Green · Klay Thompson · John Wall · Tyrese Haliburton",
+    },
+  ],
+  rejected: [
+    {name: "3PAr × ORB%",            reason: "Modern 3-and-D wings (Paul George, Otto Porter, OG Anunoby) tend to be above-avg in both anyway — no additional edge over just being a solid Wing."},
+    {name: "3PAr × FTR",             reason: "Only a handful of Playmakers (Lillard, Trae) hit this combination. Sample too small for a reliable signal."},
+    {name: "Rim Frequency × Low TO%", reason: "Rim-frequency mixes rolling bigs, cutting wings, and actual drivers — signal too noisy to be useful."},
+    {name: "Rim Pressure × Low TO%",  reason: "Rim-attack and turnover-rate are practically uncorrelated in college. The 'driving leads to more turnovers' trade-off doesn't show up."},
+  ],
+};
+
+// Position group for badge logic (consistent with resolvePosition) ──
 function getBadgePos(p) {
   // If pos is already resolved to Playmaker/Wing/Big, use that
   const resolved = p.pos;
@@ -680,6 +883,22 @@ function computeBadges(p) {
   if (isIntl && age < 18.5 && bpm > 4.0)                            green.push("International Prodigy");
   // Pro-Ready Teen
   if (isIntl && age < 19 && bpm > 2.0)                              green.push("Pro-Ready Teen");
+  // Possession Demon — positiv auf allen vier CFFR-Faktoren (Tobias 2026-06-01).
+  // CFFR-Werte sind 0–100 (50 = mean, 75 ≈ z=0.5, 25 ≈ z=-0.5). Schwelle: jeder
+  // Faktor mindestens leicht überdurchschnittlich (>55), composite >70.
+  // Reliability-Gate via cffr (Backend filtert intern auf >=200 min).
+  // TODO Migrationspfad: nach Backend (10c_ml_calibration compute_badges) verschieben
+  // beim nächsten vollen 10c-Rerun für Single-Source-of-Truth.
+  {
+    const _ffEfg = p.ff_efg, _ffTov = p.ff_tov, _ffOrb = p.ff_orb, _ffFtr = p.ff_ftr;
+    const _allPresent = _ffEfg != null && _ffTov != null && _ffOrb != null && _ffFtr != null;
+    if (_allPresent) {
+      const _ffMin  = Math.min(_ffEfg, _ffTov, _ffOrb, _ffFtr);
+      const _ffMean = (_ffEfg + _ffTov + _ffOrb + _ffFtr) / 4;
+      const _cffr   = p.cffr ?? 0;
+      if (_ffMin >= 55 && _ffMean >= 70 && _cffr >= 60) green.push("Possession Demon");
+    }
+  }
 
   // ═══ YELLOW BADGES ═══
   // Moreyballer: ≥75% of shots from rim + 3P (excludes mid-range).
@@ -733,6 +952,11 @@ function computeBadges(p) {
     if (stocks < 2.5 && fouls40 > 0 && fouls40 < 2.5)              red.push("Passive Defender");
     else if (stocks < 1.8 && fouls40 === 0)                         red.push("Passive Defender");
   }
+  // High Maintenance — CFFR in der roten Zone des Net Possession Value (Tobias 2026-06-01).
+  // Spiegel-Badge zu Possession Demon: drainiert Possessions mehr als er hilft.
+  // TODO Migrationspfad: nach Backend (10c_ml_calibration) beim nächsten 10c-Rerun.
+  // Tobias 2026-06-03 v16: HM threshold tightened from <45 to <40
+  if (p.cffr != null && p.cffr < 40)                                 red.push("High Maintenance");
 
   return { green, yellow, red };
 }
@@ -1483,7 +1707,73 @@ function mapProfile(d) {
     dunkR: d.dunk_r ?? d.dunk_rate ?? d.dunkR,
     dunkPct: d.dunk_pct ?? d.dunkPct,
     fta: d.fta, ftm: d.ftm, fga: d.fga,
-    selfCreation: d.creation_score ?? d.self_creation ?? d.box_creation_idx ?? d.self_creation_idx ?? 50,
+    // Sprint-3.17 D.7 (2026-06-14): Creation Pillar — SKILL (not projection).
+    // The v2 Self-Adjusted Box Creation measures what the prospect CURRENTLY does
+    // (USG × TS × Self-Share + AST × Quality, position-weighted), matching the
+    // semantic of the other skill pillars (Defense, Shooting, Feel, Athletic).
+    //
+    // The v3 calibrated Star+ Creator probability is a projection (future NBA
+    // outcome) and lives in the NBA Projections section as `starCreator`, NOT
+    // here. Mixing skill and projection in the same pillar slot was semantically
+    // wrong and got reverted.
+    selfCreation: (() => {
+      // Sprint-3.22 (2026-06-14): Creation Skill v3 hat Priority — Backend
+      // computiert via Translation (USG/AST × league_strength_combined) +
+      // Anchored Percentile vs Draft Pool 2008-2020 ∩ peak_pie. Single number
+      // 0-100, position-stratified, intl/NCAA comparable.
+      // Anchors: 50=avg draft prospect, 75=solid NBA rotation, 85=All-Star path,
+      // 95+=Star path.
+      // Falls v3 nicht da → v2 inline-formula als Fallback (legacy below).
+      if (d.creation_skill_v3 != null) return Math.round(d.creation_skill_v3);
+      const legacy = d.creation_score ?? d.self_creation ?? d.box_creation_idx ?? d.self_creation_idx ?? 50;
+      const usg = d.usg ?? d.college_usg;
+      const ts = d.ts ?? d.ts_pct;
+      const astP = d.ast_p ?? d.AST_per ?? 0;
+      /* Tobias 2026-06-04 v19: ast_tov-derive + Self-Created Offense rename */
+      // ast_tov derivation: fall back to ast_p/to_p ratio when API omits ast_tov.
+      // Previously defaulted to 1.0 → astQuality=0.40 → all players got flat passing credit.
+      const _astTovRaw = d.ast_tov ?? d.college_ast_tov;
+      const _astTovDerived = (d.ast_p && d.to_p > 0) ? d.ast_p / d.to_p : 1.0;
+      const astTov = _astTovRaw ?? _astTovDerived;
+      const sc = d.shotCreation?.overall;
+      const selfPct = sc?.selfPct;
+      const fga = sc?.fga ?? 0;
+      // Need core inputs to compute v2; otherwise fall back
+      if (usg == null || ts == null || selfPct == null || fga < 100) return legacy;
+      const selfShare = selfPct / 100;
+      const sampleFactor = Math.min(1.0, fga / 300);
+      const scoring = (usg * ts / 100) * selfShare;
+      const astQuality = Math.min(2.5, Math.max(0.5, astTov)) / 2.5;
+      const passing = astP * astQuality;
+      const pos = d.pos;
+      let raw;
+      if (pos === 'Playmaker')   raw = 0.4 * scoring + 0.6 * passing;
+      else if (pos === 'Wing')   raw = 0.7 * scoring + 0.3 * passing;
+      else if (pos === 'Big')    raw = 0.8 * scoring + 0.2 * passing;
+      else                        raw = 0.6 * scoring + 0.4 * passing;
+      const composite = raw * sampleFactor;
+      // Map raw composite (~0-30 typical range) to 0-100 percentile-like scale
+      // using empirical anchors derived from the training cohort.
+      const scaled = Math.max(0, Math.min(100, (composite / 25) * 100));
+      return Math.round(scaled);
+    })(),
+    // Sprint-3.17 D.7 — NBA Projection: Star+ Creator probability (not a skill,
+    // but a projected NBA outcome). Lives in the NBA Projections section,
+    // semantically separate from the Creation skill pillar above.
+    starCreator:            d.star_creator_projection ?? d.creation_pillar_v3 ?? null,
+    starCreatorProbability: d.star_creator_probability ?? d.creation_pillar_v3_probability ?? null,
+    starCreatorExplanation: d.star_creator_explanation ?? d.creation_pillar_v3_explanation ?? null,
+    starCreatorPhaseB:      d.star_creator_phase_b ?? d.creation_pillar_v3_phase_b ?? null,
+    // Sprint-3.18 (2026-06-14): Elite Shooter Projection.
+    eliteShooter:            d.elite_shooter_projection ?? null,
+    eliteShooterProbability: d.elite_shooter_probability ?? null,
+    eliteShooterExplanation: d.elite_shooter_explanation ?? null,
+    eliteShooterPhaseB:      d.elite_shooter_phase_b ?? null,
+    // Sprint-3.19 (2026-06-14): All-Defensive Player Projection.
+    allDefensive:            d.all_defensive_projection ?? null,
+    allDefensiveProbability: d.all_defensive_probability ?? null,
+    allDefensiveExplanation: d.all_defensive_explanation ?? null,
+    allDefensivePhaseB:      d.all_defensive_phase_b ?? null,
     selfCreationPct: d.box_creation ?? d.self_creation_pct ?? null,
     boxScoring: d.box_scoring ?? null,
     boxAssist: d.box_assist ?? null,
@@ -1492,12 +1782,25 @@ function mapProfile(d) {
     creationScore: d.creation_score ?? null,
     // Shot Creation Spectrum (zone-level PBP data)
     shotCreation: d.shotCreation ?? null,
+    // Tobias 2026-06-03: shooting field (Three-Layer block)
+    // Emitted by backend after v10 sprint (PID-keyed Skill/Intent/Volume).
+    // Conditional render lives in ShootingTab: `{p.shooting && ...}`.
+    shooting: d?.shooting ?? null,
     // Leverage-Weighted Efficiency (self-creation-weighted eFG%)
     leverageEff: d.leverageEff ?? null,
     // Offensive Skill Curve (usage scalability + peer curve position)
     skillCurve: d.skillCurve ?? null,
     // Mind-Tab Mental-Resilience metrics (Tobias 2026-05-09)
     mindMetrics: d.mindMetrics ?? null,
+    // Sprint-3.41 (2026-06-16): H1/H2 Box-Score Splits (stamina/concentration)
+    halfSplits: d.halfSplits ?? null,
+    // Sprint-3.25 (#19, 2026-06-14): Usage Reaction Strahl
+    usageReaction: d.usageReaction ?? null,
+    // Sprint-3.29 (2026-06-15): Functional Size — predicted height/wingspan
+    // from defensive (REB-D, BLK, STL) and offensive (ORB, dunks, FTR)
+    // stat profile, anchored on Draft Pool 2008-2020. Plus answers
+    // "does he play bigger or smaller than his frame?"
+    functionalSize: d.functionalSize ?? null,
     // Per-Game-Stats für Scouting Skill-Curve + Development In-Season-Trajectory
     gameLogs: d.gameLogs ?? null,
     // Draft Risk Profile (Market/Merit range + bust/star risk) — inject_draft_risk.py
@@ -1525,11 +1828,19 @@ function mapProfile(d) {
     // Tall wings (≥81") get Stretch-4 / Glass Cleaner pass-through (Tatum/Markkanen pattern).
     archetype: filterArchetypesByPos(d.archetype || "", resolvedPos, d.ht ?? d.height_in ?? d.college_height_inches, _ncaaArch).split("|")[0] || "",
     archetypesAll: filterArchetypesByPos(d.archetypes_all || d.archetype || "", resolvedPos, d.ht ?? d.height_in ?? d.college_height_inches, _ncaaArch),
+    // Sprint-3.2 v27 Archetype-fields (post 10c-Pipeline-Run).
+    // Wenn v27 nicht im Backend-Output → undefined → ArchetypeV27Card hidet sich automatisch.
+    archetypeV27: d.archetype_v27 || null,
+    archetypeV27Confidence: d.archetype_v27_confidence ?? null,
+    archetypeV27Alternative: d.archetype_v27_alternative || null,
+    archetypeV27NArch: d.archetype_v27_n_arch ?? null,
+    archetypeV27ArchMedian: d.archetype_v27_arch_median ?? null,
+    archetypeV27ArchStarRate: d.archetype_v27_arch_star_rate ?? null,
     feas:{repl:d.feas_repl,rot:d.feas_rot,start:d.feas_start,allstar:d.feas_allstar,
       cleared:d.feas_cleared||"",blocker:d.feas_blocker||""},
     mu:d.pred_mu??d.mu??d.projected_pie??d.pred_mu_pie??d.aspm_adj??d.aspm,
     sigma:d.pred_sigma??d.sigma??d.mc_sigma??d.volatility,
-    pNba:d.pred_p_nba??d.pNba??d.pn,
+    // pNba merged into single definition further below (see ~Z.1779) — kept legacy fallbacks there.
     // Tobias 2026-05-09: predTier is now threshold-recalibrated (see recalibrateTier).
     // Original modal tier is preserved as `predTierRaw` for debugging / methodology.
     predTier: d.addedWins?.projTier ?? (() => {
@@ -1549,6 +1860,20 @@ function mapProfile(d) {
       return recalibrateTier(legacy, fallback);
     })(),
     predTierRaw: d.v2Tier ?? d.pred_tier ?? d.predicted_tier ?? d.tier,
+    // Sprint-3.0.C (2026-06-12): Multi-Layer Tier Output, backend-vorberechnet.
+    //   tierLayered.point_estimate    — historisch / headline tier (proj_tier)
+    //   tierLayered.modal             — mode of tier_probs (vorsichtigste Sicht)
+    //   tierLayered.weighted_label    — display-fertig: "Modal (P%)" oder "Range Tier1-Tier2"
+    //   tierLayered.ci_95             — [tier_low, tier_high] über cumulative probability
+    //   tierLayered.sample_confidence — "Full" | "Partial" | "Insufficient"
+    // Source-of-Truth: model_utils.build_multi_layer_tier(). Frontend wählt nur
+    // welche Sicht angezeigt wird — kein Compute hier. Siehe SPRINT_3_0_DESIGN.md
+    // für vollständige methodische Begründung.
+    tierLayered: d.tier_layered ?? null,
+    // Sprint-3.0.A: Sample-Size-aware Eligibility (separater Quick-Access shortcut).
+    // Identisch zu tierLayered.sample_confidence, aber bequemer für Filter-Logic.
+    sampleConfidence: d.tier_layered?.sample_confidence ?? d.sample_confidence_tier ?? null,
+    sampleNEffective: d.sample_n_effective ?? null,
     // Tobias 2026-05-05: potential_tier zeigt P(A+)≥30%-basierten Tier (statt nur Modal).
     // Doncic mit S=45% A=51.5% bekommt "Superstar Potential" (45%≥30%), waehrend
     // predicted_tier "All-Star" bleibt. Macht Pre-Draft-Potenzial sichtbar.
@@ -1566,7 +1891,7 @@ function mapProfile(d) {
     waFloor: d.addedWins?.floor ?? d.waFloor ?? null,
     waCeiling: d.addedWins?.ceiling ?? d.waCeiling ?? null,
     waSigma: d.waSigma ?? d.v2_sigma ?? null,
-    pNba: d.addedWins?.pNba ?? d.pNba ?? null,   // real P(NBA) for the Non-NBA chart bar
+    pNba: d.addedWins?.pNba ?? d.pred_p_nba ?? d.pNba ?? d.pn ?? null,   // real P(NBA) for the Non-NBA chart bar (merged with legacy fallbacks)
     v2Conf: d.v2Conf ?? null,
     v2TierProbs: d.addedWins?.tierProbs ?? d.v2TierProbs ?? null,  // %-scale {Superstar:0.3, ...}
     v2Boosters: d.v2Boosters ?? null,
@@ -1786,6 +2111,66 @@ const BadgeChip = ({text,color="#22c55e"}) => {
 };
 
 const TierBadge = ({tier}) => <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{background:(TC[tier]||"#6b7280")+"22",color:TC[tier]||"#6b7280",border:`1px solid ${(TC[tier]||"#6b7280")}44`}}>{tier}</span>;
+
+// Sprint-3.0.A (2026-06-12): Sample-Confidence Badge.
+// Macht Modell-Konfidenz visuell sichtbar — wichtig für Pod-Decisions
+// und Daten-Konsumenten ("ist diese Bewertung verlässlich?").
+//
+// Color-Semantic:
+//   Full         → green (genug Sample für verlässliche Bewertung)
+//   Partial      → amber (echter Rollen-Anteil, aber statistisch unsicher)
+//   Insufficient → red   (Walk-on / Garbage-Time — Modell läuft, Vorsicht)
+//
+// Empirische Begründung: p10 historischer NBA-Spieler 2018-2024 hatte
+// GP≥24 AND Min_per≥25 → Full-Threshold. Siehe SPRINT_3_0_DESIGN.md.
+const SAMPLE_CONFIDENCE_COLORS = {
+  Full:         { bg: "#22c55e22", color: "#22c55e", border: "#22c55e44", label: "Full Sample" },
+  Partial:      { bg: "#fbbf2422", color: "#fbbf24", border: "#fbbf2444", label: "Partial Sample" },
+  Insufficient: { bg: "#ef444422", color: "#ef4444", border: "#ef444444", label: "Insufficient Sample" },
+  Unknown:      { bg: "#6b728022", color: "#9ca3af", border: "#6b728044", label: "Sample n/a" },
+};
+
+const SampleConfidenceBadge = ({ confidence, nEffective, compact=false }) => {
+  if (!confidence) return null;
+  const c = SAMPLE_CONFIDENCE_COLORS[confidence] || SAMPLE_CONFIDENCE_COLORS.Unknown;
+  const title = nEffective != null
+    ? `${c.label} (${Math.round(nEffective)} total minutes)`
+    : c.label;
+  return (
+    <span
+      className="px-2 py-0.5 rounded-full text-xs font-medium"
+      style={{ background: c.bg, color: c.color, border: `1px solid ${c.border}` }}
+      title={title}
+    >
+      {compact ? confidence : c.label}
+    </span>
+  );
+};
+
+// Sprint-3.0.C: Multi-Layer Tier Display. Wählt zwischen "Confident-Mode"
+// (nur point_estimate) und "Honest-Mode" (modal + CI). Default: Confident-Mode
+// für Backward-Compatibility, kann via UI-Toggle umgeschaltet werden.
+const MultiLayerTierDisplay = ({ tierLayered, mode = "confident", showConfidence = true }) => {
+  if (!tierLayered) return null;
+  const { point_estimate, modal, weighted_label, ci_95, sample_confidence } = tierLayered;
+  const primaryTier = mode === "honest" ? modal : point_estimate;
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <TierBadge tier={primaryTier} />
+      {mode === "honest" && weighted_label && weighted_label !== `${primaryTier} (100%)` && (
+        <span className="text-xs" style={{ color: "#9ca3af" }}>
+          {weighted_label}
+        </span>
+      )}
+      {mode === "honest" && ci_95 && ci_95[0] && ci_95[1] && ci_95[0] !== ci_95[1] && (
+        <span className="text-xs" style={{ color: "#6b7280" }}>
+          CI: {ci_95[0]} – {ci_95[1]}
+        </span>
+      )}
+      {showConfidence && <SampleConfidenceBadge confidence={sample_confidence} compact />}
+    </div>
+  );
+};
 
 const StatCell = ({label,val,pctl,suffix="",tooltip}) => (
   <div className="text-center p-2 rounded-lg" style={{background:valBg(pctl)}} title={tooltip}>
@@ -2026,7 +2411,7 @@ function OverviewTab({p, compTier, setCompTier}) {
       </Sec>
 
       {/* ═══ TIER FEASIBILITY — Each metric on its own row ═══ */}
-      <Sec icon="📊" title={`vs. NBA ${compTier} (${p.pos})`} sub="Does this prospect's college production line up with what NBA players at the chosen tier typically deliver? Bars show the typical range for that NBA tier and position. Green = inside the range. Yellow = below range but compensated by an elite core skill. Red = critical gap. College stats don't translate 1:1 to the NBA — read as directional, not literal.">
+      <Sec icon="📊" title={`vs. NBA ${compTier} (${p.pos})`} sub="How does this prospect's college production line up with what players who reached this NBA tier actually showed pre-draft? Bars show the typical range for that NBA tier and position, built from the empirical median of 353 NBA players drafted 2008–2018 (grouped by realized peak Wins Added). Green = at/above median. Yellow = below median but compensated by an elite core skill. Orange = below median. Red = critical gap. Caveat: pre-draft college stats only weakly separate Starter from All-Star — a prospect can clear Starter and miss All-Star simply because the two tiers' college numbers overlap. The real tier sort happens AFTER the draft (role, minutes, team). Read this as a fit-diagnostic, not a tier prediction.">
         <div className="flex items-center gap-3 mb-4">
           <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Compare:</span>
           <div className="flex gap-1">
@@ -2053,6 +2438,114 @@ function OverviewTab({p, compTier, setCompTier}) {
             </div>
           </div>
         </div>
+
+        {/* Tobias 2026-06-02 v3: Verdict — class-aware for NCAA + bridge-cohort for Intl. */}
+        {(() => {
+          const inR = assessed.filter(m=>m.status==="In-Range").length;
+          const total = assessed.filter(m=>m.pctP50!=null).length;
+          if (total < 8) return null;
+          // Tobias 2026-06-02 Option C: Min-Floor — kleine Samples = Profile-Artifakt
+          const _sampleMin = (Number(p.gp) || 0) * (Number(p.min) || 0);
+          const _sampleHardFloor = _sampleMin > 0 && _sampleMin < 100;
+          const _sampleSoftWarn  = _sampleMin > 0 && _sampleMin >= 100 && _sampleMin < 500;
+          if (_sampleHardFloor) {
+            return (
+              <div className="mt-4 rounded-xl p-4" style={{background:"#0d1117", border:"1px solid #ef444455"}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#6b7280",letterSpacing:1,marginBottom:6}}>
+                  CLEARANCE VERDICT vs {compTier.toUpperCase()} · Insufficient Sample
+                </div>
+                <div style={{fontSize:13,fontWeight:600,color:"#ef4444",marginBottom:6}}>
+                  Only {Math.round(_sampleMin)} minutes of college sample — verdict suppressed.
+                </div>
+                <div style={{fontSize:11,color:"#9ca3af",lineHeight:1.6}}>
+                  Below 100 total minutes, the box-stat profile is a small-sample artifact rather than a player signal. Bol Bol (158 min, foot injury) and James Wiseman (16 min, 3-game NCAA suspension) both cleared 8+ on tiny samples and busted in the NBA — exactly because the cleared profile never reflected real college performance. Wait for more data, or rely on Mind, Comp-Engine and Skill-Curve.
+                </div>
+              </div>
+            );
+          }
+          const clsMap = {"Fr":1,"Freshman":1,"So":2,"Sophomore":2,"Jr":3,"Junior":3,"Sr":4,"Senior":4};
+          const clsRaw = p.cls || p.classLabel || "";
+          const classNum = clsMap[clsRaw] || (p.seasons ? Math.min(4, parseInt(p.seasons)) : null);
+          const className = classNum === 1 ? "Freshman" : classNum === 2 ? "Sophomore" :
+                            classNum === 3 ? "Junior" : classNum === 4 ? "Senior" : null;
+          // Tobias 2026-06-03: _isIntlSrc + _thresholdCohort derived from the
+          // playerSourceMeta helper (single source of truth, defined at top).
+          // The verdict-block UI uses these to switch threshold/cohort copy.
+          const { isIntl: _isIntlSrc, thresholdCohort: _thresholdCohort } = playerSourceMeta(p);
+          const VERDICTS = {
+            "Replacement": [
+              {min:6, label:"Plays Replacement-level box profile", color:"#22c55e", desc:"Every drafted NBA player reaches Replacement-level — this is the baseline floor, not a forecast."},
+              {min:3, label:"Below Replacement-level statistical profile", color:"#fbbf24", desc:"Box profile sits below Replacement-tier medians on most dimensions."},
+              {min:0, label:"Atypical for Replacement-tier", color:"#ef4444", desc:"Development-stars (Westbrook 2/10) started here too — pair with Skill-Curve and Comps."},
+            ],
+            "Role Player": [
+              {min:8, label:"Strong Role-Player profile fit", color:"#22c55e", desc:"Historically 70–90% of college players who clear 8+ Role-Player thresholds reach Role-Player tier or higher (1.4–1.7× Base-Rate lift)."},
+              {min:6, label:"Plausible Role-Player fit", color:"#22c55e", desc:"6–7/10 cleared. Historical precision 68–70%."},
+              {min:4, label:"Mixed Role-Player signals", color:"#fbbf24", desc:"~46% historically reach Role-Player. Mind, Skill-Curve, Comps decide direction."},
+              {min:0, label:"Atypical Role-Player profile", color:"#ef4444", desc:"Stars like Tatum (3/10) and SGA (3/10) developed past this profile."},
+            ],
+            "Starter": [
+              {min:9, label:"Generation-level Starter profile", color:"#22c55e", desc:"9+/10 → 80% precision (2.5× Base-Rate). Only a handful per decade."},
+              {min:8, label:"Strong Starter profile fit", color:"#22c55e", desc:"8/10 → 64% Precision (2× Base-Rate). Players like Zion Williamson, KAT sat here pre-draft."},
+              {min:6, label:"Plausible Starter fit", color:"#fbbf24", desc:"6–7/10 → 36–50% precision. Development signal becomes tie-breaker."},
+              {min:0, label:"Atypical Starter profile", color:"#ef4444", desc:"SGA / Tatum / Donovan Mitchell were here pre-draft and became Stars — NOT a hard veto."},
+            ],
+            "All-Star": [
+              {min:9, label:"Historically unique All-Star profile", color:"#22c55e", desc:_isIntlSrc ? "9+/10 within Intl-Bridge-Cohort — extremely rare. Tracy McGrady, Sengun and Andray Blatche are the only historical cases." : "9+/10 against All-Star thresholds — in 18 years of NCAA history only 3 Freshmen with substantial sample (≥500 min) have hit this: Caleb Wilson 2026 (10/10, first ever, UNC), Cameron Boozer 2026 (9/10, Duke), Cooper Flagg 2025 (9/10, Duke). The current 2025-2026 class is historically unique — having three Freshmen at 9+/10 in adjacent years has never happened in our 18-year dataset."},
+              {min:8, label:"Strong All-Star profile fit", color:"#22c55e", desc:_isIntlSrc ? "8/10 in Intl-Bridge → 23% precision = 5.5× Intl Base-Rate. Tracy McGrady, Gilbert Arenas, Andrei Kirilenko sat exactly here pre-NBA." : "8/10 → 55% overall precision = 4× Base-Rate. Joel Embiid, KAT, Ben Simmons, Blake Griffin, Kevin Love, Deandre Ayton sat exactly here pre-draft."},
+              {min:6, label:"Plausible Star-Candidate signals", color:"#fbbf24", desc:_isIntlSrc ? "6–7/10 in Intl-Bridge → 0–7% precision. Most Intl-All-Stars (Doncic, Wemby) sat BELOW this profile pre-NBA because intl box-stats translate imperfectly." : "6–7/10 cleared. Curry (6/10), Harden (6/10), Kawhi (6/10), AD (7/10) developed past this profile."},
+              {min:0, label:"Atypical for All-Star profile", color:"#ef4444", desc:_isIntlSrc ? "<6/10 cleared in Intl-Bridge. Doncic and Wemby sat here — intl box-stats are noisy proxies. Comp-Engine + Skill-Curve decide direction." : "Half of historical All-Stars sat here pre-draft (Tatum 3/10, SGA 3/10, Westbrook 2/10). NOT a veto — focus on Mind, Comps, Skill-Curve."},
+            ],
+          };
+          const list = VERDICTS[compTier] || [];
+          const verdict = list.find(v => inR >= v.min) || list[list.length-1];
+          if (!verdict) return null;
+          let classNote = null;
+          if (_isIntlSrc) {
+            if (inR >= 8 && compTier === "All-Star") {
+              classNote = {color:"#fbbf24", icon:"i", txt:"Intl-Bridge cohort: 400 players who entered the NBA via Euroleague / ACB / BBL / FIBA youth tournaments. Thresholds are the medians of this cohort. Note: league strength varies (Euroleague = top, NBL = low) and pro-experience replaces the college-class concept — the maturity effect runs in a different direction."};
+            }
+          } else if (compTier === "All-Star" && inR >= 8) {
+            if (classNum === 1) classNote = {color:"#22c55e", icon:"✓", txt:"Freshman 8+/10 with substantial sample (≥500 min) historically → 86% Precision (6 of 7). Embiid, KAT, Ben Simmons, Kevin Love, Deandre Ayton and Zion all cleared 8+ as Freshmen with real college minutes and became All-Stars. The single miss: Michael Beasley (Kansas St., 2,508 min) — profile-strong but Off-Court issues killed development. Bol Bol (158 min, foot injury) and James Wiseman (16 min, 3-game NCAA suspension) are excluded because their clearances came from tiny samples, not real profiles. Strongest single signal we measure for a Freshman — pair with Mind for character-risk and Skill-Curve for development."};
+            else if (classNum === 2) classNote = {color:"#fbbf24", icon:"~", txt:"Sophomore 8+/10 historically → 25% Precision. Weaker than Freshman: more development time already inside college."};
+            else if (classNum === 3) classNote = {color:"#ef4444", icon:"!", txt:"Junior 8+/10 historically → 0% Precision (0 of 1). Maturity advantage over younger competition — box profile reflects age, not star talent."};
+            else if (classNum === 4) classNote = {color:"#ef4444", icon:"!", txt:"Senior 8+/10 historically → 0% Precision (0 of 3). Sindarius Thornwell cleared 10/10 as Senior → peakWA −2.9. Senior college dominance is a maturity edge, not an NBA star signal."};
+          } else if (compTier === "Starter" && inR === 10 && classNum && classNum >= 4 && !_isIntlSrc) {
+            classNote = {color:"#ef4444", icon:"!", txt:"10/10 Starter as Senior: historically 0% Precision. Old-for-Class effect — profile looks strong because of age advantage, but NBA outcomes settled at Replacement-level."};
+          }
+          return (
+            <div className="mt-4 rounded-xl p-4" style={{background:"#0d1117", border:`1px solid ${verdict.color}55`}}>
+              <div style={{fontSize:11,fontWeight:700,color:"#6b7280",letterSpacing:1,marginBottom:6}}>
+                CLEARANCE VERDICT vs {compTier.toUpperCase()}
+                {className && !_isIntlSrc && <span style={{color:"#9ca3af",marginLeft:8}}>· {className}</span>}
+                {_isIntlSrc && <span style={{color:"#9ca3af",marginLeft:8}}>· Intl Cohort</span>}
+                {_sampleMin > 0 && <span style={{color:"#6b7280",marginLeft:8}}>· {Math.round(_sampleMin)} min sample</span>}
+              </div>
+              {_sampleSoftWarn && (
+                <div className="mb-2 rounded px-2 py-1" style={{background:"#fbbf2410", border:"1px solid #fbbf2444"}}>
+                  <div style={{fontSize:11,fontWeight:600,color:"#fbbf24"}}>⚠ Limited sample ({Math.round(_sampleMin)} min). Confidence reduced — small-sample profiles are noisy.</div>
+                </div>
+              )}
+              <div className="flex items-baseline gap-3 mb-2">
+                <span style={{fontSize:24,fontWeight:700,color:verdict.color,fontFamily:"Oswald, sans-serif"}}>
+                  {inR}<span style={{fontSize:14,color:"#6b7280"}}>/{total}</span>
+                </span>
+                <span style={{fontSize:14,fontWeight:600,color:verdict.color}}>{verdict.label}</span>
+              </div>
+              <div style={{fontSize:11,color:"#9ca3af",lineHeight:1.6}}>{verdict.desc}</div>
+              {classNote && (
+                <div className="mt-3 pt-3" style={{borderTop:"1px solid #1f2937"}}>
+                  <div style={{fontSize:11,fontWeight:600,color:classNote.color,lineHeight:1.6}}>
+                    <span style={{marginRight:6}}>{classNote.icon}</span>{classNote.txt}
+                  </div>
+                </div>
+              )}
+              <div className="mt-2 text-xs" style={{color:"#4b5563"}}>
+                Thresholds: {_thresholdCohort}
+              </div>
+            </div>
+          );
+        })()}
         <div className="space-y-6">
           {cats.map(cat=>{
             const cm=assessed.filter(m=>m.cat===cat);
@@ -2177,7 +2670,17 @@ function ShootingTab({p}) {
   const rimPct = normPct(p.rimPct), midPct = normPct(p.midPct), tp = normPct(p.tp), ft = normPct(p.ft);
   const efg = normPct(p.efg), ftr = norm(p.ftr), ts = normPct(p.ts);
   const twoPct = normPct(p.twoPct);
-  const rimF = norm(p.rimF), midF = norm(p.midF), threeF = norm(p.threeF), dunkR = norm(p.dunkR);
+  /* Tobias 2026-06-04 v18: shot-frequency fields use pct-safe norm */
+  // rim_f, mid_f, three_f, dunk_r are stored as percentages (0-100), never as ratios.
+  // Standard norm() incorrectly auto-converts values <1 into 100x percentages
+  // (intended for fields like rim_pct = 0.58). Use pct-safe normalizer instead.
+  const normPctSafe = (v) => {
+    if (v == null || v === "" || v === "—") return null;
+    const n = Number(v);
+    if (isNaN(n)) return null;
+    return Math.round(n * 10) / 10;
+  };
+  const rimF = normPctSafe(p.rimF), midF = normPctSafe(p.midF), threeF = normPctSafe(p.threeF), dunkR = normPctSafe(p.dunkR);
   const dunkPct = normPct(p.dunkPct);
   const hasRim = rimF != null && rimF > 0, hasMid = midF != null && midF > 0;
   const hasDunk = dunkR != null && dunkR > 0, hasTracking = hasRim || hasMid;
@@ -2306,6 +2809,59 @@ function ShootingTab({p}) {
   // einen Tier-spezifischen FGA-Wert kennen. Bleibt im UI als heuristische Schätzung.
   const projNba3pa = proj3PAr != null ? Math.round(projFGA * proj3PAr / 100 * 10) / 10 : null;
 
+  // Sprint-3.37.H (Tobias 2026-06-16): Three-Layer Synthese aus M1-Output.
+  // Plus Backend inject_shooting_m1.py schreibt nur shooting.m1.*, aber das
+  // UI erwartet shooting.skill / .intent / .volume / .touchTier Subdicts.
+  // Plus Vor Sprint-3.37.H zeigten Layer 1/2/3 leer ("—%") obwohl m1 vorhanden
+  // war. Wurzel: kein Mapping zwischen den Schichten — daher synthesize wir
+  // hier client-seitig aus projNba3p / proj3PAr.
+  // Plus typical-miss-Werte (±2.85 Layer 1, ±9.7 Layer 2) stammen aus dem
+  // Berger-2022 M1-Paper (NCAA RMSE) und matchen den im UI gezeigten Text.
+  const shootingSynth = (() => {
+    if (!p.shooting) return null;
+    const out = { ...p.shooting };
+    // Layer 1 — Skill (projected NBA 3P%)
+    if (out.skill == null && projNba3p != null) {
+      out.skill = {
+        p50: projNba3p,
+        lo: Math.max(0, projNba3p - 2.85),
+        hi: Math.min(60, projNba3p + 2.85),
+      };
+    }
+    // Layer 2 — Intent (projected NBA 3PAr)
+    if (out.intent == null && proj3PAr != null) {
+      const tier = proj3PAr >= 50 ? "High" : proj3PAr >= 35 ? "Moderate" : "Low";
+      out.intent = {
+        p50: proj3PAr,
+        lo: Math.max(0, proj3PAr - 9.7),
+        hi: Math.min(100, proj3PAr + 9.7),
+        tier,
+      };
+    }
+    // Touch Tier from FT% (Berger 2022 thresholds)
+    if (out.touchTier == null && ft != null) {
+      out.touchTier = ft >= 86 ? "Elite" : ft >= 78 ? "Strong" : ft >= 72 ? "Average" : "Weak";
+    }
+    // Layer 3 — Volume: Tier-conditional 3PA/game = FGA(tier×pos) × proj3PAr.
+    // Plus tierPosFga ist 5 Zeilen weiter oben definiert und damit hier in
+    // scope — wir leiten 3PA/game pro Tier ab. Keys matchen die Frontend-Map
+    // unten (allStar, starter, rolePlayer, replacement).
+    if (out.volume == null && proj3PAr != null && p.pos) {
+      const fgaForTier = (tier) => (tierPosFga[tier] || tierPosFga["Starter"])[p.pos] || 13;
+      out.volume = {
+        allStar:     Math.round(fgaForTier("All-Star")    * proj3PAr / 100 * 10) / 10,
+        starter:     Math.round(fgaForTier("Starter")      * proj3PAr / 100 * 10) / 10,
+        rolePlayer:  Math.round(fgaForTier("Role Player")  * proj3PAr / 100 * 10) / 10,
+        replacement: Math.round(fgaForTier("Replacement")  * proj3PAr / 100 * 10) / 10,
+      };
+    }
+    return out;
+  })();
+  // Plus Wir reichen die synthetische Variante anstelle des Roh-`p.shooting`
+  // in den nachfolgenden Render-Block. Plus Override nur wenn synth != null,
+  // sonst Fallback aufs ursprüngliche Objekt (Backwards-Compat).
+  if (shootingSynth) p = { ...p, shooting: shootingSynth };
+
   const sc = (pct, type) => {
     if (pct == null) return "#6b7280";
     if (type==="3pt") return pct>38?"#22c55e":pct>34?"#86efac":pct>30?"#fbbf24":"#ef4444";
@@ -2335,13 +2891,7 @@ function ShootingTab({p}) {
 
   return (
     <div className="space-y-5">
-      {useSimplifiedCourt && (
-        <div className="p-3 rounded-lg text-sm" style={{background:"#1e3a5f33",border:"1px solid #3b82f644",color:"#93c5fd"}}>
-          {isIntl ? "International prospect" : "Pre-2010 NCAA"} — shot-type tracking (rim/mid/dunk) not available. Showing 2P/3P/FT split.
-        </div>
-      )}
-
-      <Sec icon="🏀" title="3.5 Level Scoring" sub="Accuracy, volume (made-att), and shot diet per zone">
+<Sec icon="🏀" title="3.5 Level Scoring" sub="Accuracy, volume (made-att), and shot diet per zone">
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
           {/* ══ COURT ══ */}
           <div className="lg:col-span-3 mx-auto w-full" style={{maxWidth:580}}>
@@ -2475,6 +3025,239 @@ function ShootingTab({p}) {
           </div>
         </div>
       </Sec>
+      {/* Tobias 2026-06-03 v3-jsx: ShootingTab layout (Shot Chart top, plain-English Three-Layer) */}
+      {p.shooting && (
+        <Sec icon="🎯" title="NBA 3P Projection — Three Layers" sub="A three-layer model. Each layer answers a separate question. Validation reports typical miss (how far the model is usually off) and fit strength r (1.0 = perfect prediction, 0 = random guess). Ranges below are realistic spreads built from that typical miss.">
+
+          {/* Layer 1 — SKILL */}
+          <div className="rounded-xl p-4 mb-3" style={{background:"#0a0e14", border:"1px solid #22c55e33"}}>
+            <div className="flex items-start justify-between mb-2 gap-2">
+              <div>
+                <div className="text-xs font-bold uppercase tracking-widest" style={{color:"#22c55e"}}>Layer 1 · Skill</div>
+                <div className="text-xs mt-1" style={{color:"#6b7280"}}>How well does he shoot the three? (projected NBA 3P%)</div>
+              </div>
+              {p.shooting.touchTier && (
+                <span className="px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap" style={{
+                  background: (p.shooting.touchTier === "Elite" || p.shooting.touchTier === "Strong") ? "#22c55e22" : p.shooting.touchTier === "Average" ? "#fbbf2422" : "#ef444422",
+                  color: (p.shooting.touchTier === "Elite" || p.shooting.touchTier === "Strong") ? "#22c55e" : p.shooting.touchTier === "Average" ? "#fbbf24" : "#ef4444"
+                }}>TOUCH: {p.shooting.touchTier.toUpperCase()}</span>
+              )}
+            </div>
+            <div className="flex items-baseline gap-3 mb-3">
+              <span style={{fontSize:36, fontWeight:700, color:"#22c55e", fontFamily:"Oswald, sans-serif"}}>{p.shooting.skill?.p50?.toFixed(1) ?? "—"}%</span>
+              {p.shooting.skill?.lo != null && p.shooting.skill?.hi != null && (
+                <span style={{fontSize:13, color:"#9ca3af"}}>realistically {p.shooting.skill.lo.toFixed(1)} – {p.shooting.skill.hi.toFixed(1)}%</span>
+              )}
+            </div>
+
+            {/* Tobias 2026-06-03 v5: Strahl-Viz + Intl-Caveat */}
+            {p.shooting.skill?.p50 != null && (() => {
+              const p50 = p.shooting.skill.p50;
+              const lo = p.shooting.skill.lo ?? p50 - 2.7;
+              const hi = p.shooting.skill.hi ?? p50 + 2.7;
+              const NBA_MIN = 28, NBA_MAX = 42, NBA_MED = 34.8;
+              const clamp = (x) => Math.max(0, Math.min(100, x));
+              const pos = clamp((p50 - NBA_MIN) / (NBA_MAX - NBA_MIN) * 100);
+              const posLo = clamp((lo - NBA_MIN) / (NBA_MAX - NBA_MIN) * 100);
+              const posHi = clamp((hi - NBA_MIN) / (NBA_MAX - NBA_MIN) * 100);
+              const posMed = clamp((NBA_MED - NBA_MIN) / (NBA_MAX - NBA_MIN) * 100);
+              const delta = (p50 - NBA_MED).toFixed(1);
+              const deltaPos = p50 >= NBA_MED;
+              const deltaColor = deltaPos ? "#22c55e" : "#ef4444";
+              return (
+                <div className="mb-3 mt-2">
+                  <div className="text-xs mb-1" style={{color:"#6b7280"}}>
+                    Position on NBA-shooter range ·
+                    <span style={{color:deltaColor, marginLeft:6, fontWeight:600}}>
+                      {deltaPos ? "+" : ""}{delta} pp vs NBA median (34.8%)
+                    </span>
+                  </div>
+                  <div className="relative h-6 rounded-full overflow-hidden" style={{
+                    background:"linear-gradient(90deg, #ef444433 0%, #fbbf2433 35%, #22c55e33 70%, #22c55e55 100%)"
+                  }}>
+                    <div className="absolute top-0 bottom-0" style={{
+                      left: `${posLo}%`,
+                      width: `${Math.max(1, posHi - posLo)}%`,
+                      background:"#22c55e44",
+                      borderLeft:"1px dashed #22c55e88",
+                      borderRight:"1px dashed #22c55e88"
+                    }}></div>
+                    <div className="absolute top-0 bottom-0" style={{
+                      left: `${posMed}%`, width:1, background:"#ffffff66"
+                    }}></div>
+                    <div className="absolute" style={{
+                      left: `${pos}%`, top:-2, bottom:-2,
+                      width:3, marginLeft:-1.5,
+                      background:"#22c55e", boxShadow:"0 0 6px #22c55e"
+                    }}></div>
+                  </div>
+                  <div className="flex justify-between text-xs mt-1" style={{color:"#6b7280"}}>
+                    <span>28% (poor)</span>
+                    <span>34.8% NBA median</span>
+                    <span>42% (elite)</span>
+                  </div>
+                </div>
+              );
+            })()}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 text-xs leading-relaxed" style={{color:"#9ca3af"}}>
+              <div><span style={{color:"#6b7280"}}>Model: </span>Beta-regression on the NBA 3P% (a model that treats percentages cleanly).</div>
+              <div><span style={{color:"#6b7280"}}>Inputs: </span>College 3P% (regressed toward league mean for small samples), FT% (touch prior), College 3PAr.</div>
+              <div><span style={{color:"#6b7280"}}>How accurate: </span>Typical miss ±2.85 pp on 731 NBA shooters — when the model says 35%, reality is usually 32–38%.</div>
+              <div><span style={{color:"#6b7280"}}>Fit strength: </span>r = 0.27 (0 = random, 1.0 = perfect). Modest, because college shooting noise translates imperfectly.</div>
+              {p.shooting.ftPct != null && (
+                <div className="md:col-span-2 pt-1"><span style={{color:"#6b7280"}}>This player: </span>FT {(p.shooting.ftPct*100).toFixed(1)}% · {Math.round(p.shooting.nNcaa3pa || 0)} college 3PA · {p.shooting.pool || "ncaa"}</div>
+              )}
+            </div>
+            <div className="text-xs mt-3 pt-3 leading-snug" style={{color:"#6b7280", borderTop:"1px solid #1f2937"}}>
+              <strong style={{color:"#9ca3af"}}>Touch Tier</strong> reads the FT% signal: Elite (≥ 86%) → 80% of those players hit NBA 3P% ≥ 35%. Strong (78–86%) → 59%. Average (72–78%) → 46%. Weak (&lt; 72%) → 33%.
+            </div>
+
+            {/* Tobias 2026-06-03 v5: Intl-Caveat */}
+            {p.source && p.source !== "ncaa" && (
+              <div className="text-xs mt-2 px-2 py-1 rounded" style={{color:"#fbbf24", background:"#fbbf2411", border:"1px solid #fbbf2433"}}>
+                <strong>Intl note:</strong> pro-league shooting stats translate weaker to NBA than NCAA stats (validation r = 0.07 vs 0.38 NCAA). Treat this projection as an indicator, not a precise estimate.
+              </div>
+            )}
+          </div>
+
+          {/* Layer 2 — INTENT */}
+          <div className="rounded-xl p-4 mb-3" style={{background:"#0a0e14", border:"1px solid #fbbf2433"}}>
+            <div className="flex items-start justify-between mb-2 gap-2">
+              <div>
+                <div className="text-xs font-bold uppercase tracking-widest" style={{color:"#fbbf24"}}>Layer 2 · Intent</div>
+                <div className="text-xs mt-1" style={{color:"#6b7280"}}>How often will he take the three? (NBA 3PAr — share of his shots from beyond the arc)</div>
+              </div>
+              {p.shooting.intent?.tier && (
+                <span className="px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap" style={{
+                  background: p.shooting.intent.tier === "High" ? "#22c55e22" : p.shooting.intent.tier === "Moderate" ? "#fbbf2422" : "#ef444422",
+                  color: p.shooting.intent.tier === "High" ? "#22c55e" : p.shooting.intent.tier === "Moderate" ? "#fbbf24" : "#ef4444"
+                }}>INTENT: {p.shooting.intent.tier.toUpperCase()}</span>
+              )}
+            </div>
+            <div className="flex items-baseline gap-3 mb-3">
+              <span style={{fontSize:36, fontWeight:700, color:"#fbbf24", fontFamily:"Oswald, sans-serif"}}>{p.shooting.intent?.p50?.toFixed(0) ?? "—"}%</span>
+              {p.shooting.intent?.lo != null && p.shooting.intent?.hi != null && (
+                <span style={{fontSize:13, color:"#9ca3af"}}>realistically {p.shooting.intent.lo.toFixed(0)} – {p.shooting.intent.hi.toFixed(0)}%</span>
+              )}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 text-xs leading-relaxed" style={{color:"#9ca3af"}}>
+              <div><span style={{color:"#6b7280"}}>Model: </span>Beta-regression on the NBA 3PAr.</div>
+              <div><span style={{color:"#6b7280"}}>Inputs: </span>College 3PAr + FT% + the Skill estimate from Layer 1.</div>
+              <div><span style={{color:"#6b7280"}}>How accurate: </span>Typical miss ±9.7 pp — when the model says 40%, reality is usually 30–50%.</div>
+              <div><span style={{color:"#6b7280"}}>Fit strength: </span>r = 0.73 — strong (closer to 1.0 = closer to a perfect prediction).</div>
+              <div className="md:col-span-2 pt-1"><span style={{color:"#6b7280"}}>Why separate from Skill: </span>great shooters can take few threes (Joel Embiid). Average shooters can take many (Joe Ingles). The two signals diverge in NBA roles.</div>
+            </div>
+            <div className="text-xs mt-3 pt-3 leading-snug" style={{color:"#6b7280", borderTop:"1px solid #1f2937"}}>
+              <strong style={{color:"#9ca3af"}}>Intent Tier:</strong> High (≥ 50%) → volume shooter, efficiency is the real question. Moderate (35–50%) → standard wing distribution. Low (&lt; 35%) → rarely shoots from 3, a role player who hits open looks.
+            </div>
+          </div>
+
+          {/* Layer 3 — VOLUME */}
+          <div className="rounded-xl p-4" style={{background:"#0a0e14", border:"1px solid #f9731633"}}>
+            <div className="mb-3">
+              <div className="text-xs font-bold uppercase tracking-widest" style={{color:"#f97316"}}>Layer 3 · Volume</div>
+              <div className="text-xs mt-1" style={{color:"#6b7280"}}>How many 3PA per game? Volume is a role function, not a talent function — so we show it CONDITIONAL on which tier he reaches.</div>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+              {[
+                {key:"allStar",     label:"If All-Star",     color:"#22c55e"},
+                {key:"starter",     label:"If Starter",      color:"#22c55e"},
+                {key:"rolePlayer",  label:"If Role",         color:"#fbbf24"},
+                {key:"replacement", label:"If Replacement",  color:"#9ca3af"}
+              ].map(t => (
+                <div key={t.key} className="rounded p-3" style={{background:"#111827"}}>
+                  <div className="text-xs uppercase tracking-wider" style={{color:t.color}}>{t.label}</div>
+                  <div className="text-2xl font-bold mt-1" style={{color:"#e5e7eb", fontFamily:"Oswald, sans-serif"}}>{p.shooting.volume?.[t.key] != null ? p.shooting.volume[t.key].toFixed(1) : "—"}</div>
+                  <div className="text-xs" style={{color:"#6b7280"}}>3PA / game</div>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 text-xs leading-relaxed" style={{color:"#9ca3af"}}>
+              <div><span style={{color:"#6b7280"}}>Why no single number: </span>college 3PA/g basically does NOT predict NBA 3PA/g (fit strength r = 0.005 — essentially random).</div>
+              <div><span style={{color:"#6b7280"}}>How we get the numbers: </span>3PA = 3PAr (Layer 2) × FGA per game. FGA per game depends on Tier × Position.</div>
+              <div><span style={{color:"#6b7280"}}>FGA source: </span>empirical median per Tier × Position, drawn from 369 NBA players with ≥ 5,000 career minutes (2008–2026).</div>
+              <div><span style={{color:"#6b7280"}}>How to read: </span>each card is the implied volume IF he reaches that tier — not a prediction of which tier (see Projection tab).</div>
+            </div>
+          </div>
+        </Sec>
+      )}
+
+      {/* Tobias 2026-06-03 v5: missing-shooting fallback */}
+      {!p.shooting && (
+        <Sec icon="🎯" title="NBA 3P Projection" sub="No shooting projection available for this player.">
+          <div className="rounded-lg p-4" style={{background:"#0a0e14", border:"1px solid #1f2937"}}>
+            <div className="text-sm" style={{color:"#9ca3af"}}>
+              We don't have a shooting projection for this player. This usually means college 3-pt sample size was too small (typically &lt; 20 attempts) or the player profile is from a cohort our shooting model doesn't cover well.
+            </div>
+            <div className="text-xs mt-2" style={{color:"#6b7280"}}>
+              The base projection model needs enough 3-pt attempts to estimate shooting skill above noise. For pre-2008 NCAA seasons and some older intl prospects, the data quality wasn't sufficient.
+            </div>
+          </div>
+        </Sec>
+      )}
+
+      {/* Tobias 2026-06-02: 3-Layer Shooting Projection explainer (Skill / Intent / Volume). */}
+      <div className="rounded-2xl p-5 mb-4" style={{background:"linear-gradient(135deg,#0d1117,#111827)", border:"1px solid #1f2937"}}>
+        <h3 className="text-base font-bold text-gray-100 mb-2">How 3P Projection Works — Three Layers</h3>
+        <p className="text-xs text-gray-400 mb-4">A 3-point projection mixes three different questions. We split them out so each can be read on its own.</p>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="rounded-lg p-3" style={{background:"#0a0e14", border:"1px solid #22c55e44"}}>
+            <div style={{fontSize:10,fontWeight:700,color:"#22c55e",letterSpacing:1,marginBottom:4}}>LAYER 1 — SKILL</div>
+            <div style={{fontSize:13,fontWeight:600,color:"#e5e7eb",marginBottom:6}}>How well does he shoot? <span style={{color:"#22c55e"}}>(NBA 3P%)</span></div>
+            <p style={{fontSize:11,color:"#9ca3af",lineHeight:1.6}}>
+              <strong>Inputs:</strong> College 3P% (Bayesian-shrunken toward the 34.8% league mean), FT% (touch — our single strongest predictor), mid-range FG%.
+            </p>
+            <p style={{fontSize:11,color:"#9ca3af",lineHeight:1.6,marginTop:4}}>
+              <strong>Output:</strong> Point estimate with a confidence range. <em>e.g. "35.5% — realistically 33–38%"</em>.
+            </p>
+            <p style={{fontSize:10,color:"#6b7280",marginTop:4,fontStyle:"italic"}}>Validation: MAE 2.5 pp on 506 NBA shooters. Pearson r = 0.40.</p>
+          </div>
+
+          <div className="rounded-lg p-3" style={{background:"#0a0e14", border:"1px solid #fbbf2444"}}>
+            <div style={{fontSize:10,fontWeight:700,color:"#fbbf24",letterSpacing:1,marginBottom:4}}>LAYER 2 — INTENT</div>
+            <div style={{fontSize:13,fontWeight:600,color:"#e5e7eb",marginBottom:6}}>How often does he take the three? <span style={{color:"#fbbf24"}}>(NBA 3PAr)</span></div>
+            <p style={{fontSize:11,color:"#9ca3af",lineHeight:1.6}}>
+              <strong>Inputs:</strong> College 3PAr (share of his college shots from three), touch (FT%), the Layer-1 skill estimate.
+            </p>
+            <p style={{fontSize:11,color:"#9ca3af",lineHeight:1.6,marginTop:4}}>
+              <strong>Why separate:</strong> A great shooter can take few threes (Joel Embiid). An average shooter can take many (Joe Ingles). Skill ≠ Intent.
+            </p>
+            <p style={{fontSize:10,color:"#6b7280",marginTop:4,fontStyle:"italic"}}>Validation: MAE 9.7 pp. Pearson r = 0.73.</p>
+          </div>
+
+          <div className="rounded-lg p-3" style={{background:"#0a0e14", border:"1px solid #f9731644"}}>
+            <div style={{fontSize:10,fontWeight:700,color:"#f97316",letterSpacing:1,marginBottom:4}}>LAYER 3 — VOLUME</div>
+            <div style={{fontSize:13,fontWeight:600,color:"#e5e7eb",marginBottom:6}}>How many threes per game? <span style={{color:"#f97316"}}>(NBA 3PA / G)</span></div>
+            <p style={{fontSize:11,color:"#9ca3af",lineHeight:1.6}}>
+              <strong>Not directly predictable from college</strong> — college 3PA-per-game has near-zero correlation with NBA 3PA-per-game (r = 0.005). Volume is a function of role, not talent.
+            </p>
+            <p style={{fontSize:11,color:"#9ca3af",lineHeight:1.6,marginTop:4}}>
+              <strong>How we get there:</strong> 3PA = 3PAr × FGA. FGA depends on Tier × Position. We show conditional ranges: <em>"If Starter: 5 attempts. If All-Star: 6."</em>
+            </p>
+            <p style={{fontSize:10,color:"#6b7280",marginTop:4,fontStyle:"italic"}}>Empirical NBA FGA-per-36 per Tier × Position table.</p>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg p-3" style={{background:"#0a0e14", border:"1px solid #1f2937"}}>
+          <div style={{fontSize:11,color:"#9ca3af",lineHeight:1.7}}>
+            <strong style={{color:"#e5e7eb"}}>Why this matters.</strong> If a player has high touch (FT% 84%) but moderate intent (33% of shots are 3s), he&apos;s a <em>willing-but-not-eager</em> shooter — like Cooper Flagg. A player with weak touch but high intent — many bad-form shooters — is a <em>red flag</em>. We surface both axes so you can read which one is strong and which is weak.
+          </div>
+          <div className="mt-2" style={{fontSize:11,color:"#9ca3af",lineHeight:1.7}}>
+            <strong style={{color:"#e5e7eb"}}>Each layer can be wrong independently.</strong> Skill mis-fires on small samples (Caleb Wilson: 27 college 3PA). Intent shifts with coach and role (Joe Harris was projected at 35% intent and coached into 45%). Volume hinges on the tier projection itself, which has its own error bars. So we show <strong>ranges, not single numbers</strong>.
+          </div>
+        </div>
+      </div>
+
+      
+
+      {useSimplifiedCourt && (
+        <div className="p-3 rounded-lg text-sm" style={{background:"#1e3a5f33",border:"1px solid #3b82f644",color:"#93c5fd"}}>
+          {isIntl ? "International prospect" : "Pre-2010 NCAA"} — shot-type tracking (rim/mid/dunk) not available. Showing 2P/3P/FT split.
+        </div>
+      )}
+
+      
 
       {/* ═══ SHOT CREATION SPECTRUM ═══ */}
       {p.shotCreation && p.shotCreation.overall && p.shotCreation.overall.fga >= 30 && (() => {
@@ -2495,9 +3278,14 @@ function ShootingTab({p}) {
           selfMakesByZone[z] = selfMakes;
           totalSelfMakes += selfMakes;
         });
-        if (isPBPLimited2026(p)) return <PBPNotAvailable title="Shot Creation Spectrum" icon="🎯"/>;
+        /* Tobias 2026-06-03 v6: SC reactivated for 2026 — season complete */
+        // SC was previously hidden for 2026 due to partial-season PBP scrape.
+        // As of 2026-06-03 the 2025-26 NCAA season is complete in the source data;
+        // PBPSampleWarning still guards low-sample players (<100 FGA threshold).
         return (
           <Sec icon="🎯" title="Shot Creation Spectrum" sub={`PBP-based creation profile — ${scd.overall.fga} FGA tracked · ${fmt(scd.overall.selfPct||0)}% overall self-created`}>
+            {/* Sample-size honesty (Tobias 2026-05-30) */}
+            <PBPSampleWarning n={scd.overall.fga} threshold={100} unit="FGA"/>
             <div className="space-y-3">
               {/* Zone bars: each zone shows FGA, FG%, self-creation rate */}
               {zones.map(z => {
@@ -2623,6 +3411,45 @@ function ShootingTab({p}) {
                       </div>
                       <div className="text-xs leading-relaxed" style={{color:"#9ca3af"}}>{verdictDesc}</div>
                     </div>
+
+                    {/* Tobias 2026-06-03 v8: Compact cluster pill (full theory in Research tab) */}
+                    {(() => {
+                      if (!p.pos) return null;
+                      const atrM = Math.round((scd.rim?.fga ?? 0) * ((scd.rim?.pct ?? 0)/100) * ((scd.rim?.selfPct ?? 0)/100));
+                      const midM = Math.round((scd.mid?.fga ?? 0) * ((scd.mid?.pct ?? 0)/100) * ((scd.mid?.selfPct ?? 0)/100));
+                      const tpM  = Math.round((scd.three?.fga ?? 0) * ((scd.three?.pct ?? 0)/100) * ((scd.three?.selfPct ?? 0)/100));
+                      let cluster, starterPct, comp;
+                      if (p.pos === "Wing") {
+                        const aHi = atrM > 50, tHi = tpM > 6;
+                        if (aHi && tHi)       { cluster = "Volume-Trap"; starterPct = 15.1; comp = "Jaden Ivey / Tony Wroten"; }
+                        else if (aHi)          { cluster = "Rim-Workhorse"; starterPct = 34.8; comp = "SGA / Kawhi / Brunson (college)"; }
+                        else if (tHi)          { cluster = "Pullup-3 Volume"; starterPct = 15.8; comp = "Carsen Edwards / Austin Rivers"; }
+                        else                    { cluster = "Role-Floor"; starterPct = 18.7; comp = "Trey Murphy / Duncan Robinson"; }
+                      } else if (p.pos === "Big") {
+                        const aHi = atrM > 70, mHi = midM > 20;
+                        if (aHi && mHi)       { cluster = "Two-Way Star-Big"; starterPct = 42.6; comp = "Anthony Davis / KAT"; }
+                        else if (aHi)          { cluster = "Rim-Power Big"; starterPct = 38.0; comp = "Jarrett Allen / Sabonis"; }
+                        else if (mHi)          { cluster = "Mid-Range Big"; starterPct = 36.4; comp = "Sabonis / Cousins"; }
+                        else                    { cluster = "Catch-Big Role-Floor"; starterPct = 16.7; comp = "Steven Adams / Zach Collins"; }
+                      } else if (p.pos === "Playmaker") {
+                        const aHi = atrM > 80, tHi = tpM > 20;
+                        if (aHi && tHi)        { cluster = "Star-PG"; starterPct = 47.0; comp = "Lillard / Trae Young / Brunson"; }
+                        else if (aHi)           { cluster = "Iso-Heavy PG"; starterPct = 32.0; comp = "Kemba / Kyrie"; }
+                        else if (tHi)           { cluster = "Pullup PG"; starterPct = 27.3; comp = "Lonzo Ball"; }
+                        else                    { cluster = "Connector PG"; starterPct = 45.0; comp = "Haliburton / Dellavedova"; }
+                      } else { return null; }
+                      const color = starterPct >= 30 ? "#22c55e" : starterPct >= 20 ? "#fbbf24" : "#ef4444";
+                      return (
+                        <div className="mt-3 pt-3 border-t flex flex-wrap items-baseline gap-x-3 gap-y-1" style={{borderColor:"#1e293b"}}>
+                          <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Historical Cluster</span>
+                          <span className="text-sm font-bold" style={{color, fontFamily:"'Oswald',sans-serif"}}>{cluster}</span>
+                          <span className="text-xs" style={{color:"#9ca3af"}}>Starter+ rate: <strong style={{color}}>{starterPct.toFixed(1)}%</strong></span>
+                          <span className="text-xs" style={{color:"#6b7280"}}>·</span>
+                          <span className="text-xs" style={{color:"#cbd5e1"}}>Comp: {comp}</span>
+                          <span className="text-[10px] ml-auto" style={{color:"#475569"}}>See <span style={{color:"#94a3b8"}}>Research → Self-Creation Framework</span></span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })()}
@@ -2632,45 +3459,7 @@ function ShootingTab({p}) {
       })()}
 
       {/* ═══ NBA SHOOTING PROJECTION ═══ */}
-      <Sec icon="🔮" title="NBA Shooting Projection" sub={isIntl||useSimplifiedCourt?"How well does he project to shoot in the NBA? Dissertation Stage 1 shrinks his pre-draft 3P% against the NCAA league-wide distribution — small 3PA samples are pulled toward the league median; Stage 2 (M1) translates FT% and the 3P-Estimate into an NBA 3P%. Intl variant has no 2-point-jumper data, so the 2PJ% term drops out.":"How well does he project to shoot in the NBA? Dissertation Stage 1 shrinks his pre-draft 3P% against the NCAA league-wide distribution (small 3PA samples regress strongly toward the league median); Stage 2 (M1) translates FT% + 2PJ% + 3P-Estimate into an NBA 3P%; Stage 3 (M4) projects role-independent 3PAr (3PA/FGA) from the same inputs. All coefficients fitted on the resolved holdout, none hand-tuned."}>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-          {[
-            ["projNba3p","Proj. 3P%", projNba3p, projNba3p!=null?(projNba3p>36?"#22c55e":projNba3p>32?"#fbbf24":"#ef4444"):"#6b7280"],
-            ["projNba3pa","Proj. 3PA/G", projNba3pa, projNba3pa!=null?(projNba3pa>5?"#3b82f6":"#6b7280"):"#6b7280"],
-            ["projNba3par","Proj. 3PAr", proj3PAr, proj3PAr!=null?(proj3PAr>30?"#3b82f6":"#6b7280"):"#6b7280"],
-            ["touchPrior","Touch Prior", touchPrior, touchPrior>37?"#22c55e":touchPrior>34?"#fbbf24":"#ef4444"],
-          ].map(([key,l,v,c])=>{
-            const m=METHODS[key]||METHODS.touchPrior;
-            return (
-              <Tip key={key} wide content={
-                <div><div className="font-bold mb-1" style={{color:"#f97316"}}>{m?.name||l}</div>
-                {m?.formula&&<div className="mb-1"><span style={{color:"#94a3b8"}}>Formula:</span><br/><code className="text-xs" style={{color:"#7dd3fc"}}>{m.formula}</code></div>}
-                {m?.desc&&<div style={{color:"#cbd5e1"}}>{m.desc}</div>}
-                {key==="projNba3pa"&&<div className="mt-1" style={{color:"#94a3b8"}}>Volume: {bestTier} {p.pos} → {projFGA.toFixed(1)} FGA/game median.</div>}
-                {key==="touchPrior"&&touchPriorPctl!=null&&<div className="mt-1" style={{color:"#94a3b8"}}>Pctl <strong style={{color:"#cbd5e1"}}>{touchPriorPctl}</strong> within draft-eligible cohort (empirical approximation: 30-44% Range).</div>}
-                </div>
-              }>
-                <div className="rounded-lg p-4 text-center cursor-help" style={{background:"#0d1117"}}>
-                  <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#6b7280"}}>{l} <span style={{color:"#475569"}}>ⓘ</span></div>
-                  <div className="text-3xl font-bold" style={{color:c,fontFamily:"'Oswald',sans-serif"}}>{v!=null?fmt(v):"—"}{key==="touchPrior"?"%":""}</div>
-                  {key==="touchPrior"&&touchPriorPctl!=null&&v!=null&&(
-                    <div className="text-xs mt-1" style={{color:"#9ca3af"}}>Pctl <strong style={{color:c}}>{touchPriorPctl}</strong></div>
-                  )}
-                  {v==null&&<div className="text-xs mt-1" style={{color:"#475569"}}>insufficient data</div>}
-                </div>
-              </Tip>
-            );
-          })}
-        </div>
-        <div className="px-3 py-2 rounded-lg text-xs" style={{background:"#0d1117",border:"1px solid #1e293b"}}>
-          <Tip wide content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>Bayesian Beta-Binomial (Berger 2022)</div><div style={{color:"#cbd5e1"}}>Prior: FT%-based touch (μ₀). kappa=200 pseudo-attempts. Volume: {bestTier} {p.pos} → {projFGA.toFixed(1)} FGA/game.</div></div>}>
-            <span style={{color:"#6b7280"}}>{hasMidData
-              ? <>Touch Prior: FT% (<span style={{color:"#8b5cf6"}}>{ft!=null?fmt(ft):"—"}</span>) × 0.18 + Mid% (<span style={{color:"#fbbf24"}}>{fmt(midForPrior)}</span>) × 0.05 + 0.20</>
-              : <>Touch Prior (FT-only): FT% (<span style={{color:"#8b5cf6"}}>{ft!=null?fmt(ft):"—"}</span>) × 0.22 + 0.22 <span style={{color:"#475569"}}>(no midrange data)</span></>
-            } = <span className="font-bold" style={{color:touchPrior>37?"#22c55e":"#fbbf24"}}>{fmt(touchPrior)}%</span> <span style={{color:"#475569"}}>ⓘ</span></span>
-          </Tip>
-        </div>
-      </Sec>
+      
     </div>
   );
   } catch(e) {
@@ -3222,14 +4011,34 @@ function ClassScatterAndDev({p}) {
 // ═══════════════════════════════════════════════════════════
 function MindTab({p}) {
   if (!p) return null;
-  // 2026-05-29 — entire Mind tab is PBP-derived; hide for 2026 class.
-  if (isPBPLimited2026(p)) {
-    return (
-      <div className="space-y-6">
-        <PBPNotAvailable title="Mind Tab — Behaviour Under Pressure" icon="🧠"/>
-      </div>
-    );
-  }
+  {/* Tobias 2026-06-03 v9: Mind Tab honest disclaimer banner */}
+  const MindDisclaimer = () => (
+    <div className="rounded-xl p-4 mb-4 text-sm leading-relaxed"
+         style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+      <div className="font-semibold text-gray-100 mb-2">About these metrics</div>
+      <p className="text-gray-300 mb-2">
+        The Mind tab measures behavioural patterns under pressure — clutch shooting deltas,
+        adverse-event response tendencies (Aggressor, Overdriver, Hothead, Passive),
+        stamina drift across halves, and bounceback efficiency after negative streaks.
+        These come from BartTorvik aggregated PBP arrays and cover the full 2025-26 NCAA season.
+      </p>
+      <p className="text-gray-400 text-xs">
+        <strong className="text-gray-300">What they show:</strong> Behavioural fingerprint and stylistic tendencies under stress.
+        <br/>
+        <strong className="text-gray-300">What they do NOT predict:</strong> NBA stardom on their own. Most historical NBA stars
+        (Anthony Edwards, Brunson, Trae Young, Haliburton) scored <em>below-median</em> on the mind composite
+        in their final NCAA season. Mind correlates weakly with NBA peak Wins Added (|r| &lt; 0.10 univariate).
+        Treat this as <strong className="text-gray-200">qualitative behavioural reference</strong>, not a projection.
+        Full methodology, sample-size conventions and historic validation in <a href="https://github.com/TobiasBergerData/ProspectTheory/blob/main/docs/MIND_FRAMEWORK.md" target="_blank" rel="noopener noreferrer" style={{color:"#60a5fa",textDecoration:"underline"}}>docs/MIND_FRAMEWORK.md</a>.
+      </p>
+    </div>
+  );
+
+  /* Tobias 2026-06-03 v9: Mind tab reactivated for 2026, with honest disclaimer */
+
+  // Mind metrics use BartTorvik aggregated PBP arrays — full 2025-26 season coverage,
+
+  // same source as Shot Creation. No partial-season concern.
 
   const le = p.leverageEff ?? null;
 
@@ -3240,6 +4049,7 @@ function MindTab({p}) {
     const tierColor = pct >= 80 ? "#22c55e" : pct >= 60 ? "#86efac" : pct >= 40 ? "#fbbf24" : "#ef4444";
     return (
       <div className="flex flex-col items-center" style={{minWidth:90}}>
+      <MindDisclaimer/>
         <div style={{position:"relative",width:80,height:80}}>
           <svg width={80} height={80} viewBox="0 0 80 80">
             <circle cx={40} cy={40} r={34} fill="none" stroke="#1f2937" strokeWidth={8}/>
@@ -3385,13 +4195,12 @@ function MindTab({p}) {
         </div>
       </div>
 
+      {/* Sample-size honesty (Tobias 2026-05-30): warn when PBP event-count
+          is too small for confident reading. Threshold 200 events ≈ ~10–15 games. */}
+      <PBPSampleWarning n={p.mindMetrics?.n_actions} threshold={200} unit="player-events"/>
+
       {/* ══════════════════════════════════════════════════════════════════
            Section 1: Self-Sufficiency Profile — 4-Step Decision Tree
-           Tobias 2026-05-09: refactor in klare nummerierte Schritte mit
-           Step-Header, Hero-Number pro Schritt, eindeutiger Verdict am Ende.
-           Tobias 2026-05-19: für Intl-Spieler ohne leverageEff (kein NCAA-PBP-
-           Self-Creation) wird die ganze Sec übersprungen — Mental Resilience
-           (mindMetrics-only) bleibt sichtbar.
          ══════════════════════════════════════════════════════════════════ */}
       {!le && p.mindMetrics && (
         <div style={{background:"#0d1117",border:"1px solid #1f2937",borderRadius:10,padding:"10px 14px"}}>
@@ -3447,15 +4256,53 @@ function MindTab({p}) {
             return "Predominantly assisted finisher";
           })();
 
+          // Tobias 2026-06-04 (Sprint-1): Verdict-Thresholds + Sample-Size Filter
+          //
+          // Pre-existing condition (entdeckt im Pod-Audit 2026-06-04):
+          //   Mikel Brown Jr. erhielt "★★★ Self-Sufficient Star Profile" weil
+          //   clutch_wp.delta_efg = +5.3pp den +5-Threshold ÜBERSCHRITT — bei nur
+          //   n=8 clutch-attempts. Ein einzelner getroffener Shot kann bei diesem
+          //   Sample den Schwellenwert pushen → false-positive Star-Label.
+          //
+          // Architektur:
+          //   Zentrale PRESSURE_THRESHOLDS Konstante mit { delta, n_min } pro
+          //   Metrik. Single source of truth — wenn man künftig die Filter
+          //   verschärfen will, ein Patch reicht (statt 3+ verstreute Stellen).
+          //
+          // n_min Begründung (statistisch):
+          //   - clutch_wp.fga    n_min=15  → delta von ±5pp braucht ~15 Versuche
+          //                                  um aus reinem Rausch zu treten
+          //   - late_clock.fga   n_min=25  → -10pp ist gut detektierbar ab ~25
+          //                                  attempts (Effekt typisch persistent)
+          //   - clutch_time.fga  n_min=12  → kleineres Volumen, akzeptabel mit 12
+          //   (Diese Schwellen basieren auf Beobachtung: ~5%-Effekt detektierbar
+          //   bei n≥15 für FG-Distributions mit σ≈12pp/√n.)
+          const PRESSURE_THRESHOLDS = {
+            clt_strong:    { delta: +5,   n_min: 15, metric: "clutch_wp"  },
+            clt_drop:      { delta: -8,   n_min: 15, metric: "clutch_wp"  },
+            late_clock_bad:{ delta: -10,  n_min: 25, metric: "late_clock" },
+          };
+
+          // hasReliablePressure(t): true wenn delta AND sample-size beide
+          // erfüllt sind. Falls n_min unterschritten → return false statt true.
+          const hasReliablePressure = (cfg) => {
+            const block = p.mindMetrics?.[cfg.metric];
+            if (!block || block.delta_efg == null || block.fga == null) return false;
+            if (block.fga < cfg.n_min) return false;
+            return cfg.delta >= 0
+              ? block.delta_efg > cfg.delta
+              : block.delta_efg < cfg.delta;
+          };
+
           // Verdict logic — combine signals
           const verdict = (() => {
             const heavy = overallSelfPct != null && overallSelfPct >= 50;
             const lite = overallSelfPct != null && overallSelfPct < 40;
             const efficientHard = diffPrem != null && diffPrem > -2;
             const inefficientHard = diffPrem != null && diffPrem < -8;
-            const cltDrop = p.mindMetrics?.clutch_wp?.delta_efg != null && p.mindMetrics.clutch_wp.delta_efg < -8;
-            const cltStrong = p.mindMetrics?.clutch_wp?.delta_efg != null && p.mindMetrics.clutch_wp.delta_efg > 5;
-            const lateClockBad = p.mindMetrics?.late_clock?.delta_efg != null && p.mindMetrics.late_clock.delta_efg < -10;
+            const cltStrong    = hasReliablePressure(PRESSURE_THRESHOLDS.clt_strong);
+            const cltDrop      = hasReliablePressure(PRESSURE_THRESHOLDS.clt_drop);
+            const lateClockBad = hasReliablePressure(PRESSURE_THRESHOLDS.late_clock_bad);
 
             if (heavy && efficientHard && cltStrong) return {
               label: "Self-Sufficient Star Profile", color: "#22c55e",
@@ -3625,10 +4472,206 @@ function MindTab({p}) {
                           sub="FT in last 5 min Half 2 with ≤5pt diff."
                           fga={ft.clutch_fta} efg={ft.clutch_pct} delta={ft.clutch_delta} type="ft" minSample={5}/>
                       )}
+                      {/* Sprint-3.24 (2026-06-14): FT-Resilience nach Adverse Event */}
+                      {ft.resilience?.idx != null && (() => {
+                        const r = ft.resilience;
+                        const delta = (r.pct_post != null && r.pct_base != null) ? (r.pct_post - r.pct_base) : null;
+                        return (
+                          <PressureCard title="FT after Adverse Streak"
+                            sub={`FT% post-streak vs baseline. Resilience idx ${r.idx.toFixed(2)} (${r.trips_post} post vs ${r.trips_base} base trips).`}
+                            fga={r.trips_post} efg={r.pct_post} delta={delta} type="ft" minSample={5}/>
+                        );
+                      })()}
                     </div>
                     <div style={{fontSize:9,color:"#475569",marginTop:4,fontStyle:"italic"}}>
                       Cards with &lt;8 attempts are directional only — a single make/miss can shift eFG dramatically.
                     </div>
+
+                    {/* ── Sprint-3.25 (#19, 2026-06-14) / Sprint-3.28 (2026-06-15 EN rewrite + verdict): Usage Reaction ── */}
+                    {p.usageReaction && p.usageReaction.n_games >= 10 && (() => {
+                      const ur = p.usageReaction;
+                      // Slope-Skala: typical pool p10 / p90 für scorer und passer
+                      // (aus compute_usage_reaction.py 2025-26 distribution)
+                      // scorer: p10=-0.031, p90=+0.046 → range ±0.05
+                      // passer: p10=-0.031, p90=+0.004 → range ±0.04 (asymmetric)
+                      const SLOPE_RANGE = 0.05;
+
+                      // ── Verdict-Logik: beantwortet die Wurzel-Frage ──
+                      // "When usage rises, does he become more of a Scorer or a Passer?"
+                      // Plus die 3 Hauptfaktoren: scorer slope sign + passer slope sign + significance.
+                      const computeVerdict = () => {
+                        const ss = ur.scorer_slope ?? 0;
+                        const ps = ur.passer_slope ?? 0;
+                        const ssSig = ur.scorer_p != null && ur.scorer_p < 0.05;
+                        const psSig = ur.passer_p != null && ur.passer_p < 0.05;
+                        const FLAT = 0.005;    // |slope| < this counts as flat
+
+                        // Pure Playmaker: passing scales significantly, scoring flat/stable
+                        if (ps > FLAT && Math.abs(ss) < FLAT && psSig) {
+                          return {
+                            tilt: "Playmaker-tilt",
+                            color: "#3b82f6",
+                            msg: "When usage rises, he creates significantly more assists while scoring efficiency stays stable. Typical for elite Point Guards who scale playmaking with possessions.",
+                          };
+                        }
+                        // Dual Playmaker: passing scales + scoring scales (rare, elite)
+                        if (ps > FLAT && ss > FLAT) {
+                          return {
+                            tilt: "Dual Scaling",
+                            color: "#a855f7",
+                            msg: "Both scoring efficiency AND assists scale upward with usage. Rare elite pattern — gains efficiency in BOTH dimensions when given the ball.",
+                          };
+                        }
+                        // Scorer-tilt (Boozer): scoring stable, passing significantly drops
+                        if (ps < -FLAT && Math.abs(ss) < FLAT && psSig) {
+                          return {
+                            tilt: "Scorer-tilt",
+                            color: "#f97316",
+                            msg: "When usage rises, scoring efficiency stays stable but passing significantly drops. Becomes more of a scorer/finisher, less of a playmaker — typical Wing-Star pattern.",
+                          };
+                        }
+                        // Pure Scorer: scoring scales, passing flat/drops
+                        if (ss > FLAT && ps <= FLAT) {
+                          return {
+                            tilt: "Pure Scorer",
+                            color: "#f97316",
+                            msg: "When usage rises, scoring efficiency improves (gets MORE efficient with more possessions). Classic on-ball scorer profile.",
+                          };
+                        }
+                        // Volume-limited: both drop
+                        if (ss < -FLAT && ps < -FLAT) {
+                          return {
+                            tilt: "Volume-limited",
+                            color: "#ef4444",
+                            msg: "Both scoring efficiency and assists drop under higher usage. Profile suggests limited shot-creation capacity — best in lower-usage roles where he stays efficient.",
+                          };
+                        }
+                        // Balanced: both flat
+                        if (Math.abs(ss) < FLAT && Math.abs(ps) < FLAT) {
+                          return {
+                            tilt: "Balanced / Stable",
+                            color: "#86efac",
+                            msg: "Both slopes near flat — uses extra possessions without specializing toward scoring or playmaking. Versatile usage profile.",
+                          };
+                        }
+                        // Mixed (default fallback)
+                        return {
+                          tilt: "Mixed pattern",
+                          color: "#9ca3af",
+                          msg: `Scoring slope ${ss > 0 ? "+" : ""}${(ss * 100).toFixed(1)} PTS/100 poss, passing slope ${ps > 0 ? "+" : ""}${(ps * 100).toFixed(1)} AST/100 poss per +1 USG-pt. Plus read the individual bars below for the full picture.`,
+                        };
+                      };
+                      const verdict = computeVerdict();
+
+                      const StrahlBar = ({label, sublabel, slope, slope_lo, slope_hi, r2, p_val, leftLabel, rightLabel, unit}) => {
+                        if (slope == null) return null;
+                        const clamped = Math.max(-SLOPE_RANGE, Math.min(SLOPE_RANGE, slope));
+                        const pct = ((clamped + SLOPE_RANGE) / (2 * SLOPE_RANGE)) * 100;
+                        const sigColor = slope > 0.005 ? "#22c55e" :
+                                          slope > -0.005 ? "#9ca3af" :
+                                          "#ef4444";
+                        const ci_lo_pct = slope_lo != null ? ((Math.max(-SLOPE_RANGE, Math.min(SLOPE_RANGE, slope_lo)) + SLOPE_RANGE) / (2 * SLOPE_RANGE)) * 100 : null;
+                        const ci_hi_pct = slope_hi != null ? ((Math.max(-SLOPE_RANGE, Math.min(SLOPE_RANGE, slope_hi)) + SLOPE_RANGE) / (2 * SLOPE_RANGE)) * 100 : null;
+                        const isSig = p_val != null && p_val < 0.05;
+                        return (
+                          <div style={{width:"100%",marginBottom:10}}>
+                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                              <div style={{display:"flex",flexDirection:"column",maxWidth:"68%"}}>
+                                <span style={{fontSize:12,fontWeight:600,color:"#e5e7eb"}}>{label}</span>
+                                <span style={{fontSize:10,color:"#6b7280",lineHeight:1.3}}>{sublabel}</span>
+                              </div>
+                              <div style={{textAlign:"right"}}>
+                                <span style={{fontSize:14,fontWeight:700,color:sigColor,fontFamily:"Oswald,sans-serif"}}>
+                                  {slope > 0 ? "+" : ""}{(slope*100).toFixed(1)}
+                                </span>
+                                <span style={{fontSize:10,color:"#6b7280",marginLeft:3}}>{unit}/100 poss per +1 USG</span>
+                                {r2 != null && (
+                                  <div style={{fontSize:9,color:isSig ? "#86efac" : "#6b7280"}}>
+                                    r²={r2.toFixed(2)} · p={p_val?.toFixed(3) ?? "—"} {isSig ? "· significant" : "· not significant"}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <div style={{position:"relative",background:"#1f2937",borderRadius:6,height:10,overflow:"visible"}}>
+                              <div style={{position:"absolute",left:"50%",top:-2,bottom:-2,width:2,background:"#374151"}}/>
+                              {ci_lo_pct != null && ci_hi_pct != null && (
+                                <div style={{position:"absolute",left:`${Math.min(ci_lo_pct,ci_hi_pct)}%`,
+                                              width:`${Math.abs(ci_hi_pct-ci_lo_pct)}%`,
+                                              top:0,bottom:0,
+                                              background:sigColor,opacity:0.25,borderRadius:6}}/>
+                              )}
+                              <div style={{position:"absolute",left:`calc(${pct}% - 4px)`,top:-2,
+                                            width:8,height:14,background:sigColor,borderRadius:2,
+                                            boxShadow:"0 0 4px rgba(0,0,0,0.5)"}}/>
+                            </div>
+                            <div style={{display:"flex",justifyContent:"space-between",marginTop:3,fontSize:9,color:"#475569"}}>
+                              <span>← {leftLabel}</span>
+                              <span>flat (no change with usage)</span>
+                              <span>{rightLabel} →</span>
+                            </div>
+                          </div>
+                        );
+                      };
+                      const limited = ur.limited_sample || ur.n_games < 15;
+                      return (
+                        <div style={{background:"#0d1117",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px",marginTop:14}}>
+                          {/* ── Header with root question ── */}
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:10}}>
+                            <div>
+                              <div style={{fontSize:13,fontWeight:600,color:"#e5e7eb"}}>Usage Reaction — Scorer or Passer?</div>
+                              <div style={{fontSize:10,color:"#9ca3af",lineHeight:1.4}}>
+                                When this player takes <strong style={{color:"#d1d5db"}}>more usage</strong>, does he become more of a <strong style={{color:"#f97316"}}>scorer</strong> or more of a <strong style={{color:"#3b82f6"}}>passer</strong>? Built from per-game linear regression on {ur.n_games} games (USG range {ur.usg_range?.min?.toFixed(0)}–{ur.usg_range?.max?.toFixed(0)}%).
+                              </div>
+                            </div>
+                            {limited && (
+                              <span style={{fontSize:10,color:"#fbbf24",background:"#1f1300",padding:"2px 6px",borderRadius:4,whiteSpace:"nowrap",marginLeft:8}}>
+                                directional · n={ur.n_games}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* ── Verdict box: the answer in one sentence ── */}
+                          <div style={{background:`${verdict.color}15`, border:`1px solid ${verdict.color}50`,
+                                        borderRadius:8, padding:"10px 12px", marginBottom:14}}>
+                            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                              <span style={{fontSize:10,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.5}}>Verdict</span>
+                              <span style={{fontSize:14,fontWeight:700,color:verdict.color}}>{verdict.tilt}</span>
+                            </div>
+                            <div style={{fontSize:11,color:"#d1d5db",lineHeight:1.55}}>{verdict.msg}</div>
+                          </div>
+
+                          {/* ── Detail bars: the underlying numbers ── */}
+                          <div style={{fontSize:10,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>The two slopes behind the verdict</div>
+                          <StrahlBar
+                            label="Scoring efficiency vs usage"
+                            sublabel="How does PTS-per-possession change when his usage goes up?"
+                            slope={ur.scorer_slope}
+                            slope_lo={ur.scorer_slope_lo}
+                            slope_hi={ur.scorer_slope_hi}
+                            r2={ur.scorer_r2}
+                            p_val={ur.scorer_p}
+                            leftLabel="less efficient under high usage"
+                            rightLabel="more efficient under high usage"
+                            unit="PTS"
+                          />
+                          <StrahlBar
+                            label="Passing rate vs usage"
+                            sublabel="How does AST-per-possession change when his usage goes up?"
+                            slope={ur.passer_slope}
+                            slope_lo={ur.passer_slope_lo}
+                            slope_hi={ur.passer_slope_hi}
+                            r2={ur.passer_r2}
+                            p_val={ur.passer_p}
+                            leftLabel="passes less when given more usage"
+                            rightLabel="passes more when given more usage"
+                            unit="AST"
+                          />
+                          <div style={{fontSize:9,color:"#475569",marginTop:6,fontStyle:"italic",lineHeight:1.4}}>
+                            Methodology: per-game linear regression on {ur.n_games} BartTorvik box scores from 2025-26. Shaded band = 95% Wald confidence interval. Slopes are read as "PTS (or AST) per 100 possessions, per 1-point USG increase". A slope is statistically significant when p &lt; 0.05 AND the CI does not cross zero. Below 15 games the verdict is directional only — confirm with film and re-run mid-season.
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </>
                 );
               })()}
@@ -3727,213 +4770,7 @@ function MindTab({p}) {
 
       </Sec>
 
-      {/* ── Section 2: Usage Reaction (formerly "Offensive Skill Curve") ── */}
-      {p.skillCurve && (() => {
-        const sc = p.skillCurve;
-        const rawLines = (p.seasonLines || []).filter(s => s.yr && s.usg >= 8);
-        const seasons = rawLines.map((s, i) => ({
-          yr:     s.yr,
-          usg:    s.usg,
-          adjOrtg: (i === rawLines.length - 1 && sc.curAdjOrtg) ? sc.curAdjOrtg
-                   : Math.round(-0.0052*s.usg*s.usg + 1.6262*s.usg + 69.51 + (sc.peerResidual || 0) * 0.5),
-          ts:     s.ts,
-          astP:   null,   // AST% not in season_lines; shown as — in table
-          toP:    null,
-          obpm:   s.bpm,
-          gp:     s.gp,
-        }));
-        const curSeason = seasons[seasons.length - 1];
-        const multiSeason = sc.nSeasons >= 2 && sc.slope != null;
-
-        // Peer curve: AdjOrtg = -0.0052*USG^2 + 1.6262*USG + 69.51
-        const peerExp = (usg) => Math.round(-0.0052*usg*usg + 1.6262*usg + 69.51);
-
-        // Slope classification: individual AdjOrtg/USG slope across seasons.
-        // Typical: efficiency DROPS slightly at higher volume. Holding flat or growing is the positive signal.
-        // Peer curve derivative at avg USG (~22%) ≈ +0.88/1% USG (cross-sectional, not individual).
-        // Labels reflect individual trajectory vs typical decay.
-        const getSlopeLabel = (slope) => {
-          if (slope == null) return null;
-          if (slope >= 2.5) return {label:"Scales with Volume", color:"#22c55e"};   // rare — efficiency actively grows
-          if (slope >= 0.5) return {label:"Holds Efficiency", color:"#86efac"};     // beats typical individual decay
-          if (slope >= -1.0) return {label:"Normal Volume Decay", color:"#fbbf24"}; // expected — most players here
-          return {label:"Efficiency Drops at Volume", color:"#ef4444"};             // concerning volume limitation
-        };
-        const getAstLabel = (slope) => {
-          if (slope == null) return null;
-          if (slope >= 1.5) return {label:"Playmaking Expands", color:"#22c55e"};
-          if (slope >= 0.3) return {label:"Slight Playmaking Gain", color:"#86efac"};
-          if (slope >= -0.3) return {label:"Role Stays Flat", color:"#fbbf24"};
-          return {label:"Scoring-Only at Volume", color:"#ef4444"};
-        };
-
-        const slopeInfo = getSlopeLabel(sc.slope);
-        const astInfo   = getAstLabel(sc.slopeAst);
-        const peerColor = sc.peerPctl >= 80 ? "#22c55e" : sc.peerPctl >= 60 ? "#86efac" : sc.peerPctl >= 40 ? "#fbbf24" : "#ef4444";
-
-        // Mini scatter chart for multi-season players
-        // Map each season onto a 200×100 canvas: USG 8-40, AdjOrtg 60-180
-        const USG_MIN=8, USG_MAX=40, ADJ_MIN=60, ADJ_MAX=180;
-        const toX = (usg) => ((usg - USG_MIN) / (USG_MAX - USG_MIN)) * 180 + 10;
-        const toY = (adj) => ((ADJ_MAX - adj) / (ADJ_MAX - ADJ_MIN)) * 80 + 10;
-
-        // Peer curve points for SVG
-        const curvePoints = [];
-        for (let u = USG_MIN; u <= USG_MAX; u += 2) {
-          curvePoints.push(`${toX(u)},${toY(peerExp(u))}`);
-        }
-
-        return (
-          <Sec icon="📈" title="Usage Reaction — Scorer or Passer Under Load?"
-            sub={multiSeason ? `${sc.nSeasons}-season trajectory: when usage rises, does playmaking grow with it (true creator) or shrink (iso scorer)?` : "Single-season snapshot. Compares current AdjOrtg vs. expected at same usage level. Multi-season would reveal scaling profile."}>
-
-            <div style={{fontSize:12,color:"#9ca3af",marginBottom:16,lineHeight:"1.6"}}>
-              {multiSeason
-                ? <>Shows how this player's offensive efficiency and role evolved as usage changed across <strong style={{color:"#e5e7eb"}}>{sc.nSeasons} seasons</strong>. The slope measures AdjOrtg per +1% usage. The AST slope reveals whether this player becomes a playmaker under load or retreats into pure scoring.</>
-                : <>Single-season player. Compares current AdjOrtg against the <strong style={{color:"#e5e7eb"}}>peer curve</strong> — what is expected from a player at this exact usage level. Far above the line = elite efficiency for their offensive role.</>
-              }
-            </div>
-
-            {/* ── Hero: Scorer ↔ Passer Spectrum (multi-season only) ── */}
-            {multiSeason && sc.slopeAst != null && (() => {
-              const s = sc.slopeAst;
-              // Map AST/USG-Slope to spectrum [-2.0 .. +2.0] → [0% .. 100%]
-              const sClamp = Math.max(-2.0, Math.min(2.0, s));
-              const pos = ((sClamp + 2.0) / 4) * 100;
-              const heroColor = s >= 1.0 ? "#22c55e" : s >= 0.3 ? "#86efac" : s >= -0.3 ? "#fbbf24" : s >= -1.0 ? "#fb923c" : "#ef4444";
-              const heroLabel = s >= 1.0 ? "Lead Creator" : s >= 0.3 ? "Dual-Role Creator" : s >= -0.3 ? "Steady Role" : s >= -1.0 ? "Iso Scorer at Volume" : "Pure Volume Scorer";
-              const heroSub = s >= 1.0 ? "playmaking grows substantially with usage — true engine profile"
-                            : s >= 0.3 ? "playmaking grows modestly with usage — versatile creator"
-                            : s >= -0.3 ? "role stays constant at all usage levels — focused specialist"
-                            : s >= -1.0 ? "playmaking shrinks at higher usage — leans iso when given the ball"
-                            : "playmaking collapses at high usage — pure shot-taker";
-              return (
-                <div style={{background:"#0d1117",border:`1px solid ${heroColor}44`,borderRadius:10,padding:"14px 16px",marginBottom:18,boxShadow:`0 0 12px ${heroColor}22`}}>
-                  <div style={{fontSize:10,fontWeight:700,color:"#6b7280",letterSpacing:1.2,marginBottom:8}}>
-                    AT HIGHER USAGE, HE BECOMES MORE OF A...
-                  </div>
-                  {/* Spectrum bar */}
-                  <div style={{position:"relative",height:34,background:"linear-gradient(90deg,#ef4444,#fb923c,#fbbf24,#86efac,#22c55e)",borderRadius:6,marginBottom:10,opacity:0.85}}>
-                    <div style={{position:"absolute",left:`${pos}%`,top:-4,bottom:-4,width:4,marginLeft:-2,background:"#fff",borderRadius:2,boxShadow:"0 0 8px #fff"}}/>
-                    <div style={{position:"absolute",left:0,top:-2,fontSize:10,fontWeight:600,color:"#ef4444cc",padding:"4px 6px"}}>● Pure Scorer</div>
-                    <div style={{position:"absolute",right:0,top:-2,fontSize:10,fontWeight:600,color:"#22c55ecc",padding:"4px 6px",textAlign:"right"}}>Passer ●</div>
-                  </div>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:6}}>
-                    <div>
-                      <div style={{fontSize:18,fontWeight:700,color:heroColor,fontFamily:"Oswald,sans-serif"}}>{heroLabel}</div>
-                      <div style={{fontSize:11,color:"#9ca3af",marginTop:2}}>{heroSub}</div>
-                    </div>
-                    <Tip content={<div>AST/USG slope: <strong>{s>=0?"+":""}{s.toFixed(2)}</strong> AST% per +1% USG.<br/>Across {sc.nSeasons} seasons — does AST% grow as USG% grows?<br/>{sc.astSlopePctl != null && <>Same-year peer rank: {sc.astSlopePctl}th percentile.</>}</div>}>
-                      <div style={{textAlign:"right",cursor:"help"}}>
-                        <div style={{fontSize:22,fontWeight:700,color:heroColor,fontFamily:"Oswald,sans-serif"}}>{s>=0?"+":""}{s.toFixed(2)}</div>
-                        <div style={{fontSize:10,color:"#6b7280"}}>AST%/USG%</div>
-                      </div>
-                    </Tip>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Top row: peer position + slope cards */}
-            <div style={{display:"grid",gridTemplateColumns:multiSeason?"repeat(3,1fr)":"repeat(2,1fr)",gap:10,marginBottom:20}}>
-              {/* Peer Position */}
-              <div style={{background:"#1f2937",borderRadius:8,padding:"10px 12px",textAlign:"center"}}>
-                <div style={{fontSize:20,fontWeight:700,color:peerColor,fontFamily:"Oswald,sans-serif"}}>
-                  {sc.peerPctl != null ? `${sc.peerPctl}th` : "—"}
-                </div>
-                <div style={{fontSize:11,fontWeight:600,color:"#e5e7eb",marginTop:2}}>Peer Curve Pctl</div>
-                <div style={{fontSize:10,color:"#6b7280",marginTop:1}}>
-                  {sc.peerResidual != null ? `${sc.peerResidual > 0 ? "+" : ""}${sc.peerResidual}pt vs expected` : ""}
-                </div>
-              </div>
-
-              {/* Current season */}
-              <div style={{background:"#1f2937",borderRadius:8,padding:"10px 12px",textAlign:"center"}}>
-                <div style={{fontSize:20,fontWeight:700,color:"#f97316",fontFamily:"Oswald,sans-serif"}}>
-                  {sc.curAdjOrtg?.toFixed(0) ?? "—"}
-                </div>
-                <div style={{fontSize:11,fontWeight:600,color:"#e5e7eb",marginTop:2}}>Adj. Off. Rtg</div>
-                <div style={{fontSize:10,color:"#6b7280",marginTop:1}}>at {sc.curUsg?.toFixed(1)}% USG</div>
-              </div>
-
-              {/* Slope (multi-season only) */}
-              {multiSeason && slopeInfo && (
-                <Tip content="AdjOrtg slope: how many points of offensive rating are gained per +1% usage increase across seasons. Positive = grows with responsibility.">
-                  <div style={{background:"#1f2937",borderRadius:8,padding:"10px 12px",textAlign:"center",cursor:"help"}}>
-                    <div style={{fontSize:20,fontWeight:700,color:slopeInfo.color,fontFamily:"Oswald,sans-serif"}}>
-                      {sc.slope > 0 ? "+" : ""}{sc.slope?.toFixed(1)}
-                    </div>
-                    <div style={{fontSize:11,fontWeight:600,color:"#e5e7eb",marginTop:2}}>AdjOrtg/USG%</div>
-                    <div style={{fontSize:10,color:slopeInfo.color,marginTop:1}}>{slopeInfo.label}</div>
-                  </div>
-                </Tip>
-              )}
-            </div>
-
-            {/* AST slope card — multi-season: trajectory; single-season: snapshot */}
-            {!multiSeason && p.astP != null && (() => {
-              const ast = p.astP ?? 0;
-              const usgVal = sc.curUsg ?? p.usg ?? 0;
-              const ato = p.astTov ?? null;
-              const role = ast >= 30 ? {label:"Primary Playmaker", color:"#22c55e"}
-                         : ast >= 20 ? {label:"Dual-Role Creator", color:"#86efac"}
-                         : ast >= 12 ? {label:"Secondary Facilitator", color:"#fbbf24"}
-                         : {label:"Scorer / Off-Ball", color:"#f97316"};
-              return (
-                <div style={{background:"#0f172a",borderRadius:8,padding:"12px 14px",marginBottom:16,border:`1px solid ${role.color}33`}}>
-                  <div style={{display:"flex",alignItems:"center",gap:12}}>
-                    <div style={{flexShrink:0,minWidth:130}}>
-                      <div style={{fontSize:18,fontWeight:700,color:role.color,fontFamily:"Oswald,sans-serif"}}>
-                        {ast.toFixed(1)}% AST
-                      </div>
-                      <div style={{fontSize:11,color:role.color}}>{role.label}</div>
-                      {ato != null && <div style={{fontSize:10,color:"#6b7280",marginTop:2}}>AST/TO: {ato.toFixed(1)}</div>}
-                    </div>
-                    <div style={{flex:1,fontSize:11,color:"#9ca3af",lineHeight:"1.5"}}>
-                      {ast >= 30
-                        ? `At ${usgVal?.toFixed(1)}% usage, this player doubles as a primary distributor. AST% in the top tier indicates a true lead-creator profile.`
-                        : ast >= 20
-                        ? `Balanced scorer-facilitator. Capable of creating for others while maintaining meaningful usage. Versatile offensive weapon.`
-                        : ast >= 12
-                        ? `Primarily a scoring-oriented player with secondary passing. Can facilitate in spot situations but not a primary engine.`
-                        : `Low assist rate signals an off-ball scorer or specialist. Offensive value concentrated in individual scoring, not creation.`
-                      }
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-            {multiSeason && sc.slopeAst != null && astInfo && (
-              <div style={{background:"#0f172a",borderRadius:8,padding:"12px 14px",marginBottom:16,border:`1px solid ${astInfo.color}33`}}>
-                <div style={{display:"flex",alignItems:"center",gap:12}}>
-                  <div style={{flexShrink:0}}>
-                    <div style={{fontSize:18,fontWeight:700,color:astInfo.color,fontFamily:"Oswald,sans-serif"}}>
-                      {sc.slopeAst > 0 ? "+" : ""}{sc.slopeAst?.toFixed(2)} AST%/USG%
-                    </div>
-                    <div style={{fontSize:11,color:astInfo.color}}>{astInfo.label}</div>
-                    {sc.astSlopePctl != null && (
-                      <div style={{fontSize:10,color:"#6b7280"}}>{sc.astSlopePctl}th percentile vs same-year peers</div>
-                    )}
-                  </div>
-                  <div style={{flex:1,fontSize:11,color:"#9ca3af",lineHeight:"1.5"}}>
-                    {sc.slopeAst >= 1.0
-                      ? "When given more offensive responsibility, this player's assist rate grows alongside. They become MORE of a playmaker at higher usage — hallmark of a true lead creator."
-                      : sc.slopeAst >= 0.3
-                      ? "Moderate playmaking expansion at higher usage. Can handle the ball without completely shifting to isolation scoring."
-                      : sc.slopeAst >= -0.3
-                      ? "Role stays roughly constant regardless of usage — focused scorer who doesn't shift toward creation or distribution."
-                      : "At higher usage, passing drops off. Tends toward isolation at high volume. Best as secondary option or specialist scorer."
-                    }
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Season-Trajectory-Plot entfernt 2026-05-09 (User: redundant zu Game-by-Game Skill-Curve in Scouting) */}
-
-          </Sec>
-        );
-      })()}
+      {/* Tobias 2026-06-03 v11: Usage Reaction removed — see backlog Task #19 */}
 
       {/* ══════════════════════════════════════════════════════════════════
            Section: MENTAL RESILIENCE  (Tobias 2026-05-09)
@@ -3972,7 +4809,17 @@ function MindTab({p}) {
         // type: "neutral" → high oder low können beide Bedeutung haben
         // type: "adverse" → high = bad (mehr TOs/Fouls)
         // type: "positive" → high = good (Bounceback eFG)
-        const TendBar = ({label, sub, m, type, hint, reli}) => {
+        //
+        // Tobias 2026-06-04: shrinkable=false EXEMPTS the metric from Bayesian-Shrinkage.
+        // Background — shrinkage prior is calibrated for STREAK-RESPONSE indices
+        // (n_prior=30 streaks). Metrics that aggregate across ALL actions (not streaks)
+        // already have large effective n and should be displayed as raw.
+        // Match Stamina (h2/h1 adverse-rate ratio, n≈500-1000 actions) is the canonical
+        // example — historically displayed shrunken in this card but raw in the
+        // Match-Phase-Drift section, causing the two to disagree for the same player.
+        // Single-source-of-truth: shrinkable controls a SINGLE Bayesian step at the
+        // display boundary; raw stays in tooltips for traceability.
+        const TendBar = ({label, sub, m, type, hint, reli, shrinkable = true}) => {
           const rel = reliTier(reli);
           if (!m || m.idx == null) return (
             <div style={{background:"#0d1117",border:"1px solid #1f2937",borderRadius:8,padding:"10px 12px",opacity:0.5}}>
@@ -3980,11 +4827,13 @@ function MindTab({p}) {
               <div style={{fontSize:10,color:"#4b5563",marginTop:4}}>insufficient data</div>
             </div>
           );
-          // Use shrunken values for display, raw for tooltip
+          // Use shrunken values for display, raw for tooltip — UNLESS the metric is
+          // exempted (shrinkable=false), in which case raw IS the display value
+          // (consistency with other sections like Match-Phase-Drift).
           const idx_raw = m.idx;
           const z_raw = m.z;
-          const idx = shrink(idx_raw);    // Bayesian-shrunken display value
-          const z = shrinkZ(z_raw);
+          const idx = shrinkable ? shrink(idx_raw) : idx_raw;
+          const z   = shrinkable ? shrinkZ(z_raw)  : z_raw;
           const lo = m.lo, hi = m.hi;
           // CI excludes 1.0 = statistically significant deviation from baseline
           const sigDev = (lo != null && hi != null && (lo > 1.0 || hi < 1.0));
@@ -4120,7 +4969,12 @@ function MindTab({p}) {
           {key:"passive",    m:mm.passive,    type:"neutral",  reli:0.03, label:"Engagement",      sub:"actions taken under stress",    hint:"After multi-event slumps: how many actions does he take in the next 4 plays vs. expected? Low = withdraws / checks out."},
           {key:"aggressor",  m:mm.aggressor,  type:"neutral",  reli:0.05, label:"Shot-Seeking",    sub:"more shots under stress",       hint:"After multi-event slumps: does FGA-Rate spike (force shots) or fall (fade away)? Both extremes can be tells."},
           {key:"bounceback", m:mm.bounceback, type:"positive", reli:0.04, label:"Bounceback eFG",  sub:"shooting recovers under stress",hint:"After multi-event slumps: does eFG% on subsequent shots recover? High = clutch shot-making mentality."},
-          {key:"stamina",    m:staminaM,      type:"adverse",  reli:0.07, label:"Match Stamina",   sub:"adverse rate H2 vs H1",         hint:"Half-2 vs Half-1 adverse-event rate. >1 = gets worse in the 2nd half (conditioning / mental fatigue). <1 = stays stable or improves."},
+          // Stamina exempted from Bayesian-Shrinkage (Tobias 2026-06-04):
+          // stamina_idx aggregates over ALL actions (n≈500-1000), not streaks.
+          // Shrinking with the streak-calibrated prior (n_prior=30) was distorting
+          // this card relative to the Match-Phase-Drift section, which always
+          // displayed raw. Now both surfaces show the identical value.
+          {key:"stamina",    m:staminaM,      type:"adverse",  reli:0.07, label:"Match Stamina",   sub:"adverse rate H2 vs H1",         hint:"Half-2 vs Half-1 adverse-event rate. >1 = gets worse in the 2nd half (conditioning / mental fatigue). <1 = stays stable or improves.", shrinkable:false},
         ];
         for (const c of cards) {
           if (!c.m || c.m.idx == null) continue;
@@ -4285,14 +5139,611 @@ function MindTab({p}) {
       })()}
 
       {/* ── Sequential Resilience entfernt 2026-05-09 (User: Mental Resilience deckt das ab) ── */}
+
+      {/* ── Sprint-3.41: H1/H2 Box-Score Splits (Stamina + Concentration) ── */}
+      <HalfSplitSection p={p}/>
     </div>
   );
 }
+
+
+// ═══════════════════════════════════════════════════════════
+// Sprint-3.41/3.42/3.43 — H1/H2 Box-Score Splits (Tobias 2026-06-16/17)
+// 13 rate-Stats H1 vs H2 from PBP (garbage time excluded).
+// Source: p.halfSplits = {season, h1: {counts}, h2: {counts}, sample_floor_pass}
+//
+// Sprint-3.43 (2026-06-17): Position-stratified percentiles from full
+// 9-season NCAA pool (2017-18 through 2025-26, n=35,578 with pos_group +
+// ≥10 min/half). Color-coding now position-aware: a Center with Δ TS% -5pp
+// is a different outlier than a PG with -5pp. Front-office-grade calibration.
+// ═══════════════════════════════════════════════════════════
+const HALF_SPLIT_PERCENTILES = {
+  // Δ (H2 - H1) per position group. Source: 9-season NCAA pool, ≥10 min/half.
+  Playmaker: {
+    n: 8172,
+    ts:       {p10: -12.12, p25:  -3.22, p50: +3.38, p75: +9.89,  p90: +18.59},
+    efg:      {p10: -14.42, p25:  -5.85, p50: +1.06, p75: +8.33,  p90: +17.79},
+    fg:       {p10: -10.86, p25:  -3.99, p50: +1.49, p75: +7.46,  p90: +15.13},
+    ft:       {p10: -20.00, p25:  -9.36, p50:  0.00, p75: +9.60,  p90: +21.79},
+    ftr:      {p10:  -0.05, p25:  +0.03, p50: +0.15, p75: +0.26,  p90: +0.39},
+    usg:      {p10: -23.24, p25: -10.89, p50: -1.36, p75: +8.44,  p90: +25.56},
+    to_pct:   {p10: -10.57, p25:  -5.21, p50: -1.39, p75: +2.06,  p90:  +7.10},
+    ast_fga:  {p10:  -0.18, p25:  -0.08, p50: -0.00, p75: +0.07,  p90:  +0.18},
+    stl_fga:  {p10:  -0.10, p25:  -0.05, p50: -0.00, p75: +0.04,  p90:  +0.10},
+    blk_fga:  {p10:  -0.03, p25:  -0.01, p50:  0.00, p75: +0.01,  p90:  +0.03},
+    orb_fga:  {p10:  -0.05, p25:  -0.02, p50: +0.00, p75: +0.03,  p90:  +0.08},
+    drb_fga:  {p10:  -0.21, p25:  -0.10, p50: -0.02, p75: +0.05,  p90:  +0.15},
+    ppp:      {p10:  -0.20, p25:  -0.05, p50: +0.07, p75: +0.19,  p90:  +0.34},
+  },
+  Wing: {
+    n: 23590,
+    ts:       {p10: -16.82, p25:  -4.07, p50: +3.55, p75: +11.79, p90: +23.97},
+    efg:      {p10: -19.39, p25:  -6.05, p50: +2.13, p75: +11.39, p90: +25.00},
+    fg:       {p10: -15.79, p25:  -4.67, p50: +2.05, p75: +10.00, p90: +21.62},
+    ft:       {p10: -25.00, p25:  -8.94, p50:  0.00, p75: +10.84, p90: +25.00},
+    ftr:      {p10:  -0.15, p25:  +0.00, p50: +0.12, p75: +0.27,  p90: +0.46},
+    usg:      {p10: -22.83, p25: -11.27, p50: -3.49, p75: +1.88,  p90: +12.83},
+    to_pct:   {p10: -11.95, p25:  -4.49, p50: -0.43, p75: +2.43,  p90: +10.06},
+    ast_fga:  {p10:  -0.17, p25:  -0.07, p50:  0.00, p75: +0.07,  p90: +0.20},
+    stl_fga:  {p10:  -0.13, p25:  -0.05, p50:  0.00, p75: +0.04,  p90: +0.15},
+    blk_fga:  {p10:  -0.07, p25:  -0.02, p50:  0.00, p75: +0.02,  p90: +0.07},
+    orb_fga:  {p10:  -0.14, p25:  -0.03, p50: +0.00, p75: +0.06,  p90: +0.18},
+    drb_fga:  {p10:  -0.30, p25:  -0.12, p50: -0.01, p75: +0.10,  p90: +0.29},
+    ppp:      {p10:  -0.36, p25:  -0.09, p50: +0.07, p75: +0.22,  p90: +0.46},
+  },
+  Big: {
+    n: 3816,
+    ts:       {p10: -25.31, p25:  -8.41, p50: +1.83, p75: +12.27, p90: +29.55},
+    efg:      {p10: -25.00, p25:  -8.97, p50: +0.79, p75: +12.50, p90: +28.57},
+    fg:       {p10: -21.79, p25:  -7.55, p50: +1.43, p75: +11.41, p90: +25.74},
+    ft:       {p10: -33.33, p25: -13.84, p50: -0.79, p75: +13.05, p90: +29.41},
+    ftr:      {p10:  -0.31, p25:  -0.10, p50: +0.04, p75: +0.20,  p90: +0.43},
+    usg:      {p10: -20.96, p25:  -7.16, p50: -1.32, p75: +3.40,  p90: +14.36},
+    to_pct:   {p10: -14.54, p25:  -6.87, p50: -1.86, p75: +2.63,  p90: +9.24},
+    ast_fga:  {p10:  -0.15, p25:  -0.06, p50:  0.00, p75: +0.05,  p90: +0.14},
+    stl_fga:  {p10:  -0.12, p25:  -0.04, p50:  0.00, p75: +0.04,  p90: +0.11},
+    blk_fga:  {p10:  -0.16, p25:  -0.05, p50:  0.00, p75: +0.08,  p90: +0.20},
+    orb_fga:  {p10:  -0.20, p25:  -0.06, p50: +0.03, p75: +0.12,  p90: +0.28},
+    drb_fga:  {p10:  -0.39, p25:  -0.14, p50: +0.01, p75: +0.16,  p90: +0.40},
+    ppp:      {p10:  -0.24, p25:  -0.06, p50: +0.08, p75: +0.22,  p90: +0.39},
+  },
+  // Plus globaler Fallback wenn pos_group fehlt
+  Global: {
+    n: 56263,
+    ts:       {p10: -28.81, p25:  -6.49, p50: +2.67, p75: +12.22, p90: +31.66},
+    efg:      {p10: -30.56, p25:  -8.29, p50: +0.93, p75: +11.66, p90: +32.85},
+    fg:       {p10: -25.00, p25:  -6.23, p50: +1.32, p75: +10.33, p90: +27.78},
+    ft:       {p10: -25.00, p25: -10.00, p50:  0.00, p75: +10.98, p90: +25.52},
+    ftr:      {p10:  -0.19, p25:  +0.00, p50: +0.09, p75: +0.25,  p90: +0.47},
+    usg:      {p10: -22.40, p25:  -9.56, p50: -2.00, p75: +1.00,  p90:  +9.19},
+    to_pct:   {p10: -20.00, p25:  -6.91, p50: -0.80, p75: +3.33,  p90: +17.01},
+    ast_fga:  {p10:  -0.21, p25:  -0.07, p50:  0.00, p75: +0.06,  p90: +0.22},
+    stl_fga:  {p10:  -0.15, p25:  -0.04, p50:  0.00, p75: +0.04,  p90: +0.14},
+    blk_fga:  {p10:  -0.06, p25:  -0.01, p50:  0.00, p75: +0.01,  p90: +0.07},
+    orb_fga:  {p10:  -0.16, p25:  -0.03, p50:  0.00, p75: +0.06,  p90: +0.20},
+    drb_fga:  {p10:  -0.40, p25:  -0.14, p50:  0.00, p75: +0.11,  p90: +0.35},
+    ppp:      {p10:  -0.50, p25:  -0.11, p50: +0.06, p75: +0.23,  p90: +0.54},
+  },
+};
+const HALF_SPLIT_POOL_N_TOTAL = 35578;   // pos_group-known players
+const HALF_SPLIT_POOL_N_GLOBAL = 56263;  // all players (incl. no pos)
+
+// Plus picks the right pool (Position or Global fallback) for percentile lookup
+function _halfSplitPool(posGroup) {
+  if (posGroup && HALF_SPLIT_PERCENTILES[posGroup]) return HALF_SPLIT_PERCENTILES[posGroup];
+  return HALF_SPLIT_PERCENTILES.Global;
+}
+
+// Plus computes the player's empirical percentile rank (0-100) for a
+// given Δ — linear interpolation between p10/p25/p50/p75/p90.
+function _halfSplitPercentile(delta, pcts) {
+  if (delta == null || !pcts) return null;
+  const x = [pcts.p10, pcts.p25, pcts.p50, pcts.p75, pcts.p90];
+  const y = [10, 25, 50, 75, 90];
+  if (delta <= x[0]) {
+    // Below p10: extrapolate down to ~0
+    const span = Math.max(0.1, x[0] - (x[0] - (x[1] - x[0])));
+    return Math.max(0, 10 * (1 - (x[0] - delta) / Math.max(0.1, x[1] - x[0])));
+  }
+  if (delta >= x[4]) {
+    return Math.min(100, 90 + 10 * (delta - x[4]) / Math.max(0.1, x[4] - x[3]));
+  }
+  for (let i = 0; i < x.length - 1; i++) {
+    if (delta <= x[i+1]) {
+      const t = (delta - x[i]) / Math.max(0.001, x[i+1] - x[i]);
+      return y[i] + t * (y[i+1] - y[i]);
+    }
+  }
+  return 50;
+}
+
+function HalfSplitSection({p}) {
+  const hs = p?.halfSplits;
+  if (!hs || !hs.h1 || !hs.h2) return null;
+
+  // Sprint-3.44 Pro-Mode: career default + season-picker
+  // Available views: "career" (if 2+ seasons), each individual season
+  const hasCareer = !!hs.career && (hs.seasons_n || 0) >= 2;
+  const availableSeasons = hs.seasons ? Object.keys(hs.seasons).sort() : [];
+  const defaultView = hasCareer ? "career" : (hs.primary_season || availableSeasons[availableSeasons.length-1] || null);
+  const [view, setView] = useState(defaultView);
+
+  // Resolve h1/h2/team based on current view selection
+  let h1, h2, viewLabel, viewSeasons, viewTeam, viewSamplePass;
+  if (view === "career" && hs.career) {
+    h1 = hs.career.h1; h2 = hs.career.h2;
+    viewLabel = "NCAA Career";
+    viewSeasons = hs.career.seasons || availableSeasons;
+    viewTeam = (hs.career.teams || []).join(" · ");
+    viewSamplePass = hs.career.sample_floor_pass;
+  } else if (view && hs.seasons && hs.seasons[view]) {
+    const s = hs.seasons[view];
+    h1 = s.h1; h2 = s.h2;
+    viewLabel = view;
+    viewSeasons = [view];
+    viewTeam = s.team || "";
+    viewSamplePass = s.sample_floor_pass;
+  } else {
+    // Fallback to top-level (legacy)
+    h1 = hs.h1; h2 = hs.h2;
+    viewLabel = hs.season || "single season";
+    viewSeasons = [hs.season];
+    viewTeam = hs.team || "";
+    viewSamplePass = hs.sample_floor_pass;
+  }
+
+  // 13 stat computations — all robust to minutes-tracking imperfection by
+  // using FGA-normalised or self-contained rates.
+  const pts = (h) => 2*((h?.FGM||0) - (h?.TPM||0)) + 3*(h?.TPM||0) + (h?.FTM||0);
+  const tsa = (h) => (h?.FGA||0) + 0.44 * (h?.FTA||0);
+  const poss = (h) => (h?.FGA||0) + 0.44 * (h?.FTA||0) + (h?.TO||0);
+
+  const HALF_STATS = [
+    { id: "ts",      label: "True Shooting %",      fmt: "pct",   good: "up",
+      desc: "Points per scoring attempt — combines FG and FT efficiency.",
+      val: (h)=> tsa(h) > 0 ? pts(h) / (2*tsa(h)) * 100 : null },
+    { id: "efg",     label: "Effective FG %",       fmt: "pct",   good: "up",
+      desc: "FG % adjusted for 3-point value.",
+      val: (h)=> h.FGA > 0 ? (h.FGM + 0.5*(h.TPM||0)) / h.FGA * 100 : null },
+    { id: "fg",      label: "Field Goal %",         fmt: "pct",   good: "up",
+      desc: "Raw FGM / FGA. Concentration / shot quality.",
+      val: (h)=> h.FGA > 0 ? h.FGM / h.FGA * 100 : null },
+    { id: "ft",      label: "Free Throw %",         fmt: "pct",   good: "up",
+      desc: "Free throw conversion. Sensitive to focus + fatigue.",
+      val: (h)=> h.FTA > 0 ? h.FTM / h.FTA * 100 : null },
+    { id: "ftr",     label: "Free Throw Rate",      fmt: "ratio", good: "up",
+      desc: "FTA / FGA — how often he gets to the line.",
+      val: (h)=> h.FGA > 0 ? h.FTA / h.FGA : null },
+    { id: "usg",     label: "Possession Volume",    fmt: "int",   good: "neutral",
+      desc: "FGA + 0.44·FTA + TO. Raw load — drop in H2 may signal role-shift, not fatigue.",
+      val: (h)=> poss(h) },
+    { id: "ast_fga", label: "Assists per FGA",      fmt: "ratio", good: "up",
+      desc: "Distribution rate per shot attempt.",
+      val: (h)=> h.FGA > 0 ? h.AST / h.FGA : null },
+    { id: "stl_fga", label: "Steals per FGA",       fmt: "ratio", good: "up",
+      desc: "Defensive activity normalized to involvement.",
+      val: (h)=> h.FGA > 0 ? h.STL / h.FGA : null },
+    { id: "blk_fga", label: "Blocks per FGA",       fmt: "ratio", good: "up",
+      desc: "Rim-protection activity normalized to involvement.",
+      val: (h)=> h.FGA > 0 ? h.BLK / h.FGA : null },
+    { id: "to_pct",  label: "Turnover Rate",        fmt: "pct",   good: "down",
+      desc: "TO / (FGA + 0.44·FTA + TO). Concentration metric — rises with fatigue.",
+      val: (h)=> poss(h) > 0 ? h.TO / poss(h) * 100 : null },
+    { id: "orb_fga", label: "Off Rebounds per FGA", fmt: "ratio", good: "up",
+      desc: "Crashing-the-boards activity per shot.",
+      val: (h)=> h.FGA > 0 ? h.ORB / h.FGA : null },
+    { id: "drb_fga", label: "Def Rebounds per FGA", fmt: "ratio", good: "up",
+      desc: "Defensive rebounding involvement.",
+      val: (h)=> h.FGA > 0 ? h.DRB / h.FGA : null },
+    { id: "ppp",     label: "Points per Possession",fmt: "ratio", good: "up",
+      desc: "Offensive Rtg proxy — pts produced per possession used.",
+      val: (h)=> poss(h) > 0 ? pts(h) / poss(h) : null },
+  ];
+
+  // Plus pick the position-stratified percentile pool (Sprint-3.43)
+  const posGroup = p?.pos || p?.pos_group;
+  const pool = _halfSplitPool(posGroup);
+  const poolLabel = HALF_SPLIT_PERCENTILES[posGroup] ? posGroup : "Global";
+  const poolN = pool.n;
+
+  // Sample-Size für Bayesian Shrinkage: TSA = FGA + 0.44 × FTA
+  // (tsa-Helper schon weiter oben deklariert für trajectory points)
+  const tsa1 = tsa(h1), tsa2 = tsa(h2);
+  const tsaMin = Math.min(tsa1, tsa2);
+  const PRIOR_N = 60;   // equivalent of half-a-season of TSA per half — Bayesian prior weight
+  const shrinkAlpha = tsaMin / (tsaMin + PRIOR_N);  // 0 = full shrinkage, 1 = no shrinkage
+
+  // Compute deltas + shrunken delta + percentile rank vs NCAA-pos pool
+  const computed = HALF_STATS.map(s => {
+    const v1 = s.val(h1);
+    const v2 = s.val(h2);
+    if (v1 == null || v2 == null) return {...s, v1: null, v2: null, delta: null, shrunkDelta: null, pctl: null, dirScore: 0};
+    const rawDelta = v2 - v1;
+    const pcts = pool[s.id];
+    const peerMedian = pcts?.p50 ?? 0;
+    // Bayesian shrinkage: pull raw Δ toward peer-median by (1 - alpha)
+    const shrunkDelta = shrinkAlpha * rawDelta + (1 - shrinkAlpha) * peerMedian;
+    // Use shrunken delta for percentile + color (less false-positive on small samples)
+    const rawPctl = _halfSplitPercentile(shrunkDelta, pcts);
+    // For "down is good" stats, flip the percentile (high Δ TO% = bad direction)
+    const pctl = (s.good === "down" && rawPctl != null) ? 100 - rawPctl : rawPctl;
+    // dirScore in [-1, +1]
+    let dirScore = 0;
+    if (pctl != null) {
+      dirScore = (pctl - 50) / 50;
+    }
+    if (s.good === "neutral") dirScore = 0;
+    return {...s, v1, v2, delta: rawDelta, shrunkDelta, pctl, dirScore};
+  });
+
+  // Verdict: average dirScore over the directional stats
+  const directional = computed.filter(s => s.good !== "neutral" && s.delta !== null);
+  const avgDir = directional.length > 0
+    ? directional.reduce((acc, s) => acc + s.dirScore, 0) / directional.length
+    : 0;
+
+  // Plus "extreme" counts — stats where the player is in the tails relative to NCAA peers
+  const strongPos = directional.filter(s => s.pctl >= 75).length;
+  const strongNeg = directional.filter(s => s.pctl <= 25).length;
+
+  let verdict, verdictColor;
+  if (avgDir >= 0.30) {
+    verdict = "Late-game riser — well above the typical NCAA H2 lift";
+    verdictColor = "#22c55e";
+  } else if (avgDir <= -0.30) {
+    verdict = "Mid-game peaker — fades clearly below the typical NCAA H2 lift";
+    verdictColor = "#ef4444";
+  } else if (avgDir >= 0.10) {
+    verdict = "Mildly improves vs peers in H2";
+    verdictColor = "#86efac";
+  } else if (avgDir <= -0.10) {
+    verdict = "Mildly fades vs peers in H2";
+    verdictColor = "#fbbf24";
+  } else {
+    verdict = "Tracks the typical NCAA H2 pattern";
+    verdictColor = "#9ca3af";
+  }
+
+  const fmtVal = (v, fmt) => {
+    if (v == null) return "—";
+    if (fmt === "pct")   return `${v.toFixed(1)}%`;
+    if (fmt === "ratio") return v.toFixed(2);
+    if (fmt === "int")   return Math.round(v).toString();
+    return v;
+  };
+  const fmtDelta = (d, fmt) => {
+    if (d == null) return "—";
+    const sign = d > 0 ? "+" : "";
+    if (fmt === "pct")   return `${sign}${d.toFixed(1)}pp`;
+    if (fmt === "ratio") return `${sign}${d.toFixed(2)}`;
+    if (fmt === "int")   return `${sign}${Math.round(d)}`;
+    return `${sign}${d}`;
+  };
+
+  // Trajectory: compute career arc of "avg peer percentile" if 2+ seasons
+  // Each season's avg-pctl is its own dirScore mean.
+  const trajectoryPoints = [];
+  if (hasCareer && availableSeasons.length >= 2) {
+    for (const season of availableSeasons) {
+      const sObj = hs.seasons[season];
+      if (!sObj?.h1 || !sObj?.h2) continue;
+      const sH1 = sObj.h1, sH2 = sObj.h2;
+      const sTsaMin = Math.min(tsa(sH1), tsa(sH2));
+      const sAlpha = sTsaMin / (sTsaMin + PRIOR_N);
+      const scores = [];
+      for (const stat of HALF_STATS) {
+        if (stat.good === "neutral") continue;
+        const v1 = stat.val(sH1), v2 = stat.val(sH2);
+        if (v1 == null || v2 == null) continue;
+        const sDelta = v2 - v1;
+        const pcts = pool[stat.id];
+        const peerMed = pcts?.p50 ?? 0;
+        const shrunk = sAlpha * sDelta + (1 - sAlpha) * peerMed;
+        const rawP = _halfSplitPercentile(shrunk, pcts);
+        if (rawP == null) continue;
+        const flipped = stat.good === "down" ? 100 - rawP : rawP;
+        scores.push(flipped);
+      }
+      if (scores.length > 0) {
+        const avgPctl = scores.reduce((a,b) => a+b, 0) / scores.length;
+        trajectoryPoints.push({season, avgPctl, sample_pass: sObj.sample_floor_pass, team: sObj.team});
+      }
+    }
+  }
+
+  return (
+    <Sec icon="🌡" title="First vs Second Half — Stamina & Concentration"
+         sub={`Box-stat split across NCAA play. NCAA players typically improve in H2 (median TS% +3pp) once they've read the defence and warmed up. Color is relative to the ${poolLabel}-pool over 9 NCAA seasons (n=${poolN.toLocaleString()}, ≥30 TSA/half). Small-sample players are Bayesian-shrunken toward peer-median to reduce false positives. Historical validation: tier-correlations weak (|r|<0.10 with peak WA, n=182 NBA-careered) — treat as scout-eye signal, not predictor. Garbage time excluded.`}>
+      {/* Season-picker (Career default + per-season tabs) */}
+      {(hasCareer || availableSeasons.length >= 1) && (
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>View:</span>
+          {hasCareer && (
+            <button onClick={()=>setView("career")}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
+              style={{background:view==="career"?"#f9731622":"transparent", color:view==="career"?"#f97316":"#9ca3af", border:`1px solid ${view==="career"?"#f97316":"#374151"}`}}>
+              NCAA Career ({hs.seasons_n}s)
+            </button>
+          )}
+          {availableSeasons.map(s => {
+            const sPass = hs.seasons?.[s]?.sample_floor_pass;
+            return (
+              <button key={s} onClick={()=>setView(s)}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
+                style={{background:view===s?"#f9731622":"transparent", color:view===s?"#f97316":(sPass?"#9ca3af":"#6b7280"), border:`1px solid ${view===s?"#f97316":"#374151"}`}}>
+                {s}{!sPass && <span className="ml-1 text-[10px]" style={{color:"#fbbf24"}}>·sm</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {!viewSamplePass && (
+        <div className="rounded-lg p-3 mb-4 text-xs"
+             style={{background:"#fbbf2411",border:"1px solid #fbbf2444",color:"#fcd34d"}}>
+          ⚠ Limited sample: {tsa1.toFixed(0)} TSA H1 · {tsa2.toFixed(0)} TSA H2 ({viewLabel}, floor: 30/half). Bayesian-shrunken toward peer-median — directional only.
+        </div>
+      )}
+
+      {/* Verdict pill + (optional) career-trajectory mini-chart */}
+      <div className="rounded-xl p-4 mb-4"
+           style={{background:"#0d111788",border:`1px solid ${verdictColor}55`}}>
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#9ca3af"}}>
+              Verdict ({viewLabel}, vs NCAA peers)
+              {shrinkAlpha < 0.7 && (
+                <span className="ml-2 px-1.5 py-0.5 rounded text-[9px]" style={{background:"#fbbf2422",color:"#fbbf24",border:"1px solid #fbbf2444"}}>
+                  shrunken {Math.round((1-shrinkAlpha)*100)}%
+                </span>
+              )}
+            </div>
+            <div className="text-base font-semibold" style={{color:verdictColor}}>{verdict}</div>
+            <div className="text-[11px] mt-1" style={{color:"#6b7280"}}>
+              {strongPos} stat{strongPos===1?"":"s"} above peer-typical (≥p75) · {strongNeg} below (≤p25)
+            </div>
+          </div>
+          <div className="text-right text-xs" style={{color:"#6b7280"}}>
+            <div>Avg peer percentile</div>
+            <div className="text-2xl font-bold" style={{color:verdictColor,fontFamily:"'Oswald',sans-serif"}}>
+              {Math.round(50 + avgDir * 50)}<span className="text-sm" style={{color:"#6b7280"}}>th</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Trajectory mini-chart — career arc of avg-peer-percentile over seasons */}
+        {trajectoryPoints.length >= 2 && (
+          <div className="mt-3 pt-3" style={{borderTop:"1px solid #1f2937"}}>
+            <div className="flex items-center justify-between text-[10px] mb-1.5" style={{color:"#6b7280"}}>
+              <span className="uppercase tracking-wider">Career trajectory (avg peer percentile per season)</span>
+              <span>Hover for season</span>
+            </div>
+            <div className="relative h-10" style={{background:"#0a0e16",border:"1px solid #1f2937", borderRadius:6}}>
+              {/* 50th-percentile reference line */}
+              <div className="absolute left-0 right-0 h-px" style={{top:"50%", background:"#ffffff22"}}/>
+              {/* Connect points with a polyline */}
+              {(() => {
+                const minS = 0, maxS = trajectoryPoints.length - 1;
+                const xPct = (i) => maxS === 0 ? 50 : (i / maxS) * 90 + 5;  // 5-95% padded
+                const yPct = (pctl) => 90 - (pctl / 100) * 80;  // 10-90% padded (invert: high pctl up)
+                let path = "";
+                trajectoryPoints.forEach((pt, i) => {
+                  const x = xPct(i), y = yPct(pt.avgPctl);
+                  path += (i === 0 ? "M" : "L") + `${x.toFixed(1)} ${y.toFixed(1)} `;
+                });
+                return (
+                  <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    <path d={path} stroke={verdictColor} strokeWidth="1.5" fill="none" vectorEffect="non-scaling-stroke"/>
+                    {trajectoryPoints.map((pt, i) => (
+                      <g key={pt.season}>
+                        <circle cx={xPct(i)} cy={yPct(pt.avgPctl)} r="2" fill={verdictColor} vectorEffect="non-scaling-stroke"/>
+                      </g>
+                    ))}
+                  </svg>
+                );
+              })()}
+              {/* Season labels */}
+              {trajectoryPoints.map((pt, i) => {
+                const xPct = trajectoryPoints.length === 1 ? 50 : (i / (trajectoryPoints.length - 1)) * 90 + 5;
+                return (
+                  <div key={pt.season} className="absolute text-[9px]"
+                    title={`${pt.season}: ${Math.round(pt.avgPctl)}th pctl${pt.team ? " · " + pt.team : ""}`}
+                    style={{left:`${xPct}%`, bottom:0, transform:"translateX(-50%)", color: pt.sample_pass ? "#cbd5e1" : "#fbbf24"}}>
+                    {pt.season.split("-")[0].slice(-2)}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 13 stat rows */}
+      <div className="space-y-3">
+        {computed.map(s => {
+          if (s.v1 == null || s.v2 == null) {
+            return (
+              <div key={s.id}>
+                <div className="flex justify-between text-sm mb-1">
+                  <span style={{color:"#cbd5e1"}}>{s.label}</span>
+                  <span style={{color:"#475569"}} className="italic">— no data</span>
+                </div>
+                <div className="h-7 rounded" style={{background:"#0d1117",border:"1px solid #1f2937"}}/>
+              </div>
+            );
+          }
+
+          // Bar magnitude: based on player's percentile rank vs NCAA peers.
+          // Bar fills from center to 0/100 proportionally. 50th pctl = no bar.
+          const pctl = s.pctl ?? 50;
+          const barPct = Math.abs(pctl - 50);   // 0-50 (centered, both sides)
+          const isAbovePeer = pctl >= 50;
+
+          // Color spectrum based on percentile distance from peer-typical
+          let color;
+          if (s.good === "neutral") {
+            color = "#9ca3af";
+          } else if (pctl >= 90)      color = "#22c55e";
+          else if (pctl >= 75)        color = "#86efac";
+          else if (pctl >= 60)        color = "#bbf7d0";
+          else if (pctl <= 10)        color = "#ef4444";
+          else if (pctl <= 25)        color = "#fca5a5";
+          else if (pctl <= 40)        color = "#fecaca";
+          else                        color = "#9ca3af";   // 40-60 = peer-typical
+
+          // Plus "callout" badge for extreme tail values
+          let tail = null;
+          if (s.good !== "neutral") {
+            if (pctl >= 90) tail = {label: "Top 10%", color: "#22c55e"};
+            else if (pctl >= 75) tail = {label: "Above-typical", color: "#86efac"};
+            else if (pctl <= 10) tail = {label: "Bottom 10%", color: "#ef4444"};
+            else if (pctl <= 25) tail = {label: "Below-typical", color: "#fca5a5"};
+          }
+
+          // Peer-typical Δ reference (median of position pool)
+          const peerMedian = pool[s.id]?.p50;
+
+          return (
+            <Tip key={s.id} block wide content={
+              <div>
+                <div className="font-bold mb-1" style={{color:color}}>{s.label}</div>
+                <div className="text-xs mb-2" style={{color:"#cbd5e1"}}>{s.desc}</div>
+                <div className="text-[11px] leading-relaxed" style={{color:"#94a3b8"}}>
+                  Raw Δ: <span style={{color:"#e5e7eb"}}>{fmtDelta(s.delta, s.fmt)}</span>
+                  {shrinkAlpha < 0.95 && (<>&nbsp;·&nbsp;Shrunken Δ: <span style={{color:"#fcd34d"}}>{fmtDelta(s.shrunkDelta, s.fmt)}</span></>)}
+                  <br/>
+                  NCAA median Δ ({poolLabel}): <span style={{color:"#e5e7eb"}}>{fmtDelta(peerMedian, s.fmt)}</span>
+                  &nbsp;·&nbsp;
+                  Percentile vs peers: <span style={{color:color}}>{Math.round(pctl)}th</span>
+                </div>
+                <div className="text-[11px] mt-2" style={{color:"#6b7280"}}>
+                  Good direction: {s.good === "up" ? "higher Δ = better" : s.good === "down" ? "lower Δ = better (TO%)" : "neutral"}
+                </div>
+              </div>
+            }>
+              <div className="cursor-help">
+                <div className="flex items-center justify-between text-sm mb-1">
+                  <span style={{color:"#cbd5e1"}}>
+                    {s.label} <span style={{color:"#475569"}}>ⓘ</span>
+                    {tail && <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold"
+                                   style={{background:tail.color+"22",color:tail.color,border:`1px solid ${tail.color}55`}}>{tail.label}</span>}
+                  </span>
+                  <div className="flex items-center gap-3 text-xs">
+                    <span style={{color:"#9ca3af"}}>H1 <span style={{color:"#e5e7eb"}}>{fmtVal(s.v1, s.fmt)}</span></span>
+                    <span style={{color:"#475569"}}>→</span>
+                    <span style={{color:"#9ca3af"}}>H2 <span style={{color:"#e5e7eb"}}>{fmtVal(s.v2, s.fmt)}</span></span>
+                    <span className="font-bold text-base" style={{color:color, minWidth:60, textAlign:"right",fontFamily:"'Oswald',sans-serif"}}>
+                      {fmtDelta(s.delta, s.fmt)}
+                    </span>
+                  </div>
+                </div>
+                <div className="relative h-7 rounded overflow-hidden" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+                  <div className="absolute top-0 bottom-0 w-0.5 z-10" style={{left:"50%", background:"#ffffff44"}}/>
+                  {isAbovePeer ? (
+                    <div className="absolute top-1 bottom-1 rounded-r"
+                         style={{left:"50%", width:`${barPct}%`, background:`linear-gradient(90deg,${color}33,${color})`}}/>
+                  ) : (
+                    <div className="absolute top-1 bottom-1 rounded-l"
+                         style={{right:"50%", width:`${barPct}%`, background:`linear-gradient(270deg,${color}33,${color})`}}/>
+                  )}
+                  <div className="absolute inset-0 flex items-center justify-between px-2 text-[10px]" style={{color:"#ffffff22"}}>
+                    <span>Below peers</span><span>Above peers</span>
+                  </div>
+                </div>
+              </div>
+            </Tip>
+          );
+        })}
+      </div>
+
+      {/* Footer caveat: TSA-based (consistent across all seasons regardless of sub-tracking) */}
+      <div className="mt-4 text-[11px]" style={{color:"#6b7280"}}>
+        Sample ({viewLabel}{viewTeam ? " · " + viewTeam : ""}): {tsa1.toFixed(0)} TSA H1 · {tsa2.toFixed(0)} TSA H2
+        · {(h1.FGA||0) + (h2.FGA||0)} total FGA · {(h1.AST||0) + (h2.AST||0)} assists · {(h1.TO||0) + (h2.TO||0)} turnovers
+        · garbage time excluded · TSA = FGA + 0.44·FTA
+      </div>
+    </Sec>
+  );
+}
+
 
 // ═══════════════════════════════════════════════════════════
 // TAB: DEVELOPMENT TRAJECTORY
 // Season-by-Season table + Class Scatter + In-Season DevTrajectory
 // ═══════════════════════════════════════════════════════════
+// Sprint-3.45 (Tobias 2026-06-17): Trajectory validation constants from NCAA
+// multi-season pool (n=14,281; NBA-careered subset n=518 for outcome anchors).
+// IMPORTANT: only USG slope shows a moderate signal — BPM and TS% slopes are
+// essentially flat across quartiles, so the Methods note flags that explicitly.
+const TRAJECTORY_VALIDATION = {
+  poolNote: "Slopes computed across all NCAA multi-season players 2008-2026 (n=14,281). Outcome rates pulled from the NBA-careered sub-sample (n=518) bucketed into quartiles by per-stat slope.",
+  percentiles: {
+    bpm: {p10:-1.78, p25:-0.54, p50:+0.45, p75:+1.41, p90:+2.46},
+    ts:  {p10:-4.19, p25:-1.42, p50:+0.57, p75:+2.57, p90:+5.03},
+    usg: {p10:-2.13, p25:-0.72, p50:+0.55, p75:+2.00, p90:+3.55},
+    ast: {p10:-2.60, p25:-0.80, p50:+0.60, p75:+2.20, p90:+4.30},
+    to:  {p10:-4.30, p25:-2.40, p50:-0.80, p75:+0.70, p90:+2.50},
+    blk: {p10:-0.75, p25:-0.27, p50: 0.00, p75:+0.20, p90:+0.60},
+    stl: {p10:-0.50, p25:-0.20, p50:+0.01, p75:+0.22, p90:+0.50},
+  },
+  // Per-stat slope-quartile outcome cohorts. Each Q stores: range, n, bust%, starter+%, star+%
+  cohorts: {
+    bpm: {
+      Q1:{lo:-4.47, hi:+0.28, n:130, bust:50.0, starter:31.5, star:14.6},
+      Q2:{lo:+0.30, hi:+1.27, n:129, bust:45.7, starter:34.1, star:15.5},
+      Q3:{lo:+1.27, hi:+2.12, n:129, bust:53.5, starter:25.6, star:14.0},
+      Q4:{lo:+2.13, hi:+8.76, n:130, bust:43.8, starter:32.3, star:10.8},
+    },
+    ts: {
+      Q1:{lo:-12.12, hi:-0.35, n:130, bust:50.0, starter:35.4, star:16.2},
+      Q2:{lo: -0.35, hi:+1.11, n:129, bust:46.5, starter:31.0, star:11.6},
+      Q3:{lo:+1.11,  hi:+2.98, n:129, bust:50.4, starter:22.5, star:13.2},
+      Q4:{lo:+2.98,  hi:+14.88,n:130, bust:46.2, starter:34.6, star:13.8},
+    },
+    usg: {
+      Q1:{lo:-5.50, hi:+0.35, n:130, bust:54.6, starter:26.9, star:12.3},
+      Q2:{lo:+0.37, hi:+1.77, n:129, bust:53.5, starter:26.4, star: 9.3},
+      Q3:{lo:+1.80, hi:+3.40, n:129, bust:44.2, starter:31.8, star:12.4},
+      Q4:{lo:+3.40, hi:+15.10,n:130, bust:40.8, starter:38.5, star:20.8},
+    },
+  },
+  notes: {
+    bpm: "BPM slope is a weak predictor by itself — all quartiles produce Star+ at ~11-16% and Bust at ~44-54%. A rising BPM curve is a positive signal but not a star differentiator on its own.",
+    ts:  "TS% slope is a weak predictor by itself — similar flat outcome distribution across quartiles. Translation of a rising shooter curve depends heavily on shot type (rim vs three) and is better captured by the Shooting Projection (Diss-M1) on the Projection tab.",
+    usg: "USG slope carries a moderate signal — top quartile players (USG rising by +3.4 to +15 percentage points per year) reach Star+ at 20.8% vs bottom quartile 12.3%, and Bust drops from 54.6% to 40.8%. Players who EXPAND their offensive load over their career are more often legit lottery-tier prospects than developers who plateau.",
+  },
+};
+
+function _percentileFor(value, pcts) {
+  if (value == null || !pcts) return null;
+  const xs = [pcts.p10, pcts.p25, pcts.p50, pcts.p75, pcts.p90];
+  const ys = [10, 25, 50, 75, 90];
+  if (value <= xs[0]) return Math.max(0, 10 * (1 - (xs[0] - value) / Math.max(0.01, xs[1] - xs[0])));
+  if (value >= xs[4]) return Math.min(100, 90 + 10 * (value - xs[4]) / Math.max(0.01, xs[4] - xs[3]));
+  for (let i = 0; i < xs.length - 1; i++) {
+    if (value <= xs[i+1]) {
+      const t = (value - xs[i]) / Math.max(0.001, xs[i+1] - xs[i]);
+      return ys[i] + t * (ys[i+1] - ys[i]);
+    }
+  }
+  return 50;
+}
+
+function _quartileFor(slope, cohorts) {
+  for (const [q, c] of Object.entries(cohorts)) {
+    if (slope >= c.lo && slope <= c.hi) return {q, ...c};
+  }
+  // fallback: nearest by midpoint
+  let best = null, bestD = Infinity;
+  for (const [q, c] of Object.entries(cohorts)) {
+    const mid = (c.lo + c.hi) / 2;
+    const d = Math.abs(slope - mid);
+    if (d < bestD) { bestD = d; best = {q, ...c}; }
+  }
+  return best;
+}
+
+
 function DevTrajectoryTab({p}) {
   if (!p) return null;
 
@@ -4552,9 +6003,113 @@ function DevTrajectoryTab({p}) {
     );
   };
 
+  // Sprint-3.45: Trajectory validation — compute slopes from p.seasonLines and
+  // show percentile + cohort outcome distribution for the 3 covered stats.
+  const TrajectoryValidation = () => {
+    const lines = (p.seasonLines || []).filter(s => s.yr && (s.gp == null || s.gp >= 8));
+    if (lines.length < 2) return null;
+    const STATS = [
+      { id: "bpm", label: "BPM",  getter: s => s.bpm },
+      { id: "ts",  label: "TS%",  getter: s => s.ts  },
+      { id: "usg", label: "USG%", getter: s => s.usg },
+    ];
+    const computed = STATS.map(stat => {
+      const pts = lines.map((s,i) => ({i, y: stat.getter(s), yr: s.yr})).filter(d => d.y != null && isFinite(d.y));
+      if (pts.length < 2) return {...stat, slope:null};
+      // Use year-based slope (per year, matches the pool calculation method)
+      const yrs = pts.map(d => Number(d.yr));
+      const ys  = pts.map(d => d.y);
+      const xm = yrs.reduce((a,b)=>a+b,0) / yrs.length;
+      const ym = ys.reduce((a,b)=>a+b,0)  / ys.length;
+      const num = yrs.reduce((s,x,i) => s + (x-xm)*(ys[i]-ym), 0);
+      const den = yrs.reduce((s,x)   => s + (x-xm)*(x-xm), 0);
+      const slope = den === 0 ? 0 : num/den;
+      return {...stat, slope, n: pts.length};
+    });
+
+    return (
+      <Sec icon="🧭" title="Trajectory Validation"
+           sub="How does the year-over-year change in each headline stat compare to the historical NCAA pool, and what did players with similar slopes typically become in the NBA?">
+        <div className="rounded-lg p-3 mb-3 text-[11px]" style={{background:"#fbbf2411",border:"1px solid #fbbf2444",color:"#fcd34d"}}>
+          ⚠ Caveats this section can't fix on its own: (1) slope quartiles are POOLED across positions — a Playmaker's USG-slope distribution differs from a Big's, so the global percentile is a rough anchor not a position-fair rank; (2) outcome rates are CONDITIONAL on reaching the NBA (n=518), so the Bust% you see is "bust among NBA-careered with this slope", not unconditional. Read the cohort as scout-eye context.
+        </div>
+        <div className="text-[11px] mb-3" style={{color:"#6b7280"}}>
+          {TRAJECTORY_VALIDATION.poolNote}
+        </div>
+        <div className="space-y-3">
+          {computed.map(stat => {
+            if (stat.slope == null) return (
+              <div key={stat.id} className="rounded-lg p-3 text-xs" style={{background:"#0d1117",border:"1px solid #1f2937",color:"#475569"}}>
+                {stat.label}: not enough data
+              </div>
+            );
+            const pcts = TRAJECTORY_VALIDATION.percentiles[stat.id];
+            const cohorts = TRAJECTORY_VALIDATION.cohorts[stat.id];
+            const pctl = _percentileFor(stat.slope, pcts);
+            const cohort = _quartileFor(stat.slope, cohorts);
+            const note = TRAJECTORY_VALIDATION.notes[stat.id];
+            const dirColor = pctl >= 75 ? "#22c55e" : pctl >= 50 ? "#86efac" : pctl >= 25 ? "#fbbf24" : "#ef4444";
+            return (
+              <div key={stat.id} className="rounded-lg p-4" style={{background:"#0d111788",border:"1px solid #1f2937"}}>
+                {/* Header row: stat name + slope + percentile rank */}
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <div className="text-sm font-semibold" style={{color:"#cbd5e1"}}>{stat.label} Slope <span style={{color:"#6b7280", fontWeight:400}}>· {stat.n} seasons</span></div>
+                    <div className="text-[11px] mt-0.5" style={{color:"#6b7280"}}>
+                      NCAA pool median: {pcts.p50 >= 0 ? "+" : ""}{pcts.p50.toFixed(2)} / yr · p10–p90 range {pcts.p10.toFixed(2)} → +{pcts.p90.toFixed(2)}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xl font-bold" style={{color:dirColor, fontFamily:"'Oswald',sans-serif"}}>
+                      {stat.slope >= 0 ? "+" : ""}{stat.slope.toFixed(2)} <span className="text-xs" style={{color:"#6b7280"}}>/ yr</span>
+                    </div>
+                    <div className="text-[11px]" style={{color:dirColor}}>
+                      {Math.round(pctl)}th percentile
+                    </div>
+                  </div>
+                </div>
+
+                {/* Cohort outcome anchor */}
+                {cohort && (
+                  <div className="rounded-md p-3 mb-2" style={{background:"#0a0e16", border:"1px solid #1f2937"}}>
+                    <div className="text-[10px] uppercase tracking-wider mb-1.5" style={{color:"#9ca3af"}}>
+                      Players in {cohort.q} of {stat.label} slope ({cohort.lo>=0?"+":""}{cohort.lo.toFixed(1)} to {cohort.hi>=0?"+":""}{cohort.hi.toFixed(1)} per yr, n={cohort.n})
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div>
+                        <div style={{color:"#6b7280"}}>Star+ rate</div>
+                        <div className="font-bold" style={{color:"#22c55e"}}>{cohort.star.toFixed(0)}%</div>
+                      </div>
+                      <div>
+                        <div style={{color:"#6b7280"}}>Starter+ rate</div>
+                        <div className="font-bold" style={{color:"#86efac"}}>{cohort.starter.toFixed(0)}%</div>
+                      </div>
+                      <div>
+                        <div style={{color:"#6b7280"}}>Bust rate</div>
+                        <div className="font-bold" style={{color:"#ef4444"}}>{cohort.bust.toFixed(0)}%</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Honest note about predictor strength */}
+                {note && (
+                  <div className="text-[11px]" style={{color:"#9ca3af"}}>
+                    <span style={{color:"#fbbf24", fontWeight:600}}>How to read it: </span>{note}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </Sec>
+    );
+  };
+
   return (
     <div className="flex flex-col gap-4">
       <SeasonLineChart />
+      <TrajectoryValidation />
       <SeasonTable />
       <ClassScatterAndDev p={p} />
       <FibaCard />
@@ -4717,7 +6272,70 @@ function ProjectionTab({p}) {
               </div>
             );
           })()}
-          {/* ── Archetype Pipeline ── */}
+          {/* ── Sprint-3.2 v27 Archetype Group (anchor-based K-Means + Bayesian shrinkage) ── */}
+          {p.archetypeV27 && ARCHETYPE_V27_PRIORS[p.archetypeV27] && (() => {
+            const v27 = ARCHETYPE_V27_PRIORS[p.archetypeV27];
+            const conf = p.archetypeV27Confidence ?? 0;
+            const bucket = archetypeV27Bucket(conf);
+            const alt = p.archetypeV27Alternative;
+            const altPriors = alt ? ARCHETYPE_V27_PRIORS[alt] : null;
+            return (
+              <div className="mt-4 rounded-xl p-4" style={{
+                background: bucket.bg,
+                borderLeft: `4px solid ${v27.color}`,
+                border: `1px solid ${v27.color}33`,
+              }}>
+                <div className="flex items-center gap-2 flex-wrap mb-2">
+                  <div className="text-xs uppercase tracking-widest" style={{color:"#9ca3af",letterSpacing:"0.1em"}}>
+                    Archetype Group (empirical, v27)
+                  </div>
+                  <div className="text-xs font-bold px-2 py-0.5 rounded"
+                    style={{background:bucket.color+"33",color:bucket.color,border:`1px solid ${bucket.color}66`}}>
+                    {bucket.label} · {(conf*100).toFixed(0)}%
+                  </div>
+                </div>
+                <div className="text-xs mb-2" style={{color:"#9ca3af",lineHeight:1.4}}>
+                  This prospect is placed into the closest archetype cluster based on his role profile + anthropometrics.
+                  The named players below are <strong style={{color:"#cbd5e1"}}>illustrative members of that group</strong>,
+                  not individual comparables.
+                </div>
+                <div className="flex items-baseline gap-3 flex-wrap mb-2">
+                  <div className="text-2xl font-bold" style={{color:v27.color}}>
+                    {p.archetypeV27}
+                  </div>
+                  <div className="text-xs" style={{color:"#9ca3af"}}>
+                    Group stats: n={v27.n_nba} historical NBA players · {(v27.starRate*100).toFixed(0)}% star rate · median peak-WA {v27.median.toFixed(1)} · 90th pct {v27.p90.toFixed(1)}
+                  </div>
+                </div>
+                <div className="text-xs mb-2" style={{color:"#cbd5e1",lineHeight:1.5}}>{v27.desc}</div>
+                <div className="text-xs mb-1" style={{color:"#9ca3af"}}>
+                  <strong style={{color:"#e5e7eb"}}>Group members include:</strong> {v27.groupMembers.slice(0,5).join(" · ")}
+                </div>
+                {v27.isComboGuard && (
+                  <div className="text-xs mt-2 px-2 py-1 rounded" style={{
+                    background:"rgba(245,158,11,0.10)",color:"#fbbf24",border:"1px solid rgba(245,158,11,0.3)"
+                  }}>
+                    ⓘ Pre-draft archetype: this college combo-guard cluster historically develops into NBA lead-scorer roles. Group classification reflects pre-draft role (driven by college USG), not the player's eventual NBA position.
+                  </div>
+                )}
+                {v27.isReplacement && (
+                  <div className="text-xs mt-2 px-2 py-1 rounded" style={{
+                    background:"rgba(148,163,184,0.10)",color:"#94a3b8",border:"1px solid rgba(148,163,184,0.3)"
+                  }}>
+                    ⓘ Replacement-tier group: small NBA sample (n={v27.n_nba}), historically near-zero star rate. Bayesian shrinkage applies a weak anchor (model trusts the LightGBM prediction more for this cluster).
+                  </div>
+                )}
+                {alt && altPriors && conf < 0.50 && (
+                  <div className="text-xs mt-2" style={{color:"#9ca3af"}}>
+                    <strong style={{color:"#cbd5e1"}}>Runner-up group (low fit confidence):</strong>{" "}
+                    <span style={{color:altPriors.color}}>{alt}</span>{" "}
+                    <span style={{color:"#6b7280"}}>(n={altPriors.n_nba}, {(altPriors.starRate*100).toFixed(0)}% star rate)</span>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+          {/* ── Archetype Pipeline (v26 legacy — NCAA Role → NBA Projection) ── */}
           {(p.ncaaArchetype || p.nbaProjection) && (
             <div className="mt-4 rounded-xl px-4 py-3" style={{background:"#0a0e17",border:"1px solid #1f2937"}}>
               <div className="text-xs mb-2 mt-0" style={{color:"#6b7280",lineHeight:1.5,textAlign:"center"}}>
@@ -5208,6 +6826,195 @@ function ProjectionTab({p}) {
         })()}
       </Sec>
 
+      {/* ═══════════════════════════════════════════════════════════
+          Sprint-3.17.X (2026-06-14): Role/Outcome Projections section.
+          Container for calibrated probability forecasts of specific NBA
+          outcomes — distinct from the Tier Probabilities above (which
+          forecast value tier). Add new role projection cards here as
+          they ship — they share the same display convention (% × 100).
+          ═══════════════════════════════════════════════════════════ */}
+      <Sec title="Role Projections" subtitle="Calibrated probabilities of specific NBA role outcomes">
+        <div className="space-y-4">
+          <p className="text-xs text-gray-400 leading-relaxed">
+            Each card is a forecast of a specific NBA role outcome — whether the prospect
+            becomes a Star+ Creator, an elite shooter, an All-Defensive player, etc. Scores
+            are calibrated probabilities anchored against historic prospects who actually
+            reached the outcome. Historic base rates are low (typically 8-15%), so a score
+            well above that is a strong lift over the population. No prospect realistically
+            scores 95%+ — anything that high would mean the model is overfitting.
+          </p>
+
+          {/* Star+ Creator Projection */}
+          {p.starCreator != null && Number.isFinite(p.starCreator) && p.starCreator > 0 && (() => {
+            const score = p.starCreator;
+            const color = score >= 50 ? "#22c55e"
+                        : score >= 30 ? "#fbbf24"
+                        : score >= 15 ? "#06b6d4"
+                        : "#6b7280";
+            const tierLabel = score >= 50 ? "Exceptional Creator profile"
+                            : score >= 30 ? "Strong Creator potential"
+                            : score >= 15 ? "Around the base-rate"
+                            : "Unlikely Creator";
+            return (
+              <div className="rounded-xl p-4" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+                <div className="text-sm font-semibold text-gray-100 mb-1">
+                  Star+ Creator Projection
+                </div>
+                <div className="text-xs text-gray-400 mb-3 leading-relaxed">
+                  Probability of becoming a Star+ Creator in the NBA — peak All-Star tier
+                  <span className="text-gray-300"> AND</span> high on-ball usage
+                  <span className="text-gray-300"> AND</span> high passing involvement.
+                </div>
+                <div className="flex flex-wrap gap-5 mb-3 items-end">
+                  <div>
+                    <div className="text-2xl font-bold" style={{color}}>{score.toFixed(1)}%</div>
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wide">
+                      Star+ Creator Probability
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-200">{tierLabel}</div>
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wide">Tier read</div>
+                  </div>
+                  {p.starCreatorPhaseB != null && Number.isFinite(p.starCreatorPhaseB) && (
+                    <div>
+                      <div className="text-sm text-gray-300">{p.starCreatorPhaseB.toFixed(1)}%</div>
+                      <div className="text-[10px] text-gray-500 uppercase tracking-wide">
+                        Model only (pre-triangulation)
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="flex h-5 rounded overflow-hidden mb-1" style={{background:"#1f2937"}}>
+                  <div
+                    style={{width:`${Math.min(100, score)}%`, background:color}}
+                    title={`${score.toFixed(1)}% calibrated probability`}
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] text-gray-500">
+                  <span>0%</span>
+                  <span>base rate ~8–15%</span>
+                  <span>50%</span>
+                  <span>100%</span>
+                </div>
+                {p.starCreatorExplanation && (
+                  <div className="text-[11px] text-gray-400 mt-3 leading-relaxed">
+                    <span className="text-gray-500 uppercase tracking-wide text-[10px] mr-1">Drivers:</span>
+                    {p.starCreatorExplanation}
+                  </div>
+                )}
+                <div className="text-[10px] text-gray-500 mt-2 leading-relaxed">
+                  Position-stratified Logistic Regression · Bayesian shrinkage · Triangulated
+                  with Comps Engine v5 (age-stage cohort + archetype cluster). Calibrated on
+                  held-out 2015-2017 set.
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Elite Shooter Projection (Sprint-3.18) */}
+          {p.eliteShooter != null && Number.isFinite(p.eliteShooter) && p.eliteShooter > 0 && (() => {
+            const score = p.eliteShooter;
+            const color = score >= 50 ? "#22c55e" : score >= 30 ? "#fbbf24" : score >= 15 ? "#06b6d4" : "#6b7280";
+            const tier  = score >= 50 ? "Exceptional shooter profile"
+                        : score >= 30 ? "Strong shooting projection"
+                        : score >= 15 ? "Around the base-rate"
+                        : "Unlikely floor-spacer";
+            return (
+              <div className="rounded-xl p-4" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+                <div className="text-sm font-semibold text-gray-100 mb-1">Elite Shooter Projection</div>
+                <div className="text-xs text-gray-400 mb-3 leading-relaxed">
+                  Probability of becoming an NBA floor-spacer — peak 3P% ≥ 36% (Bigs ≥ 33%) AND 3PAr ≥ 0.30 (Bigs ≥ 0.20),
+                  measured over qualifying seasons with ≥ 2 attempts per game.
+                </div>
+                <div className="flex flex-wrap gap-5 mb-3 items-end">
+                  <div>
+                    <div className="text-2xl font-bold" style={{color}}>{score.toFixed(1)}%</div>
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wide">Elite Shooter Probability</div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-200">{tier}</div>
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wide">Tier read</div>
+                  </div>
+                  {p.eliteShooterPhaseB != null && Number.isFinite(p.eliteShooterPhaseB) && (
+                    <div>
+                      <div className="text-sm text-gray-300">{p.eliteShooterPhaseB.toFixed(1)}%</div>
+                      <div className="text-[10px] text-gray-500 uppercase tracking-wide">Model only (pre-triangulation)</div>
+                    </div>
+                  )}
+                </div>
+                <div className="flex h-5 rounded overflow-hidden mb-1" style={{background:"#1f2937"}}>
+                  <div style={{width:`${Math.min(100, score)}%`, background:color}} />
+                </div>
+                <div className="flex justify-between text-[10px] text-gray-500">
+                  <span>0%</span><span>base rate ~10–15%</span><span>50%</span><span>100%</span>
+                </div>
+                {p.eliteShooterExplanation && (
+                  <div className="text-[11px] text-gray-400 mt-3 leading-relaxed">
+                    <span className="text-gray-500 uppercase tracking-wide text-[10px] mr-1">Drivers:</span>
+                    {p.eliteShooterExplanation}
+                  </div>
+                )}
+                <div className="text-[10px] text-gray-500 mt-2 leading-relaxed">
+                  Position-stratified Logistic Regression · Bayesian shrinkage · Triangulated with Comps Engine v5.
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* All-Defensive Player Projection (Sprint-3.19) */}
+          {p.allDefensive != null && Number.isFinite(p.allDefensive) && p.allDefensive > 0 && (() => {
+            const score = p.allDefensive;
+            const color = score >= 50 ? "#22c55e" : score >= 30 ? "#fbbf24" : score >= 15 ? "#06b6d4" : "#6b7280";
+            const tier  = score >= 50 ? "Exceptional defensive profile"
+                        : score >= 30 ? "Strong defensive projection"
+                        : score >= 15 ? "Around the base-rate"
+                        : "Unlikely All-Defensive";
+            return (
+              <div className="rounded-xl p-4" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+                <div className="text-sm font-semibold text-gray-100 mb-1">All-Defensive Player Projection</div>
+                <div className="text-xs text-gray-400 mb-3 leading-relaxed">
+                  Probability of becoming an NBA All-Defensive level player. Position-aware target:
+                  Guards via STL rate + DEF_WS, Wings via DEF_WS (highest All-Def density), Bigs via
+                  DEF_WS or BLK rate (rim-protection path).
+                </div>
+                <div className="flex flex-wrap gap-5 mb-3 items-end">
+                  <div>
+                    <div className="text-2xl font-bold" style={{color}}>{score.toFixed(1)}%</div>
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wide">All-Defensive Probability</div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-200">{tier}</div>
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wide">Tier read</div>
+                  </div>
+                  {p.allDefensivePhaseB != null && Number.isFinite(p.allDefensivePhaseB) && (
+                    <div>
+                      <div className="text-sm text-gray-300">{p.allDefensivePhaseB.toFixed(1)}%</div>
+                      <div className="text-[10px] text-gray-500 uppercase tracking-wide">Model only (pre-triangulation)</div>
+                    </div>
+                  )}
+                </div>
+                <div className="flex h-5 rounded overflow-hidden mb-1" style={{background:"#1f2937"}}>
+                  <div style={{width:`${Math.min(100, score)}%`, background:color}} />
+                </div>
+                <div className="flex justify-between text-[10px] text-gray-500">
+                  <span>0%</span><span>base rate ~8–12%</span><span>50%</span><span>100%</span>
+                </div>
+                {p.allDefensiveExplanation && (
+                  <div className="text-[11px] text-gray-400 mt-3 leading-relaxed">
+                    <span className="text-gray-500 uppercase tracking-wide text-[10px] mr-1">Drivers:</span>
+                    {p.allDefensiveExplanation}
+                  </div>
+                )}
+                <div className="text-[10px] text-gray-500 mt-2 leading-relaxed">
+                  Position-stratified Logistic Regression · Bayesian shrinkage · Triangulated with Comps Engine v5.
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      </Sec>
+
       {/* Role Fit & Team Context placeholder removed 2026-05-09 (User: feature is on backlog, no need to advertise it) */}
     </div>
   );
@@ -5224,32 +7031,53 @@ function ScoutingTab({p, mode="scouting"}) {
     {key:"shootScore",name:"Shooting",value:p.shootScore??0,color:"#22c55e",icon:"🎯"},
     {key:"defScore",name:"Defense",value:p.defScore??0,color:"#3b82f6",icon:"🛡"},
     {key:"funcAth",name:"Athleticism",value:p.funcAth??0,color:"#f97316",icon:"⚡"},
-    {key:"selfCreation",name:"Box Creation",value:p.selfCreation??0,color:"#06b6d4",icon:"✦"},
+    {key:"selfCreation",name:"Self-Created Offense",value:p.selfCreation??0,color:"#06b6d4",icon:"✦",desc:"Self-Adjusted On-Ball Creation v2 — NOT classical Ben Taylor Box Creation. Measures HOW MUCH offense a player produces himself (not assisted) and HOW WELL he distributes when he passes.\n\nINPUTS (PBP-tracked):\n  • Scoring component  =  USG × TS × Self-Share\n       └ USG: how many of the team's possessions he uses\n       └ TS: how efficiently he converts them\n       └ Self-Share: % of his shots NOT assisted (PBP)\n  • Passing component  =  AST% × Quality\n       └ AST%: how often he creates for others\n       └ Quality: AST/TO ratio (clamped 0.5–2.5, normalized to 0–1)\n\nPOSITION-WEIGHTING (composite):\n  • Playmakers: 40% scoring + 60% passing\n  • Wings:      70% scoring + 30% passing\n  • Bigs:       80% scoring + 20% passing\n\nSAMPLE PENALTY: full credit at 300+ FGA, proportionally reduced below.\n\nNOTE: A high score means the player MANUFACTURES his own offense. It is NOT a measure of total scoring volume — a high-volume catch-and-shoot wing will score LOWER than a moderate-volume off-dribble creator."},
   ];
 
   // ── Roles ──
   const rr = p.roles || {};
+  // Tobias 2026-06-04 v22: 14-role layout with actual 10c position-aware formulas
+  // All formulas below match 10c_ml_calibration.py:3476-3495 (NOT 10_composite_scores.py:500-573 which is overwritten).
+  // p_X = position-aware percentile of input X via pctl_by_pos (10c:3162).
+  // Layout: 5 Offensive, 4 Defensive, 5 Hybrid = 14 roles.
   const ROLE_INFO = {
-    scorer:     {name:"Scorer",      cat:"Offensive", inputs:"PTS/36, USG%, TS%, eFG%",                desc:"Volume scoring ability. Weights production × efficiency."},
-    playmaker:  {name:"Playmaker",   cat:"Offensive", inputs:"AST%, AST/TO, USG%, Feel Score",         desc:"Creates for others. Passing vision and decision-making under pressure."},
-    spacer:     {name:"Spacer",      cat:"Offensive", inputs:"3P%, 3PAr, FT%, three_frequency",        desc:"Floor spacing gravity. Draws defenders beyond the arc."},
-    driver:     {name:"Driver",      cat:"Offensive", inputs:"Rim%, FTR, USG%, Dunk Rate*",          desc:"Rim pressure via drives. Creates contact and free throws. *Dunk Rate unavailable for internationals — FTR weighted higher as proxy."},
-    crasher:    {name:"Crasher",     cat:"Offensive", inputs:"ORB%, Dunk Rate, FTR, Func Ath",         desc:"Offensive rebounds and put-backs. Second-chance creation."},
-    onball:     {name:"On-Ball D",   cat:"Defensive", inputs:"STL%, DBPM, Height (size proxy)",      desc:"Perimeter defense. Ball pressure and steal ability. No direct lateral quickness data available — STL% and DBPM serve as proxies."},
-    switchPot:  {name:"Switch Pot.", cat:"Defensive", inputs:"Height, STL%, BLK%, Wingspan",           desc:"Can defend multiple positions in switching schemes."},
-    rimProt:    {name:"Rim Protect", cat:"Defensive", inputs:"BLK%, DBPM, Height, DRB%",              desc:"Shot-blocking and rim deterrence. Anchors paint defense."},
-    rebounder:  {name:"Rebounder",   cat:"Defensive", inputs:"DRB%, ORB%, Height, Func Ath",          desc:"Board control on both ends. Ends possessions and starts breaks."},
-    connector:  {name:"Connector",   cat:"Hybrid",    inputs:"AST/TO>2, DBPM>0, USG%<18",             desc:"Glue guy. Connects offense without mistakes, contributes defensively."},
-    helio:      {name:"Helio-Scorer",cat:"Hybrid",    inputs:"USG%>28, PTS/36>18, TS%>55",            desc:"Ball-dominant scoring engine. Offense revolves around this player."},
-    event:      {name:"Event Creator",cat:"Hybrid",   inputs:"Box Creation Pctl>70, AST%>20, USG%>25",desc:"Creates scoring opportunities from nothing. Iso + playmaking dual threat."},
-    zone:       {name:"Zone Pressure",cat:"Hybrid",   inputs:"STL%>2.5, BLK%>1.5, Func Ath>70",      desc:"Defensive chaos agent. Forces turnovers and blocks in multiple zones."},
-    microSpacer:{name:"Micro-Spacer",cat:"Hybrid",    inputs:"3P%>35, USG%<16, DBPM>0",               desc:"Low-usage spacer who contributes defensively. 3&D role player archetype."},
+    // ── OFFENSIVE (5) ──────────────────────────────────────────────────
+    scorer:     {name:"Scorer",            cat:"Offensive", inputs:"PTS × TS, position-percentilet",
+                 desc:"Volume × efficiency scoring. Backend formula: pctl_by_pos(PTS × TS / 100). Single composite — players are ranked by raw points scaled by efficiency, within their position group."},
+    playmaker:  {name:"Playmaker",         cat:"Offensive", inputs:"AST%, AST/TO, low-TO%",
+                 desc:"Distribution profile. Backend formula: 0.50 × p_AST + 0.30 × p_AST/TO + 0.20 × (100−p_TO). All position-aware. Weighted toward raw assist rate with quality and ball-security as supports."},
+    spacer:     {name:"Spacer",            cat:"Offensive", inputs:"3P%, FT%, eFG%",
+                 desc:"Shooting footprint. Backend formula: 0.50 × p_3P% + 0.30 × p_FT% + 0.20 × p_eFG%. Position-aware. Three-point accuracy carries the role, FT% as touch indicator, eFG% as overall scoring proxy."},
+    driver:     {name:"Driver",            cat:"Offensive", inputs:"FTr, USG%, ORB%",
+                 desc:"Rim-attack / aggression profile. Backend formula: 0.50 × p_FTR + 0.30 × p_USG + 0.20 × p_ORB. Position-aware. Foul-drawing is the dominant signal, with usage and offensive boards as supports."},
+    crasher:    {name:"Crasher",           cat:"Offensive", inputs:"ORB%, DRB%",
+                 desc:"Offensive glass + general rebounding intent. Backend formula: 0.60 × p_ORB + 0.40 × p_DRB. Position-aware. Heavy weight on offensive boards because they create second-chance possessions; defensive boards support as overall rebounding signal."},
+
+    // ── DEFENSIVE (4) ──────────────────────────────────────────────────
+    onball:     {name:"On-Ball Pressure",  cat:"Defensive", inputs:"STL%, low-TO%, USG%",
+                 desc:"Ball-handling defense + activity. Backend formula: 0.50 × p_STL + 0.30 × (100−p_TO) + 0.20 × p_USG. Position-aware. Steals carry the role; low turnover share signals controlled aggression; usage matters because higher-volume players face primary defenders more often."},
+    switchPot:  {name:"Switch Pot.",       cat:"Defensive", inputs:"STL% + BLK%, position-percentilet",
+                 desc:"Multi-position versatility. Backend formula: pctl_by_pos(STL + BLK). Position-aware. The sum of stocks ranks players against their position peers — guards with both blocks and steals stand out, bigs with steals on top of blocks rise."},
+    rimProt:    {name:"Rim Protect",       cat:"Defensive", inputs:"BLK%, DRB%",
+                 desc:"Paint anchor. Backend formula: 0.70 × p_BLK + 0.30 × p_DRB. Position-aware. Block volume dominates; defensive boards as supporting indicator. Height is NOT separately weighted (different from older docs)."},
+    // Tobias 2026-06-04 v23: Event Creator removed (offensive overlap with Creation), Zone Pressure renamed to Event Creator
+    zone:       {name:"Event Creator",      cat:"Defensive", inputs:"STL%, BLK%, DRB%",
+                 desc:"Defensive event creator. Backend formula: 0.40 × p_STL + 0.30 × p_BLK + 0.30 × p_DRB. Position-aware percentile composite. Generates extra possessions through hands (steals) and shot contests (blocks), plus closes possessions on the defensive glass. Distinct from Stocks Machine badge (simple threshold trigger) and from the Creation pillar (which measures OFFENSIVE event creation)."},
+    // ── HYBRID (5) ─────────────────────────────────────────────────────
+    connector:  {name:"Connector",         cat:"Hybrid",    inputs:"AST%, Spacer score, Defense score",
+                 desc:"Glue-guy composite. Backend formula: 0.40 × p_AST + 0.30 × role_spacer + 0.30 × def_score. Position-aware. Combines passing with shooting gravity and defensive contribution — the player who connects everything without dominating the ball."},
+    helio:      {name:"Helio-Scorer",      cat:"Hybrid",    inputs:"Scorer score, USG%, AST%",
+                 desc:"Ball-dominant scoring engine. Backend formula: 0.50 × role_scorer + 0.30 × p_USG + 0.20 × p_AST. Position-aware. Leverages the volume × efficiency scoring component, amplified by usage and supported by playmaking presence — the offensive sun the team revolves around."},
+    rebounder:  {name:"Rebounder",         cat:"Hybrid",    inputs:"ORB%, DRB%",
+                 desc:"Two-way board control. Backend formula: 0.40 × p_ORB + 0.60 × p_DRB. Position-aware. Defensive boards primary, offensive boards secondary. Hybrid because the role spans both ends — different from Crasher which weights ORB heavier."},
+    microSpacer:{name:"Micro-Spacer",      cat:"Hybrid",    inputs:"3P%, FT%, Defense score",
+                 desc:"Off-ball shooter with defensive contribution. Backend formula: 0.50 × p_3P% + 0.30 × p_FT% + 0.20 × def_score. Position-aware. Same shooting inputs as Spacer but adds a defensive component — the proper 3-and-D role-player template."},
   };
 
   const roleGroups = [
     {label:"Offensive",color:"#f97316",roles:["scorer","playmaker","spacer","driver","crasher"]},
-    {label:"Defensive",color:"#3b82f6",roles:["onball","switchPot","rimProt","rebounder"]},
-    {label:"Hybrid",color:"#8b5cf6",roles:["connector","helio","event","zone","microSpacer"]},
+    {label:"Defensive",color:"#3b82f6",roles:["onball","switchPot","rimProt","zone"]},  // 14-role layout: rebounder moved to Hybrid  // event moved here, rebounder moved to Hybrid
+    {label:"Hybrid",color:"#8b5cf6",roles:["connector","helio","rebounder","microSpacer"]}  // event removed (offensive overlap with Creation pillar),  // event + zone restored, rebounder included  // event moved to Defensive, zone removed (Driver overlap), rebounder added
   ];
 
   // ── Archetype ──
@@ -5261,52 +7089,97 @@ function ScoutingTab({p, mode="scouting"}) {
   // are objectively harder to find — that's a useful scouting signal without making
   // normative claims about which archetype is "more valuable".
   const archetype = p.archetype || "Unknown";
+  // Tobias 2026-06-04 v26: Archetype audit — real 10c formulas + current freq + NBA outcomes
+  // All trigger formulas verified against 10c_ml_calibration.py:3592-3653 (assign_archetypes_multi).
+  // freqPct = % within position-pool from current 44.7k profile dataset.
+  // outcome = historical NBA stats for drafts 2010-2022 (HoF-collisions excluded, n=historical sample).
+  // "Defender" in any trigger formula refers to def_score PILLAR (0.35×STL+0.35×BLK+0.30×DRB), not a Role Inference.
   const ARCH_MAP = {
-    // === PLAYMAKER (n=12,089) ===
-    "Non-Specialized Playmaker": {desc:"Versatile guard without a dominant skill. Jack-of-all-trades backcourt piece.",color:"#8b5cf6",
-      pos:["Playmaker"],formula:"Default (no role >70)",roles:["Scorer","Playmaker","Spacer"], freqPct:52.8},
-    "Scoring Playmaker": {desc:"Dual-threat point guard. Scores at high volume while maintaining playmaking.",color:"#fbbf24",
-      pos:["Playmaker"],formula:"Scorer>70 + Playmaker>55",roles:["Scorer","Playmaker","Event Creator"], freqPct:19.5},
-    "Spacing Guard":      {desc:"Off-ball scoring guard. Elite spacing with catch-and-shoot gravity.",color:"#22c55e",
-      pos:["Playmaker"],formula:"Spacer>70",roles:["Spacer","Scorer","Micro-Spacer"], freqPct:15.5},
-    "Defensive Guard":     {desc:"Perimeter lockdown specialist. Ball pressure and steal ability define his value.",color:"#3b82f6",
-      pos:["Playmaker"],formula:"Defender>70",roles:["On-Ball D","Connector","Zone Pressure"], freqPct:7.9},
-    "Floor General":       {desc:"Lead playmaker who creates for others. Elite AST/TO and half-court orchestration.",color:"#f97316",
-      pos:["Playmaker"],formula:"Playmaker>75",roles:["Playmaker","Connector","Event Creator"], freqPct:4.3},
+    // ═══ PLAYMAKER (n_pos=4,439) ═══
+    "Scoring Playmaker": {desc:"Dual-threat point guard. Scores at high volume while maintaining playmaking. Most common PG archetype in modern NBA.",color:"#fbbf24",
+      pos:["Playmaker"],formula:"role_scorer >70 AND role_playmaker >55",roles:["Scorer","Playmaker","Event Creator"],
+      freqPct:38.6, outcome:"n=107 · Star+ 15.9% · Bust 43.0% · meanWA +4.4",
+      examples:"Damian Lillard (37), Kemba Walker (29), Tyrese Haliburton (24)"},
+    "Non-Specialized Playmaker": {desc:"Versatile guard without a dominant skill. Jack-of-all-trades backcourt piece — needs role context to thrive.",color:"#8b5cf6",
+      pos:["Playmaker"],formula:"Default (no trigger met)",roles:["Scorer","Playmaker","Spacer"],
+      freqPct:31.6, outcome:"n=5 · sample too small for robust outcomes",
+      examples:"—"},
+    "Floor General":  {desc:"Lead playmaker who creates for others. Elite AST/TO and half-court orchestration.",color:"#f97316",
+      pos:["Playmaker"],formula:"role_playmaker >75",roles:["Playmaker","Connector","Event Creator"],
+      freqPct:11.4, outcome:"n=1 · sample too small",
+      examples:"—"},
+    "Spacing Guard":  {desc:"Off-ball scoring guard. Elite spacing with catch-and-shoot gravity.",color:"#22c55e",
+      pos:["Playmaker"],formula:"role_spacer >70",roles:["Spacer","Scorer","Micro-Spacer"],
+      freqPct:9.4, outcome:"n=0 historical (rare archetype)",
+      examples:"—"},
+    "Defensive Guard":{desc:"Perimeter lockdown specialist. Ball pressure and steal ability define his value.",color:"#3b82f6",
+      pos:["Playmaker"],formula:"def_score PILLAR >70 (NOT a single Role Inference — composite of STL+BLK+DRB)",roles:["On-Ball Pressure","Connector","Event Creator"],
+      freqPct:5.9, outcome:"n=1 · sample too small",
+      examples:"—"},
 
-    // === WING (n=26,838) ===
-    "Non-Specialized Wing":      {desc:"Multi-tool forward without a dominant skill. Fits many lineups.",color:"#a78bfa",
-      pos:["Wing"],formula:"Default (no role >65)",roles:["Connector","Switch Pot.","Spacer"], freqPct:44.2},
-    "Scoring Wing":        {desc:"Pure scorer without elite creation. Efficient finisher who needs structure.",color:"#ef4444",
-      pos:["Wing"],formula:"Scorer>75",roles:["Scorer","Driver","Spacer"], freqPct:21.1},
-    "Defensive Wing":      {desc:"Elite wing defender. Versatile stopper who guards multiple positions.",color:"#06b6d4",
-      pos:["Wing"],formula:"Defender>65",roles:["On-Ball D","Switch Pot.","Zone Pressure"], freqPct:11.1},
-    "Point Forward":       {desc:"Oversized playmaker. Creates mismatches with size + passing vision.",color:"#10b981",
-      pos:["Wing","Big"],formula:"Playmaker>65",roles:["Playmaker","Connector","Driver"], freqPct:11.1},
-    "Slashing Wing":       {desc:"Attacks the rim with explosiveness. Transition weapon and paint-pressure.",color:"#f43f5e",
-      pos:["Wing"],formula:"Driver>70",roles:["Driver","Crasher","On-Ball D"], freqPct:5.9},
-    "Initiator Wing":        {desc:"Creates own offense off the dribble. Self-creation specialist with high usage.",color:"#fb923c",
-      pos:["Wing","Playmaker"],formula:"Scorer>70 + Playmaker>55 + USG>26",roles:["Scorer","Driver","Helio-Scorer"], freqPct:4.0},
-    "3-and-D Wing":        {desc:"Shoot and defend — the modern NBA's most coveted role-player template.",color:"#3b82f6",
-      pos:["Wing"],formula:"Spacer>65 + Defender>65",roles:["Spacer","On-Ball D","Micro-Spacer"], freqPct:2.6},
+    // ═══ WING (n_pos=35,340) ═══
+    "Non-Specialized Wing": {desc:"Multi-tool forward without a dominant skill. Fits many lineups but rarely a Star — high Bust-Risk in this bucket.",color:"#a78bfa",
+      pos:["Wing"],formula:"Default (no trigger met)",roles:["Connector","Switch Pot.","Spacer"],
+      freqPct:34.9, outcome:"n=54 · Star+ 3.7% · Bust 61.1% · meanWA +1.2",
+      examples:"Josh Smith (25), Mark Jackson (16), Kevin Johnson (11)"},
+    "Scoring Wing":   {desc:"Pure scorer without elite creation. Efficient finisher who needs structure to function at high level.",color:"#ef4444",
+      pos:["Wing"],formula:"role_scorer >75",roles:["Scorer","Driver","Spacer"],
+      freqPct:16.3, outcome:"n=232 · Star+ 8.6% · Bust 48.3% · meanWA +2.7",
+      examples:"Jayson Tatum (35), Donovan Mitchell (25), Devin Booker (25)"},
+    "Point Forward":  {desc:"Oversized playmaker. Creates mismatches with size + passing vision.",color:"#10b981",
+      pos:["Wing","Big"],formula:"role_playmaker >65",roles:["Playmaker","Connector","Driver"],
+      freqPct:8.5, outcome:"n=22 · Star+ 4.5% · Bust 50.0% · meanWA +1.5",
+      examples:"Zach LaVine (14), Deni Avdija (10), De\'Anthony Melton (8)"},
+    "Defensive Wing": {desc:"Elite wing defender. Versatile stopper who guards multiple positions.",color:"#06b6d4",
+      pos:["Wing"],formula:"def_score PILLAR >65 (composite of STL+BLK+DRB)",roles:["On-Ball Pressure","Switch Pot.","Event Creator"],
+      freqPct:7.8, outcome:"n=23 · Star+ 0.0% · Bust 52.2% · meanWA +0.9",
+      examples:"Earl Watson (10), Tre Jones (9), Larry Johnson (6)"},
+    "Slashing Wing":  {desc:"Attacks the rim with explosiveness. Transition weapon and paint-pressure.",color:"#f43f5e",
+      pos:["Wing"],formula:"role_driver >70",roles:["Driver","Crasher","On-Ball Pressure"],
+      freqPct:4.6, outcome:"n=9 · Star+ 0.0% · Bust 55.6% · meanWA +1.0",
+      examples:"Bobby Jackson (7), Eric Williams (5), James Johnson (4)"},
+    "Initiator Wing": {desc:"Creates own offense off the dribble. Self-creation specialist with high usage. Rare archetype but historically extremely valuable.",color:"#fb923c",
+      pos:["Wing","Playmaker"],formula:"role_scorer >70 AND role_playmaker >55 AND college_usg >26",roles:["Scorer","Driver","Helio-Scorer"],
+      freqPct:3.2, outcome:"n=105 · Star+ 9.5% · Bust 54.3% · meanWA +2.6  ★ Star-cluster",
+      examples:"Paul George (34), Draymond Green (28), Kawhi Leonard (27)"},
+    "3-and-D Wing":   {desc:"Shoot and defend — the modern NBA\'s most coveted role-player template (when it works).",color:"#3b82f6",
+      pos:["Wing"],formula:"role_spacer >65 AND def_score PILLAR >65",roles:["Spacer","On-Ball Pressure","Micro-Spacer"],
+      freqPct:1.7, outcome:"n=9 · Star+ 0.0% · Bust 66.7% · meanWA +0.6  ⚠ historisch schwach",
+      examples:"Kevin Porter Jr. (7), Matisse Thybulle (3), Isaac Bonga (2)"},
 
-    // === BIG (n=5,866) ===
-    "Non-Specialized Big":          {desc:"Well-rounded center without a standout skill. Does a bit of everything.",color:"#60a5fa",
-      pos:["Big"],formula:"Default (no role >65)",roles:["Rim Protect","Rebounder","Switch Pot."], freqPct:31.5},
-    "Stretch Big":         {desc:"Shooting big who spaces the floor. Gravity from the 5 position.",color:"#22c55e",
-      pos:["Big"],formula:"Spacer>65",roles:["Spacer","Rim Protect","Rebounder"], freqPct:21.3},
-    "Rim Protector":       {desc:"Elite shot-blocker. Deters drives and alters shots. Anchors paint defense.",color:"#3b82f6",
-      pos:["Big"],formula:"Rim Protect>75",roles:["Rim Protect","Rebounder","Switch Pot."], freqPct:13.1},
-    "Short Roll Playmaker":{desc:"Decision-making big in the short roll. Drives and passes from the elbow/FT line area.",color:"#f59e0b",
-      pos:["Big"],formula:"Driver>55 + Playmaker>55",roles:["Driver","Playmaker","Connector"], freqPct:10.2},
-    "Passing Hub":       {desc:"Playmaking big — Jokic/Draymond archetype. Creates from post/elbow with vision.",color:"#fbbf24",
-      pos:["Big"],formula:"Playmaker>55",roles:["Playmaker","Connector","Driver"], freqPct:9.1},
-    "Glass Cleaner":       {desc:"Dominant rebounder. Controls both boards and creates second chances.",color:"#f97316",
-      pos:["Big"],formula:"Rebounder>65",roles:["Rebounder","Crasher","Rim Protect"], freqPct:8.3},
-    "Stretch Rim Protector":{desc:"Unicorn big — protects the rim AND stretches the floor. Extreme roster flexibility.",color:"#10b981",
-      pos:["Big"],formula:"Rim Protect>75 + Spacer>65",roles:["Rim Protect","Spacer","Rebounder"], freqPct:3.4},
-    "Scoring Big":         {desc:"Offense-first big. Post scoring, face-up game, or finishing at the rim.",color:"#ef4444",
-      pos:["Big"],formula:"Scorer>65",roles:["Scorer","Crasher","Driver"], freqPct:3.2},
+    // ═══ BIG (n_pos=5,014) ═══
+    "Non-Specialized Big": {desc:"Well-rounded center without a standout skill. Does a bit of everything but rarely dominant.",color:"#60a5fa",
+      pos:["Big"],formula:"Default (no trigger met)",roles:["Rim Protect","Rebounder","Switch Pot."],
+      freqPct:25.9, outcome:"n=6 · sample too small",
+      examples:"Mark Jackson (16), James Johnson (4), Ryan Gomes (0)"},
+    "Stretch Big":    {desc:"Shooting big who spaces the floor. Gravity from the 5 position — but historically mid-tier value.",color:"#22c55e",
+      pos:["Big"],formula:"role_spacer >65",roles:["Spacer","Rim Protect","Rebounder"],
+      freqPct:16.9, outcome:"n=26 · Star+ 3.8% · Bust 57.7% · meanWA +1.7",
+      examples:"Lauri Markkanen (15), Nikola Mirotic (10), Davis Bertans (8)"},
+    "Rim Protector":  {desc:"Elite shot-blocker. Deters drives and alters shots. Anchors paint defense — strong Star+ tier historically.",color:"#3b82f6",
+      pos:["Big"],formula:"role_rim_protect >75",roles:["Rim Protect","Rebounder","Switch Pot."],
+      freqPct:10.5, outcome:"n=30 · Star+ 20.0% · Bust 26.7% · meanWA +6.2  ★",
+      examples:"Rudy Gobert (31), Anthony Mason (24), Andre Drummond (20)"},
+    "Passing Hub":    {desc:"Playmaking big — Jokic/Draymond archetype. Creates from post/elbow with vision.",color:"#fbbf24",
+      pos:["Big"],formula:"role_playmaker >55",roles:["Playmaker","Connector","Driver"],
+      freqPct:7.0, outcome:"n=4 · sample too small",
+      examples:"—"},
+    "Glass Cleaner":  {desc:"Dominant rebounder. Controls both boards and creates second chances. Historically high Bust-Rate.",color:"#f97316",
+      pos:["Big"],formula:"role_rebounder >65",roles:["Rebounder","Crasher","Rim Protect"],
+      freqPct:6.4, outcome:"n=9 · Star+ 11.1% · Bust 66.7% · meanWA +1.8  ⚠",
+      examples:"Jarrett Allen (23), Ante Zizic (2), Willy Hernangomez (2)"},
+    "Short Roll Playmaker": {desc:"Decision-making big in the short roll. Drives and passes from the elbow / FT line area.",color:"#f59e0b",
+      pos:["Big"],formula:"role_driver >55 AND role_playmaker >55",roles:["Driver","Playmaker","Connector"],
+      freqPct:6.2, outcome:"n=10 · Star+ 0.0% · Bust 20.0% · meanWA +3.0  ✓ Role-Player-safe",
+      examples:"Jakob Poeltl (12), Cody Zeller (5), Tim Thomas (5)"},
+    "Stretch Rim Protector": {desc:"Unicorn big — protects the rim AND stretches the floor. Extreme roster flexibility. THE best Big archetype historically.",color:"#10b981",
+      pos:["Big"],formula:"role_rim_protect >75 AND role_spacer >65",roles:["Rim Protect","Spacer","Rebounder"],
+      freqPct:2.5, outcome:"n=25 · Star+ 28.0% · Bust 12.0% · meanWA +10.0  ★★★",
+      examples:"Joel Embiid (36), Anthony Davis (35), Karl-Anthony Towns (29)"},
+    "Scoring Big":    {desc:"Offense-first big. Post scoring, face-up game, or finishing at the rim.",color:"#ef4444",
+      pos:["Big"],formula:"role_scorer >65",roles:["Scorer","Crasher","Driver"],
+      freqPct:2.3, outcome:"n=1 · sample too small",
+      examples:"—"},
   };
   const allArchetypes = Object.entries(ARCH_MAP);
   // Pipeline-triggered archetypes (from 10c assign_archetypes_multi)
@@ -5332,18 +7205,55 @@ function ScoutingTab({p, mode="scouting"}) {
   const secondaryArch = triggeredNotPrimary[0]?.name || posFilteredArchs[0]?.name;
   const tertiaryArch = triggeredNotPrimary[1]?.name || (triggeredNotPrimary[0] ? posFilteredArchs[0]?.name : posFilteredArchs[1]?.name);
 
-  // ── CFFR / Possession Impact ──
+  // ── CFFR / Possession Impact (NetPV v2 — Bayesian-shrunken position weights) ──
+  // OLS regression peak_pie ~ FF z-scores in NBA-careered pool (n=892).
+  // RAW empirical magnitudes (|coefficient|, normalized to sum 1) per position,
+  // then BAYESIAN-SHRUNKEN toward the pool default: α = R² / (R² + r²_prior),
+  // r²_prior = 0.03. This is the standard NBA-quant move: high-R² positions
+  // get most of their position-specific signal through; low-R² positions
+  // shrink back to the pool because their per-factor coefficients are barely
+  // distinguishable from noise. Result is conservative + honest:
+  //   PM (R²=0.09, α=0.75) keeps most empirical signal → ORB+ remains visible
+  //   Big (R²=0.01, α=0.25) shrinks heavily toward default
+  //   Wing (R²=0.004, α=0.12) shrinks ~88% to default — essentially the pool
+  // DIRECTION stays classic Dean-Oliver for all positions (magnitude-only use).
+  const NETPV_WEIGHTS = {
+    // Bayesian-shrunken final weights:
+    Playmaker: {efg: 0.36, tov: 0.15, orb: 0.25, ftr: 0.24, n: 180, r2: 0.090, alpha: 0.75},
+    Wing:      {efg: 0.39, tov: 0.13, orb: 0.19, ftr: 0.28, n: 526, r2: 0.004, alpha: 0.12},
+    Big:       {efg: 0.36, tov: 0.14, orb: 0.23, ftr: 0.27, n: 186, r2: 0.010, alpha: 0.25},
+    Default:   {efg: 0.39, tov: 0.14, orb: 0.20, ftr: 0.28, n: 892, r2: 0.015, alpha: 0.00},
+    Legacy:    {efg: 0.40, tov: 0.25, orb: 0.20, ftr: 0.15},   // Dean Oliver original, display only
+  };
+  const posGroupForFF = p.pos || p.pos_group;
+  const ffW = NETPV_WEIGHTS[posGroupForFF] || NETPV_WEIGHTS.Default;
+  const ffWLabel = posGroupForFF && NETPV_WEIGHTS[posGroupForFF]
+    ? `${posGroupForFF}-empirical, ${Math.round(ffW.alpha * 100)}% data weight`
+    : "Pool default";
+
   const ffEfg = p.ff?.efg ?? 50, ffTov = p.ff?.tov ?? 50, ffOrb = p.ff?.orb ?? 50, ffFtr = p.ff?.ftr ?? 50;
-  const npv = p.ff?.comp ?? 50;
+  // NetPV v2: recompute NPV client-side as position-weighted sum of percentiles
+  // (centered on 50, scaled 0-100). Falls back to backend p.ff.comp if all FF percentiles missing.
+  const npvV2 = (() => {
+    if (p.ff?.efg == null && p.ff?.tov == null && p.ff?.orb == null && p.ff?.ftr == null) {
+      return p.ff?.comp ?? 50;
+    }
+    return Math.round(
+      (ffEfg * ffW.efg) + (ffTov * ffW.tov) + (ffOrb * ffW.orb) + (ffFtr * ffW.ftr)
+    );
+  })();
+  const npv = npvV2;
+
   const pToZ = (pctl) => pctl == null ? 0 : Math.max(-3, Math.min(3, (pctl - 50) / 16.67));
+  const pctOf = (w) => `${Math.round(w * 100)}%`;
   const ffFactors = [
-    {key:"efg",label:"Shot Quality (eFG%)",z:pToZ(ffEfg),pctl:ffEfg,weight:"40%",color:"#fbbf24",
+    {key:"efg",label:"Shot Quality (eFG%)",z:pToZ(ffEfg),pctl:ffEfg,weight:pctOf(ffW.efg),color:"#fbbf24",
      desc:"Shooting efficiency adjusted for 3-point value. Positive = better than role-peers."},
-    {key:"tov",label:"Ball Security (TO%)",z:pToZ(ffTov),pctl:ffTov,weight:"25%",color:"#3b82f6",
+    {key:"tov",label:"Ball Security (TO%)",z:pToZ(ffTov),pctl:ffTov,weight:pctOf(ffW.tov),color:"#3b82f6",
      desc:"Turnover control inverted: positive = fewer turnovers than peers."},
-    {key:"orb",label:"Extra Possessions (ORB%)",z:pToZ(ffOrb),pctl:ffOrb,weight:"20%",color:"#06b6d4",
+    {key:"orb",label:"Extra Possessions (ORB%)",z:pToZ(ffOrb),pctl:ffOrb,weight:pctOf(ffW.orb),color:"#06b6d4",
      desc:"Offensive rebounding creates second-chance points."},
-    {key:"ftr",label:"Foul Pressure (FTr)",z:pToZ(ffFtr),pctl:ffFtr,weight:"15%",color:"#8b5cf6",
+    {key:"ftr",label:"Foul Pressure (FTr)",z:pToZ(ffFtr),pctl:ffFtr,weight:pctOf(ffW.ftr),color:"#8b5cf6",
      desc:"Drawing fouls generates free points and creates foul trouble."},
   ];
   const npvZ = pToZ(npv);
@@ -5430,7 +7340,7 @@ function ScoutingTab({p, mode="scouting"}) {
       </Sec>
 
       {/* ── POSSESSION IMPACT (CFFR) — wider bars, usage role prominent ── */}
-      <Sec icon="↗" title="Possession Impact (Four Factors)" sub="How efficiently does this player use possessions, given his offensive role? We compare him only to other players with similar usage (Primary/Secondary/Finisher/Low-Usage) — so a primary scorer is rated against fellow primaries, not against low-usage finishers. Built on the four classic offensive efficiency drivers: shooting (eFG%), ball security (TO%), offensive rebounding, and free-throw generation.">
+      <Sec icon="↗" title="Possession Impact (Four Factors)" sub={`How efficiently does this player use possessions, given his offensive role? Compared only to peers with similar usage (Primary/Secondary/Finisher/Low-Usage), so a primary scorer is rated against fellow primaries. Weights are ${ffWLabel} — magnitudes derived from how each factor's percentile predicts peak Wins Added in the NBA-careered pool, then Bayesian-shrunken toward the pool default by α = R² / (R² + 0.03). High-confidence positions (Playmaker R²=0.09, α=75%) keep most of their position-specific signal; low-confidence positions (Big R²=0.01, α=25% · Wing R²=0.004, α=12%) shrink back to the pool because per-factor coefficients aren't distinguishable from noise. Direction stays classic Dean Oliver (eFG↑, low-TO↑, ORB↑, FTr↑ = better) for every position — the data confirms the prior, it doesn't override it.`}>
         <Tip wide content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>{METHODS.fourFactors?.name||"Four Factors"}</div>{METHODS.fourFactors?.formula&&<div className="mb-1"><code className="text-xs" style={{color:"#7dd3fc"}}>{METHODS.fourFactors.formula}</code></div>}<div style={{color:"#cbd5e1"}}>{METHODS.fourFactors?.desc||"Dean Oliver's Four Factors adjusted for usage role. Measures net possession quality relative to role-peers."}</div></div>}>
           <div className="text-xs mb-4 cursor-help" style={{color:"#6b7280"}}>Efficiency index: how much value this player creates per possession, relative to his usage role. <span style={{color:"#475569"}}>ⓘ</span></div>
         </Tip>
@@ -5505,208 +7415,147 @@ function ScoutingTab({p, mode="scouting"}) {
         </div>
       </Sec>
 
-      {/* ══════════════════════════════════════════════════════════════════
-           Game-by-Game Skill Curve (Tobias 2026-05-09)
-           Per-Game USG vs Individual ORtg Scatter aus PBP-Daten.
-           Smoothed trend (LOESS-like rolling mean) zeigt Skalierung.
-         ══════════════════════════════════════════════════════════════════ */}
-      {p.gameLogs && p.gameLogs.games && p.gameLogs.games.length >= 5 && (() => {
-        const games = p.gameLogs.games.filter(g => g.u != null && g.o2 != null);
-        if (games.length < 5) return null;
-
-        const OPP_COL = {T:"#ef4444", M:"#fbbf24", L:"#22c55e"};
-        const OPP_LABEL = {T:"Strong opponent", M:"Average opponent", L:"Weak opponent"};
-        const hasOpp = games.some(g => g.os === "T" || g.os === "M" || g.os === "L");
-
-        // Multi-season awareness — count distinct seasons across game-rows
-        const seasonsSet = new Set(games.map(g => g.yr).filter(Boolean));
-        const nSeasons = seasonsSet.size || 1;
-        const seasonsList = (p.gameLogs.seasons && p.gameLogs.seasons.length) ? p.gameLogs.seasons : Array.from(seasonsSet).sort();
-
-        const USG_MIN = 0, USG_MAX = 50;
-        const ORTG_MIN = 50, ORTG_MAX = 200;
-        const W = 720, H = 340, PAD = {l: 50, r: 20, t: 18, b: 36};
-        const xS = (u) => PAD.l + ((u - USG_MIN) / (USG_MAX - USG_MIN)) * (W - PAD.l - PAD.r);
-        const yS = (o) => PAD.t + ((ORTG_MAX - o) / (ORTG_MAX - ORTG_MIN)) * (H - PAD.t - PAD.b);
-
-        // 2026-05-29 Tobias: LOWESS-Smoother mit tricubic weights (Bart-Torvik-Style).
-        // Bandwidth = max(0.30, k/N) — bei kleinen Samples (10 Spiele) ist die Curve
-        // notgedrungen lokaler. Plus 1-SD-Konfidenzband aus lokalen Residuen.
-        const sortedByUsg = [...games].sort((a, b) => a.u - b.u);
-        const N = sortedByUsg.length;
-        const bandwidth = Math.max(0.3, Math.min(0.6, 7 / N));   // dynamic
-        const kNeighbors = Math.max(5, Math.round(bandwidth * N));
-        // Evaluate smoother on a dense grid (60 points), not just at observations
-        const gridPts = [];
-        for (let i = 0; i <= 60; i++) {
-          const u = USG_MIN + (USG_MAX - USG_MIN) * (i / 60);
-          // K nearest neighbors by |u - g.u|
-          const withDist = sortedByUsg.map(g => ({u: g.u, o: g.o2, d: Math.abs(g.u - u)}));
-          withDist.sort((a, b) => a.d - b.d);
-          const near = withDist.slice(0, kNeighbors);
-          const dMax = near[near.length - 1].d || 1e-6;
-          let wSum = 0, weighted = 0, w2Sum = 0, wO2 = 0;
-          for (const nd of near) {
-            const w = Math.pow(1 - Math.pow(nd.d / dMax, 3), 3);
-            wSum += w; weighted += w * nd.o; w2Sum += w * w; wO2 += w * nd.o * nd.o;
-          }
-          const meanO = wSum > 0 ? weighted / wSum : null;
-          // local variance → 1-SD band (clamped)
-          const varO = wSum > 0 ? Math.max(0, wO2 / wSum - meanO * meanO) : 0;
-          const sd = Math.sqrt(varO);
-          gridPts.push({u, o: meanO, sd});
-        }
-        // Smooth path
-        const curvePath = gridPts.map((pt, i) =>
-          `${i === 0 ? "M" : "L"} ${xS(pt.u).toFixed(1)} ${yS(Math.max(ORTG_MIN, Math.min(ORTG_MAX, pt.o))).toFixed(1)}`
-        ).join(" ");
-        // Confidence band (±1 SD), clamped to drawable range
-        const upperPath = gridPts.map((pt, i) => {
-          const o = Math.max(ORTG_MIN, Math.min(ORTG_MAX, pt.o + pt.sd));
-          return `${i === 0 ? "M" : "L"} ${xS(pt.u).toFixed(1)} ${yS(o).toFixed(1)}`;
-        }).join(" ");
-        const lowerPath = gridPts.slice().reverse().map((pt, i) => {
-          const o = Math.max(ORTG_MIN, Math.min(ORTG_MAX, pt.o - pt.sd));
-          return `L ${xS(pt.u).toFixed(1)} ${yS(o).toFixed(1)}`;
-        }).join(" ");
-        const bandPath = `${upperPath} ${lowerPath} Z`;
-
-        // OLS line through raw points for comparison
-        const n = games.length;
-        const meanU = games.reduce((a, g) => a + g.u, 0) / n;
-        const meanO = games.reduce((a, g) => a + g.o2, 0) / n;
-        const num = games.reduce((a, g) => a + (g.u - meanU) * (g.o2 - meanO), 0);
-        const den = games.reduce((a, g) => a + (g.u - meanU) ** 2, 0);
-        const slope = den > 0 ? num / den : 0;
-        const intercept = meanO - slope * meanU;
-        const slopeColor = slope > 0.5 ? "#22c55e" : slope > -0.5 ? "#fbbf24" : "#ef4444";
-        const slopeLabel = slope > 1.0 ? "Scales strongly with usage"
-                         : slope > 0.0 ? "Holds efficiency at higher usage"
-                         : slope > -1.0 ? "Slight decay at higher usage"
-                         : "Significant efficiency drop at high usage";
-
-        // Date-color gradient (early season → late season)
-        // Sort by date for color
-        const sortedByDate = [...games].sort((a, b) => (a.d || "").localeCompare(b.d || ""));
-        const dateRank = new Map(sortedByDate.map((g, i) => [g, i]));
-
-        // Y-axis ticks
-        const yTicks = [60, 80, 100, 120, 140, 160, 180];
-        const xTicks = [10, 15, 20, 25, 30, 35, 40, 45];
-
-        const avgU = meanU;
-        const avgO = meanO;
-
-        if (isPBPLimited2026(p)) return <PBPNotAvailable title="Game-by-Game Skill Curve" icon="📊"/>;
+      {/* ── SPRINT-3.40 SKILL INTERSECTIONS — Four-Factors-style bars ── */}
+      {(() => {
+        const posGroup = p.pos_group || p.pos;
+        if (!SKILL_INTERSECTIONS.pos_stats[posGroup]) return null;
+        const posStats = SKILL_INTERSECTIONS.pos_stats[posGroup];
+        // z per stat against the position-pool mean
+        const zVal = (statKey) => {
+          const raw = p[statKey];
+          const m = posStats[statKey];
+          if (raw == null || !m || !m.sig) return null;
+          return (raw - m.mu) / m.sig;
+        };
         return (
-          <Sec icon="📊" title="Game-by-Game Skill Curve"
-            sub={`${games.length} games across ${nSeasons} ${nSeasons===1?"season":"seasons"}${seasonsList.length?` (${seasonsList.join(" · ")})`:""}. Each dot = one game. Smooth curve uses LOWESS with tricubic weights; the shaded band shows the ±1 SD spread of the local ORtg distribution. Used to read where efficiency stops scaling with possession load — the higher the curve stays at high usage, the better he handles a bigger role.`}>
-            <div style={{background:"#0d1117",border:"1px solid #1f2937",borderRadius:8,padding:"12px 14px",marginBottom:12}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,flexWrap:"wrap",gap:8}}>
-                <div>
-                  <div style={{fontSize:11,fontWeight:700,color:"#6b7280",letterSpacing:1}}>SCALING-VERDICT</div>
-                  <div style={{fontSize:14,fontWeight:600,color:slopeColor,marginTop:2}}>{slopeLabel}</div>
-                </div>
-                <div style={{display:"flex",gap:14,fontSize:11,color:"#9ca3af"}}>
-                  <span>Avg USG: <strong style={{color:"#f97316"}}>{avgU.toFixed(1)}%</strong></span>
-                  <span>Avg ORtg: <strong style={{color:"#22c55e"}}>{avgO.toFixed(0)}</strong></span>
-                  <span>Trend slope: <strong style={{color:slopeColor}}>{slope >= 0 ? "+" : ""}{slope.toFixed(1)}</strong> ORtg per +1% USG</span>
-                </div>
-              </div>
-              {hasOpp && (
-                <div style={{display:"flex",gap:14,alignItems:"center",fontSize:10,color:"#9ca3af",marginBottom:6,flexWrap:"wrap"}}>
-                  <span style={{color:"#6b7280",fontWeight:600}}>Dot = opponent strength:</span>
-                  <span><span style={{color:"#ef4444"}}>●</span> Strong</span>
-                  <span><span style={{color:"#fbbf24"}}>●</span> Average</span>
-                  <span><span style={{color:"#22c55e"}}>●</span> Weak</span>
-                  <span><span style={{color:"#6b7280"}}>●</span> Unknown</span>
-                  <span style={{color:"#475569"}}>— do red (strong-opponent) games sink to lower ORtg?</span>
-                </div>
-              )}
-              <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{overflow:"visible"}}>
-                {/* Grid */}
-                {yTicks.map(v => (
-                  <g key={v}>
-                    <line x1={PAD.l} x2={W-PAD.r} y1={yS(v)} y2={yS(v)} stroke="#1f2937" strokeWidth={0.5}/>
-                    <text x={PAD.l-6} y={yS(v)+3} textAnchor="end" fontSize={9} fill="#6b7280">{v}</text>
-                  </g>
-                ))}
-                {xTicks.map(u => (
-                  <g key={u}>
-                    <line x1={xS(u)} y1={PAD.t} x2={xS(u)} y2={H-PAD.b} stroke="#1f2937" strokeWidth={0.5}/>
-                    <text x={xS(u)} y={H-PAD.b+14} textAnchor="middle" fontSize={9} fill="#6b7280">{u}%</text>
-                  </g>
-                ))}
-                {/* Mean horizontal */}
-                <line x1={PAD.l} x2={W-PAD.r} y1={yS(avgO)} y2={yS(avgO)} stroke="#22c55e44" strokeWidth={1} strokeDasharray="3,3"/>
-                <text x={W-PAD.r-2} y={yS(avgO)-3} textAnchor="end" fontSize={9} fill="#22c55e88">avg ORtg</text>
-
-                {/* OLS trend (dashed) */}
-                {Math.abs(slope) > 0.05 && (
-                  <line x1={xS(USG_MIN+5)} y1={yS(intercept + slope*(USG_MIN+5))}
-                        x2={xS(USG_MAX-5)} y2={yS(intercept + slope*(USG_MAX-5))}
-                        stroke={slopeColor} strokeWidth={1.5} strokeDasharray="6,4" opacity={0.7}/>
-                )}
-
-                {/* 2026-05-29 — confidence band (±1 SD), beneath the curve */}
-                <path d={bandPath} fill="#f9731622" stroke="none"/>
-                {/* Smooth curve (LOWESS, tricubic-weighted) — primary visual element */}
-                <path d={curvePath} fill="none" stroke="#f97316" strokeWidth={2.5} opacity={0.95}/>
-
-                {/* Game dots — Backlog 3.2: color by opponent strength (else date gradient) */}
-                {games.map((g, i) => {
-                  let fill;
-                  if (hasOpp) {
-                    fill = OPP_COL[g.os] || "#6b7280";  // gray = unknown opponent
-                  } else {
-                    const rank = dateRank.get(g) ?? 0;
-                    const t = sortedByDate.length > 1 ? rank / (sortedByDate.length - 1) : 0.5;
-                    fill = `rgb(${Math.round(96 + t*(249-96))},${Math.round(165 - t*50)},${Math.round(250 - t*200)})`;
-                  }
+          <Sec icon="◈" title="Skill Intersections" sub="Two stat pairs that don't usually go together at the college level. A player above his position's average in BOTH historically carried a peak-Wins-Added lift — bigs who pass like guards, point guards who block like rim protectors. The bar shows the weaker of the two stats, because the intersection only counts when both are above average. Validation pool is conditional on reaching the NBA (n=919), so the lift you read is 'lift among NBA-careered with this profile', not unconditional. Use as scout-eye context, not a stand-alone predictor.">
+            <div className="space-y-4">
+              {SKILL_INTERSECTIONS.pairs.map(pair => {
+                const za = zVal(pair.statA);
+                const zb = zVal(pair.statB);
+                const outc = SKILL_INTERSECTIONS.outcomes[pair.id]?.[posGroup];
+                if (za == null || zb == null) {
                   return (
-                    <Tip key={i} content={
-                      <div>
-                        <div style={{fontWeight:700,color:"#f97316"}}>{g.d} {g.h ? "vs" : "@"} {g.o}{g.yr ? ` · ${g.yr}` : ""}{OPP_LABEL[g.os] ? ` · ${OPP_LABEL[g.os]}` : ""}</div>
-                        <div style={{fontSize:11,color:"#cbd5e1",marginTop:3}}>
-                          {g.p} pts · {g.fm}/{g.fa} FG · {g.tm}/{g.ta} 3PT · {g.a} ast · {g.to} TO · {g.b} blk · {(g.st ?? g.s) ?? 0} stl
+                    <div key={pair.id}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-sm font-semibold" style={{color:pair.color}}>{pair.label}</span>
+                        <span className="text-xs italic" style={{color:"#6b7280"}}>stat missing</span>
+                      </div>
+                      <div className="h-10 rounded-lg" style={{background:"#0d1117",border:"1px solid #1f2937"}}/>
+                    </div>
+                  );
+                }
+                const minZ = Math.min(za, zb);
+                const isPos = minZ >= 0;
+                const barPct = Math.min(Math.abs(minZ) / 3 * 50, 50);
+                return (
+                  <Tip key={pair.id} block wide content={
+                    <div>
+                      <div className="font-bold mb-2" style={{color:pair.color}}>{pair.label}</div>
+                      <div className="text-xs mb-2" style={{color:"#cbd5e1"}}>{pair.hypothesis}</div>
+                      {outc && (
+                        <div className="text-xs mb-2 leading-relaxed" style={{color:"#94a3b8"}}>
+                          <div><span style={{color:pair.color}}>Above-avg {posGroup}s</span> (n={outc.above.n}): <span style={{color:"#22c55e"}}>{outc.above.star}% Star+</span> · <span style={{color:"#ef4444"}}>{outc.above.bust}% Bust</span> · μ WA <span style={{color:"#fbbf24"}}>{outc.above.meanWA}</span></div>
+                          <div><span style={{color:"#6b7280"}}>Rest of {posGroup}-pool</span> (n={outc.baseline.n}): {outc.baseline.star}% Star+ · {outc.baseline.bust}% Bust · μ WA {outc.baseline.meanWA}</div>
                         </div>
-                        <div style={{fontSize:11,color:"#94a3b8",marginTop:3}}>
-                          USG <strong style={{color:"#f97316"}}>{g.u}%</strong> · ORtg <strong style={{color:"#22c55e"}}>{g.o2}</strong> · eFG <strong style={{color:"#fbbf24"}}>{g.e}%</strong>
+                      )}
+                      <div className="text-[11px]" style={{color:"#6b7280"}}><span style={{color:"#475569"}}>Validators:</span> {pair.validators}</div>
+                    </div>
+                  }>
+                    <div className="cursor-help">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-sm font-semibold" style={{color:pair.color}}>{pair.label} <span style={{color:"#475569"}}>ⓘ</span></span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs" style={{color:"#6b7280"}}>{pair.aLabel} {za>=0?"+":""}{za.toFixed(1)}σ · {pair.bLabel} {zb>=0?"+":""}{zb.toFixed(1)}σ</span>
+                          <span className="text-lg font-bold" style={{color:isPos?pair.color:"#ef4444",fontFamily:"'Oswald',sans-serif"}}>{minZ>=0?"+":""}{minZ.toFixed(1)}σ</span>
                         </div>
                       </div>
-                    }>
-                      <circle cx={xS(g.u)} cy={yS(Math.max(ORTG_MIN, Math.min(ORTG_MAX, g.o2)))}
-                        r={4} fill={fill}
-                        stroke="#000" strokeWidth={0.5}
-                        style={{cursor:"crosshair"}}/>
-                    </Tip>
-                  );
-                })}
+                      <div className="relative h-10 rounded-lg overflow-hidden" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+                        <div className="absolute top-0 bottom-0 w-0.5 z-10" style={{left:"50%",background:"#ffffff44"}}/>
+                        {isPos ? (
+                          <div className="absolute top-1 bottom-1 rounded-r" style={{left:"50%",width:`${barPct}%`,background:`linear-gradient(90deg,${pair.color}44,${pair.color})`}}/>
+                        ) : (
+                          <div className="absolute top-1 bottom-1 rounded-l" style={{right:"50%",width:`${barPct}%`,background:`linear-gradient(270deg,${pair.color}44,${pair.color})`}}/>
+                        )}
+                        <div className="absolute inset-0 flex items-center justify-between px-3 text-xs" style={{color:"#ffffff22"}}>
+                          <span>− Below</span><span>+ Above</span>
+                        </div>
+                      </div>
+                    </div>
+                  </Tip>
+                );
+              })}
+            </div>
 
-                {/* Axis labels */}
-                <text x={(PAD.l+W-PAD.r)/2} y={H-4} textAnchor="middle" fontSize={11} fill="#9ca3af">Usage % (per game, share of team possessions)</text>
-                <text x={12} y={H/2} textAnchor="middle" fontSize={11} fill="#9ca3af" transform={`rotate(-90,12,${H/2})`}>Individual Offensive Rating</text>
-              </svg>
-              <div style={{display:"flex",gap:14,marginTop:8,fontSize:10,color:"#6b7280",flexWrap:"wrap"}}>
-                {!hasOpp && <span>● <span style={{color:"#60a5fa"}}>early-season</span> → <span style={{color:"#f97316"}}>late-season</span> color gradient</span>}
-                <span>━ orange LOWESS curve · ▒ ±1 SD band</span>
-                <span style={{color:slopeColor}}>--- {slope >= 0 ? "+" : ""}{slope.toFixed(2)} OLS slope</span>
-              </div>
-              <div style={{marginTop:8,fontSize:10,color:"#475569",lineHeight:1.6,fontStyle:"italic"}}>
-                <strong style={{color:"#6b7280"}}>How to read:</strong> A flat or rising curve = he holds efficiency even as load grows.
-                A falling curve at high USG = production drops when defenses focus on him.
-                The shaded band ≈ how variable his per-game output is at that load — wide band = boom/bust at that usage, narrow = stable.
-                ORtg is individual (not team-context); USG-proxy is share-of-team-possessions (not the standard NBA-USG with minutes adjustment).
+            {/* Rejected pairs — transparency footer (light) */}
+            <div className="mt-5 pt-4 border-t" style={{borderColor:"#1f2937"}}>
+              <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#6b7280"}}>Also Tested — No Signal</div>
+              <div className="space-y-1.5">
+                {SKILL_INTERSECTIONS.rejected.map((r,i)=>(
+                  <div key={i} className="text-[11px]" style={{color:"#9ca3af"}}>
+                    <span style={{color:"#475569"}}>·</span> <span className="font-semibold" style={{color:"#cbd5e1"}}>{r.name}</span> — {r.reason}
+                  </div>
+                ))}
               </div>
             </div>
           </Sec>
         );
       })()}
+
+      {/* Tobias 2026-06-03 v13: Game-by-Game Skill Curve removed — see backlog Task #21 */}
       </>)}
 
       {mode === "roles" && (<>
       {/* ── ROLE INFERENCE MATRIX — hoverable with inputs ── */}
-      <Sec icon="📊" title="Role Inference Matrix" sub="14 NBA roles, each scored against position peers. The z-score tells you how far this prospect stands above or below the average peer in that role. +2.0σ = Elite (top ~2%), +1.0σ = Impact, −1.0σ or lower = Liability. Hover any role to see the statistical inputs feeding it.">
+      <Sec icon="📊" title="Role Inference Matrix" sub="13 NBA roles, each scored against position peers. The z-score tells you how far this prospect stands above or below the average peer in that role. +2.0σ = Elite (top ~2%), +1.0σ = Impact, −1.0σ or lower = Liability. Hover any role to see the statistical inputs feeding it.">
+        {(() => {
+  /* Tobias 2026-06-04 v25: Versatility moved into Role Matrix box + larger counts */
+  /* Tobias 2026-06-04 v24: Versatility = strict count of roles with z >= +1.0 */
+  // Client-side recompute: count of roles where z >= +1.0 (Pctl >= 84).
+  // 13-role layout (event = role_zone via v23). Split by Off/Def/Hyb.
+  const OFF_ROLES = ["scorer","playmaker","spacer","driver","crasher"];
+  const DEF_ROLES = ["onball","switchPot","rimProt","zone"];
+  const HYB_ROLES = ["connector","helio","rebounder","microSpacer"];
+  const isImpact = (key) => {
+    const v = rr[key];
+    if (v == null) return false;
+    return roleToZ(v) >= 1.0;
+  };
+  const nOff = OFF_ROLES.filter(isImpact).length;
+  const nDef = DEF_ROLES.filter(isImpact).length;
+  const nHyb = HYB_ROLES.filter(isImpact).length;
+  const nTotal = nOff + nDef + nHyb;
+  const tierLabel = nTotal >= 8 ? "Swiss Army Knife"
+                  : nTotal >= 5 ? "Multi-Role"
+                  : nTotal >= 3 ? "Specialist"
+                  :                "One-Dimensional";
+  const tierColor = nTotal >= 8 ? "#22c55e"
+                  : nTotal >= 5 ? "#86efac"
+                  : nTotal >= 3 ? "#fbbf24"
+                  :                "#6b7280";
+  return (
+    <div className="mb-4 p-3 rounded-lg" style={{background:"#0d111788",border:"1px solid #1f2937"}}>
+      <div className="flex items-center gap-4">
+        <Tip content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>Role Versatility</div><div style={{color:"#cbd5e1"}}>Strict count of roles where the player is at <strong>z &ge; +1.0&sigma;</strong> (top 16% of his position peers — &quot;Impact&quot; tier). Higher count = more lineup flexibility. Historical analysis: Wings with &ge;7 hits had +14pp Star+ lift vs base; Bigs with &ge;7 hits hit 50% Starter+ rate.</div><div style={{color:"#9ca3af",marginTop:6,fontSize:11}}>Computed client-side from the 13 role inferences. Off=5 max, Def=4 max, Hyb=4 max.</div></div>}>
+          <div className="cursor-help">
+            <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Versatility <span style={{color:"#475569"}}>&#9432;</span></span>
+            <div className="text-2xl font-bold" style={{color:tierColor,fontFamily:"'Oswald',sans-serif"}}>{nTotal}/13</div>
+          </div>
+        </Tip>
+        <div className="flex-1 h-3 rounded-full overflow-hidden" style={{background:"#1f2937"}}>
+          <div className="h-full rounded-full" style={{width:`${Math.min(100, nTotal*8)}%`,background:`linear-gradient(90deg,#f9731688,${tierColor})`}}/>
+        </div>
+        <div className="text-xs" style={{color:tierColor}}>{tierLabel}</div>
+      </div>
+      <div className="flex items-center gap-5 mt-3 text-sm" style={{color:"#94a3b8"}}>
+        <span><span style={{color:"#f97316",fontWeight:700}}>Off</span> <span style={{fontWeight:700,fontFamily:"'Oswald',sans-serif"}}>{nOff}/5</span></span>
+        <span><span style={{color:"#3b82f6",fontWeight:700}}>Def</span> <span style={{fontWeight:700,fontFamily:"'Oswald',sans-serif"}}>{nDef}/4</span></span>
+        <span><span style={{color:"#8b5cf6",fontWeight:700}}>Hyb</span> <span style={{fontWeight:700,fontFamily:"'Oswald',sans-serif"}}>{nHyb}/4</span></span>
+        <span style={{color:"#475569",marginLeft:"auto"}}>roles with z &ge; +1.0&sigma;</span>
+      </div>
+    </div>
+  );
+})()}
         {roleGroups.map(grp=>(
           <div key={grp.label} className="mb-5">
             <div className="text-xs uppercase tracking-widest font-bold mb-2" style={{color:grp.color}}>{grp.label}</div>
@@ -5738,20 +7587,7 @@ function ScoutingTab({p, mode="scouting"}) {
       {/* ── ARCHETYPE — formulas + secondary/tertiary + versatility ── */}
       <Sec icon="🏷" title="NBA Archetype Fit" sub="What NBA role does this prospect project into? PRIMARY is his best-fit archetype (assigned from his dominant role scores). 2ND/3RD are alternative fits within his position. Within each position, cards are sorted left → right by how OFTEN that archetype actually appears in real basketball (common → rare). Rarity is measured across 46k player-seasons — so you can see if a prospect projects into a common role-player template or an unusually scarce profile.">
         {/* Role Versatility — prominent */}
-        {p.roleVersatility != null && (
-          <div className="flex items-center gap-4 mb-4 p-3 rounded-lg" style={{background:"#0d111788",border:"1px solid #1f2937"}}>
-            <Tip content={<div><div className="font-bold mb-1" style={{color:"#f97316"}}>Role Versatility</div><div style={{color:"#cbd5e1"}}>Count of roles where z-score ≥ +0.5, normalized to 0-100. Higher = more lineup flexibility. 80+ = Swiss Army Knife territory.</div></div>}>
-              <div className="cursor-help">
-                <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Role Versatility <span style={{color:"#475569"}}>ⓘ</span></span>
-                <div className="text-2xl font-bold" style={{color:p.roleVersatility>70?"#22c55e":p.roleVersatility>45?"#fbbf24":"#6b7280",fontFamily:"'Oswald',sans-serif"}}>{Math.round(p.roleVersatility)}/100</div>
-              </div>
-            </Tip>
-            <div className="flex-1 h-3 rounded-full overflow-hidden" style={{background:"#1f2937"}}>
-              <div className="h-full rounded-full" style={{width:`${Math.min(100,p.roleVersatility)}%`,background:`linear-gradient(90deg,#f9731688,${p.roleVersatility>70?"#22c55e":"#f97316"})`}}/>
-            </div>
-            <div className="text-xs" style={{color:"#4b5563"}}>{p.roleVersatility>75?"Swiss Army Knife":p.roleVersatility>55?"Multi-Role":p.roleVersatility>35?"Specialist":"One-Dimensional"}</div>
-          </div>
-        )}
+        
         {/* Orange-only archetype system: rank distinction via weight/opacity, not color.
             Tobias 2026-05-08: split flat grid into 3 position sub-grids (Playmaker/Wing/Big),
             each sorted left→right by value (Non-Specialized → Role Player → Specialist → Creator/Anchor). */}
@@ -5776,6 +7612,8 @@ function ScoutingTab({p, mode="scouting"}) {
                   {info.formula&&<div className="mb-1"><span style={{color:"#94a3b8"}}>Formula:</span> <code className="text-xs" style={{color:"#7dd3fc"}}>{info.formula}</code></div>}
                   {info.freqPct != null && <div className="mb-1"><span style={{color:"#94a3b8"}}>Frequency:</span> <span style={{color: freqColor(info.freqPct)}}>{info.freqPct}% of {(info.pos||["Wing"])[0]}s</span> <span style={{color:"#475569"}}>({freqLabel(info.freqPct)})</span></div>}
                   {ARCHETYPE_TIER[name] && <div className="mb-1"><span style={{color:"#94a3b8"}}>Typical NBA value (n={ARCHETYPE_TIER[name].n}):</span> <span style={{color:TC[ARCHETYPE_TIER[name].ceiling]}}>{ARCHETYPE_TIER[name].ceiling} ceiling</span> <span style={{color:"#475569"}}>· {ARCHETYPE_TIER[name].starterPlus}% Starter+, {ARCHETYPE_TIER[name].allstarPlus}% All-Star+</span></div>}
+                  {info.outcome && <div className="mb-1"><span style={{color:"#94a3b8"}}>NBA outcome:</span> <span style={{color:"#7dd3fc"}}>{info.outcome}</span></div>}
+                  {info.examples && info.examples !== "—" && <div className="mb-1"><span style={{color:"#94a3b8"}}>Examples:</span> <span style={{color:"#fbbf24"}}>{info.examples}</span></div>}
                   {info.roles&&<div><span style={{color:"#94a3b8"}}>Key roles:</span> <span style={{color:"#f97316"}}>{info.roles.join(", ")}</span></div>}
                   {info.pos&&<div className="mt-1"><span style={{color:"#94a3b8"}}>Positions:</span> <span style={{color:posMatch?"#86efac":"#fca5a5"}}>{info.pos.join(", ")}{posMatch?"":" ⚠ mismatch"}</span></div>}
                   {isTriggered && !isRanked && <div className="mt-1 text-xs" style={{color:"#fb923c"}}>✓ Triggered by pipeline thresholds</div>}
@@ -5869,11 +7707,12 @@ function ScoutingTab({p, mode="scouting"}) {
 // nur für Anthropometric stats (Height, Weight, Wingspan, Standing Reach).
 // Range-Bars: p25 = -1″ vom median (vom Tier), p75 = +1″ (oder ±5 lbs für wt).
 // Grün = ≥ Median, Gelb = unter Median aber innerhalb Korridor, Rot = unter Floor.
-function AnthroTierComparison({p, compTier, setCompTier, realHt, estimatedWs, estimatedWt, standingReach}) {
+function AnthroTierComparison({p, compTier, setCompTier, compPos, setCompPos, realHt, estimatedWs, estimatedWt, standingReach}) {
   const tierData = ANTHRO_TIER_THRESHOLDS[compTier] || ANTHRO_TIER_THRESHOLDS.Replacement;
   // Tobias 2026-05-09: 5-Position-Klassifikation (PG/SG/SF/PF/C) statt 3-Tier.
   // Fallback-Hierarchie: posDetailed → infer aus pos+ht+astP → SF (sicherster Mittelwert).
-  const posDetailed = p.posDetailed || inferDetailedPos(p.pos, p.htIn || realHt, p.astP);
+  const autoPos = p.posDetailed || inferDetailedPos(p.pos, p.htIn || realHt, p.astP);
+  const posDetailed = compPos || autoPos;
   const posRef = tierData[posDetailed] || tierData.SF;
 
   // Metrics — only include sr if we have a value (Combine-only field, not always available)
@@ -5917,8 +7756,8 @@ function AnthroTierComparison({p, compTier, setCompTier, realHt, estimatedWs, es
   return (
     <Sec icon="📏" title={`Anthro vs. NBA ${compTier} (${posDetailed})`}
       sub="How does this player's frame compare to a typical NBA player at the chosen tier? Median values from NBA Combine 2010-2024 (with shoes). Green = above median · Light green = within range · Yellow = below range · Red = critical gap.">
-      <div className="flex items-center gap-3 mb-4">
-        <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Compare:</span>
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Compare tier:</span>
         <div className="flex gap-1">
           {["Replacement","Role Player","Starter","All-Star"].map(tier => (
             <button key={tier} onClick={() => setCompTier(tier)}
@@ -5926,6 +7765,25 @@ function AnthroTierComparison({p, compTier, setCompTier, realHt, estimatedWs, es
               style={{background: compTier===tier ? (TC[tier]||"#f97316") : "#1f2937",
                       color: compTier===tier ? "#000" : "#9ca3af"}}>
               {tier}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="flex items-center gap-3 mb-4">
+        <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Compare position:</span>
+        <div className="flex gap-1">
+          <button onClick={() => setCompPos(null)}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+            style={{background: compPos===null ? "#f97316" : "#1f2937",
+                    color: compPos===null ? "#000" : "#9ca3af"}}>
+            Auto ({autoPos})
+          </button>
+          {["PG","SG","SF","PF","C"].map(pos => (
+            <button key={pos} onClick={() => setCompPos(pos)}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+              style={{background: compPos===pos ? "#f97316" : "#1f2937",
+                      color: compPos===pos ? "#000" : "#9ca3af"}}>
+              {pos}
             </button>
           ))}
         </div>
@@ -6017,6 +7875,8 @@ function BodyTab({p}) {
   // Tobias 2026-05-09: Anthro-Tier-Vergleich (analog Overview Tab vs.NBA-Tier).
   // Default "Starter" — gleicher Anchor wie Overview-Tab.
   const [anthroCompTier, setAnthroCompTier] = useState("Starter");
+  // Tobias 2026-06-03 v12: Body Anthro position selector
+  const [anthroCompPos, setAnthroCompPos] = useState(null);  // null = auto-detect from posDetailed
 
   // ── Fetch combine data on mount ──
   // Tobias 2026-05-06 BUG-FIX: API_BASE.replace("/api","") matchte das
@@ -6509,11 +8369,549 @@ function BodyTab({p}) {
         p={p}
         compTier={anthroCompTier}
         setCompTier={setAnthroCompTier}
+        compPos={anthroCompPos}
+        setCompPos={setAnthroCompPos}
         realHt={realHt}
         estimatedWs={estimatedWs}
         estimatedWt={estimatedWt}
         standingReach={standingReach}
       />
+
+      {/* ── Sprint-3.30 (2026-06-15) v2: Functional Frame NBA-Pro architecture ── */}
+      {p.functionalSize && (() => {
+        const fs = p.functionalSize;
+        // Sprint-3.37.B: Wingspan 6'12" Bug-Fix (Tobias 2026-06-16).
+        // Plus Alter Code: ft=floor(83.5/12)=6, inc=round(83.5-72)=round(11.5)=12 → "6'12""
+        // Plus Fix: total inches ZUERST runden, dann floor+modulo. Mathematisch sauber.
+        const inchesToFt = (inches) => {
+          if (inches == null) return "—";
+          const total = Math.round(inches);
+          const ft = Math.floor(total / 12);
+          const inc = total % 12;
+          return `${ft}'${inc}"`;
+        };
+        const fmtDelta = (d, unit = '"') => d == null ? "—" : `${d > 0 ? "+" : ""}${d.toFixed(1)}${unit}`;
+
+        // Plus side semantics — defensive is monotonic (bigger=better), offensive is neutral (paint vs perimeter)
+        const sideSemantics = (sideKey) => sideKey === "defensive"
+          ? { positiveColor: "#22c55e", negativeColor: "#ef4444",
+              positiveLabel: "plays bigger", negativeLabel: "plays smaller" }
+          : { positiveColor: "#f59e0b", negativeColor: "#a78bfa",
+              positiveLabel: "paint-oriented", negativeLabel: "perimeter/stretch" };
+
+        const FrameBar = ({label, sublabel, actual, predicted, delta, residual, semantics, unit = '"', range = 5}) => {
+          if (predicted == null) return null;
+          // Sprint-3.37.J + 3.39.F (Tobias 2026-06-16): Predicted-only Modus mit
+          // Strahl-Optik (statt Banner-Sentence). Plus konsistent zum
+          // Δ-Strahl-Pattern der Standard-FrameBars: predicted wird auf einer
+          // Pool-Range visualisiert (h: 70-90", ws: 72-94", wt: 160-300 lbs).
+          // Plus dashed border + "no measurement" Hint machen den predicted-only
+          // Modus visuell unterscheidbar — semantik klar ohne UI-Inkonsistenz.
+          if (delta == null) {
+            // Pool-Range pro Dimension (mid-cohort visual context)
+            const poolRange = unit === '"'
+              ? (label === "Height" ? { min: 70, max: 90 } : { min: 72, max: 94 })
+              : { min: 160, max: 300 };
+            const pctOnRange = Math.max(2, Math.min(98,
+              ((predicted - poolRange.min) / (poolRange.max - poolRange.min)) * 100
+            ));
+            return (
+              <div style={{width:"100%",marginBottom:10}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:3}}>
+                  <div style={{display:"flex",flexDirection:"column"}}>
+                    <span style={{fontSize:11,fontWeight:600,color:"#e5e7eb"}}>{label}</span>
+                    <span style={{fontSize:9,color:"#6b7280"}}>{sublabel}</span>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <span style={{fontSize:10,color:"#64748b",fontStyle:"italic",marginRight:6}}>
+                      no measurement
+                    </span>
+                    <span style={{fontSize:13,fontWeight:700,color:"#93c5fd",fontFamily:"Oswald,sans-serif"}}>
+                      {unit === '"' ? inchesToFt(predicted) : `${Math.round(predicted)} lbs`}
+                    </span>
+                  </div>
+                </div>
+                <div style={{position:"relative",background:"#1f2937",borderRadius:4,height:7,
+                              border:"1px dashed #1e3a5f"}}>
+                  <div style={{position:"absolute",left:`calc(${pctOnRange}% - 3px)`,top:-2,
+                                width:6,height:11,background:"#93c5fd",borderRadius:2,
+                                boxShadow:"0 0 4px #3b82f6aa"}}/>
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:8,
+                              color:"#475569",marginTop:2}}>
+                  <span>{unit === '"' ? inchesToFt(poolRange.min) : `${poolRange.min} lbs`}</span>
+                  <span style={{fontStyle:"italic"}}>
+                    pool range · predicted only
+                  </span>
+                  <span>{unit === '"' ? inchesToFt(poolRange.max) : `${poolRange.max} lbs`}</span>
+                </div>
+              </div>
+            );
+          }
+          const clamp = Math.max(-range, Math.min(range, delta));
+          const pct = ((clamp + range) / (2 * range)) * 100;
+          const color = Math.abs(delta) < 0.3 ? "#9ca3af" :
+                        delta > 0 ? semantics.positiveColor : semantics.negativeColor;
+          let ci_lo_pct = null, ci_hi_pct = null;
+          if (residual != null) {
+            const lo = Math.max(-range, delta - 1.96 * residual);
+            const hi = Math.min(range, delta + 1.96 * residual);
+            ci_lo_pct = ((lo + range) / (2 * range)) * 100;
+            ci_hi_pct = ((hi + range) / (2 * range)) * 100;
+          }
+          return (
+            <div style={{width:"100%",marginBottom:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:3}}>
+                <div style={{display:"flex",flexDirection:"column"}}>
+                  <span style={{fontSize:11,fontWeight:600,color:"#e5e7eb"}}>{label}</span>
+                  <span style={{fontSize:9,color:"#6b7280"}}>{sublabel}</span>
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <span style={{fontSize:11,color:"#6b7280"}}>{unit === '"' ? inchesToFt(actual) : (actual != null ? `${Math.round(actual)} lbs` : "—")}</span>
+                  <span style={{margin:"0 4px",color:"#475569"}}>→</span>
+                  <span style={{fontSize:13,fontWeight:700,color,fontFamily:"Oswald,sans-serif"}}>
+                    {unit === '"' ? inchesToFt(predicted) : `${Math.round(predicted)} lbs`}
+                  </span>
+                  <span style={{fontSize:11,marginLeft:5,color}}>{fmtDelta(delta, unit)}</span>
+                </div>
+              </div>
+              <div style={{position:"relative",background:"#1f2937",borderRadius:4,height:7}}>
+                <div style={{position:"absolute",left:"50%",top:-2,bottom:-2,width:2,background:"#374151"}}/>
+                {ci_lo_pct != null && (
+                  <div style={{position:"absolute",left:`${Math.min(ci_lo_pct,ci_hi_pct)}%`,
+                                width:`${Math.abs(ci_hi_pct-ci_lo_pct)}%`,top:0,bottom:0,
+                                background:color,opacity:0.2,borderRadius:4}}/>
+                )}
+                <div style={{position:"absolute",left:`calc(${pct}% - 3px)`,top:-2,
+                              width:6,height:11,background:color,borderRadius:2}}/>
+              </div>
+            </div>
+          );
+        };
+
+        // Sprint-3.37.D (Tobias 2026-06-16): Position-aware Verdict-Texte.
+        // Plus Vor dem Refactor bekam z.B. Mikel Brown Jr. (Playmaker 6'5") als
+        // Offensive-Style "clear stretch-Big or perimeter-oriented pattern" —
+        // weil der alte Code nur die Δ-Avg checkte, nicht aber die Position.
+        // Big-spezifische Vokabeln (Stretch-Big, Markkanen, Porzingis) gehören
+        // ausschließlich zu pos=Big. Guards/Wings bekommen Perimeter-Sprache.
+        const posGroup = (p.pos || "").trim();   // "Playmaker" | "Wing" | "Big" | ""
+        const isPerimeter = posGroup === "Playmaker" || posGroup === "Wing";
+        const isBig = posGroup === "Big";
+
+        const offensiveStyleVerdict = (side) => {
+          const dh = side.height_delta;
+          const dws = side.wingspan_delta;
+          const avg = [dh, dws].filter(x => x != null).reduce((a, b) => a + b, 0) / [dh, dws].filter(x => x != null).length;
+          if (isNaN(avg)) return { style: "—", color: "#9ca3af", desc: "" };
+
+          // Sehr paint-orientiert (avg > 1.5)
+          if (avg > 1.5) {
+            if (isPerimeter) return { style: "interior-leaning for position", color: "#f59e0b",
+              desc: "stats heavier on rim diet, ORB%, paint pressure than typical for his position. Pattern: slasher / driver with limited spacing — value depends on finishing efficiency." };
+            return { style: "paint-oriented", color: "#f59e0b",
+              desc: "stats look like a bigger player's — strong ORB%, dunks, paint pressure. Traditional Big-style offense." };
+          }
+
+          // Slight oversize (avg 0.5–1.5)
+          if (avg > 0.5) return { style: "balanced (slight paint-tilt)", color: "#9ca3af",
+            desc: isPerimeter
+              ? "offensive footprint matches a slightly bigger guard/wing — average rim diet for position with some paint pressure."
+              : "balanced offensive footprint — uses his frame at typical pool rate." };
+
+          // Frame-match (avg -0.5 to 0.5)
+          if (avg > -0.5) return { style: "balanced", color: "#9ca3af",
+            desc: "offensive stats match his listed frame closely." };
+
+          // Slight smaller (avg -1.5 to -0.5)
+          if (avg > -1.5) {
+            if (isPerimeter) return { style: "perimeter-focused", color: "#a78bfa",
+              desc: "stats lean perimeter — typical guard/wing offensive profile, low rim diet, more on-ball / off-ball game on the outside." };
+            if (isBig) return { style: "perimeter-leaning Big", color: "#a78bfa",
+              desc: "stats look more like a perimeter player's — modern skill-Big signal in a tall frame. Star-positive segment (≥7'0\" who play smaller offensively show elevated star rates)." };
+            return { style: "perimeter-leaning", color: "#a78bfa",
+              desc: "stats look more like a smaller player's — likely less paint volume, more perimeter game." };
+          }
+
+          // Strong smaller (avg ≤ -1.5)
+          if (isPerimeter) return { style: "pure perimeter / spacer", color: "#a78bfa",
+            desc: "very low paint signature — off-ball shooter, spot-up scorer, or movement scorer profile. Value lies in spacing + off-ball reads, not interior pressure." };
+          if (isBig) return { style: "skilled-Big / stretch pattern", color: "#a78bfa",
+            desc: "clear stretch / skilled-Big pattern. Tall body + perimeter offensive footprint = Markkanen/JJJ/Porzingis archetype. Skill-in-body is Star-positive in this size segment." };
+          return { style: "stretch-leaning", color: "#a78bfa",
+            desc: "offensive footprint smaller than listed frame would suggest — likely spacing-first role." };
+        };
+
+        const defensiveVerdict = (side) => {
+          const dh = side.height_delta;
+          const dws = side.wingspan_delta;
+          const avg = [dh, dws].filter(x => x != null).reduce((a, b) => a + b, 0) / [dh, dws].filter(x => x != null).length;
+          if (isNaN(avg)) return { tone: "—", color: "#9ca3af", desc: "" };
+          const h = fs.actual.height;
+          // Sprint-3.32 + 3.37.D: segment- + position-aware verdicts
+          const isSmall = h != null && h <= 77;
+
+          if (avg > 1.5) {
+            if (isPerimeter && isSmall) return { tone: "plays much bigger", color: "#22c55e",
+              desc: "stats match a taller defender — outsized defensive impact for his guard frame. Star-positive segment (small guards who play bigger: motor/IQ/effort archetype, Kemba/VanVleet pattern)." };
+            return { tone: "plays much bigger", color: "#22c55e",
+              desc: "stat profile matches taller / longer defenders. Leverages frame defensively." };
+          }
+          if (avg > 0.5) return { tone: "plays slightly bigger", color: "#86efac",
+            desc: "above-frame defensive impact — good signal." };
+          if (avg > -0.5) return { tone: "plays his size", color: "#9ca3af",
+            desc: "defensive stats match his listed frame." };
+          if (avg > -1.5) return { tone: "plays slightly smaller", color: "#fbbf24",
+            desc: isPerimeter
+              ? "some defensive frame leverage missing — typical for guards/wings, room to improve on-ball physicality."
+              : "some defensive frame leverage missing — room for growth." };
+          return { tone: "plays much smaller", color: "#ef4444",
+            desc: isBig
+              ? "defensive stat profile matches shorter players — Liability-Big segment, frame not translating to rim protection / DRB."
+              : "defensive stat profile matches shorter / smaller defenders. Physical advantage not yet translating." };
+        };
+
+        const Side = ({title, icon, sideKey, side, neutralOff = false}) => {
+          const semantics = sideSemantics(sideKey);
+          const verdict = neutralOff ? offensiveStyleVerdict(side) : defensiveVerdict(side);
+          const headerColor = sideKey === "defensive" ? "#3b82f6" : "#f97316";
+          return (
+            <div style={{background:"#0d1117",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px",flex:1,minWidth:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+                <span style={{fontSize:13,fontWeight:600,color:headerColor}}>{icon} {title}</span>
+              </div>
+              <div style={{background:"#0a0e14",border:`1px solid ${(neutralOff ? verdict.color : verdict.color)}30`,
+                            borderRadius:6,padding:"7px 10px",marginBottom:10}}>
+                <div style={{fontSize:9,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.5,marginBottom:2}}>
+                  {neutralOff ? "Offensive Style" : "Verdict"}
+                </div>
+                <div style={{fontSize:13,fontWeight:700,color:(neutralOff ? verdict.color : verdict.color),marginBottom:3}}>
+                  {neutralOff ? verdict.style : verdict.tone}
+                </div>
+                <div style={{fontSize:10,color:"#d1d5db",lineHeight:1.4}}>{verdict.desc}</div>
+              </div>
+
+              {/* Sprint-3.39.A (Tobias 2026-06-16): Sublabels kompakt halten,
+                  Methodik-Details über Hover-Tip + Methods Tab. Plus Feature-
+                  Sets sind Sprint-3.38 empirisch validiert (LassoCV + Bootstrap).
+                  Plus volle Liste pro Modell siehe Methods → Functional Frame. */}
+              <Tip content={
+                <div style={{color:"#cbd5e1",maxWidth:340,fontSize:11,lineHeight:1.5}}>
+                  <div style={{fontWeight:600,color:"#e5e7eb",marginBottom:4}}>How these are computed</div>
+                  {sideKey === "defensive" ? (
+                    <>
+                      <div><strong style={{color:"#93c5fd"}}>Height</strong>: predicted from BLK%, STL%, DRB%, Rim Protection role.</div>
+                      <div><strong style={{color:"#93c5fd"}}>Wingspan</strong>: predicted from STL%, DRB%, BLK%.</div>
+                      <div><strong style={{color:"#93c5fd"}}>Weight</strong>: predicted from STL%, DRB%, DBPM, Rim Protection (directional only).</div>
+                    </>
+                  ) : (
+                    <>
+                      <div><strong style={{color:"#fdba74"}}>Height</strong>: predicted from 10 offensive features (dunks, rim%, mid%, 3P%, ORB%, ff_orb, AST%, FTR, OBPM, Rebounder role).</div>
+                      <div><strong style={{color:"#fdba74"}}>Wingspan</strong>: same 10 offensive features as Height.</div>
+                      <div><strong style={{color:"#fdba74"}}>Weight</strong>: predicted from ORB% + AST% (directional only).</div>
+                    </>
+                  )}
+                  <div style={{marginTop:6,color:"#64748b",fontSize:10}}>Plus full methodology + validation details in Methods → Functional Frame.</div>
+                </div>
+              }>
+                <div style={{fontSize:9,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.5,marginBottom:6,cursor:"help"}}>
+                  Predicted vs listed <span style={{color:"#475569"}}>ⓘ how computed</span>
+                </div>
+              </Tip>
+              <FrameBar label="Height" sublabel="prediction"
+                actual={fs.actual.height} predicted={side.height} delta={side.height_delta}
+                residual={side.residual_height} semantics={semantics}/>
+              <FrameBar label="Wingspan" sublabel="prediction"
+                actual={fs.actual.wingspan} predicted={side.wingspan} delta={side.wingspan_delta}
+                residual={side.residual_wingspan} semantics={semantics}/>
+              <FrameBar label="Weight" sublabel="prediction · directional only"
+                actual={fs.actual.weight} predicted={side.weight} delta={side.weight_delta}
+                residual={side.residual_weight} semantics={semantics} unit="lbs" range={30}/>
+
+              {/* Sprint-3.37.C (Tobias 2026-06-16): Top driving stats —
+                  gruppiert nach Dimension, falls Backend `dim_target` setzt
+                  (height/wingspan/weight). Sonst Fallback auf flat Liste, damit
+                  diese Frontend-Änderung auch ohne Pipeline-Re-Run lebt.
+                  Plus Tooltip-Hinweis: warum manche Stats mehrfach erscheinen
+                  (selbe Feature kann mehrere Dimensions prädizieren) + was die
+                  contrib-Zahl bedeutet. */}
+              {side.top_features && side.top_features.length > 0 && (
+                <div style={{marginTop:8}}>
+                  <Tip content={
+                    <div style={{color:"#cbd5e1", maxWidth:360, lineHeight:1.4, fontSize:11}}>
+                      <div style={{fontWeight:600, marginBottom:4, color:"#e5e7eb"}}>How to read these</div>
+                      Each tile is one statistical feature that pushed the
+                      prediction <strong style={{color:"#e5e7eb"}}>above or below the draft-pool average</strong>
+                      &nbsp;(NOT vs. the player's actual measurement!). Number = contribution
+                      magnitude in the unit of the predicted dimension
+                      (inches / lbs).
+                      <br/><br/>
+                      Plus <span style={{color:"#86efac"}}>+green</span> = stat
+                      pulled prediction <em>up</em> from pool mean.
+                      <span style={{color:"#fca5a5"}}>−red</span> = pulled it
+                      <em> down</em>.
+                      <br/><br/>
+                      Plus the <strong style={{color:"#fbbf24"}}>Δ vs listed</strong> in
+                      each dim-header tells a separate story: how the
+                      prediction compares to the player's MEASURED frame. All-green drivers
+                      with negative Δ means "stats say bigger-than-pool-mean, but still smaller than his measured size" — perfectly normal.
+                      <br/><br/>
+                      Plus the same stat can appear under multiple dimensions
+                      (e.g. ORB% drives height + wingspan + weight predictions)
+                      because each has its own model.
+                    </div>
+                  }>
+                    <div style={{fontSize:9,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.5,marginBottom:3,cursor:"help"}}>
+                      Top driving stats <span style={{color:"#475569"}}>ⓘ</span>
+                    </div>
+                  </Tip>
+                  {(() => {
+                    // Wenn Backend dim_target liefert → gruppieren. Sonst flat.
+                    const hasDim = side.top_features.some(f => f.dim_target);
+                    if (!hasDim) {
+                      return (
+                        <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                          {side.top_features.slice(0,4).map((f, i) => (
+                            <div key={i} style={{background:f.contrib > 0 ? "#14532d40" : "#7f1d1d40",
+                                                   border:`1px solid ${f.contrib > 0 ? "#22c55e60" : "#ef444460"}`,
+                                                   color:f.contrib > 0 ? "#86efac" : "#fca5a5",
+                                                   borderRadius:3,padding:"2px 6px",fontSize:10}}>
+                              {f.label} {f.contrib > 0 ? "+" : ""}{f.contrib.toFixed(2)}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    }
+                    // Gruppieren — Reihenfolge: height, wingspan, weight
+                    const groups = { height: [], wingspan: [], weight: [] };
+                    side.top_features.forEach(f => {
+                      const k = f.dim_target;
+                      if (groups[k]) groups[k].push(f);
+                    });
+                    const dimLabels = { height: "Height", wingspan: "Wingspan", weight: "Weight" };
+                    // Sprint-3.39.E (Tobias 2026-06-16): per-Dim Header zeigt
+                    // jetzt predicted + Δ vs actual. Plus löst die "alle grün
+                    // bei negativem Δ"-Inkonsistenz auf: User sieht direkt dass
+                    // drivers die Prediction relativ zur Pool-Baseline erklären,
+                    // nicht den Gap zur Actual-Messung.
+                    const dimToSide = {
+                      height: { pred: side.height, delta: side.height_delta, actual: fs.actual.height, unit: '"' },
+                      wingspan: { pred: side.wingspan, delta: side.wingspan_delta, actual: fs.actual.wingspan, unit: '"' },
+                      weight: { pred: side.weight, delta: side.weight_delta, actual: fs.actual.weight, unit: ' lbs' },
+                    };
+                    const fmtNum = (v, u) => {
+                      if (v == null) return "—";
+                      return u === '"' ? inchesToFt(v) : `${Math.round(v)}${u}`;
+                    };
+                    return (
+                      <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                        {["height","wingspan","weight"].map(dim => {
+                          const feats = groups[dim].slice(0,3);
+                          if (feats.length === 0) return null;
+                          const d = dimToSide[dim];
+                          const dColor = d.delta == null ? "#64748b" : d.delta > 0.3 ? "#86efac" : d.delta < -0.3 ? "#fca5a5" : "#9ca3af";
+                          return (
+                            <div key={dim}>
+                              <div style={{fontSize:9,color:"#64748b",marginBottom:2,letterSpacing:0.3,display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:6}}>
+                                <span>→ {dimLabels[dim]}: predicted <span style={{color:"#cbd5e1",fontWeight:600}}>{fmtNum(d.pred, d.unit)}</span></span>
+                                {d.delta != null && (
+                                  <span style={{color:dColor,fontSize:9}}>
+                                    Δ {d.delta > 0 ? "+" : ""}{d.delta.toFixed(1)}{d.unit} vs listed
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                                {feats.map((f, i) => (
+                                  <div key={i} style={{background:f.contrib > 0 ? "#14532d40" : "#7f1d1d40",
+                                                         border:`1px solid ${f.contrib > 0 ? "#22c55e60" : "#ef444460"}`,
+                                                         color:f.contrib > 0 ? "#86efac" : "#fca5a5",
+                                                         borderRadius:3,padding:"2px 6px",fontSize:10}}>
+                                    {f.label} {f.contrib > 0 ? "+" : ""}{f.contrib.toFixed(2)}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {side.comps && side.comps.length > 0 && (
+                <div style={{marginTop:10}}>
+                  <div style={{fontSize:9,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.5,marginBottom:3}}>Frame comps (3D match: h + ws + wt)</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                    {side.comps.slice(0,3).map((c, i) => (
+                      <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:10,padding:"3px 7px",
+                                            background:"#0a0e14",borderRadius:3}}>
+                        <span style={{color:"#e5e7eb"}}>{c.name}</span>
+                        <span style={{color:"#6b7280",fontSize:9}}>
+                          {c.pos} · {inchesToFt(c.height)}
+                          {c.wingspan ? ` / ${inchesToFt(c.wingspan)}` : ""}
+                          {c.weight ? ` / ${Math.round(c.weight)} lbs` : ""}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        };
+
+        // Hero composite Standing Reach delta — averaged def + off
+        const reachDeltaAvg = (() => {
+          const vals = [fs.defensive?.reach_delta, fs.offensive?.reach_delta].filter(v => v != null);
+          return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+        })();
+        const reachActual = fs.actual.height != null && fs.actual.wingspan != null
+          ? fs.actual.height + (fs.actual.wingspan - 60) / 2
+          : null;
+        const reachAvg = fs.defensive?.reach != null && fs.offensive?.reach != null
+          ? (fs.defensive.reach + fs.offensive.reach) / 2
+          : (fs.defensive?.reach ?? fs.offensive?.reach);
+
+        return (
+          <Sec icon="📏" title="Functional Frame — Does he play bigger than his size?"
+            sub={`Statistical fingerprint vs. listed measurements across 3 dimensions (height, wingspan, weight) × 2 sides (defensive, offensive). Plus full methodology in Methods → Functional Frame.`}>
+
+            {/* ── Sprint-3.33 (2026-06-15): three conditional patterns ── */}
+            {(() => {
+              const h = fs.actual.height;
+              const dDef = ((fs.defensive?.height_delta ?? 0) + (fs.defensive?.wingspan_delta ?? 0)) / 2;
+              const dOff = ((fs.offensive?.height_delta ?? 0) + (fs.offensive?.wingspan_delta ?? 0)) / 2;
+              const dAvg = (dDef + dOff) / 2;
+              let pattern = null;
+              // 1. Small-Giant pattern (≤6'5", plays bigger defensively)
+              if (h != null && h <= 77 && dDef >= 2) {
+                pattern = {
+                  label: "Small-Giant pattern",
+                  signal: "Star+ signal (+10pp)",
+                  detail: "Small frame + outsized defensive stats. Motor/IQ/effort archetype. Plus Star+ rate 25% in this segment vs 14-21% baseline. Plus Bust rate stays elevated at 35% — high variance, more Stars AND more Busts than 'plays his size'. Plus full commitment matters: 'slightly bigger' is the worst sub-bucket (46% Bust). Historic comps: Kemba Walker (+28.6 WA), Fred VanVleet (+19.9), Ty Lawson (+17.1), Isaiah Thomas (+16.2), Patty Mills (+9.0).",
+                };
+              }
+              // 2. Wing-Big pattern (6'6-6'8, plays MUCH bigger): strongest stick signal
+              else if (h != null && h >= 78 && h < 81 && dAvg >= 2) {
+                pattern = {
+                  label: "Wing-Big pattern",
+                  signal: "Stick signal (-22pp Bust)",
+                  detail: "Wings who translate their frame into outsized stats stick in the NBA — the STRONGEST sample-validated pattern in this analysis. Plus Bust rate drops to 19% vs Wing mean 41% (-22pp). Plus Stick rate 81%. Plus mean WA +5.4 vs +2.8 for 'slightly bigger' Wings. Plus 'going halfway' is the worst Wing-Bucket (50% Bust). Historic comps: Brandon Clarke (+7.1 WA), John Collins (+11.1), Jarred Vanderbilt (+4.9), Kenneth Faried (+8.5), Marcus Thornton.",
+                };
+              }
+              // 3. Skilled-Big pattern (≥7'0", plays smaller offensively)
+              else if (h != null && h >= 84 && dOff <= -2) {
+                pattern = {
+                  label: "Skilled-Big pattern",
+                  signal: "Star+ + Stick signal (+25pp / +25pp)",
+                  detail: "Tall frame + perimeter-leaning offensive stats — Wembanyama / Embiid / Porzingis archetype. Plus for 7'0\"+ specifically: Star+ rate 44%, Stick rate 64%, Bust rate 28%. Plus 7-footers who play their listed size actually show 60% Bust rate — the inverse. Plus the strongest skill-in-frame signal in the analysis. Historic comps: Joel Embiid (+36.3 WA), Rudy Gobert (+30.9), Nikola Vucevic (+24.2), Kristaps Porzingis (+15.5), Lauri Markkanen (+15.3), Jaren Jackson Jr. (+14.1).",
+                };
+              }
+              return pattern && (
+                <div style={{background:"#2e1065",border:"1px solid #a855f780",borderRadius:8,
+                              padding:"10px 12px",marginBottom:12}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:6,marginBottom:4}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <span style={{fontSize:14}}>⭐</span>
+                      <span style={{fontSize:13,fontWeight:600,color:"#c084fc"}}>{pattern.label}</span>
+                    </div>
+                    <span style={{fontSize:10,color:"#c4b5fd",background:"#4c1d95",padding:"2px 8px",borderRadius:4,fontWeight:500}}>
+                      {pattern.signal}
+                    </span>
+                  </div>
+                  <div style={{fontSize:11,color:"#e9d5ff",lineHeight:1.5}}>{pattern.detail}</div>
+                </div>
+              );
+            })()}
+
+            {/* Sprint-3.39.B (Tobias 2026-06-16): Disclaimer auf Quick-Read
+                gekürzt. Plus volle Methodik inkl. conditional patterns + Sprint
+                3.31 honesty in Methods → Functional Frame. */}
+            <Tip content={
+              <div style={{color:"#cbd5e1",maxWidth:380,fontSize:11,lineHeight:1.5}}>
+                <div style={{fontWeight:600,color:"#fbbf24",marginBottom:4}}>About this metric</div>
+                Stylistic descriptor — useful for style-mapping + comp-matching, not as a linear outcome predictor.
+                Plus three conditional patterns where the signal IS positive at extremes: <strong style={{color:"#c084fc"}}>Small-Giant</strong> (small frame + plays bigger defensively), <strong style={{color:"#c084fc"}}>Wing-Big</strong> (6'6-6'8 + plays much bigger), <strong style={{color:"#c084fc"}}>Skilled-Big</strong> (≥7'0 + plays smaller offensively).
+                Plus for outcome projection see the Projection tab. Plus full validation in Methods → Functional Frame.
+              </div>
+            }>
+              <div style={{background:"#1f1300",border:"1px solid #fbbf2440",borderRadius:8,
+                            padding:"8px 12px",marginBottom:14,fontSize:11,color:"#d1d5db",lineHeight:1.5,cursor:"help"}}>
+                <span style={{color:"#fbbf24",fontWeight:600}}>Stylistic descriptor</span> · not a linear outcome predictor, but positive at extremes via 3 conditional patterns. <span style={{color:"#64748b"}}>ⓘ details</span>
+              </div>
+            </Tip>
+
+            {/* Hero: Functional Standing Reach */}
+            {reachAvg != null && reachActual != null && (
+              <div style={{background:"#0a0e14",border:"1px solid #1f2937",borderRadius:10,padding:"12px 16px",marginBottom:14}}>
+                <div style={{fontSize:10,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.5,marginBottom:3}}>
+                  Functional Standing Reach <span style={{color:"#475569",textTransform:"none",letterSpacing:0,marginLeft:6}}>· "what reach would the pool guess from his stats?"</span>
+                </div>
+                <div style={{display:"flex",alignItems:"baseline",gap:10,flexWrap:"wrap"}}>
+                  <span style={{fontSize:24,fontWeight:700,fontFamily:"Oswald,sans-serif",color:"#e5e7eb"}}>{inchesToFt(reachAvg)}</span>
+                  <span style={{fontSize:12,color:"#6b7280"}}>vs listed {inchesToFt(reachActual)}</span>
+                  {reachDeltaAvg != null && (
+                    <span style={{marginLeft:"auto",fontSize:13,fontWeight:700,
+                                    color:reachDeltaAvg > 0.5 ? "#22c55e" : reachDeltaAvg < -0.5 ? "#ef4444" : "#9ca3af"}}>
+                      {fmtDelta(reachDeltaAvg)} average
+                    </span>
+                  )}
+                </div>
+                <div style={{fontSize:10,color:"#6b7280",marginTop:5,lineHeight:1.4}}>
+                  Composite: height + (wingspan − 60) / 2. Plus a near-zero gap = he leverages his frame at typical pool rate. Plus large positive = "plays much bigger". Plus large negative = "doesn't translate frame to impact" or "specialized stretch profile".
+                </div>
+              </div>
+            )}
+
+            {/* Sprint-3.37.G (Tobias 2026-06-16): Effective-Frame Sentence wenn
+                kein Combine-Measurement existiert. Plus Wir lassen die User
+                trotzdem wissen, wie der Spieler statistisch "spielt" — auch
+                ohne offizielle Anthro. Average aus def + off predictions. */}
+            {(() => {
+              const noWs = fs.actual.wingspan == null;
+              const noWt = fs.actual.weight == null;
+              if (!noWs && !noWt) return null;
+              const avgPred = (a, b) => {
+                const xs = [a, b].filter(x => x != null);
+                return xs.length ? xs.reduce((s,x) => s+x, 0) / xs.length : null;
+              };
+              const effWs = noWs ? avgPred(fs.defensive?.wingspan, fs.offensive?.wingspan) : null;
+              const effWt = noWt ? avgPred(fs.defensive?.weight, fs.offensive?.weight) : null;
+              const parts = [];
+              if (effWs != null) parts.push(<>an effective <strong style={{color:"#e5e7eb"}}>~{inchesToFt(effWs)} wingspan</strong></>);
+              if (effWt != null) parts.push(<>an effective <strong style={{color:"#e5e7eb"}}>~{Math.round(effWt)} lb frame</strong></>);
+              if (parts.length === 0) return null;
+              return (
+                <div style={{background:"#0a1424",border:"1px solid #1e3a5f",borderRadius:8,
+                              padding:"9px 12px",marginBottom:14,fontSize:11,color:"#cbd5e1",lineHeight:1.5}}>
+                  <span style={{color:"#93c5fd",fontWeight:600}}>Inferred frame</span>
+                  {" — "}
+                  no combine measurement on file, but his stat profile suggests he plays with{" "}
+                  {parts.map((part, i) => (
+                    <Fragment key={i}>
+                      {i > 0 && (i === parts.length - 1 ? " and " : ", ")}
+                      {part}
+                    </Fragment>
+                  ))}.
+                  <span style={{color:"#64748b"}}> Plus this is an inference from the predicted-vs-pool comparison, not a measurement — treat it as a stylistic descriptor, not a combine number.</span>
+                </div>
+              );
+            })()}
+
+            <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+              <Side title="Defensive Frame" icon="🛡️" sideKey="defensive" side={fs.defensive} neutralOff={false}/>
+              <Side title="Offensive Frame" icon="🔥" sideKey="offensive" side={fs.offensive} neutralOff={true}/>
+            </div>
+
+            {/* Sprint-3.39.B: Methodology auf 1-Liner getrimmt — alle
+                statistischen Details (R², n, validation) leben in Methods Tab. */}
+            <div style={{fontSize:9,color:"#475569",marginTop:10,fontStyle:"italic",lineHeight:1.5}}>
+              6 Ridge models with empirically selected features · shaded band = 95% confidence corridor · Plus full methodology in Methods → Functional Frame.
+            </div>
+          </Sec>
+        );
+      })()}
 
       {/* ── NBA COMBINE SCATTER ──
            Tobias 2026-05-06: einziger Scatter, Class-Scatter entfernt.
@@ -6572,6 +8970,32 @@ function CompsTab({p}) {
   // Das ist methodisch ehrlich: niemand ist "97% identisch" — das wäre Marketing-Spin.
   const simColor = (s) => s > 70 ? "#22c55e" : s > 55 ? "#86efac" : s > 40 ? "#3b82f6" : s > 25 ? "#fbbf24" : "#ef4444";
 
+  /* Tobias 2026-06-04 v27: Comps audit — honest dimensions + per-comp breakdown */
+  // Per-comp stat-by-stat breakdown: which dimensions are close, which diverge.
+  // Uses the 8 displayed stats so it directly maps to what the user sees.
+  const STAT_DIMS = [
+    {key:"bpm",   label:"BPM",   threshold:2.5,  divThreshold:6,   format:(v)=>fmt(v)},
+    {key:"usg",   label:"USG%",  threshold:3,    divThreshold:8,   format:(v)=>fmt(v)+"%"},
+    {key:"ts",    label:"TS%",   threshold:2,    divThreshold:6,   format:(v)=>fmt(v)+"%"},
+    {key:"astP",  label:"AST%",  threshold:3,    divThreshold:10,  format:(v)=>fmt(v)+"%"},
+    {key:"stlP",  label:"STL%",  threshold:0.5,  divThreshold:1.5, format:(v)=>fmt(v)+"%"},
+    {key:"blkP",  label:"BLK%",  threshold:0.5,  divThreshold:2,   format:(v)=>fmt(v)+"%"},
+    {key:"tp",    label:"3P%",   threshold:3,    divThreshold:8,   format:(v)=>fmt(v)+"%"},
+    {key:"ft",    label:"FT%",   threshold:4,    divThreshold:12,  format:(v)=>fmt(v)+"%"},
+  ];
+  const compBreakdown = (comp) => {
+    const strengths = [];
+    const diffs = [];
+    STAT_DIMS.forEach(dim => {
+      const pv = p[dim.key], cv = comp[dim.key];
+      if (pv == null || cv == null) return;
+      const delta = Math.abs(pv - cv);
+      if (delta <= dim.threshold) strengths.push({label:dim.label, delta:delta.toFixed(1), p:dim.format(pv), c:dim.format(cv)});
+      else if (delta >= dim.divThreshold) diffs.push({label:dim.label, delta:delta.toFixed(1), p:dim.format(pv), c:dim.format(cv)});
+    });
+    return {strengths, diffs};
+  };
+
   // Tobias 2026-05-06: Shooting-Pct-Färbung wie im Shooting-Tab Court.
   // Konsistente Skalen: TS%, FT%, 3P% mit standard NBA-Schwellen.
   const tsColor = (v) => v == null ? "#9ca3af" : v >= 60 ? "#22c55e" : v >= 55 ? "#86efac" : v >= 50 ? "#fbbf24" : "#ef4444";
@@ -6597,8 +9021,33 @@ function CompsTab({p}) {
         </div>
       )}
 
+      {/* ── Sprint-3.3 #38: Two-views disclaimer + Group-Context Cross-Reference ── */}
+      {p.archetypeV27 && ARCHETYPE_V27_PRIORS[p.archetypeV27] && (() => {
+        const v27 = ARCHETYPE_V27_PRIORS[p.archetypeV27];
+        return (
+          <div className="rounded-xl p-3" style={{
+            background: "rgba(15,23,42,0.6)",
+            borderLeft: `3px solid ${v27.color}`,
+            border: "1px solid rgba(71,85,105,0.4)",
+          }}>
+            <div className="flex items-start gap-3 flex-wrap">
+              <div className="text-xs uppercase tracking-widest mt-0.5" style={{color:"#94a3b8",letterSpacing:"0.1em",whiteSpace:"nowrap"}}>
+                Two views ⓘ
+              </div>
+              <div className="text-xs flex-1" style={{color:"#cbd5e1",lineHeight:1.55}}>
+                The table below shows <strong style={{color:"#e5e7eb"}}>statistically similar individual players</strong> — past prospects whose pre-draft stat profile matches this prospect's.
+                This is <strong style={{color:"#fbbf24"}}>not the same as archetype-group membership</strong>: stat-similarity is per-individual,
+                while the archetype group (<span style={{color:v27.color,fontWeight:"600"}}>{p.archetypeV27}</span>) reflects the player's K-Means cluster in role + anthropometric space.
+                A stat-comp can sit in a different archetype cluster than the prospect — and vice versa. See the
+                Overview tab for the archetype group's collective cohort context (n={v27.n_nba}, star rate {(v27.starRate*100).toFixed(0)}%).
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── STATISTICAL COMPS TABLE ── */}
-      <Sec icon="📊" title="Statistical Comps" sub="Nearest-neighbor matches based on what THIS prospect looked like before the NBA — measured across 8 dimensions (BPM, USG%, TS%, AST%, STL%, BLK%, 3P%, FT%) using era-adjusted percentiles. 'Reached Tier' = the comp's verified NBA outcome (or our model's projection for current prospects).">
+      <Sec icon="📊" title="Statistical Individuals (stat-similarity)" sub="These are individual players whose pre-draft stat profile most closely matches this prospect's — weighted cosine similarity across 16 era-adjusted dimensions: 12 core stats (BPM, USG%, TS%, AST%, TO%, ORB%, DRB%, STL%, BLK%, 3P%, FT%, FTR) plus 4 shot-profile frequencies (3PA, Rim, Mid, Dunk). The 8 columns shown are the most pod-relevant — the full match calculation uses all 16. Reached Tier = the comp's verified NBA outcome (Star/All-Star/Starter/Role/Replacement/Bust) or the model's projection for current prospects. NOTE: stat-similarity is INDEPENDENT of the archetype group classification shown on the Overview tab — two different statistical lenses.">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -6646,10 +9095,12 @@ function CompsTab({p}) {
                     <td className="px-2" style={{color:"#6b7280"}}>{c.pos}</td>
                     <td className="px-2">
                       <Tip content={
-                        <div style={{maxWidth:240}}>
+                        <div style={{maxWidth:280}}>
                           <div className="font-bold mb-1" style={{color:simColor(sim||0)}}>Match: {sim}%</div>
-                          {c.rawSim != null && <div className="text-xs" style={{color:"#94a3b8"}}>Absolute similarity (z-distance scale): <strong style={{color:"#cbd5e1"}}>{c.rawSim}%</strong></div>}
-                          <div className="text-xs mt-1" style={{color:"#9ca3af"}}>The displayed % is rescaled within this comp pool (top → 95%, bottom → 50%) for differentiation. Absolute scale rarely exceeds ~50% for unique prospects.</div>
+                          {c.rawSim != null && <div className="text-xs" style={{color:"#94a3b8"}}>Absolute cosine similarity (z-distance scale): <strong style={{color:"#cbd5e1"}}>{c.rawSim}%</strong></div>}
+                          <div className="text-xs mt-1" style={{color:"#9ca3af"}}>The displayed % is rescaled within this comp pool (top → 95%, bottom → 50%) for differentiation.</div>
+                          <div className="text-xs mt-2" style={{color:"#fbbf24"}}><strong>Reality calibration:</strong> NBA prospects are unique. 30-50% absolute similarity IS a strong match for high-volatility prospects. Boozer/Flagg/Dybantsa\'s top comps land in this range.</div>
+                          <div className="text-xs mt-2" style={{color:"#9ca3af"}}>Computed via weighted cosine similarity across 16 era-adjusted dimensions (see Sec sub-title for full list).</div>
                         </div>
                       }>
                         <div className="flex items-center gap-1 cursor-help">
@@ -6668,7 +9119,49 @@ function CompsTab({p}) {
                     <td className="px-2">{fmt(c.blkP)}</td>
                     <td className="px-2" style={{color:tpColor(c.tp)}}>{fmt(c.tp)}</td>
                     <td className="px-2" style={{color:ftColor(c.ft)}}>{fmt(c.ft)}</td>
-                    <td className="px-2"><TierBadge tier={c.tier}/></td>
+                    <td className="px-2">
+                      <div className="flex flex-col gap-1">
+                        <TierBadge tier={c.tier}/>
+                        {(() => {
+                          const {strengths, diffs} = compBreakdown(c);
+                          if (strengths.length === 0 && diffs.length === 0) return null;
+                          return (
+                            <Tip content={
+                              <div style={{maxWidth:260}}>
+                                {strengths.length > 0 && (
+                                  <div className="mb-2">
+                                    <div className="text-xs font-bold mb-1" style={{color:"#22c55e"}}>STRONG MATCH ({strengths.length})</div>
+                                    {strengths.map((s,i) => (
+                                      <div key={i} className="text-xs" style={{color:"#cbd5e1"}}>
+                                        <span style={{color:"#86efac"}}>{s.label}</span>: {s.p} ↔ {s.c} <span style={{color:"#475569"}}>(Δ {s.delta})</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                {diffs.length > 0 && (
+                                  <div>
+                                    <div className="text-xs font-bold mb-1" style={{color:"#ef4444"}}>DIVERGES ({diffs.length})</div>
+                                    {diffs.map((d,i) => (
+                                      <div key={i} className="text-xs" style={{color:"#cbd5e1"}}>
+                                        <span style={{color:"#fca5a5"}}>{d.label}</span>: {d.p} ↔ {d.c} <span style={{color:"#475569"}}>(Δ {d.delta})</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                {strengths.length === 0 && (
+                                  <div className="text-xs mt-2" style={{color:"#fbbf24"}}>No strong dimension matches in the 8 visible stats — high-similarity score is driven by the other 8 backend dimensions (shot profile, etc.).</div>
+                                )}
+                              </div>
+                            }>
+                              <div className="text-[10px] flex gap-1.5 cursor-help">
+                                {strengths.length > 0 && <span style={{color:"#22c55e",fontWeight:600}}>★{strengths.length}</span>}
+                                {diffs.length > 0 && <span style={{color:"#ef4444",fontWeight:600}}>⚠{diffs.length}</span>}
+                              </div>
+                            </Tip>
+                          );
+                        })()}
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
@@ -6697,6 +9190,795 @@ function CompsTab({p}) {
     </div>
   );
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB: COMPS v5 — NBA Front Office Standard Multi-Dimensional Comp Engine
+// ═══════════════════════════════════════════════════════════════════════════
+// Sprint-3.6 through Sprint-3.10 (Tobias 2026-06-13): Complete replacement of
+// the legacy v3 single-score comp system with a methodologically rigorous
+// 5-dimensional engine matching NBA elite front office (Boston/OKC tier) practice.
+//
+// Why v5 replaces v3:
+//   Old v3 produced one "similarity score" by collapsing all signals into a
+//   single Euclidean distance. This conflated style (how the player plays),
+//   skill (what they can do), physical (anthropometric profile), trajectory
+//   (year-over-year development), and outcome (historical NBA careers of
+//   similar prospects). A high single-score could mean any combination —
+//   the user could not tell what was actually similar.
+//
+// What v5 does instead:
+//   - FIVE separate dimensions, each independently interpretable.
+//   - Each dimension has its own feature set + era window + quality filter.
+//   - For each dimension we return both a "Mixed" top-5 (any pool player)
+//     and an "NBA-only" top-3 (NBA-careered candidates) — the user toggles.
+//   - Per top comp we expose the 3 features that drove the match ("drivers")
+//     and the 2 features that diverge most ("diverges").
+//
+// Forecast structure (Layer 3 + Layer 4 + Triangulation):
+//   - Layer 3 Cohort: matches the prospect's stat profile to NBA-careered
+//     players in the SAME age bucket (18.5-19.5 freshman etc.) and SAME
+//     position. We return the distribution of their actual NBA peaks.
+//   - Layer 4 Cluster: groups the prospect by archetype_v27 (Two-Way Wing,
+//     Skilled Offensive Big, etc.) and returns cluster-wide outcomes.
+//   - Triangulation: inverse-variance weighted combination of L3 + L4.
+//
+// Robustness (Sprint-3.8):
+//   - Bayesian shrinkage toward the overall NBA population mean (k=50
+//     pseudo-count) — small cohorts get pulled toward the average so a
+//     67% All-Star rate from n=15 prospects does not get over-interpreted.
+//   - Beta-Binomial 95% credibility intervals on each rate.
+//   - Bootstrap CIs on the peak_wa median (continuous metric, 200 resamples).
+//
+// Calibration validation (Sprint-3.8.D):
+//   Leave-one-out backtest on 549 historical prospects (2010-2020) showed
+//   bucket-weighted MAE 0.78%-3.40% across all six forecast types, with
+//   aggregate bias under 0.2%. All verdicts: EXCELLENT. The engine can be
+//   trusted at the aggregate level. Individual discrimination is by design
+//   limited (cohort/cluster forecasts are group-level estimates).
+//
+// Backend endpoint:
+//   GET /api/comps/v5/{slug} → see backend/main.py route_comps_v5 for schema.
+// ═══════════════════════════════════════════════════════════════════════════
+function CompsV5Tab({p}) {
+  const [v5, setV5] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState(null);
+  // Default view: NBA-only (more interpretable). Mixed shows pool nearest neighbors.
+  const [nbaOnly, setNbaOnly] = useState(true);
+  // Which dimension drilldown is open (drivers/diverges popup).
+  const [openDrillKey, setOpenDrillKey] = useState(null);
+
+  // Sprint-3.10 hotfix v2 (Tobias 2026-06-13): The `p` object is the result
+  // of mapProfile() which has 168 keys but DROPS the `slug` field (verified
+  // via diagnostic console.log). The board entry keyed-by-name in PLAYERS
+  // does not preserve slug either. The slug DOES exist in the URL pathname
+  // (/player/{slug}) — we use that as the authoritative source.
+  // Fallback chain order: explicit fields first, then URL extraction.
+  const slug = p?.slug || p?.s || p?.player_id || p?.id ||
+               (typeof window !== "undefined" &&
+                window.location.pathname.match(/^\/player\/(.+?)(?:\/|$)/)?.[1]);
+
+  useEffect(() => {
+    if (!slug) {
+      // Still no slug — log to console so we can diagnose if this persists.
+      console.log("[CompsV5Tab] no slug yet, p keys:", p ? Object.keys(p) : null);
+      return;
+    }
+    console.log("[CompsV5Tab] fetching v5 for slug:", slug);
+    setLoading(true); setErr(null);
+    fetch(`${API_BASE}/comps/v5/${slug}`)
+      .then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`))
+      .then(data => {
+        console.log("[CompsV5Tab] v5 response received, available:", data?.available);
+        setV5(data); setLoading(false);
+      })
+      .catch(e => {
+        console.warn("[CompsV5Tab] fetch error:", e);
+        setErr(String(e)); setLoading(false);
+      });
+  }, [slug]);
+
+  if (loading) return <div className="text-sm" style={{color:"#9ca3af"}}>Loading v5 comp data…</div>;
+  if (err) return <div className="text-sm" style={{color:"#ef4444"}}>Error loading v5 comps: {err}</div>;
+  if (!v5 || !v5.available) {
+    return (
+      <div className="text-sm p-4 rounded-lg" style={{background:"#1f2937", color:"#9ca3af"}}>
+        v5 comp data not available for this player.
+        {v5?.reason && <div className="mt-2 text-xs">{v5.reason}</div>}
+      </div>
+    );
+  }
+
+  // Color scales matching site convention.
+  const simColor = (s) => s > 0.85 ? "#22c55e" : s > 0.70 ? "#86efac" : s > 0.55 ? "#3b82f6" : s > 0.40 ? "#fbbf24" : "#ef4444";
+  const pctColor = (p) => p == null ? "#9ca3af" : p > 50 ? "#22c55e" : p > 30 ? "#86efac" : p > 15 ? "#fbbf24" : "#ef4444";
+
+  // Dimension card colors (one accent per dimension, used in card headers).
+  const DIM_ACCENTS = {
+    style:      "#a78bfa", // purple — "how he plays"
+    skill:      "#22d3ee", // cyan   — "what he can do"
+    physical:   "#fb923c", // orange — "how he looks"
+    trajectory: "#34d399", // green  — "how he develops"
+    outcome:    "#f472b6", // pink   — "who succeeded like him"
+  };
+  const DIM_LABELS = {
+    style:      "Style",
+    skill:      "Skill",
+    physical:   "Physical",
+    trajectory: "Trajectory",
+    outcome:    "Outcome",
+  };
+  const DIM_SUBTITLES = {
+    style:      "Shot distribution + usage + role context",
+    skill:      "Efficiency + advanced metrics (era-adjusted)",
+    physical:   "Height + wingspan + position-aware",
+    trajectory: "Year-over-year development slopes",
+    outcome:    "Same age-stage NBA outcome matches",
+  };
+  // Sprint-3.39.C (Tobias 2026-06-16): Hover-Erklärungen für die 5 Dimensionen
+  // im Comp Tab. Plus simple-aber-nicht-zu-simple Format: "WAS fließt rein +
+  // WELCHE Frage beantwortet die Dimension?" — keine R²/Validations-Werte
+  // (das gehört in den Methods Tab).
+  const DIM_HOVER = {
+    style: {
+      title: "Style — how he plays",
+      body: "Shot distribution + role footprint. Plus features: rim/mid/3-point shot share, usage%, role scores (scorer/playmaker/spacer/driver/crasher), archetype tag. Plus answers: who shoots from where + fills the same role?",
+    },
+    skill: {
+      title: "Skill — how good he is",
+      body: "Efficiency + advanced metrics (era-adjusted). Plus features: BPM, TS%, eFG%, AST/TO ratio, OBPM, DBPM, position-percentile rank. Plus answers: who hits + reads the game at the same level?",
+    },
+    physical: {
+      title: "Physical — how he's built",
+      body: "Height + wingspan + position-aware build. Plus features: listed height, wingspan (measured or stats-imputed), weight, position group. Plus answers: who has the same frame + plays the same position?",
+    },
+    trajectory: {
+      title: "Trajectory — how he develops",
+      body: "Year-over-year development slopes. Plus features: BPM slope, OrtG slope, TS% slope from multi-season data. Plus only computed for players with ≥2 seasons. Plus answers: who's improving (or stagnating) at the same rate?",
+    },
+    outcome: {
+      title: "Outcome — who succeeded like him",
+      body: "Age-stage NBA outcome matches. Plus features: same draft age ±1 year, same position group, NBA-careered only, kernel-weighted by projected-value proximity. Plus answers: who entered at the same age + position and how did they end up?",
+    },
+  };
+
+  // Sprint-3.10.C fix (Tobias 2026-06-13): two dimensions ignore the
+  // NBA toggle and ALWAYS read from the full pool:
+  //   - Outcome is already NBA-only by Layer 3 design (peak_pie required),
+  //     so dimensions_nba.outcome was never populated. Reading from
+  //     v5.dimensions.outcome unconditionally keeps Zion/Cade/Tatum visible
+  //     when the user is in "NBA careers only" mode.
+  //   - Drivers/Diverges metadata is only carried on the full-pool comps
+  //     (backend slim_v5 only emits drv/div for mixed top-3). We surface
+  //     them under EVERY dimension card regardless of toggle, because the
+  //     drivers explain WHY the match exists — same explanation applies
+  //     whether the user is browsing the mixed or NBA-filtered view.
+  const dimSet = nbaOnly ? (v5.dimensions_nba || {}) : (v5.dimensions || {});
+  const fullPool = v5.dimensions || {};   // always-on source for outcome + drivers
+
+  // Forecast helpers — pull from Bayesian-shrunk fields with CI bounds.
+  // Sprint-3.12 (Tobias 2026-06-13): Individual Forecast from 10c LightGBM
+  // tier_probs is the PRIMARY forecast. Cohort and Cluster are reframed as
+  // baseline context. Triangulated remains as the historical-evidence summary
+  // but is presented secondary to the individual prediction.
+  const indiv = v5.individual_forecast || null;     // Sprint-3.12 player-specific
+  const fc = v5.triangulated_forecast || null;     // Sprint-3.8.C combined (baseline aggregation)
+  const co = v5.cohort_forecast || null;            // Sprint-3.7 Layer 3 (baseline)
+  const cl = v5.cluster_forecast || null;           // Sprint-3.7 Layer 4 (baseline)
+  // Delta helper — how much does the individual diverge from baseline?
+  const delta = (a, b) => (a != null && b != null) ? Math.round(a - b) : null;
+  const fmtDelta = (d) => d == null ? "" : (d > 0 ? `+${d}pp` : `${d}pp`);
+  const deltaColor = (d) => d == null ? "#64748b" : (d > 5 ? "#22c55e" : d < -5 ? "#ef4444" : "#9ca3af");
+
+  const PctBar = ({pct, ci, color}) => {
+    const w = Math.max(0, Math.min(100, pct ?? 0));
+    return (
+      <div className="mt-1" style={{position:"relative", height:6, background:"#1f2937", borderRadius:3}}>
+        <div style={{width:`${w}%`, height:6, background:color, borderRadius:3}}/>
+        {ci && ci.length === 2 && (
+          <div style={{
+            position:"absolute", top:-1, height:8,
+            left:`${ci[0]}%`, width:`${Math.max(0, ci[1]-ci[0])}%`,
+            border:`1px dashed ${color}`, borderRadius:3, opacity:0.6
+          }}/>
+        )}
+      </div>
+    );
+  };
+
+  const fmt = (v, suffix="%") => v == null ? "—" : `${Math.round(v)}${suffix}`;
+  const fmtCI = (ci) => ci && ci.length === 2 ? `[${Math.round(ci[0])}-${Math.round(ci[1])}${ci[1] > 5 ? "%" : ""}]` : "";
+
+  return (
+    <div className="space-y-5">
+      {/* ─── Header: methodology pointer + view toggle + position badges ─── */}
+      <div className="flex flex-wrap justify-between items-start gap-3">
+        <div className="flex-1 min-w-0">
+          <Tip content={
+            <div style={{color:"#cbd5e1", maxWidth:380}}>
+              v5 splits "similarity" into 5 independent dimensions. Each one
+              answers a different question — see Methods section at the bottom
+              for the full breakdown. Backtested calibration on 549 historical
+              prospects: bucket-weighted MAE 0.78-3.40%, EXCELLENT across all
+              six forecast types.
+            </div>
+          }>
+            <div className="text-xs cursor-help" style={{color:"#6b7280"}}>
+              v5 multi-dimensional comp engine — NBA front office standard.
+              <span style={{color:"#475569"}}> ⓘ</span>
+            </div>
+          </Tip>
+          <div className="flex flex-wrap gap-2 mt-1.5">
+            {/* Sprint-3.9 Layer 7 — functional position (8-way) */}
+            {v5.functional_position && (
+              <span className="px-2 py-0.5 rounded text-xs font-semibold"
+                    style={{background:"#1e3a5f", color:"#93c5fd", border:"1px solid #2563eb"}}>
+                {v5.functional_position}
+              </span>
+            )}
+            {v5.pos_group && (
+              <span className="px-2 py-0.5 rounded text-xs"
+                    style={{background:"#1f2937", color:"#9ca3af", border:"1px solid #374151"}}>
+                Position group: {v5.pos_group}
+              </span>
+            )}
+            {/* Sprint-3.8.E Combine-Coverage Disclosure */}
+            {!v5.combine_coverage && (
+              <span className="px-2 py-0.5 rounded text-xs"
+                    style={{background:"#78350f", color:"#fcd34d", border:"1px solid #92400e"}}
+                    title="Combine measurements not available. Physical comp uses college height only — refresh after May Combine.">
+                ⚠ No combine data
+              </span>
+            )}
+          </div>
+        </div>
+        {/* View toggle: NBA-only (default, more interpretable) vs Mixed (any pool player). */}
+        <div className="flex gap-1 p-1 rounded-lg" style={{background:"#1f2937"}}>
+          <button onClick={() => setNbaOnly(true)} className="px-3 py-1 rounded text-xs font-semibold"
+                  style={{background: nbaOnly ? "#f97316" : "transparent", color: nbaOnly ? "#000" : "#9ca3af"}}>
+            NBA careers only
+          </button>
+          <button onClick={() => setNbaOnly(false)} className="px-3 py-1 rounded text-xs font-semibold"
+                  style={{background: !nbaOnly ? "#f97316" : "transparent", color: !nbaOnly ? "#000" : "#9ca3af"}}>
+            Full pool
+          </button>
+        </div>
+      </div>
+
+      {/* ─── PRIMARY: Individual Player Forecast (Sprint-3.12) ───
+          The player-specific forecast from the 10c LightGBM model. This is the
+          ACTUAL prediction for this player — it accounts for his individual
+          BPM, USG, age, anthro, recruit rank, advanced metrics etc.
+
+          Sprint-3.37.A (Tobias 2026-06-16): Plus der Individual Forecast ist
+          im Comparison-Tab irreführend — er ist eine player-level Prediction,
+          KEIN Comp-Vergleich. Er gehört nur in den Overview/Forecast-Tab.
+          Gated mit `false && indiv` damit der Block dokumentiert im Code
+          bleibt und durch Flip wieder aktivierbar ist (gleiche Strategie wie
+          Sprint-3.15 für den Triangulated Forecast). */}
+      {false && indiv && (
+        <div className="p-4 rounded-lg" style={{background:"#1a2942", border:"2px solid #3b82f6"}}>
+          <div className="flex justify-between items-baseline mb-2">
+            <div>
+              <div className="text-sm font-semibold" style={{color:"#dbeafe"}}>
+                Player-specific outcome forecast
+              </div>
+              <div className="text-xs" style={{color:"#93c5fd"}}>
+                Primary prediction — from 10c LightGBM model using this player's full feature set
+              </div>
+            </div>
+            <Tip content={
+              <div style={{color:"#cbd5e1", maxWidth:380}}>
+                Source: the per-player tier probabilities computed in 10c by a
+                LightGBM regressor on 30 input features (BPM, USG, TS, age,
+                anthro, recruit rank, advanced metrics, etc.). Out-of-sample
+                CV correlation r=0.39, in-sample r=0.62. The model output is
+                already Bayesian-shrunk via Sprint-3.0.B and Sprint-3.2. Tier
+                cutoffs use peak-WAR thresholds (≥0.9 Roleplayer+, ≥3.2 Starter+,
+                ≥6.6 All-Star+, &lt;0 Bust) so they are directly comparable
+                to the baseline cards below.
+              </div>
+            }>
+              <span className="text-xs cursor-help" style={{color:"#60a5fa"}}>model ⓘ</span>
+            </Tip>
+          </div>
+          <div className="grid grid-cols-4 gap-3">
+            <div>
+              <div className="text-xs" style={{color:"#9ca3af"}}>Roleplayer+ <span style={{color:"#64748b"}}>(impact)</span></div>
+              <div className="text-2xl font-bold" style={{color:pctColor(indiv.pct_role_player_plus)}}>
+                {fmt(indiv.pct_role_player_plus)}
+              </div>
+              <PctBar pct={indiv.pct_role_player_plus} color={pctColor(indiv.pct_role_player_plus)} />
+            </div>
+            <div>
+              <div className="text-xs" style={{color:"#9ca3af"}}>Starter+</div>
+              <div className="text-2xl font-bold" style={{color:pctColor(indiv.pct_starter_plus)}}>
+                {fmt(indiv.pct_starter_plus)}
+              </div>
+              <PctBar pct={indiv.pct_starter_plus} color={pctColor(indiv.pct_starter_plus)} />
+            </div>
+            <div>
+              <div className="text-xs" style={{color:"#9ca3af"}}>All-Star+</div>
+              <div className="text-2xl font-bold" style={{color:pctColor(indiv.pct_all_star_plus)}}>
+                {fmt(indiv.pct_all_star_plus)}
+              </div>
+              <PctBar pct={indiv.pct_all_star_plus} color={pctColor(indiv.pct_all_star_plus)} />
+            </div>
+            <div>
+              <div className="text-xs" style={{color:"#9ca3af"}}>Bust <span style={{color:"#64748b"}}>(&lt;0)</span></div>
+              <div className="text-2xl font-bold" style={{color:"#ef4444"}}>
+                {fmt(indiv.pct_busted)}
+              </div>
+              <PctBar pct={indiv.pct_busted} color="#ef4444" />
+            </div>
+          </div>
+          {indiv.war_point_estimate != null && (
+            <div className="text-xs mt-3" style={{color:"#94a3b8"}}>
+              Point estimate: peak WAR = {Number(indiv.war_point_estimate).toFixed(1)}
+              {indiv.tier_probs && (
+                <span style={{color:"#64748b"}}>
+                  {" "}· raw probs: S {indiv.tier_probs.superstar}% / A {indiv.tier_probs.all_star}% /
+                  St {indiv.tier_probs.starter}% / R {indiv.tier_probs.roleplayer}% /
+                  Repl {indiv.tier_probs.replacement}% / Neg {indiv.tier_probs.negative}%
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Sprint-3.37.A: Section divider mit dem Individual Forecast gegated.
+          Plus Ohne den Forecast-Hero macht "Historical baselines" als
+          Trenner keinen Sinn mehr — direkt zu den Cohort/Cluster Karten. */}
+      {false && indiv && (co || cl) && (
+        <div className="flex items-center gap-3 text-xs" style={{color:"#64748b"}}>
+          <div style={{flex:1, height:1, background:"#374151"}}/>
+          <span>Historical baselines — how players matching this profile have actually performed</span>
+          <div style={{flex:1, height:1, background:"#374151"}}/>
+        </div>
+      )}
+
+      {/* ─── Sprint-3.15 (Tobias 2026-06-13): Combined NBA outcome forecast
+          (Triangulated) IS NOT RENDERED. Plus die zwei Hero cards (Individual +
+          Triangulated) wirken UX-mäßig redundant — visually parallel, both
+          give player-level percentages, even though methodically they answer
+          different questions (Individual = LightGBM player-specific;
+          Triangulated = inverse-variance weighted Cohort + Cluster baseline
+          aggregate). Individual stays as the primary forecast above; Cohort
+          and Cluster baselines stay as context below (with example players +
+          Δ annotations). The Triangulated payload remains on the API for
+          future use, but the card was removed for clarity. Gated with
+          `false && fc` so the entire JSX block stays in source as a single
+          documented unit — re-enable by flipping the literal. ─── */}
+      {false && fc && (
+        <div className="p-4 rounded-lg" style={{background:"#0f172a", border:"1px solid #1e293b"}}>
+          <div className="flex justify-between items-baseline mb-2">
+            <div className="text-sm font-semibold" style={{color:"#f1f5f9"}}>
+              Combined NBA outcome forecast
+            </div>
+            <Tip content={
+              <div style={{color:"#cbd5e1", maxWidth:340}}>
+                Inverse-variance weighted combination of two independent forecasts:
+                Layer 3 (Age-Stage Cohort, n={fc.n3_cohort}) and Layer 4 (Archetype
+                Cluster, n={fc.n4_cluster}). Both use Bayesian-shrunk rates so the
+                combined forecast inherits the robustness of both.
+                Roleplayer+ uses threshold peak_wa ≥ 0.9 (made impact); Bust
+                uses peak_wa &lt; 0 (truly negative impact).
+              </div>
+            }>
+              <span className="text-xs cursor-help" style={{color:"#475569"}}>method ⓘ</span>
+            </Tip>
+          </div>
+          <div className="grid grid-cols-4 gap-3">
+            <div>
+              <div className="text-xs" style={{color:"#9ca3af"}}>Roleplayer+ <span style={{color:"#64748b"}}>(impact)</span></div>
+              <div className="text-xl font-bold" style={{color:pctColor(fc.pct_role_player_combined)}}>
+                {fmt(fc.pct_role_player_combined)}
+              </div>
+              <PctBar pct={fc.pct_role_player_combined} color={pctColor(fc.pct_role_player_combined)} />
+            </div>
+            <div>
+              <div className="text-xs" style={{color:"#9ca3af"}}>Starter+</div>
+              <div className="text-xl font-bold" style={{color:pctColor(fc.pct_starter_combined)}}>
+                {fmt(fc.pct_starter_combined)}
+              </div>
+              <PctBar pct={fc.pct_starter_combined} color={pctColor(fc.pct_starter_combined)} />
+            </div>
+            <div>
+              <div className="text-xs" style={{color:"#9ca3af"}}>All-Star+</div>
+              <div className="text-xl font-bold" style={{color:pctColor(fc.pct_all_star_combined)}}>
+                {fmt(fc.pct_all_star_combined)}
+              </div>
+              <PctBar pct={fc.pct_all_star_combined} color={pctColor(fc.pct_all_star_combined)} />
+            </div>
+            <div>
+              <div className="text-xs" style={{color:"#9ca3af"}}>Bust <span style={{color:"#64748b"}}>(&lt;0)</span></div>
+              <div className="text-xl font-bold" style={{color:"#ef4444"}}>
+                {fmt(fc.pct_busted_combined)}
+              </div>
+              <PctBar pct={fc.pct_busted_combined} color="#ef4444" />
+            </div>
+          </div>
+          <div className="text-xs mt-3" style={{color:"#64748b"}}>
+            Triangulated from Layer 3 (n={fc.n3_cohort} age-stage cohort) + Layer 4 (n={fc.n4_cluster} archetype cluster).
+            Tiers are cumulative: Roleplayer+ includes Starter+ includes All-Star+.
+          </div>
+        </div>
+      )}
+
+      {/* ─── Layer 3 + Layer 4 detail cards (side-by-side) ─── */}
+      <div className="grid md:grid-cols-2 gap-4">
+        {/* LAYER 3: Age-Stage Cohort forecast — Sprint-3.15 adds example
+            players + Δ annotation to the Individual primary forecast. The
+            subtitle states the question this card answers in one sentence so
+            the user does not have to read the methods block to interpret it. */}
+        {co && (
+          <div className="p-4 rounded-lg" style={{background:"#1f2937", border:"1px solid #374151"}}>
+            <div className="flex justify-between items-baseline mb-2">
+              <div>
+                <div className="text-sm font-semibold" style={{color:"#f1f5f9"}}>Cohort baseline (Age-Stage)</div>
+                <div className="text-xs" style={{color:"#9ca3af"}}>
+                  What players of the SAME age + position historically achieved
+                </div>
+                <div className="text-xs mt-0.5" style={{color:"#94a3b8"}}>
+                  Cohort: Age {co.cohort?.[0]}-{co.cohort?.[1]}, {co.pos}, n={co.n}
+                </div>
+              </div>
+              <Tip content={
+                <div style={{color:"#cbd5e1", maxWidth:320}}>
+                  Match against NBA-careered players who were the SAME age + position
+                  at this stage of their career. Returns the distribution of their NBA peak
+                  performance (peak_pie). Bayesian-shrunk toward overall NBA mean.
+                  Note: this is a BASELINE — every prospect in the same cohort gets
+                  the same numbers, regardless of how good they are individually.
+                  Compare against the player-specific forecast at the top.
+                </div>
+              }><span className="text-xs cursor-help" style={{color:"#475569"}}>ⓘ</span></Tip>
+            </div>
+            <div className="space-y-2 text-xs">
+              <div>
+                <span style={{color:"#9ca3af"}}>Peak WA median: </span>
+                <span className="font-semibold" style={{color:"#f1f5f9"}}>{co.wa_med ?? "—"}</span>
+                {co.wa_ci && (
+                  <span style={{color:"#64748b"}}> CI95 [{co.wa_ci[0]}, {co.wa_ci[1]}]</span>
+                )}
+                {co.wa_p25 != null && co.wa_p75 != null && (
+                  <span style={{color:"#6b7280"}}>  · p25 {co.wa_p25} / p75 {co.wa_p75}</span>
+                )}
+              </div>
+              {/* Sprint-3.11: Roleplayer+ tier (>=0.9), the "made an NBA impact" line. */}
+              {co.role_shrunk != null && (
+                <div>
+                  <div className="flex justify-between"><span style={{color:"#9ca3af"}}>Roleplayer+</span>
+                    <span style={{color:pctColor(co.role_shrunk)}}>
+                      {fmt(co.role_shrunk)} <span style={{color:"#64748b"}}>{fmtCI(co.role_ci)}</span>
+                    </span></div>
+                  <PctBar pct={co.role_shrunk} ci={co.role_ci} color={pctColor(co.role_shrunk)} />
+                </div>
+              )}
+              <div>
+                <div className="flex justify-between"><span style={{color:"#9ca3af"}}>Starter+</span>
+                  <span style={{color:pctColor(co.starter_shrunk)}}>
+                    {fmt(co.starter_shrunk)} <span style={{color:"#64748b"}}>{fmtCI(co.starter_ci)}</span>
+                  </span></div>
+                <PctBar pct={co.starter_shrunk} ci={co.starter_ci} color={pctColor(co.starter_shrunk)} />
+              </div>
+              <div>
+                <div className="flex justify-between"><span style={{color:"#9ca3af"}}>All-Star+</span>
+                  <span style={{color:pctColor(co.allstar_shrunk)}}>
+                    {fmt(co.allstar_shrunk)} <span style={{color:"#64748b"}}>{fmtCI(co.allstar_ci)}</span>
+                  </span></div>
+                <PctBar pct={co.allstar_shrunk} ci={co.allstar_ci} color={pctColor(co.allstar_shrunk)} />
+              </div>
+              <div>
+                <div className="flex justify-between"><span style={{color:"#9ca3af"}}>Bust <span style={{color:"#64748b"}}>(&lt;0)</span></span>
+                  <span style={{color:"#ef4444"}}>
+                    {fmt(co.bust_shrunk)} <span style={{color:"#64748b"}}>{fmtCI(co.bust_ci)}</span>
+                  </span></div>
+                <PctBar pct={co.bust_shrunk} ci={co.bust_ci} color="#ef4444" />
+              </div>
+
+              {/* Sprint-3.15: concrete example players — best + worst outcomes
+                  from this exact cohort, sourced from the same n=X pool that
+                  produces the rates above. Makes the baseline interpretable
+                  beyond aggregate numbers. */}
+              {co.top && co.top.length > 0 && (
+                <div className="mt-2 pt-2" style={{borderTop:"1px solid #374151"}}>
+                  <div style={{color:"#9ca3af"}}>Best outcomes from this cohort:</div>
+                  <div style={{color:"#22c55e"}}>
+                    {co.top.slice(0, 3).map(t => `${t.name} (${t.peak_pie})`).join(" · ")}
+                  </div>
+                </div>
+              )}
+              {co.worst && co.worst.length > 0 && (
+                <div className="mt-1">
+                  <div style={{color:"#9ca3af"}}>Worst outcomes (bust examples):</div>
+                  <div style={{color:"#ef4444"}}>
+                    {co.worst.slice(0, 3).map(t => `${t.name} (${t.peak_pie})`).join(" · ")}
+                  </div>
+                </div>
+              )}
+
+              {/* Sprint-3.15: Δ annotation — how much the player-specific
+                  forecast diverges from this cohort baseline. Reads like
+                  "+21pp above cohort Starter+ baseline". */}
+              {indiv && (
+                <div className="mt-2 pt-2" style={{borderTop:"1px solid #374151", color:"#94a3b8"}}>
+                  Player vs cohort baseline:
+                  {indiv.pct_starter_plus != null && co.starter_shrunk != null && (
+                    <div style={{color:deltaColor(delta(indiv.pct_starter_plus, co.starter_shrunk))}}>
+                      Starter+: {fmtDelta(delta(indiv.pct_starter_plus, co.starter_shrunk))}
+                    </div>
+                  )}
+                  {indiv.pct_all_star_plus != null && co.allstar_shrunk != null && (
+                    <div style={{color:deltaColor(delta(indiv.pct_all_star_plus, co.allstar_shrunk))}}>
+                      All-Star+: {fmtDelta(delta(indiv.pct_all_star_plus, co.allstar_shrunk))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* LAYER 4: Archetype Cluster forecast — Sprint-3.15 reframes as
+            a baseline. Top/worst outcomes were already shown here; we add
+            the same subtitle/disclaimer pattern as Cohort + Δ annotations
+            to the player-specific Individual forecast at the top. */}
+        {cl && (
+          <div className="p-4 rounded-lg" style={{background:"#1f2937", border:"1px solid #374151"}}>
+            <div className="flex justify-between items-baseline mb-2">
+              <div>
+                <div className="text-sm font-semibold" style={{color:"#f1f5f9"}}>Cluster baseline (Archetype)</div>
+                <div className="text-xs" style={{color:"#9ca3af"}}>
+                  What players with the SAME playing style historically achieved
+                </div>
+                <div className="text-xs mt-0.5" style={{color:"#94a3b8"}}>
+                  Archetype: {cl.name}, n={cl.n}
+                </div>
+              </div>
+              <Tip content={
+                <div style={{color:"#cbd5e1", maxWidth:320}}>
+                  Group all NBA-careered prospects sharing this v27 archetype. The
+                  resulting rate is the historical base rate for THIS playing style
+                  cluster. Bayesian-shrunk toward overall NBA mean.
+                  Note: this is a BASELINE — every prospect with the same archetype
+                  gets the same numbers, regardless of individual talent. Compare
+                  against the player-specific forecast at the top.
+                </div>
+              }><span className="text-xs cursor-help" style={{color:"#475569"}}>ⓘ</span></Tip>
+            </div>
+            <div className="space-y-2 text-xs">
+              <div>
+                <span style={{color:"#9ca3af"}}>Peak WA median: </span>
+                <span className="font-semibold" style={{color:"#f1f5f9"}}>{cl.wa_med ?? "—"}</span>
+              </div>
+              {/* Sprint-3.11: Roleplayer+ tier added to Layer 4 cluster card too. */}
+              {cl.role_shrunk != null && (
+                <div>
+                  <div className="flex justify-between"><span style={{color:"#9ca3af"}}>Roleplayer+ (shrunk)</span>
+                    <span style={{color:pctColor(cl.role_shrunk)}}>{fmt(cl.role_shrunk)}</span></div>
+                  <PctBar pct={cl.role_shrunk} color={pctColor(cl.role_shrunk)} />
+                </div>
+              )}
+              <div>
+                <div className="flex justify-between"><span style={{color:"#9ca3af"}}>Starter+ (shrunk)</span>
+                  <span style={{color:pctColor(cl.starter_shrunk)}}>{fmt(cl.starter_shrunk)}</span></div>
+                <PctBar pct={cl.starter_shrunk} color={pctColor(cl.starter_shrunk)} />
+              </div>
+              <div>
+                <div className="flex justify-between"><span style={{color:"#9ca3af"}}>All-Star+ (shrunk)</span>
+                  <span style={{color:pctColor(cl.allstar_shrunk)}}>{fmt(cl.allstar_shrunk)}</span></div>
+                <PctBar pct={cl.allstar_shrunk} color={pctColor(cl.allstar_shrunk)} />
+              </div>
+              <div>
+                <div className="flex justify-between"><span style={{color:"#9ca3af"}}>Bust <span style={{color:"#64748b"}}>(&lt;0, shrunk)</span></span>
+                  <span style={{color:"#ef4444"}}>{fmt(cl.bust_shrunk)}</span></div>
+                <PctBar pct={cl.bust_shrunk} color="#ef4444" />
+              </div>
+              {cl.top && cl.top.length > 0 && (
+                <div className="mt-2 pt-2" style={{borderTop:"1px solid #374151"}}>
+                  <div style={{color:"#9ca3af"}}>Best outcomes:</div>
+                  <div style={{color:"#22c55e"}}>
+                    {cl.top.slice(0, 3).map(t => `${t.name} (${t.peak_pie})`).join(" · ")}
+                  </div>
+                </div>
+              )}
+              {cl.worst && cl.worst.length > 0 && (
+                <div className="mt-1">
+                  <div style={{color:"#9ca3af"}}>Worst outcomes (bust examples):</div>
+                  <div style={{color:"#ef4444"}}>
+                    {cl.worst.slice(0, 3).map(t => `${t.name} (${t.peak_pie})`).join(" · ")}
+                  </div>
+                </div>
+              )}
+
+              {/* Sprint-3.15: Δ annotation against player-specific Individual
+                  forecast — makes it obvious whether the player projects above
+                  or below his archetype baseline. */}
+              {indiv && (
+                <div className="mt-2 pt-2" style={{borderTop:"1px solid #374151", color:"#94a3b8"}}>
+                  Player vs cluster baseline:
+                  {indiv.pct_starter_plus != null && cl.starter_shrunk != null && (
+                    <div style={{color:deltaColor(delta(indiv.pct_starter_plus, cl.starter_shrunk))}}>
+                      Starter+: {fmtDelta(delta(indiv.pct_starter_plus, cl.starter_shrunk))}
+                    </div>
+                  )}
+                  {indiv.pct_all_star_plus != null && cl.allstar_shrunk != null && (
+                    <div style={{color:deltaColor(delta(indiv.pct_all_star_plus, cl.allstar_shrunk))}}>
+                      All-Star+: {fmtDelta(delta(indiv.pct_all_star_plus, cl.allstar_shrunk))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ─── 5 Comp Dimensions (Layer 1) ─── */}
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {["style","skill","physical","trajectory","outcome"].map(dim => {
+          // Sprint-3.10.C: outcome always from full pool (NBA-only by design).
+          const comps = dim === "outcome" ? (fullPool.outcome || []) : (dimSet[dim] || []);
+          // Drivers come from full-pool top comp (only place they exist).
+          const driversSource = (fullPool[dim] || [])[0];
+          const accent = DIM_ACCENTS[dim];
+          return (
+            <div key={dim} className="p-4 rounded-lg" style={{background:"#1f2937", border:"1px solid #374151"}}>
+              <div className="flex justify-between items-baseline mb-3">
+                <Tip content={
+                  <div style={{color:"#cbd5e1",maxWidth:340,fontSize:11,lineHeight:1.5}}>
+                    <div style={{fontWeight:600,color:accent,marginBottom:4}}>{DIM_HOVER[dim].title}</div>
+                    {DIM_HOVER[dim].body}
+                  </div>
+                }>
+                  <div style={{cursor:"help"}}>
+                    <div className="text-sm font-semibold" style={{color:accent}}>
+                      {DIM_LABELS[dim]} <span style={{color:"#475569",fontSize:10,fontWeight:400}}>ⓘ</span>
+                    </div>
+                    <div className="text-xs" style={{color:"#9ca3af"}}>
+                      {DIM_SUBTITLES[dim]}
+                    </div>
+                  </div>
+                </Tip>
+                <div className="text-xs" style={{color:"#475569"}}>{comps.length}</div>
+              </div>
+              {comps.length === 0 ? (
+                <div className="text-xs" style={{color:"#64748b", fontStyle:"italic"}}>
+                  {dim === "trajectory" && !v5.dimensions?.trajectory?.length
+                    ? "No multi-season slope data (1-season players excluded)."
+                    : nbaOnly ? "No NBA-careered comps found." : "No comps available."}
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {comps.slice(0, 5).map((c, i) => (
+                    <div key={i} className="flex items-center gap-2 text-xs">
+                      <div className="flex-1 min-w-0 truncate">
+                        {c.nba && <span style={{color:"#fbbf24"}} title="NBA careered">★ </span>}
+                        <span style={{color:"#f1f5f9"}}>{c.n}</span>
+                        {c.y && <span style={{color:"#64748b"}}> ({c.y})</span>}
+                      </div>
+                      <div className="font-mono" style={{color:simColor(c.s), minWidth:36, textAlign:"right"}}>
+                        {(c.s * 100).toFixed(0)}%
+                      </div>
+                    </div>
+                  ))}
+                  {/* Drivers/diverges for top comp (Sprint-3.9 Layer 5 Causal Reasoning).
+                      Sprint-3.10.C: always read from full-pool top comp (driversSource),
+                      regardless of NBA toggle — drv/div only exist there in backend slim. */}
+                  {driversSource?.drv && driversSource.drv.length > 0 && (
+                    <div className="mt-2 pt-2 text-xs" style={{borderTop:"1px solid #374151", color:"#9ca3af"}}>
+                      <div>
+                        <span style={{color:"#86efac"}}>Top match drivers: </span>
+                        {driversSource.drv.slice(0, 3).map(d => d.l).join(", ")}
+                      </div>
+                      {driversSource.div && driversSource.div.length > 0 && (
+                        <div>
+                          <span style={{color:"#fbbf24"}}>Diverges on: </span>
+                          {driversSource.div.slice(0, 2).map(d => d.l).join(", ")}
+                        </div>
+                      )}
+                      <div className="mt-1" style={{color:"#64748b", fontSize:"0.85em"}}>
+                        (based on the closest full-pool match{nbaOnly && driversSource.n ? `: ${driversSource.n}` : ""})
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ═════════════════════════════════════════════════════════════════════
+          METHODS — methodology explained in place, per Tobias 2026-06-13.
+          This block stays inside the tab so a curious reader can read what
+          the engine actually does without leaving the page.
+          ═════════════════════════════════════════════════════════════════════ */}
+      <div className="p-4 rounded-lg text-xs" style={{background:"#0f172a", border:"1px solid #1e293b", color:"#cbd5e1"}}>
+        <div className="font-semibold mb-2" style={{color:"#f1f5f9"}}>Methods</div>
+        <div className="space-y-2">
+          <div>
+            <span style={{color:"#60a5fa"}}>0. Three-layer forecast hierarchy.</span> The
+            top blue card is the <em>player-specific</em> forecast — what the 10c
+            LightGBM model says about THIS player using all 30 of his input features.
+            It is the actual prediction. The cards below it are <em>historical baselines</em>:
+            cohort (same age + position) and cluster (same archetype). Baselines
+            apply equally to every player in their group, so they answer
+            "how does the typical cohort do?" — not "how will this specific player do?"
+            The delta annotations show how much the individual diverges from each
+            baseline.
+          </div>
+          <div>
+            <span style={{color:"#a78bfa"}}>1. Five separate dimensions.</span> "Similarity"
+            is not a single number — it is five distinct questions. Style asks
+            <em> how does he play</em> (shot distribution, usage). Skill asks
+            <em> what can he do</em> (era-adjusted efficiency, BPM, advanced metrics).
+            Physical asks <em>how does he look</em> (height, wingspan, position-aware).
+            Trajectory asks <em>how is he developing</em> (year-over-year slopes;
+            blank for 1-season prospects by design). Outcome asks <em>who succeeded
+            with this profile</em> (same-age-stage NBA outcome matches).
+          </div>
+          <div>
+            <span style={{color:"#22d3ee"}}>2. Quality-adjusted pool + anthropometric band.</span> Candidates
+            are filtered to Sprint-3.0.A eligibility ≥ Partial, excluding injury-fallback
+            seasons. Each dimension also has its own era window (Style ±10yr, Skill ±15yr,
+            Physical all-era, Trajectory ±20yr, Outcome ±18yr) — basketball changed
+            after 2015 so style/skill use shorter windows than the era-neutral dimensions.
+            An anthropometric height band of ±3 inches is also applied to all
+            stat-based dimensions: a 6'9" Wing can match a 6'10" Big if anatomically
+            comparable, but a 6'4" Playmaker is never matched against a 6'11" rim
+            protector even when their stat profiles coincidentally look similar.
+          </div>
+          <div>
+            <span style={{color:"#fb923c"}}>3. Bayesian shrinkage.</span> Cohort and
+            cluster rates are shrunk toward the overall NBA-careered population mean
+            with pseudo-count k=50. A 67% All-Star rate from n=15 prospects gets
+            pulled toward the ~27% population baseline so we do not over-interpret
+            small samples. Larger samples (n=400+) move very little.
+          </div>
+          <div>
+            <span style={{color:"#34d399"}}>4. Credibility intervals.</span> Each tier
+            rate (Starter+, All-Star+, Bust) gets a 95% Beta-Binomial CI. The peak_wa
+            median gets a bootstrap CI (200 resamples). Wide CIs are the engine
+            telling you: small sample, do not trust the point estimate.
+          </div>
+          <div>
+            <span style={{color:"#f472b6"}}>5. Triangulation.</span> Layer 3 (cohort)
+            and Layer 4 (cluster) are independent forecasts. We combine them using
+            inverse-variance weighting: more precise forecast (larger n, narrower
+            CI) gets more weight. The combined rate is the headline at the top.
+          </div>
+          <div>
+            <span style={{color:"#fbbf24"}}>6. Calibration backtest.</span> Leave-one-out
+            validation on 549 historical prospects (2010–2020): bucket-weighted MAE
+            0.78–3.40% across all six forecast types, aggregate bias under 0.2%.
+            Verdict: EXCELLENT on all six. The engine is well-calibrated at the
+            aggregate level; individual discrimination is limited by design
+            (cohort/cluster forecasts are group-level estimates by construction).
+          </div>
+          <div>
+            <span style={{color:"#93c5fd"}}>7. Functional position (Layer 7).</span> The
+            badge at the top assigns one of 8 styles (Pure PG, Combo Guard,
+            Shooting Guard, On-ball Wing, Off-ball Wing, Slasher Wing, Stretch Big,
+            Block Big, Combo Big) from stat patterns — finer than the traditional
+            Playmaker/Wing/Big trichotomy.
+          </div>
+          <div style={{color:"#64748b"}}>
+            Source: comparison_v5.json, generated by data-pipeline
+            <code style={{color:"#94a3b8"}}> scripts/09_comparison_engine_v5.py</code>.
+            Backtest verdict from
+            <code style={{color:"#94a3b8"}}> scripts/validate_comps_v5_backtest.py</code>.
+            Backend endpoint:
+            <code style={{color:"#94a3b8"}}> GET /api/comps/v5/{`{slug}`}</code>.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 // ═══════════════════════════════════════════════════════════
 // TAB: RISK PROFILE  (Phase 2 — Market vs Merit + two risk axes)
@@ -6737,6 +10019,19 @@ function RiskProfileTab({p}) {
   const cons = rp.consensus;
   const p20 = rp.marketP20, p50 = rp.marketP50, p80 = rp.marketP80;
   const hasMarket = p20 != null && p80 != null;
+  // Sprint-3.0.G (#70, 2026-06-23): Steal-Probability kommt jetzt empirisch
+  // vom Backend (draft_risk_model.risk_axes mit steal_thr = g(market_slot - 10))
+  // — kernel-gewichteter Comp-Pool-Anteil mit peak_wa > Schwelle. Wenn der
+  // Backend-Wert (rp.stealProb) nicht vorhanden ist (legacy CSV, intl ohne
+  // market_slot), fallen wir auf die ursprüngliche Merit↔Market-Gap-Heuristik
+  // zurück, damit ältere Profile nicht plötzlich leer aussehen.
+  const stealBackend = rp.stealProb != null ? Math.round(rp.stealProb * 100) : null;
+  const stealTargetSlot = rp.stealTargetSlot != null ? Math.round(rp.stealTargetSlot) : null;
+  const stealHeuristic = (p50 != null && merit != null)
+    ? Math.round(Math.max(0, Math.min(100, ((p50 - merit) / 30) * 100)))
+    : null;
+  const steal       = stealBackend ?? stealHeuristic;
+  const stealSource = stealBackend != null ? "model" : (stealHeuristic != null ? "heuristic" : null);
   const showUp = star != null && star >= 15 && (rp.upsideFactors || []).length > 0;
   const showRisk = bust != null && bust >= 35 && (rp.riskFactors || []).length > 0;
 
@@ -6829,6 +10124,20 @@ function RiskProfileTab({p}) {
           rank historically translates into a real pick (teams reach, players slide), not disagreement
           between mock boards.</p>
 
+        /* Tobias 2026-06-04 v28-final: Risk source attribution + fresh marker */
+        <div className="mb-4 px-3 py-2 rounded-lg text-[11px] flex flex-wrap items-center gap-2" style={{background:"#1f293744"}}>
+          <span style={{color:"#9ca3af"}}>Consensus source:</span>
+          <a href="https://www.rookiescale.com/2026-consensus-board/" target="_blank" rel="noopener noreferrer"
+             style={{color:"#fbbf24",fontWeight:600,textDecoration:"underline"}}>
+            RookieScale 2026 Consensus Board
+          </a>
+          <span style={{color:"#6b7280"}}>·</span>
+          <span style={{color:"#9ca3af"}}>Last import: <span style={{color:"#22c55e",fontWeight:600}}>2026-06-04</span></span>
+          <Tip wide content={<div style={{color:"#cbd5e1"}}><div className="font-bold mb-1" style={{color:"#22c55e"}}>Mock Data Freshness</div><div>The RookieScale board is updated frequently throughout the season as scouts release new mocks. Our local copy was last imported on 2026-06-04. A stale-warning automatically appears here if the import is more than 30 days old.</div></div>}>
+            <span style={{color:"#22c55e",cursor:"help",fontWeight:600}}>✓ fresh</span>
+          </Tip>
+        </div>
+
         <div className="relative h-16 mb-2">
           {/* track */}
           <div className="absolute left-0 right-0 top-7 h-1.5 rounded-full" style={{background:"#1f2937"}}/>
@@ -6873,11 +10182,22 @@ function RiskProfileTab({p}) {
             where he'll go). The slider added noise without adding decision-relevant info. */}
       </div>
 
-      {/* Two risk axes */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/* Three risk axes — Bust (rot) / Steal (grün) / Star Upside (amber)
+          Tobias 2026-06-12: Steal als eigene Bar visualisiert, plus Star Upside
+          auf amber/gold umgefärbt damit die drei Achsen visuell klar getrennt sind.
+          Color-Schema: Bust=Risiko (rot), Steal=Opportunity (grün), Star=Premium (amber). */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <RiskBar label="🔥 Bust Risk — the pick that gets you fired" pct={bust ?? 0} color="#ef4444"
                  blurb="How likely he delivers LESS than the value his draft slot demands. High here at an early pick is the career-defining miss."/>
-        <RiskBar label="⭐ Star Upside — the pick you'd regret passing on" pct={star ?? 0} color="#22c55e"
+        <RiskBar
+          label={stealSource === "model" && stealTargetSlot
+                 ? `💎 Steal Probability — plays like pick ${stealTargetSlot}+`
+                 : "💎 Steal Probability — value below the market"}
+          pct={steal ?? 0} color="#22c55e"
+          blurb={stealSource === "model"
+                 ? `Probability that his realized peak Wins Added exceeds the value a pick ~10 slots higher delivers (kernel-weighted comp-pool share). For a player projected at market slot ${p50 != null ? Math.round(p50) : "?"}, the threshold is the expected peak Wins Added of a pick-${stealTargetSlot != null ? stealTargetSlot : "?"} prospect. Floor at pick 3 for top picks. A high value = he could outperform his market valuation by a full draft tier.`
+                 : "Heuristic fallback — gap between model's Merit-Slot and market Median, normalized to a 30-pick range. Used when the empirical Steal-Prob isn't available (legacy CSV or no market slot). The model-based version replaces this once draft_risk_model.py re-runs."}/>
+        <RiskBar label="⭐ Star Upside — the pick you'd regret passing on" pct={star ?? 0} color="#f59e0b"
                  blurb="How likely he becomes an All-Star-level player. High here at a late slot is the lurking star you don't want to let slip."/>
       </div>
 
@@ -7194,6 +10514,486 @@ function ResearchTab({p}) {
         “Scoring Wing”). This is a research aid for draft strategy by player type, not a
         player-specific projection.
       </p>
+    
+
+      {/* Tobias 2026-06-03 v8: Self-Creation Research Framework section */}
+      {/* Self-Creation Framework — position-specific quadrants */}
+      <div className="rounded-xl p-4 text-sm text-gray-300 leading-relaxed"
+           style={{background:"#0d1117",border:"1px solid #1f2937", marginTop: "1.25rem"}}>
+        <div className="text-base font-semibold text-gray-100 mb-2">Self-Creation Framework</div>
+        <p className="text-sm text-gray-300 leading-relaxed mb-3">
+          The Shot Creation Spectrum on every player profile shows how a prospect generates his offense
+          by zone — at the rim (including dunks, BartTorvik convention), in mid-range, and from three.
+          This framework summarizes how those zone distributions translate to NBA outcomes,
+          based on n=556 NCAA prospects from the 2010-2022 draft cohorts who reached the NBA.
+        </p>
+        <p className="text-sm text-gray-300 leading-relaxed mb-4">
+          Each position uses different cluster axes because what predicts NBA value differs
+          by archetype. Wings are split by rim creation × pullup-3 volume; bigs by rim creation × mid-range touch;
+          playmakers by rim creation × pullup-3 volume. Median splits are taken within position to ensure
+          each cluster has comparable sample sizes.
+        </p>
+
+        {/* WING QUADRANT */}
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-100 mb-2">Wing: ATR × Pullup-3 (n=371)</div>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <div className="p-2 rounded" style={{background:"#451a1a",border:"1px solid #7f1d1d"}}>
+              <div className="text-xs font-bold" style={{color:"#fca5a5"}}>Volume-Trap (Both High)</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Starter+ 15.1% · Bust 64%</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Jaden Ivey, Tony Wroten, Austin Rivers</div>
+            </div>
+            <div className="p-2 rounded" style={{background:"#451a03",border:"1px solid #7c2d12"}}>
+              <div className="text-xs font-bold" style={{color:"#fdba74"}}>Pullup-3 Volume (Low ATR, High TP)</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Starter+ 15.8% · Bust 59%</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Carsen Edwards, Dwayne Bacon</div>
+            </div>
+            <div className="p-2 rounded" style={{background:"#14532d",border:"1px solid #166534"}}>
+              <div className="text-xs font-bold" style={{color:"#86efac"}}>Rim-Workhorse (High ATR, Low TP)</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Starter+ 34.8% · Bust 38%</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">SGA, Kawhi, Brunson, Tatum (college)</div>
+            </div>
+            <div className="p-2 rounded" style={{background:"#1f2937",border:"1px solid #374151"}}>
+              <div className="text-xs font-bold" style={{color:"#9ca3af"}}>Role-Floor (Both Low)</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Starter+ 18.7% · Bust 60%</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Trey Murphy III, Duncan Robinson</div>
+            </div>
+          </div>
+          <p className="text-xs text-gray-400 leading-relaxed">
+            Reading: Wings who concentrate their self-creation at the rim — without large pullup-3 volume —
+            have nearly double the Starter+ rate of any other cluster. NCAA pullup-3 volume is historically
+            a bust marker: development of NBA pullup range happens after the draft. High-volume two-zone wings
+            ("Volume-Trap") show the lowest Starter+ rate of any wing cluster.
+          </p>
+        </div>
+
+        {/* BIG CLUSTER */}
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-100 mb-2">Big: ATR × Mid-Range (n=92)</div>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <div className="p-2 rounded" style={{background:"#14532d",border:"1px solid #166534"}}>
+              <div className="text-xs font-bold" style={{color:"#86efac"}}>Two-Way Star-Big (ATR + Mid)</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Starter+ 42.6% · Star+ 14.6%</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Anthony Davis, Karl-Anthony Towns</div>
+            </div>
+            <div className="p-2 rounded" style={{background:"#1e3a5f",border:"1px solid #1e40af"}}>
+              <div className="text-xs font-bold" style={{color:"#93c5fd"}}>Rim-Power Big (ATR only)</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Starter+ 38.0%</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Jarrett Allen, Domantas Sabonis</div>
+            </div>
+            <div className="p-2 rounded" style={{background:"#451a03",border:"1px solid #7c2d12"}}>
+              <div className="text-xs font-bold" style={{color:"#fdba74"}}>Mid-Range Big (Mid only)</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Starter+ 36.4%</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">DeMarcus Cousins, Sabonis</div>
+            </div>
+            <div className="p-2 rounded" style={{background:"#1f2937",border:"1px solid #374151"}}>
+              <div className="text-xs font-bold" style={{color:"#9ca3af"}}>Catch-Big Role-Floor</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Starter+ 16.7% (but 41.2% in Below-Composite tier)</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Steven Adams, Zach Collins, Joel Embiid</div>
+            </div>
+          </div>
+          <p className="text-xs text-gray-400 leading-relaxed">
+            Reading: Rim creation (+25.9pp) is the strongest single position-zone signal in the entire framework.
+            Above-median rim self-makes more than doubles Starter+ rate for bigs.
+            Important false-negative: the Catch-Big Role-Floor cluster includes Joel Embiid — bigs with low NCAA self-creation
+            but elite efficiency and defense can outperform the framework. Read this signal alongside finishing
+            efficiency, defensive metrics, and anthro.
+          </p>
+        </div>
+
+        {/* PLAYMAKER CLUSTER */}
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-100 mb-2">Playmaker: ATR × Pullup-3 (n=92)</div>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <div className="p-2 rounded" style={{background:"#14532d",border:"1px solid #166534"}}>
+              <div className="text-xs font-bold" style={{color:"#86efac"}}>Star-PG (Both High)</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Starter+ 47% · Star+ 17%</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Damian Lillard, Trae Young, Jalen Brunson</div>
+            </div>
+            <div className="p-2 rounded" style={{background:"#14532d",border:"1px solid #166534"}}>
+              <div className="text-xs font-bold" style={{color:"#86efac"}}>Connector PG (Both Low)</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Starter+ 45% · Role 27%</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Tyrese Haliburton, Matthew Dellavedova</div>
+            </div>
+            <div className="p-2 rounded" style={{background:"#451a03",border:"1px solid #7c2d12"}}>
+              <div className="text-xs font-bold" style={{color:"#fdba74"}}>Pullup PG (Low ATR, High TP)</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Starter+ 27.3%</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Lonzo Ball, Davion Mitchell</div>
+            </div>
+            <div className="p-2 rounded" style={{background:"#1f2937",border:"1px solid #374151"}}>
+              <div className="text-xs font-bold" style={{color:"#9ca3af"}}>Iso-Heavy PG (High ATR, Low TP)</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Starter+ 32%</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Kemba Walker, Kyrie Irving</div>
+            </div>
+          </div>
+          <p className="text-xs text-gray-400 leading-relaxed">
+            Reading: Playmakers diverge — Star-PG and Connector-PG both reach Starter+ above 45%, but for opposite reasons.
+            Star-PGs are scoring threats with both rim and pullup volume; Connector-PGs win on vision and team play
+            without dominating any shot zone. Pullup-only PGs are the riskiest cluster (Lonzo Ball pattern).
+          </p>
+        </div>
+
+        {/* METHODOLOGY FOOTNOTE */}
+        <div className="pt-3 mt-3" style={{borderTop:"1px solid #1f2937"}}>
+          <div className="text-xs font-semibold text-gray-300 mb-1">Methodology notes</div>
+          <ul className="text-[11px] text-gray-500 leading-relaxed list-disc pl-4 space-y-1">
+            <li>Source: BartTorvik aggregated PBP player-stat arrays per season (2008-2026), zone breakdown: rim, mid, three, dunk.</li>
+            <li>ATR convention: rim and dunks are merged into one At-The-Rim zone (BartTorvik standard).</li>
+            <li>Sample filter: minimum 100 total FGA per player-season to exclude small-sample noise.</li>
+            <li>NBA outcome: peak Wins Added (peak_wa, a three-season rolling peak from xRAPM-based modeling).</li>
+            <li>Tier bins: Star+ = top 10% peak_wa, Starter+ = top 25%, Role = 25-50%, Bust/Bench = below median.</li>
+            <li>Cluster thresholds: position-specific zone-volume medians, not global medians.</li>
+            <li>Limitations: self-creation captures shot generation but not finishing efficiency or defense; it under-predicts
+                NBA outcomes for off-ball-catch scorers (e.g. Embiid as a Below-SC big who became a Star+ NBA player).</li>
+          </ul>
+        </div>
+      </div>
+
+      {/* Tobias 2026-06-03 v9: Mind Framework Research section */}
+      <div className="rounded-xl p-4 text-sm text-gray-300 leading-relaxed"
+           style={{background:"#0d1117",border:"1px solid #1f2937", marginTop:"1.25rem"}}>
+        <div className="text-base font-semibold text-gray-100 mb-2">Mind Framework</div>
+        <p className="text-sm text-gray-300 leading-relaxed mb-3">
+          The Mind tab measures behavioural patterns under pressure derived from PBP event sequences:
+          clutch shooting deltas, late-clock efficiency, response to adverse streaks (Aggressor / Overdriver /
+          Hothead / Passive z-scores), half-to-half stamina drift, and bounceback eFG after negative runs.
+          All metrics come from BartTorvik aggregated PBP arrays, 2017-18 through 2025-26.
+        </p>
+        <p className="text-sm text-gray-300 leading-relaxed mb-3">
+          Historical validation against NBA peak Wins Added (n=236, draft classes 2018-2022, minimum 200
+          NCAA actions): univariate Pearson correlations are weak (|r| &lt; 0.10 overall). Mind metrics on
+          their own do NOT predict NBA stardom. Several future NBA stars score below-median on the
+          composite. Use these as behavioural reference, not as a projection.
+        </p>
+
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-100 mb-2">Position-specific signals where Mind has some signal</div>
+          <div className="grid grid-cols-1 gap-2 mb-2">
+            <div className="p-2 rounded" style={{background:"#14532d",border:"1px solid #166534"}}>
+              <div className="text-xs font-bold" style={{color:"#86efac"}}>Playmaker — Below-composite cluster</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Star+ rate 44.4% (n=9) vs 0% in Above-cluster</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Trae Young, Jalen Brunson, Tyrese Haliburton, Ja Morant all sit here</div>
+            </div>
+            <div className="p-2 rounded" style={{background:"#1e3a5f",border:"1px solid #1e40af"}}>
+              <div className="text-xs font-bold" style={{color:"#93c5fd"}}>Big — Below-composite cluster</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Star+ rate 18.2% (n=11) vs 0% in Above-cluster</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Stamina-low + non-hothead bigs translate better (Mobley pattern)</div>
+            </div>
+            <div className="p-2 rounded" style={{background:"#451a03",border:"1px solid #7c2d12"}}>
+              <div className="text-xs font-bold" style={{color:"#fdba74"}}>Wing — Above-composite cluster</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Star+ rate 13.9% (n=36) vs 7-8% in Below/Low</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Mild positive signal for wings; weakest position signal overall</div>
+            </div>
+          </div>
+          <p className="text-xs text-gray-400 leading-relaxed">
+            Reading: For Playmakers and Bigs, scoring <em>below</em> the median on the mind composite is
+            paradoxically a stronger NBA outcome predictor than scoring above. The composite likely captures
+            &quot;college-stage effort&quot; that correlates inversely with effortless dominance — top NBA
+            talents face less adverse pressure in NCAA, so their mind indices read more passively. Wings show
+            a small positive signal in the above-median bucket but the difference is modest.
+          </p>
+        </div>
+
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-100 mb-2">Where Mind succeeds: bust filtering</div>
+          <p className="text-xs text-gray-400 leading-relaxed mb-2">
+            The strongest Mind use case is identifying clear NCAA bust patterns. Bottom-quartile composite
+            players (low aggressor, high passive, high stamina effort) cluster heavily on the NBA bust side:
+          </p>
+          <p className="text-[11px] text-gray-500 leading-relaxed">
+            Nathan Knight, DaQuan Jeffries, Jericho Sims, Jaylen Hoard, Sam Merrill, Terry Taylor,
+            Carsen Edwards, Justin Jackson, Omari Spellman — most have negative NBA peak Wins Added.
+          </p>
+        </div>
+
+        <div className="pt-3 mt-3" style={{borderTop:"1px solid #1f2937"}}>
+          <div className="text-xs font-semibold text-gray-300 mb-1">Methodology notes</div>
+          <ul className="text-[11px] text-gray-500 leading-relaxed list-disc pl-4 space-y-1">
+            <li>Source: BartTorvik PBP-derived event sequences, 2017-18 through 2025-26 (9 seasons).</li>
+            <li>Sample: 236 NCAA→NBA players (draft classes 2018-2022, minimum 200 NCAA actions).</li>
+            <li>NBA outcome: peak Wins Added (peak_wa, three-season rolling peak from xRAPM-based modeling).</li>
+            <li>Composite formula: z(aggressor_idx) − z(passive_idx) − 0.5·z(stamina_idx), stratified by position.</li>
+            <li>Star+ definition: peak_wa &gt;= 11.6 (top 10% of historical cohort).</li>
+            <li>Honest limit: composite has only one historical Star+ &quot;hit&quot; (Devin Harris 2018) and many Star+ misses.</li>
+            <li>Best use: bust filtering, behavioural fingerprint, position-comparative reference — not stardom prediction.</li>
+          </ul>
+        </div>
+      </div>
+
+      {/* Tobias 2026-06-03 v16: Badges + Pillars Frameworks */}
+      <div className="rounded-xl p-4 text-sm text-gray-300 leading-relaxed"
+           style={{background:"#0d1117",border:"1px solid #1f2937", marginTop:"1.25rem"}}>
+        <div className="text-base font-semibold text-gray-100 mb-2">Badges Framework</div>
+        <p className="text-sm text-gray-300 leading-relaxed mb-3">
+          Skill Badges flag distinctive statistical patterns in a prospect's profile. Green badges mark strengths,
+          Yellow badges flag swing skills with breakout potential, Red badges signal historical bust patterns.
+          Below: how each badge holds up against NBA outcomes for the n=797 NCAA→NBA cohort (drafts 2010-2022).
+        </p>
+
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-100 mb-2">Single-badge Star+ rate ranking</div>
+          <p className="text-xs text-gray-400 leading-relaxed mb-2">
+            Base Star+ rate in cohort: 10.0%. Numbers below show Star+ lift over base, plus Bust rate reduction.
+          </p>
+          <div className="grid grid-cols-1 gap-1.5 text-[11px]">
+            <div className="grid grid-cols-5 gap-2 text-gray-300 font-semibold border-b border-gray-700 pb-1">
+              <span>Badge</span><span className="text-right">n</span><span className="text-right">Star+%</span><span className="text-right">Bust%</span><span className="text-right">Lift Star+</span>
+            </div>
+            <div className="grid grid-cols-5 gap-2"><span className="text-gray-200">Swiss Army Knife</span><span className="text-right">63</span><span className="text-right text-green-400">20.6%</span><span className="text-right">33.3%</span><span className="text-right text-green-400">+10.6pp ★</span></div>
+            <div className="grid grid-cols-5 gap-2"><span className="text-gray-200">Rim Protector</span><span className="text-right">98</span><span className="text-right text-green-400">17.3%</span><span className="text-right text-green-400">22.4%</span><span className="text-right text-green-400">+7.3pp ★</span></div>
+            <div className="grid grid-cols-5 gap-2"><span className="text-gray-200">High Feel Athlete</span><span className="text-right">158</span><span className="text-right text-green-400">15.8%</span><span className="text-right">36.1%</span><span className="text-right text-green-400">+5.8pp</span></div>
+            <div className="grid grid-cols-5 gap-2"><span className="text-gray-200">Two-Way Wing</span><span className="text-right">43</span><span className="text-right text-green-400">16.3%</span><span className="text-right text-red-400">51.2%</span><span className="text-right text-amber-400">+6.2pp polarising</span></div>
+            <div className="grid grid-cols-5 gap-2"><span className="text-gray-200">Stocks Machine</span><span className="text-right">198</span><span className="text-right">13.1%</span><span className="text-right">33.8%</span><span className="text-right">+3.1pp</span></div>
+            <div className="grid grid-cols-5 gap-2"><span className="text-gray-200">Self-Creator</span><span className="text-right">327</span><span className="text-right">11.3%</span><span className="text-right">44.0%</span><span className="text-right">+1.3pp (weak)</span></div>
+            <div className="grid grid-cols-5 gap-2"><span className="text-gray-200">Elite Shooting</span><span className="text-right">114</span><span className="text-right">9.6%</span><span className="text-right">47.4%</span><span className="text-right text-amber-400">-0.4pp (neutral)</span></div>
+            <div className="grid grid-cols-5 gap-2"><span className="text-gray-200">Young for Class</span><span className="text-right">35</span><span className="text-right text-red-400">2.9%</span><span className="text-right text-red-400">60.0%</span><span className="text-right text-red-400">-7.2pp (ANTI-STAR)</span></div>
+          </div>
+        </div>
+
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-100 mb-2">Multi-badge compositional effect</div>
+          <p className="text-xs text-gray-400 leading-relaxed mb-2">
+            The strongest signal is total green badge count. Six or more green badges historically yields 22%+ Star+ rate, eight badges 43%.
+          </p>
+          <div className="grid grid-cols-1 gap-1 text-[11px] text-gray-400">
+            <div className="grid grid-cols-4 gap-2 text-gray-300 font-semibold border-b border-gray-700 pb-1">
+              <span>Green badges</span><span className="text-right">n</span><span className="text-right">Star+%</span><span className="text-right">Bust%</span>
+            </div>
+            <div className="grid grid-cols-4 gap-2"><span>0-1</span><span className="text-right">390</span><span className="text-right">8.0%</span><span className="text-right">55%</span></div>
+            <div className="grid grid-cols-4 gap-2"><span>2-3</span><span className="text-right">267</span><span className="text-right">9.0%</span><span className="text-right">43%</span></div>
+            <div className="grid grid-cols-4 gap-2"><span>4-5</span><span className="text-right">94</span><span className="text-right">11.7%</span><span className="text-right">31%</span></div>
+            <div className="grid grid-cols-4 gap-2"><span className="text-gray-200">6-7</span><span className="text-right">39</span><span className="text-right text-green-400">23.1%</span><span className="text-right text-green-400">28%</span></div>
+            <div className="grid grid-cols-4 gap-2"><span className="text-gray-200">8</span><span className="text-right">7</span><span className="text-right text-green-400">42.9%</span><span className="text-right">29%</span></div>
+          </div>
+        </div>
+
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-100 mb-2">Top 2-badge combinations</div>
+          <p className="text-xs text-gray-400 leading-relaxed mb-2">
+            Swiss Army Knife combined with a defense-oriented badge is the most reliable Star+ pattern.
+          </p>
+          <ul className="text-[11px] text-gray-400 list-disc pl-4 space-y-0.5">
+            <li>Swiss Army Knife + Two-Way Wing — 33.3% Star+ (n=15)</li>
+            <li>Stocks Machine + Two-Way Wing — 33.3% (n=12)</li>
+            <li>Rim Protector + Swiss Army Knife — 30.8% (n=13)</li>
+            <li>Magnetic Hands + Rim Protector — 30.0% (n=10)</li>
+            <li>Stocks Machine + Swiss Army Knife — 29.4% (n=34, largest sample)</li>
+            <li>Good Defensive Baseline + Swiss Army Knife — 26.1% (n=46)</li>
+          </ul>
+        </div>
+
+        <div className="pt-3 mt-3" style={{borderTop:"1px solid #1f2937"}}>
+          <div className="text-xs font-semibold text-gray-300 mb-1">Honest limitations</div>
+          <ul className="text-[11px] text-gray-500 leading-relaxed list-disc pl-4 space-y-1">
+            <li>Young for Class is empirically an ANTI-star marker (-7.2pp Star+, +13.5pp Bust). The framing as "more runway" is not supported by historical outcomes.</li>
+            <li>Self-Creator badge triggers for 327 historical players but lifts Star+ rate by only 1.3pp — too liberal.</li>
+            <li>Old for Class red flag triggers for 454 historical players (most of cohort) but lifts Bust rate by only 1.9pp — too liberal.</li>
+            <li>Red flags overall are weak Bust predictors (max +6.8pp lift). System has stronger Star+ identification than Bust detection.</li>
+            <li>Multi-major-conference seniors with 6+ badges can be false positives (Gary Clark, Sterling Brown pattern).</li>
+          </ul>
+        </div>
+      </div>
+
+      <div className="rounded-xl p-4 text-sm text-gray-300 leading-relaxed"
+           style={{background:"#0d1117",border:"1px solid #1f2937", marginTop:"1.25rem"}}>
+        <div className="text-base font-semibold text-gray-100 mb-2">Pillars Framework</div>
+        <p className="text-sm text-gray-300 leading-relaxed mb-3">
+          The five Pillars (IQ &amp; Feel, Shooting, Defense, Athleticism, Box Creation) are position-adjusted percentile scores
+          on a 0-100 scale, derived from college statistics. Validation against n=797 NBA outcomes shows that single-pillar
+          scores are weak predictors alone, but position-specific thresholds and multi-pillar combinations carry meaningful signal.
+        </p>
+
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-100 mb-2">Position-specific Star+ markers</div>
+          <p className="text-xs text-gray-400 leading-relaxed mb-2">
+            Each position has one Pillar that strongly differentiates Stars from Busts. The single right pillar at the right position
+            outperforms generic multi-pillar criteria.
+          </p>
+          <div className="grid grid-cols-1 gap-2 mb-2">
+            <div className="p-2 rounded" style={{background:"#14532d",border:"1px solid #166534"}}>
+              <div className="text-xs font-bold" style={{color:"#86efac"}}>Playmaker — Athleticism ≥ 75</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">24.4% Star+ rate (vs PG base 16.1%, lift +8.3pp)</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Damian Lillard, Kemba Walker, John Wall, Ja Morant, De'Aaron Fox, Haliburton, Devin Harris all cleared this</div>
+            </div>
+            <div className="p-2 rounded" style={{background:"#14532d",border:"1px solid #166534"}}>
+              <div className="text-xs font-bold" style={{color:"#86efac"}}>Wing — IQ ≥ 75</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">13.6% Star+ rate (vs Wing base 7.9%, lift +5.7pp)</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Kawhi, Draymond, Anthony Edwards, Donovan Mitchell, Franz Wagner, Pascal Siakam, Mikal Bridges all cleared this</div>
+            </div>
+            <div className="p-2 rounded" style={{background:"#1e3a5f",border:"1px solid #1e40af"}}>
+              <div className="text-xs font-bold" style={{color:"#93c5fd"}}>Big — Defense ≥ 75 AND Athleticism ≥ 70</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">15.6% Star+ rate (vs Big base 13.4%, lift +2.2pp — weaker but stable)</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">Embiid, Anthony Davis, KAT, Steven Adams, Walker Kessler, Wendell Carter Jr. all cleared this</div>
+            </div>
+          </div>
+          <p className="text-xs text-gray-400 leading-relaxed">
+            Counter-intuitive: at the PG and Big positions, IQ is a NEGATIVE Star+ marker (-2.3pp for PG, -7.0pp for Big). High-IQ
+            prospects at these positions tend to be hype-driven and historically bust at higher rates. Only Wings show a positive IQ-to-Star linkage.
+          </p>
+        </div>
+
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-100 mb-2">Multi-pillar compositional effect</div>
+          <p className="text-xs text-gray-400 leading-relaxed mb-2">
+            Number of Pillars at or above 75 (top quartile). Four-pillar prospects historically convert to Star+ at 3× the base rate.
+          </p>
+          <div className="grid grid-cols-1 gap-1 text-[11px] text-gray-400">
+            <div className="grid grid-cols-4 gap-2 text-gray-300 font-semibold border-b border-gray-700 pb-1">
+              <span>Pillars ≥75</span><span className="text-right">n</span><span className="text-right">Star+%</span><span className="text-right">Bust%</span>
+            </div>
+            <div className="grid grid-cols-4 gap-2"><span>0</span><span className="text-right">170</span><span className="text-right">11.8%</span><span className="text-right">49%</span></div>
+            <div className="grid grid-cols-4 gap-2"><span className="text-amber-400">1</span><span className="text-right">282</span><span className="text-right text-red-400">6.4%</span><span className="text-right text-red-400">54%</span></div>
+            <div className="grid grid-cols-4 gap-2"><span>2</span><span className="text-right">227</span><span className="text-right">9.3%</span><span className="text-right">41%</span></div>
+            <div className="grid grid-cols-4 gap-2"><span>3</span><span className="text-right">91</span><span className="text-right">14.3%</span><span className="text-right">37%</span></div>
+            <div className="grid grid-cols-4 gap-2"><span className="text-gray-200">4</span><span className="text-right">26</span><span className="text-right text-green-400">30.8%</span><span className="text-right">35%</span></div>
+          </div>
+          <p className="text-xs text-gray-400 leading-relaxed mt-2">
+            Note: 1-pillar specialists Star+ rate is actually LOWER than 0-pillar prospects. Single-trick-pony profiles carry hidden risk —
+            versatile mid-range prospects often translate better than narrow elite ones.
+          </p>
+        </div>
+
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-100 mb-2">Bust-detection: low-pillar combos</div>
+          <ul className="text-[11px] text-gray-400 list-disc pl-4 space-y-0.5">
+            <li>Low Shoot + Low Athleticism (both ≤25) — 54.9% Bust rate (n=82, base 46.5%)</li>
+            <li>Low IQ + Low Shoot — 54.1% Bust (n=85)</li>
+            <li>Low Shoot + Low Defense — 53.3% Bust (n=75)</li>
+            <li>Low IQ + Low Box Creation — 51.6% Bust (n=93)</li>
+          </ul>
+          <p className="text-xs text-gray-400 leading-relaxed mt-2">
+            Pillars are stronger at Star identification than Bust prediction. Max Bust-lift from low-pillar combinations is ~8pp over base,
+            while top Star+ predictors lift 20pp+ over base.
+          </p>
+        </div>
+
+        <div className="pt-3 mt-3" style={{borderTop:"1px solid #1f2937"}}>
+          <div className="text-xs font-semibold text-gray-300 mb-1">Methodology notes</div>
+          <ul className="text-[11px] text-gray-500 leading-relaxed list-disc pl-4 space-y-1">
+            <li>Cohort: n=797 NCAA→NBA players, draft classes 2010-2022.</li>
+            <li>Pillar values are position-adjusted percentiles (0-100) within era-aligned NCAA cohort.</li>
+            <li>NBA outcome: peak Wins Added (3-season rolling peak from xRAPM-based modeling).</li>
+            <li>Star+ threshold: top 10% peak Wins Added. Bust threshold: peak Wins Added &lt; 0.</li>
+            <li>Box Creation Pillar was recalibrated 2026-06-03 to incorporate PBP-based self-creation share (v2 self-adjusted formula).</li>
+            <li>Univariate Pearson r values for individual pillars are all modest (|r| &lt; 0.13). Strength comes from position-specific thresholds and multi-pillar combinations.</li>
+          </ul>
+        </div>
+      </div>
+
+      {/* Tobias 2026-06-03 v10: Combined Insights Research section */}
+      <div className="rounded-xl p-4 text-sm text-gray-300 leading-relaxed"
+           style={{background:"#0d1117",border:"1px solid #1f2937", marginTop:"1.25rem"}}>
+        <div className="text-base font-semibold text-gray-100 mb-2">Combined Insights — Usage Reaction &amp; Cross-Signal Bust Markers</div>
+        <p className="text-sm text-gray-300 leading-relaxed mb-3">
+          This section consolidates the strongest cross-signal patterns found in the 2026-06-03 validation pass.
+          Two threads: (1) Usage Reaction metrics — how a player's shot volume shifts in clutch and how their assist-rate
+          relates to their usage rate; (2) combined bust markers — what happens when Self-Creation, Mind, and Stamina
+          flags align on the same player.
+        </p>
+
+        {/* USAGE REACTION */}
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-100 mb-2">Usage Reaction signals</div>
+          <p className="text-xs text-gray-400 leading-relaxed mb-3">
+            Two derived signals that turn out stronger than most individual Mind metrics:
+          </p>
+          <div className="grid grid-cols-1 gap-2 mb-3">
+            <div className="p-2 rounded" style={{background:"#1e3a5f",border:"1px solid #1e40af"}}>
+              <div className="text-xs font-bold" style={{color:"#93c5fd"}}>Clutch Usage Shift = clutch_fga / normal_fga</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Wing Pearson r = +0.126, Big r = +0.170 vs NBA peak Wins Added (n=236)</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">
+                Wing top-quartile clutch shift: 16.3% Star+ rate vs 4.7% bottom-quartile (+11.6pp).
+                Big top-quartile: 10.0% Star+ vs 0.0% bottom-quartile.
+              </div>
+              <div className="text-[11px] text-gray-500 mt-0.5">
+                Reading: players whose volume rises disproportionately in clutch moments win more NBA value.
+                The behavioural signature of taking the moment when it counts.
+              </div>
+            </div>
+            <div className="p-2 rounded" style={{background:"#14532d",border:"1px solid #166534"}}>
+              <div className="text-xs font-bold" style={{color:"#86efac"}}>AST_p / USG ratio (Passer-Scorer Profile)</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Wing Pearson r = +0.262 vs peak Wins Added — strongest single signal in the Mind+Profile family</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">
+                Wings whose assist percentage is high relative to their usage rate consistently outperform
+                pure volume-scorers in NBA outcomes.
+              </div>
+              <div className="text-[11px] text-gray-500 mt-0.5">
+                Combined reading: the SGA/Brunson archetype — passer in flow, scorer in clutch.
+                Wings who only score and never pass are bust-prone even with elite volume.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* COMBINED BUST MARKERS */}
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-100 mb-2">Combined bust markers — honest results</div>
+          <p className="text-xs text-gray-400 leading-relaxed mb-2">
+            Three independent flags applied to historical drafts 2018-2022 (n=231 NCAA→NBA with full SC + Mind data):
+          </p>
+          <ul className="text-[11px] text-gray-500 leading-relaxed list-disc pl-4 mb-2 space-y-1">
+            <li><span className="text-gray-300">SC bust flag</span>: Self-Creation composite in bottom quartile (Volume-Trap / Pullup-3-Only / Mid-only-Big clusters).</li>
+            <li><span className="text-gray-300">Mind bust flag</span>: Mind composite in bottom quartile (low aggressor + high passive + high stamina drift).</li>
+            <li><span className="text-gray-300">Stamina flag</span>: stamina_idx &gt; 1.10 (more adverse events in 2nd half).</li>
+          </ul>
+          <div className="text-xs text-gray-300 mb-2">Historical bust-rate by flag count:</div>
+          <div className="grid grid-cols-1 gap-1 mb-2 text-[11px]">
+            <div className="text-gray-400"><span style={{color:"#cbd5e1"}}>0 flags</span> &middot; n=116 &middot; bust rate <strong>43.1%</strong> (base rate)</div>
+            <div className="text-gray-400"><span style={{color:"#cbd5e1"}}>1 flag</span> &middot; n=71 &middot; bust rate <strong>54.9%</strong></div>
+            <div className="text-gray-400"><span style={{color:"#cbd5e1"}}>2 flags</span> &middot; n=38 &middot; bust rate <strong>57.9%</strong> (+15pp over base)</div>
+            <div className="text-gray-400"><span style={{color:"#cbd5e1"}}>3 flags</span> &middot; n=6 &middot; bust rate 50.0% (sample too small)</div>
+          </div>
+          <p className="text-xs text-gray-400 leading-relaxed">
+            Reading: naive flag-stacking is honest but not magical. Two flags raise bust probability by ~15 percentage
+            points above the 43% base rate. The components are correlated, so additive scoring overestimates the marginal
+            contribution of each additional flag. Use as one input, not as a binary verdict.
+          </p>
+        </div>
+
+        {/* POSITION-TIER SYNTHESIS */}
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-100 mb-2">Position-tier synthesis</div>
+          <table className="w-full text-xs" style={{borderCollapse:"collapse"}}>
+            <thead>
+              <tr style={{borderBottom:"1px solid #1f2937"}}>
+                <th className="text-left py-1 px-2 text-gray-300">Position</th>
+                <th className="text-left py-1 px-2 text-gray-300">Star marker</th>
+                <th className="text-left py-1 px-2 text-gray-300">Bust marker</th>
+              </tr>
+            </thead>
+            <tbody className="text-gray-400">
+              <tr style={{borderBottom:"1px solid #1f2937"}}>
+                <td className="py-1 px-2 text-gray-200">Wing</td>
+                <td className="py-1 px-2">High AST/USG + positive clutch volume shift + ATR-Workhorse SC cluster</td>
+                <td className="py-1 px-2">Pullup-3 volume + low AST/USG + Mind bottom-quartile</td>
+              </tr>
+              <tr style={{borderBottom:"1px solid #1f2937"}}>
+                <td className="py-1 px-2 text-gray-200">Big</td>
+                <td className="py-1 px-2">Positive clutch volume shift + Mid-range touch + low stamina drift (effortless)</td>
+                <td className="py-1 px-2">Mid-only without ATR + Mind bottom-quartile</td>
+              </tr>
+              <tr>
+                <td className="py-1 px-2 text-gray-200">Playmaker</td>
+                <td className="py-1 px-2">Below-median Mind composite + Aggressor + ATR+TP SC cluster</td>
+                <td className="py-1 px-2">College mid-range volume + TP-only without ATR</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* METHOD AND LIMITS */}
+        <div className="pt-3 mt-3" style={{borderTop:"1px solid #1f2937"}}>
+          <div className="text-xs font-semibold text-gray-300 mb-1">Method and limits</div>
+          <ul className="text-[11px] text-gray-500 leading-relaxed list-disc pl-4 space-y-1">
+            <li>Cohort: 231-236 NCAA→NBA players, drafts 2018-2022, joined across SC + Mind + Profile data.</li>
+            <li>NBA outcome: peak Wins Added (peak_wa).</li>
+            <li>Star+ = top 10% peak_wa; Bust = peak_wa &lt; 0 (negative impact NBA stint).</li>
+            <li>Sample threshold: minimum 200 NCAA actions for Mind, 100 FGA for SC.</li>
+            <li>Limitations: linear combinations only — non-linear interactions not modeled. Wing AST/USG signal might shrink with multivariate control.</li>
+            <li>Honest framing: these are reference patterns for analysts, not deterministic projections.</li>
+          </ul>
+        </div>
+      </div>
     </div>
   );
 }
@@ -7206,30 +11006,40 @@ function MethodologyTab() {
 
   const sections = [
     {cat:"Added Wins Projection Model",items:["monteCarlo","posClassification"],desc:"The core engine: a two-stage (hurdle) value model. Stage 1 estimates P(NBA) on the FULL prospect pool (~15k NCAA + international players, NBA reached or not) — a calibrated logistic model, ROC-AUC 0.98 on a 2017–2019 holdout. Stage 2 predicts the expected value if he reaches the league — a regularized, fully-explainable ElasticNet trained on 752 NBA careers. The headline = P(NBA) × E[Added Wins | NBA]. Target variable: Added Wins — the best 3-consecutive-season window in the first 8 NBA years, a team-anchored blend of player-isolated on-court impact (xRAPM, 70%) and box production (30%), scaled so a roster's player-wins sum to the team's actual wins-above-replacement (additivity). Trained with a temporal split (≤2016 train, 2017–2019 holdout, no future leakage). Validated: value-model Spearman ρ = 0.41 out-of-sample (vs craftednba.com benchmark 0.373). Output: a single interpretable number plus a full tier-probability distribution. Honest caveat: the number is an EXPECTED value and is deliberately modest — a college profile rarely signals stardom (e.g. SGA looked ordinary at Kentucky), so star upside is shown via the tier distribution, not inflated into the point estimate. A separate high-floor model (P(NBA or EuroLeague-tier), trained on international career outcomes too) gives the downside. Projections for undrafted/fringe players are extrapolations beyond the training distribution."},
-    {cat:"Risk Profile Tab — Draft Range & Risk (NEW)",items:[],desc:"Reframes the projection as a front-office decision: where a player will be drafted vs. where he belongs, plus risk in both directions. (1) MARKET RANGE — the realistic pick range, PROJECTED from an existing consensus mock ranking (a single consensus board, one rank per player). We do not generate a new consensus; we take that rank and map it onto where similarly-ranked players were actually drafted in 2008–2018. The band width therefore reflects how a consensus rank historically translates into a real pick (teams reach, prospects slide) — NOT disagreement between different mock boards. Two players with the same consensus rank get the same band. Out-of-sample on 2019–2025 the actual pick falls inside the predicted p20–p80 band 63% of the time (target ~60%), with Spearman(consensus, pick)=+0.85. (2) MERIT SLOT — where a player belongs on talent in an average draft. Our projected value (Added Wins) is recalibrated onto the realized-Wins-Added scale, then mapped through an isotonic curve E[peak Wins Added | pick] built from mature drafts. Our value predicts realized NBA outcome (peak Wins Added) markedly better than the actual draft order did: Spearman +0.54 vs +0.29. The gap between Merit and Market is the steal/bust signal (e.g. Tyrese Haliburton: market #10, merit #1). (3) TWO RISK AXES, computed from a kernel-weighted empirical distribution of comparable past prospects (similar projected value × archetype affinity): BUST RISK = share of comps who delivered below the value their slot demanded — well-calibrated (predicted 75–100% → 86% actual bust rate; James Wiseman scored 96%); STAR UPSIDE = share who reached All-Star level, blended 70/30 with the archetype's empirical All-Star rate so high-ceiling archetypes get proper credit. (4) ARCHETYPE VALUE — positional value is measured, not assumed: we compute each NBA archetype's realized peak Wins Added distribution from ~1,210 NBA players. Scoring Playmaker (ceiling ~29 WA) and Stretch Rim Protector (~28) carry the highest ceilings; pure rim-runners and role-archetypes cap around starter level. This is why a player's best-case archetype shapes his upside. CAVEATS: market range needs a consensus-board presence (most deep prospects have none); the box-score value model can under-rate raw, young upside; reason-code factors are surfaced from the projection engine and are noisier for international prospects (FIBA signals translate imperfectly)."},
+    {cat:"Risk Profile Tab — Draft Range & Risk (NEW)",items:[],desc:"Reframes the projection as a front-office decision: where a player will be drafted vs. where he belongs, plus risk in both directions. (1) MARKET RANGE — the realistic pick range, PROJECTED from an existing consensus mock ranking (a single consensus board, one rank per player). We do not generate a new consensus; we take that rank and map it onto where similarly-ranked players were actually drafted in 2008–2018. The band width therefore reflects how a consensus rank historically translates into a real pick (teams reach, prospects slide) — NOT disagreement between different mock boards. Two players with the same consensus rank get the same band. Out-of-sample on 2019–2025 the actual pick falls inside the predicted p20–p80 band 63% of the time (target ~60%), with Spearman(consensus, pick)=+0.85. (2) MERIT SLOT — where a player belongs on talent in an average draft. Our projected value (Added Wins) is recalibrated onto the realized-Wins-Added scale, then mapped through an isotonic curve E[peak Wins Added | pick] built from mature drafts. Our value predicts realized NBA outcome (peak Wins Added) markedly better than the actual draft order did: Spearman +0.54 vs +0.29. The gap between Merit and Market is the steal/bust signal (e.g. Tyrese Haliburton: market #10, merit #1). (3) THREE RISK AXES, all computed from the SAME kernel-weighted empirical distribution of comparable past prospects (similar projected value × archetype affinity): BUST RISK = share of comps who delivered below the value their slot demanded — well-calibrated (predicted 75–100% → 86% actual bust rate; James Wiseman scored 96%); STAR UPSIDE = share who reached All-Star level, blended 70/30 with the archetype's empirical All-Star rate so high-ceiling archetypes get proper credit; STEAL PROBABILITY = share of comps who delivered MORE than the value a pick 10 slots HIGHER would demand. So a player projected at market slot 25 with Steal Probability 30% would, in 30% of comparable historical cases, have delivered the realized peak Wins Added of a top-15 pick. Floor at pick 3 for top picks (Steal then = 'plays like a top-3 outcome'). The Steal axis is the symmetric inverse to Bust on the SAME comp-pool — when Bust drops, Steal tends to rise, but the two are NOT mechanically complementary because the 10-slot-higher threshold sits above the slot-expectation, not at it. Both axes share the comp-pool's calibration: a published Steal Probability of 30% means roughly 30% of similar historical prospects actually crossed that bar. (4) ARCHETYPE VALUE — positional value is measured, not assumed: we compute each NBA archetype's realized peak Wins Added distribution from ~1,210 NBA players. Scoring Playmaker (ceiling ~29 WA) and Stretch Rim Protector (~28) carry the highest ceilings; pure rim-runners and role-archetypes cap around starter level. This is why a player's best-case archetype shapes his upside. CAVEATS: market range needs a consensus-board presence (most deep prospects have none); the box-score value model can under-rate raw, young upside; reason-code factors are surfaced from the projection engine and are noisier for international prospects (FIBA signals translate imperfectly)."},
     {cat:"Risk Profile Tab — Projected NBA Role (pre→post, NEW)",items:[],desc:"Answers 'what does this player's TYPE actually become in the NBA, and what is that worth?' (1) NBA-OUTCOME ROLES: every NBA player (1,780, ≥500 peak-window minutes) is classified into the SAME archetype taxonomy as our prospects, but from his realized NBA peak — using the identical role-score formulas and assignment logic as the prospect pipeline, only ranked against NBA peers instead of college peers. So pre-draft type and NBA type share one comparable label set. Each NBA role's value is measured empirically: Scoring Playmaker (lead guard) is most valuable (median ~25 peak Wins Added, 50% All-Star); 'empty' roles (Non-Specialized / Slashing / Defensive Wing) rarely stick (8–14% reach Role-Player value). (2) TRANSITION: across matured drafted classes (≤2020), P(NBA outcome | pre-draft archetype), INCLUDING an honest 'Did Not Stick' (no established ≥500-min role). The same type's outcome depends heavily on talent — an elite-projected Scoring Playmaker sticks 75% / All-Star 38%, a marginal one 6% / 0% ('a scoring guard has to be elite to play'). (3) PER-PROSPECT PROJECTION: outcome distribution = kernel-weighted comparable past prospects (same pre-draft archetype × similar projected value). Output: most-likely NBA role, full outcome distribution with each role's typical value, P(establishes a role) and P(reaches Role-Player value) as the FLOOR, expected Wins Added. Floor calibration is sound (predicted 0–15%→5% actual, 50–100%→86%; James Wiseman projects 14% stick, Wembanyama 100%). CAVEATS: NBA stats lack height → NBA position is box-derived (occasional guard/wing/big misfires); college-tuned role thresholds on NBA percentiles cause rare star misfires (Harden→Defensive Guard via his turnover profile); extreme-talent prospects (Boozer) have few comps (flagged); draft-position confound (early picks get more opportunity)."},
+    {cat:"NBA Role Projections (NEW — Sprint-3.17+)",items:["starCreator"],desc:"A small set of focused, position-aware forecasts answering the three role questions every front office asks: will this prospect become a Creator, an elite Shooter, or an All-Defensive player in the NBA? Each forecast is a calibrated probability on the same scale as the Tier Probabilities (% × 100). All three projections live in their own cards in the Projection tab and share a common methodology so they can be compared side by side. CURRENTLY SHIPPED: Star+ Creator Projection. COMING NEXT: Elite Shooter, All-Defensive Player. SHARED METHODOLOGY: (1) Position-stratified Logistic Regression — separate models for Playmaker / Wing / Big, because the role definitions and signal weights differ structurally (a high-AST guard means something different than a high-AST big). (2) Position-aware target thresholds where the underlying role rate is structurally different — e.g. Star+ Creator-Bigs use USG ≥ 22 / AST ≥ 14 instead of 24 / 18, because Creator-Bigs are mechanically rarer. (3) Isotonic calibration on a held-out 2015-2017 set so predicted probabilities match real observed frequencies (no overconfidence). (4) Bayesian shrinkage per position pulls thin-sample predictions toward the population base rate — k=20 for guards/wings, k=30 for bigs. (5) Triangulated with the Comps Engine v5: 0.50 × Logistic Regression + 0.25 × age-stage cohort baseline + 0.25 × archetype cluster baseline. Three independent views combined. (6) Top-3 SHAP features per prediction expose what drove the score (e.g. 'Usage % (+0.32), Age-adj Production (+0.24), Consensus (+0.18)'). HONEST PERFORMANCE: tested on 2018-2020 prospects (never seen during training). Star+ Creator — Wing Brier 0.047 / AUC 0.90 (world-class), Playmaker AUC 0.74 (solid), Big small validation sample compensated by Bayesian shrinkage. Elite Shooter and All-Defensive will receive the same evaluation when they ship. WHY NO PROSPECT SCORES 95%+: historic base rates are 8-15% per position; a 60% calibrated probability is already a massive lift above the population. Any model showing 95%+ would be overfitting, not signal. These are projections of a SPECIFIC ROLE OUTCOME and complement the existing Tier Probabilities (which forecast value tier independent of role)."},
+    {cat:"Comps Engine v5 — Self-Match Exclusion + Pool Improvements (NEW — Sprint-3.16)",items:[],desc:"Two fundamental engine improvements deployed June 2026. (1) SELF-MATCH EXCLUSION: a player is no longer returned as his own comp. Previously, NBA-careered prospects (Anthony Davis, Jalen Brunson, etc.) appeared as 100% matches against themselves in outcome / cohort / cluster top-outcome lists, because they sat in both the query pool AND the comparison pool. The filter now runs centrally at the output assembly step, so it covers all five comp dimensions (style, skill, physical, trajectory, outcome) and both the Layer 3 (cohort) and Layer 4 (cluster) top-outcome example lists. (2) BETTER POOL COVERAGE: historic NBA stars from the pre-2014 era — Anthony Davis 2012, Andrew Wiggins, Embiid, etc. — were previously filtered out of the comparison pool because their college-era data was flagged 'Insufficient' (pre-PBP era). They are now kept whenever a known NBA peak (peak_pie) is available, regardless of college-data quality. (3) COHORT CACHING: the Layer 3 cohort outcome distribution is computed once per (age × position) bucket instead of per query player, reducing pipeline runtime ~10×. (4) AD VERIFICATION: the diagnostic test case was Anthony Davis 2012 Kentucky. He is now correctly returned as a Block Big with face-valid comps — Walker Kessler, Brandon Clarke, Cole Aldrich, Myles Turner — instead of the previous '(no comps)' state."},
     {cat:"Tier Probabilities — Beta-Binomial from Comp Cohort",items:[],desc:"Replaces the parametric Normal(PPWA, σ) tier mass with a non-parametric posterior built directly from each prospect's kernel-weighted comp cohort (the same cohort used for exp_wa). FOR EACH PROSPECT: count how many of his comp neighbours peaked at each tier (Superstar / All-Star / Starter / Role Player / Replacement / Negative), weighted by Gaussian kernel proximity in projected_war. Smooth those counts toward a fixed league prior with k=8 pseudo-comps: posterior_tier = (k × P_league + count) / (k + Σcounts). The league prior mirrors realistic per-class scarcity (~0.5 Superstar, 3 All-Star, 12 Starter per draft class). WHY: NBA outcomes are right-skewed with heavy tails — a symmetric Normal centred on PPWA misallocates mass. Reading the cohort directly is more honest (no Normal assumption, no hand-tuned σ scaling, no clipping) AND more individual — every prospect's tier distribution reflects HIS specific archetype neighbours, not a generic Gaussian. HEADLINE TIER vs COHORT MODAL — DELIBERATE TENSION: the headline tier is derived from PPWA directly via calibrated cutoffs; the cohort modal can disagree. When Anthony Davis is listed Superstar (PPWA=25) but only 24% of his pre-draft comps actually reached that tier (cohort modal = Role Player at 26%), the gap is REAL signal — it surfaces the historical bust risk the headline number conceals. When Cameron Boozer is listed All-Star (PPWA=15) but 22% of his cohort were Replacement, the cohort flag matches the 'helio-big peaked lower than expected' historical pattern. CAVEATS: small cohorts (eff-N < 10) shrink strongly toward the league prior; the prior itself is calibrated on 2008–2019 NBA outcomes so very recent archetype shifts may not yet show; cohort modal != prediction — it is HISTORY, not destiny."},
     {cat:"Archetype Value Bands (Research — this tab)",items:[],desc:"A draft-strategy research sub-section shown above (Method tab). For each of 16 NBA archetypes we compute the realized peak Wins Added distribution of past players of that type (~1,210 NBA players, draft classes ~2008–2024): floor (25th percentile = downside), median (typical), and ceiling (90th percentile = upside). Displayed as horizontal value bands so you can read draft strategy by player type: highest ceiling = swing-for-upside pick (Scoring Playmaker / Stretch Rim Protector, ceiling ~28–29 WA); highest floor = safest pick (Stretch Rim Protector); highest median = best balanced bet. Each band carries its SAMPLE SIZE (n) as a data-confidence signal — a type observed 374 times (Scoring Wing) is far better understood than one seen 19 times (3-and-D Wing), whose edges are noisier. Rarity is shown for confidence, NOT as a value claim (rare ≠ better). Hover any band (or see the highlighted card for the current player's type) for EXAMPLE NBA PLAYERS grouped by the tier they reached — a concrete sense of the range (note: these are pre-draft archetypes; some players, like Jokic from a pre-draft 'Scoring Wing', evolved into a different NBA role). The same archetype-value numbers also appear in the Roles & Archetypes tab (each archetype's NBA ceiling tier + % reaching Starter+/All-Star+). PRE-DRAFT → NBA TRANSITION: a second view shows, per pre-draft archetype, what those players actually became in the NBA (drafted classes ≤2020) — including an honest 'Did Not Stick' (never established a rotation role). E.g. a pre-draft Scoring Wing most often does not stick or becomes a role-filler; a Stretch Rim Protector usually becomes a Stretch Big / Rim Protector. A talent overlay then splits the same type by projected-value tier: an elite-projected Scoring Playmaker sticks 75% / All-Star 38%, a marginal one 6% / 0% — quantifying 'a scoring guard has to be elite to be worth it'. (Drafted-player population, so it carries a draft-position confound; thin pre-draft types omitted.)"},
     {cat:"International Adjustments",items:[],desc:"International players receive three adjustments: (1) League Strength via empirical bridge-player ratios (2,655 players who played both intl and NBA). Euroleague=1.40, ACB=1.39, BBL=1.18 (NCAA Power=1.0 anchor). (2) Liga-BPM-Scaler: Raw BPM proxy (PER+eDiff) is multiplied by a league-specific scaler (Euroleague ×2.1, ACB ×1.9, NBL ×1.65, etc.) to translate to NCAA-equivalent BPM before feature engineering. (3) Conf-adj post-hoc with translatable-USG-aware caps for strong leagues."},
-    {cat:"The 5 Pillars (DNA Scores)",items:["feel","shootScore","defScore","funcAth","selfCreation","overall"],desc:"Position-adjusted percentile scores (0–100) capturing the fundamental dimensions of prospect evaluation. Each pillar uses era-adjusted percentiles computed against ~34k college + ~9k international players since 2008. Box Creation (Ben Taylor method) measures total offensive creation: Scoring Creation (USG×TS) + Assist Creation (AST%×teammate possessions). Works identically for NCAA and international players."},
+    {cat:"The 5 Pillars (DNA Scores)",items:["feel","shootScore","defScore","funcAth","selfCreation","overall"],desc:"Position-adjusted percentile scores (0–100) capturing the fundamental dimensions of prospect evaluation. Each pillar uses era-adjusted percentiles computed against ~34k college + ~9k international players since 2008. ALL FIVE PILLARS MEASURE CURRENT SKILL — what the prospect actually does now — not projections of future NBA outcomes. NBA outcome forecasts live in the NBA Projections section (Tier Probabilities, Star+ Creator Projection, etc.). For example: the Creation pillar measures Self-Adjusted Box Creation = Self-Created Scoring (USG × TS × Self-Share) + Passing Creation (AST% × clamp(AST/TO,0.5,2.5)/2.5), position-weighted. The separate Star+ Creator Projection answers a different question — will this skill translate into a Star+ Creator role in the NBA — via a calibrated Logistic Regression model."},
     {cat:"Shooting Projection (Diss-M1/M4, Berger 2022)",items:["projNba3p","projNba3pa","projNba3par","touchPrior"],desc:"Two-stage model from the underlying dissertation (Ch. 7). Stage 1: empirical Bayes shrinkage of college 3P% against the NCAA league-wide distribution (α₀, β₀ fitted via method-of-moments from 16,771 NCAA players ≥20 3PA — league median μ₀=34.8%, effective κ=69). Small samples (Boozer 0%/2 attempts, Saraf 0%/2) get pulled toward the league median. Stage 2: beta regression M1 for NBA 3P% translation = FT% + 2PJ% (PBP, NCAA only) + pre-draft 3P% estimate. Coefficients freshly fitted on the resolved holdout (n=675 NCAA RMSE 0.0380, n=392 intl RMSE 0.0367). Intl gets M1-light without 2PJ% — NO imputation for missing PBP. All values data-driven, no hand-tuning."},
     {cat:"Possession Impact (CFFR)",items:["fourFactors"],desc:"Context-Free Four Factor Rating measuring possession efficiency per Dean Oliver's framework. Usage-role adjusted: Primary (USG≥28%), Secondary (≥22%), Finisher (≥15%), Low-Usage (<15%). Each factor (eFG% 40%, TO% 25%, ORB% 20%, FTr 15%) is percentiled WITHIN the player's usage bucket, so a primary scorer with 52% eFG rates correctly against peers, not low-usage finishers."},
+    {cat:"Possession Impact — Position-Aware Weights (NetPV v2)",items:[],desc:"The four-factor weights used in the Net Possession Value composite are no longer the legacy Dean Oliver defaults (40 / 25 / 20 / 15) but derived empirically and then Bayesian-shrunken toward the pool default. The starting point is OLS regression of peak Wins Added on each Four Factor's percentile in the NBA-careered pool (n=892), separately per position group. The raw empirical magnitudes (|coefficient|, normalized to sum 1): Playmakers (R²=0.09, n=180) eFG 35 / TO 16 / ORB 27 / FTr 23 — robust signal, ORB% materially higher than the pool. Bigs (R²=0.01, n=186) eFG 26 / TO 17 / ORB 32 / FTr 26 — directionally sensible but per-factor coefficients sit close to noise. Wings (R²=0.004, n=526) eFG 43 / TO 5 / ORB 17 / FTr 35 — pattern is statistically indistinguishable from random within the four-factor model. Pool default (R²=0.015, n=892) eFG 39 / TO 14 / ORB 20 / FTr 28. To avoid surfacing position-specific noise as if it were signal, the displayed weights are α × empirical + (1-α) × default, with α = R² / (R² + r²_prior) and r²_prior = 0.03. Effective data weight per position: PM α=0.75 (most empirical signal survives), Big α=0.25 (shrinks heavily toward default), Wing α=0.12 (essentially the pool defaults). FINAL WEIGHTS used in the composite: Playmaker eFG 36 / TO 15 / ORB 25 / FTr 24 — the position-specific story (Playmakers weight ORB more than pool) survives intact. Big eFG 36 / TO 14 / ORB 23 / FTr 27 — ORB still nudged above pool, eFG slightly below, but the position-specific deviation softens. Wing eFG 39 / TO 13 / ORB 19 / FTr 28 — essentially identical to pool, which is the honest read of the Wing data. DIRECTION stays classic Dean Oliver for every position — eFG up, low-TO up, ORB up, FTr up = better. We use magnitudes only, not OLS signs, because the raw OLS sign on TO% inverts for several positions: high z_tov (= low raw TO%) correlates with LOW peak Wins Added, but only because low-usage specialists post lower TO% than high-usage initiators within the same usage bucket — a sample artifact, not a basketball signal. Treating TO% as a magnitude-only weight on the classical direction is the cleanest call. The Possession Impact section sub-line tells you which weight set is in use plus the data-weight α; the per-factor tooltip carries the position-specific weight directly. R² of the position-specific regressions remains modest in absolute terms — the Four Factors alone explain a small share of peak-WA variance — so the composite serves its original purpose: a position-fair efficiency snapshot for scout reading, not a stand-alone outcome predictor."},
+    {cat:"Pool & Era Caveats (Honest Framing)",items:[],desc:"Several sections in this tool use NBA-careered pools as the validation anchor — Skill Intersections (n=919), NetPV v2 weights (n=892), Half-Split tier-correlations (n=182), and Trajectory Validation cohorts (n=518). All of these are CONDITIONAL on the player reaching the NBA. So when we say 'players above-average in both ORB% and AST% reached Star+ at 47.7% in the Playmaker pool', that means 47.7% of those who made it to the NBA and shared this pre-draft profile — not 47.7% of all college players. The unconditional Star+ rate from a random pre-draft sample is far lower. Read every NBA-careered cohort number as 'conditional on making it' — that's still useful (the profile correlates with star outcomes among NBA-careered peers) but it doesn't translate to the broader prospect pool without further adjustment. We deliberately don't do that adjustment in the section UI because the conditional rate is the cleaner scout-eye comparison. Era and pace also matter: NCAA pace rose from ~67 to ~70 possessions/game between 2017 and 2025, and 3PA rose meaningfully too, so cross-era pooling for half-split or trajectory metrics quietly favours recent seasons. Where we pool across eras (Half-Split percentiles, Trajectory slopes), the median values are dominated by the more frequent recent seasons. We accept this trade-off because the sample-size lift from pooling beats the era-correction precision we could realistically achieve here. Position classification matters too: the Playmaker / Wing / Big groups use height-based rules (Big ≥84\" unconditional, ≥82\" with non-wing usage profile, ≥80\" with elite shot-blocking; Playmaker high-AST short; Wing everything else), so a 6'10\" stretch forward sits in 'Wing' even if he plays Big in some lineups. Every position-stratified analysis inherits this classification and its edge-case behaviour."},
+    {cat:"Development Tab — Trajectory Validation",items:[],desc:"For each headline stat with a multi-season trajectory (BPM, TS%, USG%), the slope per year is compared to the historical NCAA pool of multi-season players (n=14,281). Each slope is rendered as a value (+0.45 BPM per year, e.g.), a percentile rank vs the pool, and a cohort outcome anchor: 'players in this slope-quartile reached Star+ at X%, Bust at Y%' built from the NBA-careered subset (n=518). HONEST FRAMING: BPM and TS% slopes are weak predictors by themselves — every slope quartile produces Star+ at 11–16% and Bust at 44–54%. A rising BPM curve is a positive signal but not a star differentiator on its own. USG slope carries a moderate signal: top quartile (USG rising +3.4 to +15 points/yr) reaches Star+ at 20.8% vs 12.3% in the bottom quartile, and Bust drops from 54.6% to 40.8%. Players who EXPAND their offensive load over their NCAA career are more often legit lottery-tier prospects than developers who plateau. Section header explicitly says which signal carries weight; each stat row has its own caveat sentence so the reader knows when to push hard on the cohort number and when to treat it as context."},
+    {cat:"Scouting Tab — Skill Intersections",items:[],desc:"Two stat pairs that don't usually go together at the college level — bigs who pass like guards, point guards who block like rim protectors. Being above the position average in BOTH is structurally rare and historically tied to a meaningful peak Wins Added lift. Two pairs are surfaced: Crasher + Distributor (ORB% × AST%) and Two-Way Skill (AST% × BLK%). Per pair, two z-score bars (one per stat) are rendered Four-Factors-style. A status pill at the top reads 'Above-Avg in BOTH', 'Below avg in one', or 'Insufficient data'. The hover tooltip carries the hypothesis in plain English plus historical validators — Jokic · KAT · Blake Griffin · Haliburton · Ja Morant · Draymond Green · Kawhi Leonard for Crasher + Distributor; Joel Embiid · KAT · Paul George · Draymond Green · Klay Thompson · John Wall · Tyrese Haliburton for Two-Way Skill. POOL: 919 NBA-careered players from draft years 2008–2020 with known peak outcome, joined with 224 international stars (Jokic, Doncic, Embiid, Porzingis, Gasol, Ginobili and others) via diacritic-resilient name matching, so the comparison anchor reflects the modern global player pool. METHODOLOGY: each pair is validated three ways — (1) Pearson/Spearman global correlation to confirm the anti-correlated trade-off (Crasher+Distributor r=−0.55, Two-Way Skill r=−0.42); (2) position-stratified above-average lift (z≥0 in both stats vs the position pool); (3) continuous z-score regression peak WA ~ min(z_a, z_b), reporting slope + 95% CI + p-value (Crasher+Distributor +2.03 WA per +1σ, p=0.002; Two-Way Skill +2.88 WA per +1σ, p<0.001). REJECTED PAIRS (listed transparently in the footer): 3PAr × ORB% (Wing dropper signal negative), 3PAr × FTR (sample too small), Rim Frequency × Low TO% (rim-frequency mixes rolling bigs, cutting wings, and actual drivers), Rim Pressure × Low TO% (the 'driving leads to turnovers' assumption doesn't show up in pre-NBA data). HONEST FRAMING: these are scout-eye intersections that historically tie to outcome lift — not deterministic NBA predictors. A player can be above-average in both and still bust; a player can fail both and still star. The section sits under Possession Impact precisely to be read alongside the Four Factors, not as a standalone projection."},
+    {cat:"Stats Lab Section",items:[],desc:"A filterable, sortable lab table over ~7,600 players — current draft classes 2024–26 plus the historical reference pool of NBA-careered players — with 119 columns spanning every section of the player profile. Lets you ask quantitative questions across the board: who has the highest AST per FGA among 2026 Wings? Which Bigs hit the Two-Way Skill threshold? Where do the Star+ Creator projections cluster relative to consensus rank? FILTERS in the sidebar: draft class year, position group (Playmaker / Wing / Big), source (NCAA / international), search-by-name, plus sample-size range filters (min/max games played and minutes per game) to drop low-sample noise. PRESETS for one-click view switching: Default · Shooters Audit · All-Defensive · Skill Intersections · Mind / Resilience · Role Versatility · Historical Validation. COLUMN PICKER groups the 119 columns into ten categories (Identity, Projections, 5 Pillars, Box Stats, Position Percentiles, Role Inference, Four Factors, Skill Intersections, Mind Metrics, Archetype + Badges) — toggle any combination. SORT by any header (null values always sink to the bottom). PAGINATION at 25 / 50 / 100 / 200 rows per page. Cell coloring uses position-stratified z-score gradients for stat columns whose typical range crosses zero, and warm orange gradients for percentile columns. Click any player name to jump straight into their profile. DEFAULT VIEW (Sprint-4.4): BartTorvik-Parity preset preselected, sorted by BPM desc on the current 2026 draft class — mirrors the BartTorvik playerstat landing page so anybody familiar with T-Rank starts on familiar ground. The first 35 columns of the preset cover every standard BartTorvik column (Games, MPG, ORtg, USG%, BPM/OBPM/DBPM, TS%, eFG%, FT%, 3P%, AST%, TO%, ORB%, DRB%, STL%, BLK%, FTr, 3PAr, Rim/Mid FG%, Dunk Rate, PF/40); the last 6 columns layer ProspectTheory's proprietary value (Projected WAR, P(All-Star), Feel/Shooting/Defense/Functional Athleticism pillars) on top. Switch presets to flip into Projection Lens (default Projection-focused view), Shooters Audit, All-Defensive, Skill Intersections, Mind / Resilience, Role Versatility, or Validation (Historic). HEADER TOOLTIPS: hover any column header to see its formula, what it measures, what counts as elite vs role-player. ProspectTheory-proprietary columns get a small 'PT' badge so you can tell standard from custom at a glance. SIDEBAR FILTERS: Class (draft year), Position (Playmaker/Wing/Big), Source (NCAA/INTL), Search, Sample Size (MP and GP ranges), plus Class Year (Fr/So/Jr/Sr/5 — BartTorvik parity) and Conference (multi-select dropdown — BartTorvik parity). ⌬ LINK builds a shareable URL that reproduces the exact view — every filter, sort, column selection, page, and compare-slot is encoded so a teammate opening the link sees the same table you do. ↓ CSV downloads every row currently passing your filters (all pages, with the columns you have visible, in current sort order) — header row plus a UTF-8 BOM so Excel and Sheets read it cleanly. The file name carries the filter context so multiple exports don't collide (e.g. stats_lab_2026_Wing-Big_182rows_20260623.csv). ★ SAVE VIEW stores the current filter+column+sort combination as a named preset in your browser; the preset appears as a cyan chip next to the built-in presets and applies in one click. Saved presets live in localStorage only (browser-local, not synced across devices), and the × button on each chip deletes it."},
     {cat:"Role Inference Matrix",items:[],desc:"14 NBA roles scored as z-scores relative to position peers. Offensive: Scorer, Playmaker, Spacer, Driver, Crasher. Defensive: On-Ball, Switch Potential, Rim Protect, Rebounder. Hybrid: Connector, Helio-Scorer, Event Creator, Zone Pressure, Micro-Spacer. Each role combines 2-4 statistical inputs weighted by NBA translation research. Z≥+2.0 = Elite, ≥+1.0 = Impact, <-1.0 = Liability."},
     {cat:"Archetype Classification",items:[],desc:"18 NBA archetypes assigned by position + dominant role scores. Playmaker archetypes: Scoring Playmaker, Floor General, Spacing Guard, Defensive Guard, Non-Specialized Playmaker. Wing: Initiator Wing, Scoring Wing, 3-and-D, Defensive Wing, Point Forward, Slashing Wing, Non-Specialized Wing. Big: Stretch Big, Stretch Rim Protector, Rim Protector, Short Roll Playmaker, Passing Hub, Glass Cleaner, Scoring Big, Non-Specialized Big. Primary archetype from pipeline, secondary/tertiary from role-score matching within position."},
-    {cat:"Tier Feasibility (vs NBA)",items:[],desc:"Position-specific comparison against NBA tier benchmarks (p25-p75 corridors). For each tier (Replacement through All-Star), core metrics are checked: Wings = TS%+3P%, Playmakers = AST%+TO%, Bigs = BLK%+ORB%. If a core metric exceeds p75 of the target tier, deficiencies in secondary metrics are marked 'Compensated' (yellow) instead of 'Critical Gap' (red)."},
+    {cat:"Tier Feasibility (vs NBA)",items:[],desc:"How does this prospect stack up against the actual pre-draft college numbers of players who reached each NBA tier? Built from the mature draft cohort 2008-2018 (n=353 NBA players with realized peak Wins Added). We grouped them by their realized NBA outcome — Replacement, Role Player, Starter, All-Star — using peak-WA percentile cuts (10/30/60/85). For each (tier × position) we then took the MEDIAN of every pre-draft college stat (BPM, USG%, TS%, AST%, TO%, STL%, BLK%, ORB%, DRB%, AdjOE) and used that as the in-range center. Frontend automatically derives p25 = median × 0.75 and p75 = median × 1.30 around it: above median is green (In-Range), below median is orange (Below Median), below p25 is red (Critical Gap) — or yellow (Compensated) if a position-core metric is elite enough to offset (Wings core = TS% + 3P%; Playmakers core = AST% + TO%; Bigs core = BLK% + ORB%). Thresholds are MONOTONIZED along the tier axis (a higher tier's threshold never sits below a lower tier's; TO% inverse), at the cost of small distortion — pre-draft college stats only weakly separate Starter from All-Star, because the real talent spike happens AFTER the draft via role + minutes + team context. So a player can clear all Starter thresholds and still NOT clear All-Star simply because the Starter and All-Star pre-draft stats overlap. Read this view as a diagnostic — how many tier markers does he hit — not as a forecast."},
     {cat:"Mind Tab — Self-Sufficiency Profile",items:[],desc:"Four sequential questions answered with a final verdict: (1) HOW OFTEN does he create his own shot? — share of made FGs that were unassisted, with position-peer percentile. (2) HOW EFFICIENT when self-creating? — Self-Created eFG% vs. Assisted eFG%, with a Difficulty Premium indicator (positive = better on hard shots). (3) HOW DOES PRESSURE affect efficiency? — three pressure contexts from PBP data: Close Late-Game (win prob 20–80% in 2nd half), Late Shot Clock (≥22 secs into possession), and Clutch Free Throws (last 5 min Half 2 with score-diff ≤5). (4) WHERE does he succeed? — per-zone eFG%/self%/asst% breakdown (Rim/Mid/3pt/Dunk). Verdict combines all four into one of seven profile labels: Self-Sufficient Star, Self-Sufficient Scorer, High Volume / Low Efficiency, Off-Ball Clutch Performer, Off-Ball Beneficiary, Pressure-Sensitive Creator, or Balanced Creator."},
     {cat:"Mind Tab — Mental Resilience (NEW)",items:[],desc:"Quantifies behavioral tendencies after adverse-event streaks from raw play-by-play data. We define an adverse-event streak as ≥3 negative events (missed FG, turnover, foul, missed FT trip) in a player's last 4 actions; we then track how he behaves in his next 4 actions. Five tendency indices, each shown as point-estimate + 95% confidence interval + within-position z-score: (a) Hothead = post-streak foul-rate / baseline; (b) Overdriver = TO-rate change; (c) Engagement (Passive) = action volume change; (d) Shot-Seeking (Aggressor) = FGA-rate change; (e) Bounceback eFG = made/FGA change. Plus a Match-Phase-Drift block: stamina_idx + overdriver_drift + hothead_drift compare 1st-half streaks vs 2nd-half streaks (mental fatigue signal). Bayesian-Shrinkage applied: posterior = (n × raw + 30 × 1.0) / (n + 30) — small samples shrink toward the population mean. CRITICAL CAVEAT: these are quantitative tendencies observed in PBP data, not deterministic claims. ~88-95% of the league has CIs that include 1.0 (= no detectable effect). Trust extreme z-scores (|z|>1.5) and CIs that exclude 1.0. Always verify with film."},
+    {cat:"Mind Tab — First vs Second Half",items:[],desc:"Box-stat split across both halves of the player's NCAA games, garbage time excluded (last 5 min with lead >20, or last 2 min with lead >12). Thirteen rate stats are shown side-by-side as H1 → H2 with the Δ, color-coded relative to the player's position-pool over 9 NCAA seasons (Playmaker n≈8.2k, Wing n≈23.6k, Big n≈3.8k): TS%, eFG%, FG%, FT%, FT rate, possession volume, AST per FGA, STL per FGA, BLK per FGA, TO%, ORB per FGA, DRB per FGA, Points-per-Possession. Rates are normalized by FGA or possessions rather than minutes, so the signal is consistent across seasons regardless of substitution data quality. A view picker at the top of the section toggles between 'NCAA Career' (the default — sum across all the player's eligible seasons, most stable sample) and each individual season. Multi-season players also get a career trajectory mini-chart showing the average peer percentile per season against the 50th-percentile reference, so improvement or regression as the player matures is visible at a glance. SAMPLE-SIZE HANDLING: each half needs at least 30 True Shot Attempts (TSA = FGA + 0.44 × FTA) for a strict pass; smaller samples get a yellow caveat banner and are Bayesian-shrunken toward the position-pool median, reducing false-positive 'concerning fade' readings on noisy data. The shrinkage strength is shown as a badge in the verdict pill when relevant. VERDICT pill turns green ('Late-game riser') when the average peer percentile across the 12 directional stats is ≥65, yellow/red when ≤45, neutral grey in between. Each stat row has a percentile-rank badge ('Top 10%', 'Above-typical', 'Below-typical', 'Bottom 10%') and a hover tooltip with raw Δ, shrunken Δ, position-pool median Δ, and an explanation of which direction is favourable for that stat. CONTEXT: median Δ TS% across NCAA is +3pp — most players IMPROVE in H2 once they've read the defense, so the baseline a player is measured against is a positive lift, not zero. The section is positioned as a scout-eye context tool (extreme tails worth a film review), not a Bust/Star predictor — historical tier-correlations are weak (|r| < 0.10 with peak Wins Added across the NBA-careered sub-sample)."},
     {cat:"Scouting Tab — Game-by-Game Skill Curve",items:[],desc:"Per-game scatter plot of every game the player has on file (multi-season aggregated when available): x-axis = Usage% per game (share of team possessions consumed), y-axis = Individual Offensive Rating per game (= (PTS + 0.5×AST) / Possessions × 100). A LOWESS curve with tricubic weights (Bart-Torvik-style smoothing) is fitted across the full usage range — the shaded ±1 SD band shows the local spread of per-game ORtg at each load. Dot color encodes opponent strength when available (T/M/L tertiles from BartTorvik AdjOE−AdjD per team×season), else a chronological gradient blue→orange. Hover any dot for date, opponent, season, full stat-line. Used to read where the player stops scaling: a flat or rising curve at high USG = he holds up under load (no shrinking from defenses), a downward-bending curve = a soft ceiling on how much he can carry. USG-proxy is approximate (% of team possessions, not the standard NBA-USG with minutes adjustment)."},
     {cat:"Development Tab — In-Season Trajectory (NEW)",items:[],desc:"Multi-stat overlay plot for ANY game-log player: 6 indicators on rolling K-game means (K = max(3, min(7, N/5))) over the season. Stats: Usage% (role expansion), eFG% (efficiency growth), Assists (developing playmaking), 3PT Attempts (expanding shooting range), Stocks = STL+BLK (defensive growth), and Personal Fouls (discipline — falling = good, inverted color). OLS slopes per stat shown as season-scale trends. The single-stat 'Rolling Trend' below uses an alternate game-log source for multi-season players when available."},
     {cat:"Development Tab — Season-by-Season Breakdown",items:[],desc:"Per-season table of all seasons with meaningful playing time (≥8% USG). Columns: Year, USG%, AdjOrtg (BartTorvik opponent-adjusted offensive rating), vs. Peer (delta from cross-sectional peer curve), TS%, AST%, TO%, BPM. Δ markers show year-over-year change. Multi-season improvement is one of the strongest NBA success signals."},
     {cat:"Roles & Archetypes Tab",items:[],desc:"Two-stage role inference. Stage 1 — Role Inference Matrix: 14 NBA roles scored as z-scores relative to position peers. Offensive: Scorer, Playmaker, Spacer, Driver, Crasher. Defensive: On-Ball, Switch Potential, Rim Protect, Rebounder. Hybrid: Connector, Helio-Scorer, Event Creator, Zone Pressure, Micro-Spacer. Each role combines 2-4 statistical inputs weighted by NBA translation research. Z≥+2.0 = Elite, ≥+1.0 = Impact, <-1.0 = Liability. Stage 2 — NBA Archetype Fit: 19 NBA archetypes per position, sorted left→right by empirical rarity (most common to rarest, computed from the actual frequency in 46k player-seasons). The pipeline assigns a primary, secondary, and tertiary archetype based on dominant role scores. Rarity = how strict are the position-specific role thresholds — rare archetypes are objectively harder to find on draft day."},
     {cat:"Body Tab — Anthropometrics + Wingspan/Height Scatter",items:[],desc:"Height (with shoes, +1.25\"-NBA-standard), Weight, Wingspan, and Wingspan Delta (wingspan − height). For Combine-tested players (1.835 NBA players in our database), measurements are sourced directly. For others, we use stats-enriched imputation: a multivariate Ridge regression trained on 1.266 NBA players for Wingspan (R²=0.735, MAE 1.56\") and 528 for Weight (R²=0.614, MAE 11.7 lbs), using player height + position group + box-score stats (BLK%, STL%, ORB%, DRB%, BPM components). Imputed values are flagged with badges. The scatter plot shows 1.835 NBA Combine participants as gray dots colored by position; the selected prospect is overlaid in orange. Use it to find physical comps within a realistic body-type band."},
+    {cat:"Body Tab — Anthro vs. NBA-Tier Comparison",items:[],desc:"Reference markers for height, weight, wingspan, and standing reach grouped by NBA career tier (Replacement / Role Player / Starter / All-Star) × 5-position (PG / SG / SF / PF / C). Tier boundaries are fixed peak-Wins-Added quantiles (Replacement ≤ 0.8, RP 0.8-3.3, Starter 3.3-10.1, All-Star > 10.1) chosen so the buckets describe realized NBA outcomes, not subjective \"Starter\"-vs-\"All-Star\" labels. Within each (tier × position) cell, the marker value is the per-cell MEDIAN from the joined Combine × NBA pool (NBA Combine 2000-2022 inner-joined with the nba_added_wins_peak.csv pool by NFKD-normalized name — n=231 players with all four measurements + peak_wa). The medians are then monotonized along the tier axis so every higher tier is ≥ the previous (small distortion to keep the picture monotone-readable). Three caveats matter for reading these markers correctly: (1) SELECTION-BIAS in the All-Star cell — many All-Star-level prospects (Top-5 picks) skip the NBA Combine entirely, so the Combine-pool All-Stars are a non-random subset; (2) SAMPLE THIN at Role Player and Starter (per-cell n typically 5-13, single-cell minimum n=1 for Starter/C → kept current value as fallback); (3) NON-MONOTONICITY in raw wingspan and standing reach across tiers — in the joined raw data several All-Star cells have LOWER wingspan medians than the Starter cells of the same position, because skill outweighs reach among the absolute outliers (Brunson 75″ wingspan and Trae 75″ wingspan are All-Stars). The monotonization step hides that in the displayed values; the Methods Tab makes it explicit. CONSEQUENCE: treat these markers as DESCRIPTIVE reference (\"where does this prospect's height sit vs. NBA pool of position-X Role Players?\") not as PREDICTIVE thresholds (\"if he hits this number he's an All-Star\"). The recalibration is reproducible via data-pipeline/scripts/recalibrate_anthro_tier_medians.py; the full per-cell n + raw vs monotonized table lives in data-pipeline/data/processed/anthro_tier_medians_recalibrated.json. Re-run this script when the NBA-careered pool gets refreshed (new draft classes mature) — the tier boundaries stay fixed, only the per-cell medians shift."},
+    {cat:"Body Tab — Functional Frame v2 (NBA-Pro architecture)",items:[],desc:"Answers 'does he play bigger than his measured size?' across three anthro dimensions (height, wingspan, weight) × two sides (defensive, offensive) — 6 separate Ridge regressions. ARCHITECTURE: Each model takes its OWN feature set (a player's stat profile) and predicts what anthropometric value an NBA-careered player with THAT stat profile typically had. The Δ (predicted − listed) then quantifies whether his stats look like a bigger or smaller player. POOL: NBA-careered players from college draft years 2008–2020 (n=644 with measured height, 485 with wingspan, 87 with weight). FEATURE SELECTION (Sprint-3.38, June 2026): Originally hand-picked from domain knowledge. Re-audited via NBA-Pro empirical workflow: LassoCV with CV-tuned λ (free feature count, no manual cap), Bootstrap-Stability over 100 resamples (⭐ if ≥80% selection frequency), Permutation Importance cross-check, 5-fold Out-of-Sample R² comparison. Result: 4 of 6 targets switched to empirically-selected feature sets, +0.04 to +0.14 OOS R² improvement; 2 kept (where empirical selection was statistically equivalent). CURRENT FEATURE SETS: DEF Height = BLK%, STL%, DRB%, Rim Protection (R²=0.62, residual SD 2.02\"); DEF Wingspan = STL%, DRB%, BLK% (R²=0.61, kept from v1); DEF Weight = STL%, DRB%, DBPM, Rim Protection (R²=0.52, residual SD 16.22 lbs, directional only); OFF Height = dunks, rim%, mid%, 3P%, ORB%, ff_orb, AST%, FTR, OBPM, Rebounder role (R²=0.68, residual SD 1.88\" — biggest gain); OFF Wingspan = identical LASSO selection to OFF Height (R²=0.62, residual SD 2.26\"); OFF Weight = ORB%, AST% (R²=0.64, residual SD 14.00 lbs, directional only). 95% CONFIDENCE CORRIDOR: shaded band on each FrameBar = ±1.96 × in-sample residual SD. DRIVERS PER DIMENSION: top-3 contributing features per model (capped per-dim so each dim is always represented even when one model dominates), shown grouped under Height / Wingspan / Weight headers. Each driver tile shows the contribution magnitude in the unit of the predicted dimension. Green/+ = stat pushed prediction above pool average; red/− = below. IMPORTANT: drivers explain why the prediction differs from the POOL AVERAGE — they do NOT explain the Δ vs. the player's listed measurement (that's a separate comparison shown in each dim-header). 3D COMP MATCHING: nearest-neighbour search in normalized (height, wingspan, weight) space; defensive and offensive lists are cross-list deduplicated (Sprint-3.37.F) so a single pool player can appear in at most one of the two sides for the same prospect. CONDITIONAL PATTERNS (Sprint-3.31/3.33): aggregate correlation of reach Δ with NBA peak Wins Added is just r=+0.04 across the historic pool (n=861) — so the metric does NOT linearly predict star/bust outcomes. HOWEVER, segmenting by frame size reveals three positive sub-segments: SMALL-GIANT (≤6'5\" + plays bigger defensively) → Star+ rate 25% vs 14–21% baseline (Kemba/VanVleet/Lawson archetype); WING-BIG (6'6–6'8\" + plays much bigger) → Bust rate drops to 19% from Wing-mean 41%, strongest stick signal in the analysis (Clarke/Collins archetype); SKILLED-BIG (≥7'0\" + plays smaller offensively) → Star+ 44% + Stick 64% (Wembanyama/Embiid/Markkanen/Porzingis archetype). EFFECTIVE FRAME (Sprint-3.37.G): when a player has no combine measurement on file (most 2026er prospects), the body tab additionally shows a sentence summarizing the predicted-only inference (\"plays as if he were ~X wingspan / Y lbs\") plus a pool-range scale visualization. POSITION-AWARE VERDICTS (Sprint-3.37.D): the textual style/tone label under each Side card switches vocabulary based on the player's position group (Playmaker, Wing, Big) — so a small Playmaker no longer accidentally gets a \"stretch-Big pattern\" label. USE: style-mapping, comp-matching, extreme-pattern detection. For projection see Tier Probabilities, Star+ Creator, and Added Wins on the Projection tab. WHY NOT A PREDICTOR: with aggregate r=+0.04 the metric carries almost no linear outcome signal — the conditional patterns are the right way to read it."},
     {cat:"Shooting Tab — Diss-M1/M4 (Berger 2022) NBA shooter projection",items:[],desc:"Three-stage model from Berger (2022) Chapter 7, modified for role neutrality. STAGE 1 — Pre-draft 3P% estimate via empirical Bayes shrinkage: p̂ᵢ = (α₀ + 3PMᵢ) / (α₀ + β₀ + 3PAᵢ), with α₀ and β₀ fitted from the NCAA league-wide distribution via method-of-moments (16,771 NCAA players ≥20 3PA → α₀=23.89, β₀=44.67, μ₀=34.8%, κ=69). Small 3PA samples are pulled toward the league median (Boozer 0%/2 attempts → 38.2%). STAGE 2 — M1 for NBA 3P%: logit(NBA 3P%) = β₀ + β₁·FT% + β₂·2PJ% + β₃·3P-Estimate. NCAA n=675 RMSE=0.0380 (beats the dissertation value 0.0559); intl n=383 RMSE=0.0367 (M1-light without 2PJ%, NO imputation for missing PBP). STAGE 3 — M4 for NBA 3PAr (3PA/FGA): logit(NBA 3PAr) = β₀ + β₁·NCAA-3PAr + β₂·2PJ% + β₃·FT% + β₄·3P-Estimate. NCAA n=662 RMSE=0.130, intl n=383 RMSE=0.126. IMPORTANT: the dissertation's original M4 projected 3PAp40 (role-dependent — driven by possessions and minutes). We switched the target to 3PAr (3PA/FGA), a pure shooter signature that's independent of role and playing time. Together 3P% (efficiency) and 3PAr (tendency) describe the shooter completely without any role assumption. ALL values data-driven, no hand-tuning."},
     {cat:"Possession Impact (CFFR)",items:["fourFactors"],desc:"Context-Free Four Factor Rating measuring possession efficiency per Dean Oliver's Four Factors framework. Usage-role adjusted: Primary (USG≥28%), Secondary (≥22%), Finisher (≥15%), Low-Usage (<15%). Each factor (eFG% 40%, TO% 25%, ORB% 20%, FTr 15%) is percentiled WITHIN the player's usage bucket — so a primary scorer with 52% eFG rates against fellow primaries, not against low-usage finishers. Composite: Net Possession Value (0–100). Verdict tiers: Elite Floor Raiser (≥70), Winning Piece (55–70), Role Dependent (45–55), High Maintenance (<45)."},
     {cat:"Comps Tab",items:[],desc:"Two distinct nearest-neighbor comparison engines. Statistical Comps: era-adjusted percentile vectors over 8 dimensions (BPM, USG%, TS%, AST%, STL%, BLK%, 3P%, FT%). Pre-draft seasons only — comparing what these players looked like before the NBA. Similarity rescaled 50–95 within shown pool to differentiate. 'Reached Tier' shows the comp's verified NBA outcome (or v2 model projection for current prospects). Anthropometric Comps: Euclidean distance in inch-space over height/weight/wingspan. Optional sliders allow exploration of how comp matches change with adjusted body measurements (e.g. 'how would this prospect's comps look at +10 lbs?')."},
     {cat:"Position Reclassification",items:[],desc:"Stats-driven position groups (Playmaker / Wing / Big) used throughout the site. Rules (Tobias 2026-05-09 v3): Big = Height ≥84\" unconditional, OR Height ≥82\" with non-wing usage profile (USG<25 AND AST%<15), OR Height ≥80\" with elite shot-blocking (BLK%≥5 AND non-wing usage). Playmaker = AST%≥25 AND Height ≤6'5\", OR AST%≥30 AND Height ≤6'7\". Wing = everything else. Designed to keep tall wings (Bailey-style 6'10\" forwards) classified as Wings rather than misclassified to Big purely by height."},
     {cat:"International Adjustments",items:[],desc:"International players receive three adjustments: (1) League Strength via empirical bridge-player ratios from 2,655 players who played both intl and NBA. Euroleague=1.40, ACB=1.39, BBL=1.18 (NCAA Power=1.0 anchor). (2) League-BPM-Scaler: raw BPM proxy is multiplied by a league-specific scaler (Euroleague ×2.1, ACB ×1.9, NBL ×1.65, etc.) to translate to NCAA-equivalent BPM before feature engineering. (3) Conference-adjusted post-hoc with translatable-USG-aware caps for strong leagues. For Athleticism, an FT-Rate + ORB%-based formula is used in place of dunk rate (which is unavailable for most international players)."},
-    {cat:"Tier Feasibility (vs NBA)",items:[],desc:"Position-specific comparison against NBA tier benchmarks (p25-p75 corridors). For each tier (Replacement through All-Star), core metrics are checked: Wings = TS% + 3P%, Playmakers = AST% + TO%, Bigs = BLK% + ORB%. If a core metric exceeds p75 of the target tier, deficiencies in secondary metrics are marked 'Compensated' (yellow) instead of 'Critical Gap' (red)."},
+    {cat:"Tier Feasibility (vs NBA)",items:[],desc:"How does this prospect stack up against the actual pre-draft college numbers of players who reached each NBA tier? Built from the mature draft cohort 2008-2018 (n=353 NBA players with realized peak Wins Added). We grouped them by their realized NBA outcome - Replacement, Role Player, Starter, All-Star - using peak-WA percentile cuts (10/30/60/85). For each (tier x position) we then took the MEDIAN of every pre-draft college stat (BPM, USG%, TS%, AST%, TO%, STL%, BLK%, ORB%, DRB%, AdjOE) and used that as the in-range center. Frontend automatically derives p25 = median x 0.75 and p75 = median x 1.30 around it: above median is green (In-Range), below median is orange (Below Median), below p25 is red (Critical Gap) - or yellow (Compensated) if a position-core metric is elite enough to offset (Wings core = TS% + 3P%; Playmakers core = AST% + TO%; Bigs core = BLK% + ORB%). Thresholds are MONOTONIZED along the tier axis (a higher tier's threshold never sits below a lower tier's; TO% inverse), at the cost of small distortion - pre-draft college stats only weakly separate Starter from All-Star, because the real talent spike happens AFTER the draft via role + minutes + team context. So a player can clear all Starter thresholds and still NOT clear All-Star simply because the Starter and All-Star pre-draft stats overlap. Read this view as a diagnostic - how many tier markers does he hit - not as a forecast."},
     {cat:"Data Sources & Coverage",items:[],desc:"NCAA Box Stats: BartTorvik (34k+ player-seasons 2008–2026, per-game + advanced + shooting zones — barttorvik.com). NCAA Play-by-Play: ESPN Play-by-Play (event-level data 2017-18 through 2025-26, ~700k player-game-events tracked). International Box Stats: RealGM (9k+ player-seasons across 12 European leagues — realgm.com). NBA Outcomes: NBA Stats API Advanced stats (27 seasons, used for peak Wins-Added computation). Anthropometrics: NBA Draft Combine measurements (NBA.com) + Databallr wingspan dataset. National Team / FIBA: FIBA event statistics for international youth and senior tournaments. All data is processed through our own pipeline — no external services are queried at runtime."},
   ];
   /* ── Pipeline Flow Diagram ── */
@@ -8047,6 +11857,1062 @@ function TierBoardView({ players, onSelect }) {
 
 
 // ═══════════════════════════════════════════════════════════
+// STATS LAB — Sprint-4.1 (Tobias 2026-06-16)
+// Filter + sort + multi-column compare across all profile stats.
+// Data: GET /api/stats_lab + /api/stats_lab/meta (static FileResponse).
+// ═══════════════════════════════════════════════════════════
+// Sprint-4.3 (Tobias 2026-06-23) — Permalink: URL <-> state sync
+// All Stats-Lab params live in window.location.search with `sl_` prefix so
+// they coexist with /player/<slug> routing. On mount we hydrate state from
+// URL; on each state change we replaceState. Leaving Stats Lab clears them.
+const SL_URL_PREFIX = "sl_";
+const _slParseUrl = () => {
+  if (typeof window === "undefined") return {};
+  const p = new URLSearchParams(window.location.search);
+  const get = (k) => p.get(SL_URL_PREFIX + k);
+  const arr = (k) => get(k)?.split(",").filter(Boolean) || null;
+  return {
+    y:    arr("y")?.map(Number).filter(n => !isNaN(n)),
+    pos:  arr("pos"),
+    src:  arr("src"),
+    conf: arr("conf"),
+    cls:  arr("cls"),
+    q:    get("q") || "",
+    mpmin:get("mpmin") || "",
+    mpmax:get("mpmax") || "",
+    gpmin:get("gpmin") || "",
+    gpmax:get("gpmax") || "",
+    pre:  get("pre"),
+    c:    arr("c"),
+    sk:   get("sk"),
+    sd:   get("sd") === "asc" ? "asc" : (get("sd") === "desc" ? "desc" : null),
+    ps:   Number(get("ps")) || null,
+    pg:   Number(get("pg")) || 0,
+    cmp:  arr("cmp") || [],
+    open: get("open") === "1",
+  };
+};
+
+// Sprint-4.3: Saved Presets (localStorage)
+const SL_PRESETS_KEY = "prospecttheory_stats_lab_user_presets_v1";
+const _slLoadUserPresets = () => {
+  try {
+    const raw = typeof window !== "undefined" ? window.localStorage.getItem(SL_PRESETS_KEY) : null;
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
+  } catch { return []; }
+};
+const _slSaveUserPresets = (presets) => {
+  try {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(SL_PRESETS_KEY, JSON.stringify(presets));
+    }
+  } catch { /* quota / disabled — silently fail */ }
+};
+
+function StatsLabView({onSelect}) {
+  // Sprint-4.3: capture URL params once on first render (lazy state init)
+  const URL_INIT = useMemo(() => _slParseUrl(), []);
+
+  const [meta, setMeta] = useState(null);
+  const [rows, setRows] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState(null);
+
+  // Filters — initial values come from URL if present, else sane defaults
+  const [yearFilter, setYearFilter]   = useState(URL_INIT.y || [2026]);
+  const [posFilter,  setPosFilter]    = useState(URL_INIT.pos || ["Playmaker","Wing","Big"]);
+  const [srcFilter,  setSrcFilter]    = useState(URL_INIT.src || ["ncaa","intl"]);
+  const [search,     setSearch]       = useState(URL_INIT.q || "");
+  // Sample-size Range-Filter (Tobias 2026-06-16): MP and GP minima
+  // to drop noise (n=2 GP "prospects"). Empty string = no bound.
+  const [mpMin, setMpMin] = useState(URL_INIT.mpmin);
+  const [mpMax, setMpMax] = useState(URL_INIT.mpmax);
+  const [gpMin, setGpMin] = useState(URL_INIT.gpmin);
+  const [gpMax, setGpMax] = useState(URL_INIT.gpmax);
+
+  // Columns + sort + pagination
+  // Sprint-4.4: default preset "bt_standard" + sort by BPM, gespiegelt zur
+  // BartTorvik-playerstat-Landing-View. Backend kann das via meta.filter_defaults
+  // überschreiben (preset / sort_key / sort_dir) — Frontend übernimmt nach load.
+  const [presetId,     setPresetId]   = useState(URL_INIT.pre || "bt_standard");
+  const [selectedCols, setSelectedCols] = useState(URL_INIT.c || null);
+  const [pickerOpen,   setPickerOpen] = useState(false);
+  const [sortKey,      setSortKey]    = useState(URL_INIT.sk || "bpm");
+  const [sortDir,      setSortDir]    = useState(URL_INIT.sd || "desc");
+  // Sprint-4.4: Conference + Class-Year filters (BartTorvik-parity)
+  const [confFilter, setConfFilter] = useState(URL_INIT.conf || []);    // empty = all conferences
+  const [classFilter, setClassFilter] = useState(URL_INIT.cls || []);   // empty = all class years (Fr/So/Jr/Sr/5)
+  const [page,         setPage]       = useState(URL_INIT.pg || 0);
+  const [pageSize,     setPageSize]   = useState(URL_INIT.ps || 50);
+
+  // Sprint-4.2: Compare Mode (2-5 players side by side with z-score bars)
+  const [compareSlugs, setCompareSlugs] = useState(URL_INIT.cmp || []);   // ordered slug array
+  const [compareOpen,  setCompareOpen]  = useState(URL_INIT.open || false);
+
+  // Sprint-4.3: user-saved presets (localStorage, additive to backend presets)
+  const [userPresets, setUserPresets] = useState(() => _slLoadUserPresets());
+  const [linkCopied,  setLinkCopied]  = useState(false);
+  const [savePromptOpen, setSavePromptOpen] = useState(false);
+  const [presetNameDraft, setPresetNameDraft] = useState("");
+  const MAX_COMPARE = 5;
+  const toggleCompare = (slug) => {
+    setCompareSlugs(prev => {
+      if (prev.includes(slug)) return prev.filter(s => s !== slug);
+      if (prev.length >= MAX_COMPARE) return prev;
+      return [...prev, slug];
+    });
+  };
+  const clearCompare = () => setCompareSlugs([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([
+      fetch("/api/stats_lab").then(r => {
+        if (!r.ok) throw new Error(`stats_lab fetch failed: ${r.status}`);
+        return r.json();
+      }),
+      fetch("/api/stats_lab/meta").then(r => {
+        if (!r.ok) throw new Error(`stats_lab/meta fetch failed: ${r.status}`);
+        return r.json();
+      }),
+    ]).then(([data, m]) => {
+      if (cancelled) return;
+      setRows(data.rows || []);
+      setMeta(m);
+      // Sprint-4.4: hydrate preset, sort key + dir from backend filter_defaults
+      // unless URL already supplied a value. URL > filter_defaults > hardcoded.
+      const defPresetId = m.filter_defaults?.preset || "bt_standard";
+      const defSortKey  = m.filter_defaults?.sort_key || "bpm";
+      const defSortDir  = m.filter_defaults?.sort_dir || "desc";
+      if (!URL_INIT.c && !URL_INIT.pre) {
+        const preset = (m.presets || []).find(p => p.id === defPresetId);
+        if (preset) { setSelectedCols(preset.cols); setPresetId(preset.id); }
+      } else if (URL_INIT.pre && !URL_INIT.c) {
+        // URL named a backend preset but no explicit cols → hydrate from preset
+        const preset = (m.presets || []).find(p => p.id === URL_INIT.pre);
+        if (preset) setSelectedCols(preset.cols);
+      }
+      if (!URL_INIT.sk) setSortKey(defSortKey);
+      if (!URL_INIT.sd) setSortDir(defSortDir);
+      if (!URL_INIT.y && m.filter_defaults?.year && Array.isArray(m.filter_defaults.year)) {
+        setYearFilter(m.filter_defaults.year);
+      }
+      setLoading(false);
+    }).catch(e => {
+      if (cancelled) return;
+      setErr(String(e));
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Sprint-4.3: URL <-> state sync (replaceState on each change so back-button
+  // doesn't fill up with every filter tweak). Skip until rows are loaded so
+  // we don't blow away URL state before hydration finished.
+  useEffect(() => {
+    if (loading || !rows) return;
+    const p = new URLSearchParams(window.location.search);
+    // Wipe previous sl_ params, then re-set whatever's non-default
+    Array.from(p.keys()).forEach(k => { if (k.startsWith(SL_URL_PREFIX)) p.delete(k); });
+    const set = (k, v) => p.set(SL_URL_PREFIX + k, v);
+    if (yearFilter?.length && (yearFilter.length !== allYears.length || allYears.length === 0)) {
+      // only encode if not full-set
+      const allSet = allYears.length > 0 && yearFilter.length === allYears.length;
+      if (!allSet) set("y", yearFilter.join(","));
+    }
+    if (posFilter && posFilter.length < 3) set("pos", posFilter.join(","));
+    if (srcFilter && srcFilter.length < 2) set("src", srcFilter.join(","));
+    // Sprint-4.4: persist Conference + Class-year filters
+    if (confFilter && confFilter.length) set("conf", confFilter.join(","));
+    if (classFilter && classFilter.length) set("cls", classFilter.join(","));
+    if (search)   set("q",     search);
+    if (mpMin)    set("mpmin", mpMin);
+    if (mpMax)    set("mpmax", mpMax);
+    if (gpMin)    set("gpmin", gpMin);
+    if (gpMax)    set("gpmax", gpMax);
+    if (presetId && presetId !== "default") set("pre", presetId);
+    // Only persist explicit cols if we're in custom mode (other presets are
+    // re-hydrated from meta.presets by id, no need to bloat URL).
+    if (presetId === "custom" && selectedCols?.length) set("c", selectedCols.join(","));
+    if (sortKey !== "war")   set("sk", sortKey);
+    if (sortDir !== "desc")  set("sd", sortDir);
+    if (pageSize !== 50)     set("ps", String(pageSize));
+    if (page > 0)            set("pg", String(page));
+    if (compareSlugs?.length) set("cmp", compareSlugs.join(","));
+    if (compareOpen)          set("open", "1");
+    const next = p.toString();
+    const path = window.location.pathname + (next ? "?" + next : "") + window.location.hash;
+    window.history.replaceState(window.history.state || {}, "", path);
+  }, [loading, rows, yearFilter, posFilter, srcFilter, search,
+      mpMin, mpMax, gpMin, gpMax, presetId, selectedCols, sortKey, sortDir,
+      page, pageSize, compareSlugs, compareOpen, confFilter, classFilter]);
+
+  // Sprint-4.3: clear sl_ params on unmount so going back to /player/<x>
+  // or the Board view doesn't carry stale Stats-Lab state.
+  useEffect(() => () => {
+    if (typeof window === "undefined") return;
+    const p = new URLSearchParams(window.location.search);
+    let changed = false;
+    Array.from(p.keys()).forEach(k => {
+      if (k.startsWith(SL_URL_PREFIX)) { p.delete(k); changed = true; }
+    });
+    if (changed) {
+      const next = p.toString();
+      const path = window.location.pathname + (next ? "?" + next : "") + window.location.hash;
+      window.history.replaceState(window.history.state || {}, "", path);
+    }
+  }, []);
+
+  // ── Derived data ────────────────────────────────────────────
+  const colsByKey = useMemo(() => {
+    const m = {};
+    (meta?.cols || []).forEach(c => { m[c.k] = c; });
+    return m;
+  }, [meta]);
+
+  const allYears = useMemo(() => {
+    if (!rows) return [];
+    return Array.from(new Set(rows.map(r => r.year).filter(Boolean))).sort((a,b)=>b-a);
+  }, [rows]);
+
+  // Sprint-4.4: BartTorvik-parity sidebar filters — conferences + class years
+  const allConfs = useMemo(() => {
+    if (!rows) return [];
+    return Array.from(new Set(rows.map(r => r.conf).filter(c => typeof c === "string" && c.trim()))).sort();
+  }, [rows]);
+  const allClasses = useMemo(() => {
+    if (!rows) return [];
+    const seen = new Set(rows.map(r => r.cls).filter(c => typeof c === "string" && c.trim()));
+    // Display order: Fr / So / Jr / Sr / 5
+    const order = ["Fr", "So", "Jr", "Sr", "5"];
+    return [...order.filter(c => seen.has(c)), ...Array.from(seen).filter(c => !order.includes(c))];
+  }, [rows]);
+
+  const filtered = useMemo(() => {
+    if (!rows) return [];
+    const q = search.trim().toLowerCase();
+    // Plus parse range bounds once outside the loop
+    const _f = (s) => { const n = parseFloat(s); return isNaN(n) ? null : n; };
+    const mpLo = _f(mpMin), mpHi = _f(mpMax);
+    const gpLo = _f(gpMin), gpHi = _f(gpMax);
+    return rows.filter(r => {
+      if (yearFilter.length && !yearFilter.includes(r.year)) return false;
+      if (posFilter.length && r.pos && !posFilter.includes(r.pos)) return false;
+      if (srcFilter.length && r.source && !srcFilter.includes(r.source)) return false;
+      // Sprint-4.4: Conference + Class-year filters
+      if (confFilter.length && (!r.conf || !confFilter.includes(r.conf))) return false;
+      if (classFilter.length && (!r.cls || !classFilter.includes(r.cls))) return false;
+      if (q && !(r.name || "").toLowerCase().includes(q)) return false;
+      // MP / GP range filters: null-row excluded only if a bound is set
+      if (mpLo != null || mpHi != null) {
+        if (r.mp == null) return false;
+        if (mpLo != null && r.mp < mpLo) return false;
+        if (mpHi != null && r.mp > mpHi) return false;
+      }
+      if (gpLo != null || gpHi != null) {
+        if (r.gp == null) return false;
+        if (gpLo != null && r.gp < gpLo) return false;
+        if (gpHi != null && r.gp > gpHi) return false;
+      }
+      return true;
+    });
+  }, [rows, yearFilter, posFilter, srcFilter, search, mpMin, mpMax, gpMin, gpMax, confFilter, classFilter]);
+
+  const sorted = useMemo(() => {
+    if (!filtered.length) return filtered;
+    const dir = sortDir === "desc" ? -1 : 1;
+    const fmt = colsByKey[sortKey]?.fmt;
+    const isNumeric = fmt && fmt !== "str" && fmt !== "name" && fmt !== "bool";
+    return [...filtered].sort((a, b) => {
+      const va = a[sortKey], vb = b[sortKey];
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;            // nulls always sink
+      if (vb == null) return -1;
+      if (isNumeric) return (va - vb) * dir;
+      return String(va).localeCompare(String(vb)) * dir;
+    });
+  }, [filtered, sortKey, sortDir, colsByKey]);
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const safePage = Math.min(page, totalPages - 1);
+  const pageRows = sorted.slice(safePage * pageSize, (safePage + 1) * pageSize);
+
+  // ── Helpers ────────────────────────────────────────────────
+  const applyPreset = (id) => {
+    setPresetId(id);
+    const p = (meta?.presets || []).find(x => x.id === id);
+    if (p) setSelectedCols(p.cols);
+  };
+
+  // Sprint-4.3: apply a user-saved preset (localStorage)
+  const applyUserPreset = (uid) => {
+    const up = userPresets.find(p => p.id === uid);
+    if (!up) return;
+    // Restore everything saved
+    setYearFilter(up.state.yearFilter ?? yearFilter);
+    setPosFilter(up.state.posFilter ?? posFilter);
+    setSrcFilter(up.state.srcFilter ?? srcFilter);
+    setSearch(up.state.search ?? "");
+    setMpMin(up.state.mpMin ?? "");
+    setMpMax(up.state.mpMax ?? "");
+    setGpMin(up.state.gpMin ?? "");
+    setGpMax(up.state.gpMax ?? "");
+    setSelectedCols(up.state.selectedCols || selectedCols);
+    setSortKey(up.state.sortKey || "war");
+    setSortDir(up.state.sortDir || "desc");
+    setPageSize(up.state.pageSize || 50);
+    setPresetId("user:" + up.id);
+    setPage(0);
+  };
+
+  // Sprint-4.3: persist current view as named preset
+  const saveAsUserPreset = (name) => {
+    const clean = (name || "").trim().slice(0, 40);
+    if (!clean) return;
+    const id = "u_" + Date.now().toString(36);
+    const snap = {
+      id, name: clean, savedAt: new Date().toISOString(),
+      state: {
+        yearFilter, posFilter, srcFilter, search,
+        mpMin, mpMax, gpMin, gpMax,
+        selectedCols, sortKey, sortDir, pageSize,
+      },
+    };
+    const next = [...userPresets, snap];
+    setUserPresets(next);
+    _slSaveUserPresets(next);
+    setPresetId("user:" + id);
+    setSavePromptOpen(false);
+    setPresetNameDraft("");
+  };
+
+  const deleteUserPreset = (uid) => {
+    const next = userPresets.filter(p => p.id !== uid);
+    setUserPresets(next);
+    _slSaveUserPresets(next);
+    if (presetId === "user:" + uid) setPresetId("default");
+  };
+
+  // Sprint-4.3: copy current permalink to clipboard
+  const copyPermalink = async () => {
+    try {
+      const url = window.location.origin + window.location.pathname + window.location.search;
+      await navigator.clipboard.writeText(url);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 1500);
+    } catch {
+      // Fallback: select-in-prompt
+      try { window.prompt("Copy this URL", window.location.href); } catch { /* nope */ }
+    }
+  };
+
+  // Sprint-4.3: export *currently sorted+filtered* rows (no pagination)
+  // with the currently visible columns. RFC-4180 escaping for safety.
+  const _csvEscape = (val) => {
+    if (val == null) return "";
+    const s = String(val);
+    if (s.includes(",") || s.includes('"') || s.includes("\n") || s.includes("\r")) {
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+  };
+  const exportCsv = () => {
+    if (!sorted?.length || !visibleCols?.length) return;
+    const header = visibleCols.map(c => _csvEscape(c.label || c.k)).join(",");
+    const lines = sorted.map(r =>
+      visibleCols.map(c => {
+        const v = r[c.k];
+        // Keep numerics raw so they parse cleanly in Excel/Sheets
+        if (v == null) return "";
+        if (typeof v === "number") return String(v);
+        return _csvEscape(v);
+      }).join(",")
+    );
+    const body = [header, ...lines].join("\r\n") + "\r\n";
+    // Filter-context filename: e.g. stats_lab_2026_Wing_Big_182rows_20260623.csv
+    const ymd = new Date().toISOString().slice(0,10).replace(/-/g, "");
+    const ytxt = (yearFilter && yearFilter.length ? yearFilter.join("-") : "all");
+    const ptxt = (posFilter && posFilter.length < 3 ? posFilter.join("-") : "AllPos");
+    const fname = `stats_lab_${ytxt}_${ptxt}_${sorted.length}rows_${ymd}.csv`;
+    // BOM so Excel reads UTF-8 correctly
+    const blob = new Blob(["﻿" + body], {type: "text/csv;charset=utf-8"});
+    const a = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    a.href = url; a.download = fname;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const toggleCol = (key) => {
+    setSelectedCols(prev => {
+      const list = prev || [];
+      if (list.includes(key)) return list.filter(k => k !== key);
+      return [...list, key];
+    });
+    setPresetId("custom");
+  };
+
+  const flipMulti = (state, setState, value) => {
+    if (state.includes(value)) setState(state.filter(x => x !== value));
+    else setState([...state, value]);
+  };
+
+  const onSortClick = (key) => {
+    if (key === sortKey) {
+      setSortDir(d => d === "desc" ? "asc" : "desc");
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+  };
+
+  const fmtCell = (val, col) => {
+    if (val == null) return <span style={{color:"#475569"}}>—</span>;
+    if (col?.fmt === "bool") return val ? "✓" : "—";
+    if (col?.fmt === "pct") return `${val}%`;
+    if (col?.fmt === "dec1") return Number(val).toFixed(1);
+    if (col?.fmt === "dec2") return Number(val).toFixed(2);
+    if (col?.fmt === "int") return Math.round(val);
+    return val;
+  };
+
+  // Color z-score-style cells (range from meta)
+  const cellStyle = (val, col) => {
+    if (val == null || !col?.range) return {};
+    const [lo, hi] = col.range;
+    if (lo == null || hi == null || hi <= lo) return {};
+    const t = Math.max(0, Math.min(1, (val - lo) / (hi - lo)));
+    // diverging if range crosses 0 OR is z-like
+    const isZ = lo < 0 && hi > 0;
+    if (isZ) {
+      // -3 = red, 0 = neutral, +3 = green
+      const z = val;
+      if (z >= 0) {
+        const a = Math.min(1, z / Math.abs(hi));
+        return { background: `rgba(34,197,94,${0.10 + 0.30*a})`, color: "#dcfce7" };
+      } else {
+        const a = Math.min(1, -z / Math.abs(lo));
+        return { background: `rgba(239,68,68,${0.10 + 0.30*a})`, color: "#fee2e2" };
+      }
+    }
+    return { background: `rgba(249,115,22,${0.06 + 0.20*t})`, color: "#fef3c7" };
+  };
+
+  // ── Render ────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <div className="w-12 h-12 rounded-full border-4 border-t-transparent animate-spin mb-4" style={{borderColor:"#f97316",borderTopColor:"transparent"}}/>
+        <p className="text-sm" style={{color:"#6b7280"}}>Loading stats lab... (~2 MB)</p>
+      </div>
+    );
+  }
+  if (err) {
+    return (
+      <div className="p-6 rounded-xl text-center" style={{background:"#ef444411",border:"1px solid #ef444444",color:"#fca5a5"}}>
+        <div className="font-semibold mb-1">Stats Lab failed to load</div>
+        <div className="text-xs" style={{color:"#fca5a5cc"}}>{err}</div>
+        <div className="text-xs mt-2" style={{color:"#9ca3af"}}>If the deploy is still building, try again in a minute.</div>
+      </div>
+    );
+  }
+
+  const colObj = (key) => colsByKey[key] || {k: key, label: key, fmt: "str"};
+  const visibleCols = (selectedCols || []).map(colObj);
+
+  // Group columns by category for the picker
+  const colsByGroup = {};
+  (meta?.cols || []).forEach(c => {
+    if (!colsByGroup[c.g]) colsByGroup[c.g] = [];
+    colsByGroup[c.g].push(c);
+  });
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
+      {/* ── Sidebar ── */}
+      <aside className="space-y-4">
+        <div className="rounded-xl p-4" style={{background:"#0d111766",border:"1px solid #1f2937"}}>
+          <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#9ca3af"}}>Class (draft year)</div>
+          <div className="space-y-1">
+            {allYears.map(y => (
+              <label key={y} className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="checkbox" checked={yearFilter.includes(y)} onChange={()=>flipMulti(yearFilter, setYearFilter, y)} />
+                <span style={{color: yearFilter.includes(y) ? "#f1f5f9" : "#6b7280"}}>{y}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-xl p-4" style={{background:"#0d111766",border:"1px solid #1f2937"}}>
+          <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#9ca3af"}}>Position</div>
+          <div className="space-y-1">
+            {["Playmaker","Wing","Big"].map(p => (
+              <label key={p} className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="checkbox" checked={posFilter.includes(p)} onChange={()=>flipMulti(posFilter, setPosFilter, p)} />
+                <span style={{color: posFilter.includes(p) ? "#f1f5f9" : "#6b7280"}}>{p}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-xl p-4" style={{background:"#0d111766",border:"1px solid #1f2937"}}>
+          <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#9ca3af"}}>Source</div>
+          <div className="space-y-1">
+            {["ncaa","intl"].map(s => (
+              <label key={s} className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="checkbox" checked={srcFilter.includes(s)} onChange={()=>flipMulti(srcFilter, setSrcFilter, s)} />
+                <span style={{color: srcFilter.includes(s) ? "#f1f5f9" : "#6b7280"}}>{s.toUpperCase()}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* Sprint-4.4: Class-Year Filter (Fr/So/Jr/Sr/5) — BartTorvik parity */}
+        {allClasses.length > 0 && (
+          <div className="rounded-xl p-4" style={{background:"#0d111766",border:"1px solid #1f2937"}}>
+            <div className="text-xs uppercase tracking-wider mb-2 flex items-center justify-between" style={{color:"#9ca3af"}}>
+              <span>Class Year</span>
+              {classFilter.length > 0 && (
+                <button onClick={()=>setClassFilter([])} className="text-[10px] underline" style={{color:"#9ca3af"}}>clear</button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {allClasses.map(c => {
+                const on = classFilter.includes(c);
+                return (
+                  <button key={c} onClick={()=>flipMulti(classFilter, setClassFilter, c)}
+                    className="px-2 py-1 rounded text-[11px]"
+                    style={{
+                      background: on ? "#f9731622" : "#0a0e16",
+                      color:      on ? "#fcd34d"   : "#9ca3af",
+                      border: `1px solid ${on ? "#f97316" : "#1f2937"}`,
+                    }}>{c}</button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Sprint-4.4: Conference Filter — typeahead-style with current selection chips */}
+        {allConfs.length > 0 && (
+          <div className="rounded-xl p-4" style={{background:"#0d111766",border:"1px solid #1f2937"}}>
+            <div className="text-xs uppercase tracking-wider mb-2 flex items-center justify-between" style={{color:"#9ca3af"}}>
+              <span>Conference</span>
+              {confFilter.length > 0 && (
+                <button onClick={()=>setConfFilter([])} className="text-[10px] underline" style={{color:"#9ca3af"}}>clear ({confFilter.length})</button>
+              )}
+            </div>
+            {confFilter.length > 0 && (
+              <div className="flex flex-wrap gap-1 mb-2">
+                {confFilter.map(c => (
+                  <button key={c} onClick={()=>flipMulti(confFilter, setConfFilter, c)}
+                    className="px-2 py-0.5 rounded text-[10px]"
+                    style={{background:"#f9731622", color:"#fcd34d", border:"1px solid #f97316"}}>
+                    {c} ×
+                  </button>
+                ))}
+              </div>
+            )}
+            <select multiple={false} value=""
+              onChange={e=>{ const v = e.target.value; if (v) flipMulti(confFilter, setConfFilter, v); }}
+              className="w-full px-2 py-1.5 rounded text-xs"
+              style={{background:"#0a0e16", color:"#f1f5f9", border:"1px solid #1f2937"}}>
+              <option value="">+ add conference…</option>
+              {allConfs.filter(c => !confFilter.includes(c)).map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div className="rounded-xl p-4" style={{background:"#0d111766",border:"1px solid #1f2937"}}>
+          <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#9ca3af"}}>Search</div>
+          <input
+            type="text" value={search} onChange={e=>setSearch(e.target.value)}
+            placeholder="Player name…"
+            className="w-full px-3 py-2 rounded text-sm"
+            style={{background:"#0a0e16", color:"#f1f5f9", border:"1px solid #1f2937"}}
+          />
+        </div>
+
+        {/* Sample-size filters: MP and GP minima drop sub-sample noise */}
+        <div className="rounded-xl p-4" style={{background:"#0d111766",border:"1px solid #1f2937"}}>
+          <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#9ca3af"}}>Sample Size</div>
+          <div className="space-y-2">
+            <div>
+              <div className="text-[11px] mb-1" style={{color:"#6b7280"}}>Minutes per game (MP)</div>
+              <div className="flex gap-1.5">
+                <input type="number" inputMode="decimal" placeholder="min" value={mpMin}
+                  onChange={e=>setMpMin(e.target.value)}
+                  className="w-full px-2 py-1.5 rounded text-xs"
+                  style={{background:"#0a0e16",color:"#f1f5f9",border:"1px solid #1f2937"}}/>
+                <input type="number" inputMode="decimal" placeholder="max" value={mpMax}
+                  onChange={e=>setMpMax(e.target.value)}
+                  className="w-full px-2 py-1.5 rounded text-xs"
+                  style={{background:"#0a0e16",color:"#f1f5f9",border:"1px solid #1f2937"}}/>
+              </div>
+            </div>
+            <div>
+              <div className="text-[11px] mb-1" style={{color:"#6b7280"}}>Games played (GP)</div>
+              <div className="flex gap-1.5">
+                <input type="number" inputMode="numeric" placeholder="min" value={gpMin}
+                  onChange={e=>setGpMin(e.target.value)}
+                  className="w-full px-2 py-1.5 rounded text-xs"
+                  style={{background:"#0a0e16",color:"#f1f5f9",border:"1px solid #1f2937"}}/>
+                <input type="number" inputMode="numeric" placeholder="max" value={gpMax}
+                  onChange={e=>setGpMax(e.target.value)}
+                  className="w-full px-2 py-1.5 rounded text-xs"
+                  style={{background:"#0a0e16",color:"#f1f5f9",border:"1px solid #1f2937"}}/>
+              </div>
+            </div>
+            {(mpMin||mpMax||gpMin||gpMax) && (
+              <button
+                onClick={()=>{setMpMin("");setMpMax("");setGpMin("");setGpMax("");}}
+                className="text-[11px] mt-1 underline"
+                style={{color:"#9ca3af"}}>
+                clear sample-size filters
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-xl p-4 text-xs" style={{background:"#0d111733",color:"#6b7280"}}>
+          <div>{filtered.length.toLocaleString()} of {rows.length.toLocaleString()} players</div>
+        </div>
+      </aside>
+
+      {/* ── Main Table Area ── */}
+      <section className="space-y-3">
+        {/* Preset chips (backend) */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {(meta?.presets || []).map(p => (
+            <button key={p.id}
+              onClick={()=>applyPreset(p.id)}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
+              style={{
+                background: presetId===p.id ? "#f9731622" : "transparent",
+                color:      presetId===p.id ? "#f97316"   : "#9ca3af",
+                border: `1px solid ${presetId===p.id ? "#f97316" : "#374151"}`,
+              }}>
+              {p.label}
+            </button>
+          ))}
+          {/* Sprint-4.3: User-saved preset chips */}
+          {userPresets.map(up => {
+            const active = presetId === "user:" + up.id;
+            return (
+              <span key={up.id} className="inline-flex items-center rounded-lg text-xs font-semibold"
+                style={{
+                  background: active ? "#22d3ee22" : "transparent",
+                  color:      active ? "#22d3ee"   : "#9ca3af",
+                  border: `1px solid ${active ? "#22d3ee" : "#374151"}`,
+                }}>
+                <button onClick={()=>applyUserPreset(up.id)} className="px-3 py-1.5"
+                  title={`Saved ${new Date(up.savedAt).toLocaleDateString()}`}>
+                  ★ {up.name}
+                </button>
+                <button onClick={()=>deleteUserPreset(up.id)} className="px-2 py-1.5 opacity-60 hover:opacity-100"
+                  title="Delete preset" style={{color:"#94a3b8"}}>×</button>
+              </span>
+            );
+          })}
+          {presetId === "custom" && (
+            <span className="px-3 py-1.5 rounded-lg text-xs italic" style={{color:"#fbbf24"}}>· Custom</span>
+          )}
+          <div className="flex-1"/>
+          {compareSlugs.length > 0 && (
+            <>
+              <button onClick={()=>setCompareOpen(true)}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold"
+                style={{background:"#f97316", color:"#000", border:"1px solid #f97316"}}>
+                ⇄ Compare ({compareSlugs.length})
+              </button>
+              <button onClick={clearCompare}
+                className="px-2 py-1.5 rounded-lg text-xs"
+                style={{background:"transparent", color:"#9ca3af", border:"1px solid #374151"}}>
+                Clear
+              </button>
+            </>
+          )}
+          {/* Sprint-4.3 actions: Save preset, CSV, Link, Columns */}
+          <button onClick={()=>{ setSavePromptOpen(o=>!o); setPresetNameDraft(""); }}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+            title="Save current filters, columns & sort as a named preset (stored in your browser)"
+            style={{background:"transparent", color:"#9ca3af", border:"1px solid #374151"}}>
+            ★ Save view
+          </button>
+          <button onClick={exportCsv}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+            title={`Download current ${sorted.length.toLocaleString()} rows × ${visibleCols.length} columns as CSV`}
+            style={{background:"transparent", color:"#9ca3af", border:"1px solid #374151"}}>
+            ↓ CSV
+          </button>
+          <button onClick={copyPermalink}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+            title="Copy a link that reproduces this exact view (filters, sort, columns, compare slots)"
+            style={{
+              background: linkCopied ? "#22c55e22" : "transparent",
+              color:      linkCopied ? "#22c55e"   : "#9ca3af",
+              border: `1px solid ${linkCopied ? "#22c55e" : "#374151"}`,
+            }}>
+            {linkCopied ? "✓ Copied" : "⌬ Link"}
+          </button>
+          <button
+            onClick={()=>setPickerOpen(o=>!o)}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+            style={{background:"transparent", color:"#9ca3af", border:"1px solid #374151"}}>
+            ⊕ Columns ({(selectedCols||[]).length})
+          </button>
+        </div>
+
+        {/* Sprint-4.3: inline name-prompt for Save-as-preset */}
+        {savePromptOpen && (
+          <div className="rounded-xl p-3 flex items-center gap-2" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+            <span className="text-xs" style={{color:"#9ca3af"}}>Name this view:</span>
+            <input autoFocus type="text" value={presetNameDraft}
+              onChange={e=>setPresetNameDraft(e.target.value)}
+              onKeyDown={e=>{ if (e.key === "Enter") saveAsUserPreset(presetNameDraft); if (e.key === "Escape") setSavePromptOpen(false); }}
+              placeholder="e.g. 2026 Wings ≥ 20 MP"
+              className="flex-1 px-3 py-1.5 rounded text-sm"
+              style={{background:"#0a0e16", color:"#f1f5f9", border:"1px solid #1f2937"}}/>
+            <button onClick={()=>saveAsUserPreset(presetNameDraft)}
+              disabled={!presetNameDraft.trim()}
+              className="px-3 py-1.5 rounded text-xs font-bold"
+              style={{
+                background: presetNameDraft.trim() ? "#22d3ee" : "#374151",
+                color: presetNameDraft.trim() ? "#000" : "#6b7280",
+                cursor: presetNameDraft.trim() ? "pointer" : "not-allowed",
+                border: "none",
+              }}>Save</button>
+            <button onClick={()=>setSavePromptOpen(false)}
+              className="px-3 py-1.5 rounded text-xs"
+              style={{background:"transparent",color:"#9ca3af",border:"1px solid #374151"}}>Cancel</button>
+          </div>
+        )}
+
+        {/* Column picker */}
+        {pickerOpen && (
+          <div className="rounded-xl p-4 max-h-96 overflow-y-auto" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+            {(meta?.groups || []).map(g => (
+              <div key={g.id} className="mb-3">
+                <div className="text-xs uppercase tracking-wider mb-1" style={{color:"#f97316"}}>{g.label}</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {(colsByGroup[g.id] || []).map(c => {
+                    const on = (selectedCols||[]).includes(c.k);
+                    return (
+                      <button key={c.k} onClick={()=>toggleCol(c.k)}
+                        className="px-2 py-1 rounded text-[11px]"
+                        style={{
+                          background: on ? "#f9731622" : "#0a0e16",
+                          color: on ? "#fcd34d" : "#9ca3af",
+                          border: `1px solid ${on ? "#f97316" : "#1f2937"}`,
+                        }}>
+                        {c.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Table */}
+        <div className="rounded-xl overflow-x-auto" style={{background:"#0d1117",border:"1px solid #1f2937"}}>
+          <table className="w-full text-sm" style={{borderCollapse:"separate",borderSpacing:0}}>
+            <thead>
+              <tr style={{background:"#11151c"}}>
+                <th className="px-2 py-2 text-center" style={{borderBottom:"1px solid #1f2937", position:"sticky", left:0, background:"#11151c", zIndex:6, width:36}}>
+                  <span title="Select to compare" className="text-[10px]" style={{color:"#6b7280"}}>⊕</span>
+                </th>
+                {visibleCols.map((c, i) => {
+                  // Sprint-4.4: Header tooltip with column explanation (c.tip),
+                  // plus tiny src-badge: "bt" = BartTorvik standard, "pt" =
+                  // ProspectTheory proprietary. Hover header to read formula
+                  // + interpretation, click to sort.
+                  const arrow = sortKey===c.k ? (sortDir==="desc" ? " ↓" : " ↑") : "";
+                  const hdrInner = (
+                    <span className="inline-flex items-center gap-1">
+                      <span>{c.label}{arrow}</span>
+                      {c.src === "pt" && (
+                        <span title="ProspectTheory metric"
+                          className="text-[8px] font-bold px-1 rounded leading-tight"
+                          style={{background:"#f9731622", color:"#fcd34d", border:"1px solid #f97316aa"}}>PT</span>
+                      )}
+                    </span>
+                  );
+                  const tipContent = c.tip ? (
+                    <div>
+                      <div className="font-bold mb-1" style={{color:"#f97316"}}>{c.label}</div>
+                      <div style={{color:"#cbd5e1"}}>{c.tip}</div>
+                      {c.range && (
+                        <div className="mt-1 text-[10px]" style={{color:"#9ca3af"}}>
+                          Color scale: {c.range[0]} → {c.range[1]}
+                        </div>
+                      )}
+                    </div>
+                  ) : null;
+                  return (
+                    <th key={c.k}
+                      onClick={()=>onSortClick(c.k)}
+                      className="px-3 py-2 text-left text-xs font-semibold cursor-pointer select-none whitespace-nowrap"
+                      style={{
+                        color: sortKey===c.k ? "#f97316" : "#cbd5e1",
+                        borderBottom:"1px solid #1f2937",
+                        position: i===0 ? "sticky" : undefined,
+                        left:     i===0 ? 36 : undefined,
+                        background: i===0 ? "#11151c" : undefined,
+                        zIndex: i===0 ? 5 : undefined,
+                      }}>
+                      {tipContent ? <Tip content={tipContent} wide>{hdrInner}</Tip> : hdrInner}
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {pageRows.map((r,ri) => {
+                const isChecked = r.slug && compareSlugs.includes(r.slug);
+                const canCheck = r.slug && (isChecked || compareSlugs.length < MAX_COMPARE);
+                return (
+                <tr key={r.slug || ri} className="hover:bg-white hover:bg-opacity-5" style={isChecked ? {background:"#f9731611"} : undefined}>
+                  <td className="px-2 py-1.5 text-center" style={{position:"sticky", left:0, background: isChecked ? "#1a0f08" : "#0d1117", borderBottom:"1px solid #11151c", zIndex:3, width:36}}>
+                    {r.slug && (
+                      <input type="checkbox" checked={isChecked} disabled={!canCheck && !isChecked}
+                        onChange={()=>toggleCompare(r.slug)}
+                        style={{accentColor:"#f97316", cursor: canCheck ? "pointer" : "not-allowed"}}/>
+                    )}
+                  </td>
+                  {visibleCols.map((c, i) => {
+                    const val = r[c.k];
+                    const isName = c.k === "name";
+                    return (
+                      <td key={c.k}
+                        onClick={isName && r.slug ? ()=>onSelect(r.slug) : undefined}
+                        className="px-3 py-1.5 whitespace-nowrap text-xs"
+                        style={{
+                          ...cellStyle(val, c),
+                          color: isName ? "#fcd34d" : (c.fmt==="str" ? "#cbd5e1" : "#e5e7eb"),
+                          cursor: isName && r.slug ? "pointer" : "default",
+                          borderBottom: "1px solid #11151c",
+                          position: i===0 ? "sticky" : undefined,
+                          left:     i===0 ? 36 : undefined,
+                          background: i===0 ? (isChecked ? "#1a0f08" : "#0d1117") : undefined,
+                          fontWeight: isName ? 600 : 400,
+                        }}>
+                        {fmtCell(val, c)}
+                      </td>
+                    );
+                  })}
+                </tr>
+                );
+              })}
+              {pageRows.length === 0 && (
+                <tr><td colSpan={visibleCols.length + 1} className="px-3 py-8 text-center text-xs" style={{color:"#6b7280"}}>No players match the current filters.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination */}
+        <div className="flex items-center gap-3 text-xs" style={{color:"#9ca3af"}}>
+          <button onClick={()=>setPage(p=>Math.max(0,p-1))} disabled={safePage===0}
+            className="px-3 py-1.5 rounded"
+            style={{background:"transparent", color: safePage===0 ? "#475569" : "#cbd5e1", border:"1px solid #374151", cursor: safePage===0 ? "not-allowed":"pointer"}}>← Prev</button>
+          <span>Page {safePage+1} of {totalPages}</span>
+          <button onClick={()=>setPage(p=>Math.min(totalPages-1,p+1))} disabled={safePage>=totalPages-1}
+            className="px-3 py-1.5 rounded"
+            style={{background:"transparent", color: safePage>=totalPages-1 ? "#475569" : "#cbd5e1", border:"1px solid #374151", cursor: safePage>=totalPages-1 ? "not-allowed":"pointer"}}>Next →</button>
+          <div className="flex-1"/>
+          <span>Rows per page:</span>
+          {[25,50,100,200].map(n => (
+            <button key={n} onClick={()=>{setPageSize(n); setPage(0);}}
+              className="px-2 py-1 rounded"
+              style={{background:pageSize===n?"#f9731622":"transparent", color: pageSize===n?"#f97316":"#9ca3af", border:`1px solid ${pageSize===n?"#f97316":"#374151"}`}}>{n}</button>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Sprint-4.2 Compare Modal ── */}
+      {compareOpen && compareSlugs.length > 0 && (
+        <CompareModal
+          slugs={compareSlugs}
+          rows={rows}
+          meta={meta}
+          colsByKey={colsByKey}
+          fmtCell={fmtCell}
+          onClose={()=>setCompareOpen(false)}
+          onRemove={(slug)=>{
+            setCompareSlugs(prev => prev.filter(s => s !== slug));
+          }}
+          onSelect={(slug)=>{ setCompareOpen(false); onSelect(slug); }}
+        />
+      )}
+    </div>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════
+// Sprint-4.2 — Stats Lab Compare Modal
+// Player-as-column layout: 2-5 players × ~30 essential stats.
+// Stat values shown with z-score bars (position-stratified where applicable).
+// ═══════════════════════════════════════════════════════════
+function CompareModal({slugs, rows, meta, colsByKey, fmtCell, onClose, onRemove, onSelect}) {
+  // Resolve player rows from slugs
+  const players = useMemo(() => {
+    const out = [];
+    for (const slug of slugs) {
+      const p = rows.find(r => r.slug === slug);
+      if (p) out.push(p);
+    }
+    return out;
+  }, [slugs, rows]);
+
+  // Build compare stat-blocks: groups of stat keys with meaningful side-by-side compare.
+  // For each stat we compute a per-pool min/max from the visible compare-set so bars
+  // are meaningful relative to THIS comparison (not against the global pool).
+  const STAT_GROUPS = [
+    { id: "id",   label: "Identity",     keys: ["year","pos","age","ht","team","conf"], dirs: {} },
+    { id: "proj", label: "Projection",   keys: ["war","pie","p_super","p_all","p_start","p_role","p_repl","p_out","ceil","floor"], dirs: {war:"up",pie:"up",p_super:"up",p_all:"up",p_start:"up",p_role:"up",p_repl:"down",p_out:"down"} },
+    { id: "pill", label: "5 Pillars",    keys: ["feel","shoot","def","athl","ovr","create"], dirs: {feel:"up",shoot:"up",def:"up",athl:"up",ovr:"up",create:"up"} },
+    { id: "box",  label: "Box Headlines",keys: ["ts","usg","bpm","obpm","dbpm","ftr"], dirs: {ts:"up",bpm:"up",obpm:"up",dbpm:"up",ftr:"up"} },
+    { id: "rate", label: "Rate Stats",   keys: ["ast_p","to_p","orb_p","drb_p","stl_p","blk_p","three_f","rim_f"], dirs: {ast_p:"up",to_p:"down",orb_p:"up",drb_p:"up",stl_p:"up",blk_p:"up"} },
+    { id: "role", label: "Role Inference",keys: ["rz_versat","rz_play","rz_score","rz_drive","rz_crash","rz_onball","rz_rim","rz_switch"], dirs: {} },
+    { id: "skil", label: "Skill Intersections",keys: ["zi_cd","zi_tw","zi_orb","zi_ast","zi_blk"], dirs: {zi_cd:"up",zi_tw:"up",zi_orb:"up",zi_ast:"up",zi_blk:"up"} },
+    { id: "mind", label: "Mind Metrics",  keys: ["m_aggr","m_overd","m_bounce","m_stam","m_clutch","m_drift"], dirs: {} },
+    { id: "arch", label: "Archetype + Badges",keys: ["arch","badges_n","redflag_n","conf_lvl"], dirs: {} },
+  ];
+
+  // Color palette for player columns (max 5)
+  const PLAYER_COLORS = ["#f97316","#a78bfa","#22c55e","#3b82f6","#fbbf24"];
+
+  // Per stat: find best/worst across compared players, render bar
+  const renderCell = (player, key, dir) => {
+    const c = colsByKey[key];
+    const val = player[key];
+    if (val == null) return <div className="text-xs" style={{color:"#475569"}}>—</div>;
+    if (!c || c.fmt === "str" || c.fmt === "bool") {
+      return <div className="text-xs" style={{color:"#e5e7eb"}}>{fmtCell(val, c)}</div>;
+    }
+    // For numeric, compute relative position in this compare set
+    const vals = players.map(p => p[key]).filter(v => v != null);
+    if (vals.length < 2) {
+      return <div className="text-xs" style={{color:"#e5e7eb"}}>{fmtCell(val, c)}</div>;
+    }
+    const mn = Math.min(...vals), mx = Math.max(...vals);
+    const range = mx - mn;
+    const isLeader = (dir === "up" && val === mx) || (dir === "down" && val === mn);
+    const isWorst  = (dir === "up" && val === mn) || (dir === "down" && val === mx);
+    const t = range === 0 ? 0.5 : (val - mn) / range;
+    return (
+      <div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs whitespace-nowrap" style={{color: isLeader && dir ? "#22c55e" : isWorst && dir ? "#ef4444" : "#e5e7eb", fontWeight: isLeader || isWorst ? 700 : 500}}>
+            {fmtCell(val, c)}
+          </span>
+        </div>
+        <div className="relative h-1.5 mt-1 rounded-full overflow-hidden" style={{background:"#1f2937"}}>
+          <div className="absolute top-0 left-0 h-full rounded-full"
+            style={{width:`${Math.round(t*100)}%`,
+                    background: isLeader && dir ? "#22c55e" : isWorst && dir ? "#ef4444" : "#9ca3af"}}/>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:"#000000cc", backdropFilter:"blur(4px)"}}>
+      <div className="w-full max-w-7xl max-h-[92vh] flex flex-col rounded-2xl overflow-hidden"
+           style={{background:"#0d1117", border:"1px solid #1f2937"}}>
+        {/* Header */}
+        <div className="flex items-center justify-between p-5" style={{borderBottom:"1px solid #1f2937", background:"#11151c"}}>
+          <div>
+            <div className="text-xl font-bold" style={{color:"#f1f5f9"}}>Compare {players.length} Players</div>
+            <div className="text-xs" style={{color:"#9ca3af"}}>Bars are relative to this comparison set · Green = best in set · Red = worst</div>
+          </div>
+          <button onClick={onClose}
+            className="px-4 py-2 rounded-lg text-sm font-semibold"
+            style={{background:"transparent", color:"#e5e7eb", border:"1px solid #374151"}}>
+            Close ✕
+          </button>
+        </div>
+
+        {/* Cross-position compare warning (NBA-quant style honesty) */}
+        {(() => {
+          const positions = new Set(players.map(p => p.pos).filter(Boolean));
+          if (positions.size <= 1) return null;
+          return (
+            <div className="px-5 py-2 text-[11px]" style={{background:"#fbbf2411", color:"#fcd34d", borderBottom:"1px solid #fbbf2444"}}>
+              ⚠ Cross-position comparison: this set mixes {Array.from(positions).join(" · ")}. Raw value bars favour positions whose role inflates a given stat (Bigs at ORB%, Playmakers at AST%, etc.). For position-fair comparison, open each player's profile separately and read the position-stratified percentiles there.
+            </div>
+          );
+        })()}
+
+        {/* Player headers row */}
+        <div className="px-5 py-3 grid" style={{gridTemplateColumns:`160px repeat(${players.length}, 1fr)`, gap:12, borderBottom:"1px solid #1f2937", background:"#0a0e16"}}>
+          <div className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Stat</div>
+          {players.map((p, idx) => (
+            <div key={p.slug} className="relative">
+              <div className="flex items-center justify-between">
+                <button onClick={()=>onSelect(p.slug)}
+                  className="text-sm font-bold text-left hover:underline truncate"
+                  style={{color: PLAYER_COLORS[idx], fontFamily:"'Oswald',sans-serif"}}>
+                  {p.name}
+                </button>
+                <button onClick={()=>onRemove(p.slug)}
+                  className="text-xs ml-2"
+                  style={{color:"#6b7280", border:"1px solid #1f2937", padding:"2px 6px", borderRadius:4}}>
+                  ✕
+                </button>
+              </div>
+              <div className="text-[10px] mt-0.5" style={{color:"#9ca3af"}}>
+                {p.pos} · {p.year} · age {p.age || "—"} · {p.team || "—"}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Scrollable stat grid */}
+        <div className="flex-1 overflow-y-auto px-5 py-3 space-y-5">
+          {STAT_GROUPS.map(group => {
+            // Only include keys that exist in meta and have at least one value present
+            const validKeys = group.keys.filter(k => {
+              if (!colsByKey[k]) return false;
+              return players.some(p => p[k] != null);
+            });
+            if (validKeys.length === 0) return null;
+            return (
+              <div key={group.id}>
+                <div className="text-xs uppercase tracking-wider mb-2" style={{color:"#f97316"}}>{group.label}</div>
+                <div className="space-y-1.5">
+                  {validKeys.map(k => (
+                    <div key={k} className="grid items-center" style={{gridTemplateColumns:`160px repeat(${players.length}, 1fr)`, gap:12, padding:"4px 0", borderBottom:"1px solid #11151c"}}>
+                      <div className="text-xs" style={{color:"#cbd5e1"}}>{colsByKey[k]?.label || k}</div>
+                      {players.map(p => (
+                        <div key={p.slug}>{renderCell(p, k, group.dirs[k])}</div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="px-5 py-3 text-[11px]" style={{color:"#6b7280", borderTop:"1px solid #1f2937", background:"#0a0e16"}}>
+          Click player name to open profile · Bars compare values within this set (not vs global pool) · For position-aware percentile context, see the player profile pages.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════
 // BIG BOARD (No class overview — single view)
 // ═══════════════════════════════════════════════════════════
 function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, availableYears, yearFilter, setYearFilter}) {
@@ -8357,271 +13223,35 @@ const TABS = [
   {id:"scouting",label:"Scouting",icon:"⭐"},
   {id:"roles",label:"Roles & Archetypes",icon:"🧬"},
   {id:"comps",label:"Comps",icon:"⇄"},
-  {id:"devtrajectory",label:"Development",icon:"📈"},
   {id:"projection",label:"Projection",icon:"◆"},
+  // Tobias 2026-06-04 (Sprint-2): Risk Profile Tab re-enabled after Pipeline
+  // Re-Run mit rank-in-class merit_slot + qcut-fix. 15.9-Cap-Cluster ist
+  // jetzt aufgelöst, Steal/Bust-Gap rechnet sauber gegen merit + market.
   {id:"riskprofile",label:"Risk Profile",icon:"🎯"},
 ];
 
-// ═══════════════════════════════════════════════════════════════════
-// SPRINT-5.4 — OUTCOME-COMPS KDE CURVE (standalone)
-// ═══════════════════════════════════════════════════════════════════
-// Self-contained component. Lazy-fetches the prospect's empirical comp
-// pool from /api/outcome_comps/{name} and renders a Gaussian kernel-
-// density estimate on the 0-100 Coleman grade scale. Drop-in usage:
-// <OutcomeKdeCurve player={p}/>
-const COLEMAN_TIERS_KDE = [
-  {name:"Negative",            lo:1,  hi:19,  color:"#ec4899"},
-  {name:"Replacement",         lo:20, hi:39,  color:"#f97316"},
-  {name:"Role Player",         lo:40, hi:49,  color:"#fbbf24"},
-  {name:"Average Starter",     lo:50, hi:59,  color:"#86efac"},
-  {name:"Good Starter",        lo:60, hi:69,  color:"#22c55e"},
-  {name:"Fringe All-Star",     lo:70, hi:79,  color:"#60a5fa"},
-  {name:"Perennial All-Star",  lo:80, hi:87,  color:"#3b82f6"},
-  {name:"All-NBA Regular",     lo:88, hi:94,  color:"#2563eb"},
-  {name:"Generational/MVP",    lo:95, hi:100, color:"#1d4ed8"},
-];
-function _kdeEffN(weights) {
-  let s = 0, ss = 0;
-  for (const w of weights) { s += w; ss += w * w; }
-  return ss > 0 ? (s * s) / ss : 0;
-}
-function _kdeMoments(grades, weights) {
-  let wSum = 0, mean = 0;
-  for (let i = 0; i < grades.length; i++) {
-    wSum += weights[i]; mean += weights[i] * grades[i];
-  }
-  if (wSum <= 0) return { mean: 50, std: 15 };
-  mean /= wSum;
-  let varAcc = 0;
-  for (let i = 0; i < grades.length; i++) {
-    const d = grades[i] - mean; varAcc += weights[i] * d * d;
-  }
-  varAcc /= wSum;
-  return { mean, std: Math.sqrt(Math.max(varAcc, 1e-6)) };
-}
-function _silverman(std, nEff) {
-  if (!isFinite(std) || std <= 0 || nEff <= 1) return 8;
-  return Math.max(3, 1.06 * std * Math.pow(nEff, -1 / 5));
-}
-function _kdeAt(x, comps, h) {
-  if (!comps || comps.length === 0 || h <= 0) return 0;
-  const inv = 1 / h;
-  const NORM = 0.3989422804014327;
-  let d = 0;
-  for (let i = 0; i < comps.length; i++) {
-    const z = (x - comps[i].g) * inv;
-    d += comps[i].w * NORM * inv * Math.exp(-0.5 * z * z);
-  }
-  return d;
-}
-function _kdeQuantiles(comps, h, qList) {
-  const N = 400;
-  const dens = new Array(N + 1);
-  let total = 0;
-  for (let i = 0; i <= N; i++) {
-    const x = (i / N) * 100;
-    const d = _kdeAt(x, comps, h);
-    dens[i] = d; total += d;
-  }
-  const out = {};
-  const sorted = qList.slice().sort((a, b) => a - b);
-  if (total <= 0) { for (const q of sorted) out[q] = q * 100; return out; }
-  let cum = 0, qIdx = 0;
-  for (let i = 0; i <= N && qIdx < sorted.length; i++) {
-    cum += dens[i];
-    while (qIdx < sorted.length && cum / total >= sorted[qIdx]) {
-      out[sorted[qIdx]] = (i / N) * 100; qIdx++;
-    }
-  }
-  while (qIdx < sorted.length) { out[sorted[qIdx]] = 100; qIdx++; }
-  return out;
-}
-function _kdeMode(comps, h) {
-  const N = 400;
-  let bestX = 50, bestY = -1;
-  for (let i = 0; i <= N; i++) {
-    const x = (i / N) * 100;
-    const d = _kdeAt(x, comps, h);
-    if (d > bestY) { bestY = d; bestX = x; }
-  }
-  return bestX;
-}
 
-function OutcomeKdeCurve({ player }) {
-  const [data, setData] = useState(null);
-  const [status, setStatus] = useState("idle");
-
-  useEffect(() => {
-    if (!player?.name) { setData(null); return; }
-    let cancelled = false;
-    setStatus("loading");
-    const url = `${API_BASE.replace("/api","")}/api/outcome_comps/${encodeURIComponent(player.name)}`;
-    fetch(url)
-      .then(r => {
-        if (r.status === 404) { if (!cancelled) { setData(null); setStatus("ready"); } return null; }
-        return r.ok ? r.json() : null;
-      })
-      .then(json => {
-        if (cancelled) return;
-        if (json?.comps) { setData(json.comps); setStatus("ready"); }
-        else { setData(null); setStatus("ready"); }
-      })
-      .catch(() => { if (!cancelled) setStatus("error"); });
-    return () => { cancelled = true; };
-  }, [player?.name]);
-
-  const params = useMemo(() => {
-    if (!data) return null;
-    const grades = data.comp_grades || [];
-    const weights = data.comp_weights || [];
-    if (grades.length === 0 || grades.length !== weights.length) return null;
-    let total = 0; for (const w of weights) total += w;
-    if (total <= 0) return null;
-    const wNorm = weights.map(w => w / total);
-    const nEff = _kdeEffN(wNorm);
-    const { mean, std } = _kdeMoments(grades, wNorm);
-    const h = _silverman(std, nEff);
-    const comps = grades.map((g, i) => ({ g, w: wNorm[i] }));
-    const q = _kdeQuantiles(comps, h, [0.10, 0.50, 0.90]);
-    const mode = _kdeMode(comps, h);
-    const idx = wNorm.map((w, i) => ({ w, i }))
-                     .sort((a, b) => b.w - a.w).slice(0, 5);
-    const topComps = idx.map(o => ({
-      name: (data.comp_names || [])[o.i] || `comp-${o.i}`,
-      weight: wNorm[o.i],
-      grade: grades[o.i],
-      peakWa: (data.comp_peak_wa || [])[o.i],
-    }));
-    return { comps, h, mean, std, nEff, q, mode, topComps };
-  }, [data]);
-
-  if (status === "loading") {
-    return (
-      <div className="rounded-xl p-4 text-xs text-gray-500"
-           style={{background:"#0d1117",border:"1px solid #1f2937"}}>
-        Loading outcome comp pool…
-      </div>
-    );
-  }
-  if (status === "error" || !params) return null;
-
-  let tier = COLEMAN_TIERS_KDE[COLEMAN_TIERS_KDE.length - 1];
-  for (const t of COLEMAN_TIERS_KDE) {
-    if (params.mode >= t.lo && params.mode <= t.hi) { tier = t; break; }
-  }
-
-  const W = 700, H = 240;
-  const M = { top: 32, right: 24, bottom: 50, left: 24 };
-  const px = (g) => M.left + (g / 100) * (W - M.left - M.right);
-  const N = 200;
-  let maxY = 0;
-  const samples = new Array(N + 1);
-  for (let i = 0; i <= N; i++) {
-    const g = (i / N) * 100;
-    const y = _kdeAt(g, params.comps, params.h);
-    samples[i] = { g, y };
-    if (y > maxY) maxY = y;
-  }
-  const yNorm = (y) => maxY > 0 ? y / maxY : 0;
-  const peakHeight = H - M.top - M.bottom;
-  const py = (y) => H - M.bottom - yNorm(y) * peakHeight;
-  const baselineY = H - M.bottom;
-  let outlineD = "";
-  for (let i = 0; i < samples.length; i++) {
-    const s = samples[i];
-    outlineD += (i === 0 ? "M " : " L ") + px(s.g).toFixed(2) + "," + py(s.y).toFixed(2);
-  }
-  const pathD = `M ${px(0).toFixed(2)},${baselineY} ` + outlineD.slice(1) +
-                ` L ${px(100).toFixed(2)},${baselineY} Z`;
-  const fmt = (v) => v == null || !isFinite(v) ? "—" : v.toFixed(0);
-
-  return (
-    <div className="rounded-2xl p-5" style={{background:"#0d1117",border:`1px solid ${tier.color}55`}}>
-      <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
-        <div>
-          <div className="text-xs uppercase tracking-widest" style={{color:"#9ca3af"}}>
-            Outcome Distribution (Empirical KDE)
-          </div>
-          <div className="text-2xl font-bold mt-0.5"
-               style={{color:"#f1f5f9",fontFamily:"'Oswald',sans-serif"}}>
-            Grade <span style={{color:tier.color}}>{fmt(params.mode)}</span>
-            <span className="text-sm font-normal ml-2" style={{color:"#9ca3af"}}>
-              ({fmt(params.q[0.10])}–{fmt(params.q[0.90])})
-            </span>
-          </div>
-        </div>
-        <div className="text-right">
-          <div className="text-xs uppercase tracking-wider" style={{color:"#9ca3af"}}>Tier</div>
-          <div className="text-base font-bold" style={{color:tier.color}}>{tier.name}</div>
-        </div>
-      </div>
-      <svg width="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
-        {COLEMAN_TIERS_KDE.map((t) => (
-          <rect key={t.name}
-            x={px(t.lo)} y={M.top}
-            width={px(t.hi) - px(t.lo)}
-            height={H - M.top - M.bottom}
-            fill={t.color}
-            opacity={t.name === tier.name ? 0.16 : 0.05}/>
-        ))}
-        <path d={pathD} fill={tier.color} opacity={0.55}/>
-        <path d={outlineD} fill="none" stroke={tier.color} strokeWidth="1.5" opacity={0.9}/>
-        {[
-          { g: params.q[0.10], label: "L-LIMIT", anchor: "start" },
-          { g: params.mode,    label: "MODE",    anchor: "middle" },
-          { g: params.q[0.90], label: "H-LIMIT", anchor: "end" },
-        ].map((m, i) => (
-          <g key={i}>
-            <line x1={px(m.g)} x2={px(m.g)} y1={M.top} y2={H - M.bottom}
-                  stroke={i === 1 ? tier.color : "#9ca3af"}
-                  strokeWidth={i === 1 ? 2 : 1}
-                  strokeDasharray={i === 1 ? "0" : "3,3"}/>
-            <text x={px(m.g) + (m.anchor === "start" ? 4 : m.anchor === "end" ? -4 : 0)}
-                  y={M.top - 8}
-                  textAnchor={m.anchor}
-                  fontSize="10" fontWeight="700"
-                  fill={i === 1 ? tier.color : "#9ca3af"}>{m.label}</text>
-          </g>
-        ))}
-        {[0, 20, 40, 50, 60, 70, 80, 88, 95, 100].map(g => (
-          <g key={g}>
-            <line x1={px(g)} x2={px(g)} y1={H - M.bottom} y2={H - M.bottom + 4}
-                  stroke="#374151" strokeWidth="1"/>
-            <text x={px(g)} y={H - M.bottom + 18} textAnchor="middle"
-                  fontSize="10" fill="#6b7280">{g}</text>
-          </g>
-        ))}
-        <text x={W/2} y={H - 8} textAnchor="middle" fontSize="11"
-              fontWeight="600" fill="#9ca3af">
-          Outcome Grade (0–100, Coleman scale)
-        </text>
-      </svg>
-      <div className="mt-3 rounded-lg p-3"
-           style={{background:"#0a0e16",border:"1px solid #1f2937"}}>
-        <div className="text-[10px] uppercase tracking-widest mb-1.5"
-             style={{color:"#6b7280"}}>
-          Top 5 by similarity weight (n_eff ≈ {params.nEff.toFixed(1)} of {params.comps.length})
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-2 text-[11px]">
-          {params.topComps.map((c, i) => (
-            <div key={i} className="rounded p-1.5" style={{background:"#111827"}}>
-              <div className="font-semibold truncate" style={{color:"#f1f5f9"}}>{c.name}</div>
-              <div style={{color:"#9ca3af",fontSize:"10px"}}>
-                Grade {c.grade?.toFixed(0)} · w {(c.weight*100).toFixed(1)}%
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="mt-3 text-[11px]" style={{color:"#9ca3af",lineHeight:1.5}}>
-        <strong style={{color:"#cbd5e1"}}>How to read:</strong> the curve is a non-parametric kernel
-        density estimate over the {params.comps.length} most-similar NBA-careered comparable players,
-        kernel-weighted by the same engine that drives Bust-Risk and Star-Upside. The MODE marks where
-        his comps actually clustered; L-Limit and H-Limit cover roughly the p10–p90 band of realized
-        outcomes. No Gaussian, Beta, or other parametric assumption is imposed on the shape.
-      </div>
-    </div>
-  );
+// playerSourceMeta — single source of truth for player source metadata.
+// All code that needs to know "is this player NCAA or International?" or
+// what threshold cohort to display must call this helper instead of
+// inlining `p.source !== "ncaa"`. Forward-compatible: extend the returned
+// object as new source-dependent logic emerges.
+//
+// Contract:
+//   In : player profile object (may be undefined)
+//   Out: { isIntl: bool, isNcaa: bool, source: "ncaa"|"intl"|<other>,
+//          thresholdCohort: string for verdict-block UI }
+function playerSourceMeta(p) {
+  const src = (p && p.source) ? p.source : "ncaa";
+  const isIntl = src !== "ncaa";
+  return {
+    isIntl,
+    isNcaa: !isIntl,
+    source: src,
+    thresholdCohort: isIntl
+      ? "Intl Bridge Cohort (n≈400, Euroleague/ACB/BBL/FIBA youth)"
+      : "NCAA Pre-Draft 2008–2018 (n≈506 NBA players)",
+  };
 }
 
 export default function App() {
@@ -9092,9 +13722,9 @@ export default function App() {
       <main className="max-w-7xl mx-auto px-4 md:px-8 py-6">
         {!sel ? (
           <>
-            {/* Meta-level navigation: Big Board (default) · Research · Methods */}
+            {/* Meta-level navigation: Big Board (default) · Stats Lab · Research · Methods */}
             <div className="flex gap-2 mb-6 flex-wrap">
-              {[["bigboard","Big Board","▦"],["research","Research","🔬"],["methods","Methods","📖"]].map(([id,label,icon])=>(
+              {[["bigboard","Big Board","▦"],["lab","Stats Lab","🧪"],["research","Research","🔬"],["methods","Methods","📖"]].map(([id,label,icon])=>(
                 <button key={id} onClick={()=>setBoardView(id)}
                   className="px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
                   style={{background: boardView===id?"#f97316":"transparent",
@@ -9113,6 +13743,8 @@ export default function App() {
               ) : (
                 <BigBoardView onSelect={selectPlayer} boardData={boardData} setBoardData={setBoardData} loading={loading} setLoading={setLoading} availableYears={availableYears} yearFilter={yearFilter} setYearFilter={setYearFilter}/>
               )
+            ) : boardView==="lab" ? (
+              <StatsLabView onSelect={selectPlayer}/>
             ) : boardView==="research" ? (
               <ResearchTab p={null}/>
             ) : (
@@ -9140,7 +13772,7 @@ export default function App() {
           <>
             <button onClick={()=>setSel(null)} className="mb-4 flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:bg-white hover:bg-opacity-5"
               style={{color:"#9ca3af",border:"1px solid #374151"}}>
-              <span>←</span> Back to Big Board
+              <span>←</span> Back to Big  Board
             </button>
             {tab!=="methodology" && <>
               <div className="mb-5 rounded-2xl p-5 relative overflow-hidden" style={{background:"linear-gradient(135deg,#111827 0%,#0f172a 50%,#1e1b4b 100%)",border:"1px solid #1f2937"}}>
@@ -9228,9 +13860,15 @@ export default function App() {
             {tab==="mind"&&<MindTab p={p}/>}
             {tab==="scouting"&&<ScoutingTab p={p} mode="scouting"/>}
             {tab==="roles"&&<ScoutingTab p={p} mode="roles"/>}
-            {tab==="comps"&&<CompsTab p={p}/>}
+            {/* Sprint-3.10 (Tobias 2026-06-13): Comps tab now routed to the
+                v5 NBA-Profi engine. The legacy CompsTab function is kept in
+                source above as a deprecated reference but no longer rendered.
+                Old single-score stats comps and anthro comps are deprecated;
+                v5 covers their use cases with explicit per-dimension splits. */}
+            {tab==="comps"&&<CompsV5Tab p={p}/>}
             {tab==="devtrajectory"&&<DevTrajectoryTab p={p}/>}
             {tab==="projection"&&<ProjectionTab p={p}/>}
+            {/* Tobias 2026-06-04 (Sprint-2): Risk Profile Tab re-enabled — siehe TABS-Eintrag */}
             {tab==="riskprofile"&&<RiskProfileTab p={p}/>}
           </>
         )}
