@@ -14449,6 +14449,13 @@ function OutcomeKdeCurve({ player }) {
       </svg>
       <div className="mt-3 rounded-lg p-3" style={{background:"#0a0e16",border:"1px solid #1f2937"}}>
         <div className="text-[10px] uppercase tracking-widest mb-1.5" style={{color:"#6b7280"}}>Top 5 by similarity weight (n_eff = {params.nEff.toFixed(1)} of {params.comps.length})</div>
+      <div className="mt-2 text-[10px] italic" style={{color:"#6b7280", lineHeight:1.4}}>
+        <strong>How to read this honestly:</strong> the L-Limit / H-Limit bands are robust signals
+        of plausible outcomes — the Mode is a best guess of where similar prospects most often
+        landed, not a prediction of what he will be. Probabilities are approximate, ranges are real.
+        Pool includes NCAA-played-but-no-NBA failures (Stepien-style) so the comp pool reflects
+        realistic risk rather than only survivor stories.
+      </div>
         <div className="grid grid-cols-1 md:grid-cols-5 gap-2 text-[11px]">
           {params.topComps.map((c, i) => (
             <div key={i} className="rounded p-1.5" style={{background:"#111827"}}>
