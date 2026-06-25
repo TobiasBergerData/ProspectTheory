@@ -89,6 +89,28 @@ def build_lookup() -> dict:
             "compStrength": _num(r.comp_strength),
             "upsideFactors": _factors(getattr(r, "upside_factors", "")),
             "riskFactors": _factors(getattr(r, "risk_factors", "")),
+            # Sprint-5.5.E: Tier-Probabilities (6 canonical NBA tiers)
+            "tierProbs": {
+                "intl_career": _num(getattr(r, "p_intl_career", None)),
+                "replacement": _num(getattr(r, "p_replacement", None)),
+                "roleplayer":  _num(getattr(r, "p_roleplayer", None)),
+                "starter":     _num(getattr(r, "p_starter", None)),
+                "all_star":    _num(getattr(r, "p_all_star", None)),
+                "superstar":   _num(getattr(r, "p_superstar", None)),
+            },
+            # Distribution-Summary (peak_wa augmented with p_nba mass at -4)
+            "pwDistribution": {
+                "mode": _num(getattr(r, "pw_mode", None)),
+                "p20":  _num(getattr(r, "pw_p20", None)),
+                "p50":  _num(getattr(r, "pw_p50", None)),
+                "p80":  _num(getattr(r, "pw_p80", None)),
+                "nEffective": _num(getattr(r, "n_effective", None)),
+            },
+            # Confidence indicators (Sprint-5.5.D Outlier-Risk-Flag)
+            "outlierRisk":   (r.outlier_risk if isinstance(getattr(r, "outlier_risk", None), str) else None),
+            "maxTierProb":   _num(getattr(r, "max_tier_prob", None)),
+            "tierEntropy":   _num(getattr(r, "tier_entropy", None)),
+            "poolStd":       _num(getattr(r, "pool_std", None)),
         }
         # Risiko-Achsen sind Pflicht; ohne sie kein sinnvolles Profil
         if prof["bustRisk"] is None and prof["starUpside"] is None:
