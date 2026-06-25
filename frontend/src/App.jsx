@@ -6738,9 +6738,11 @@ function RfPwaCurve({p}) {
     all_star: "All-Star", superstar: "Superstar",
   };
   const total = TIERS.reduce((s,t) => s + (TPS[t.key] || 0), 0) || 1;
-  // Sprint-5.5.H: cumulative-threshold modal (matches Hero-Card recalibrateTier).
-  const modalKey = _rfModalTier(TPS);
-  const modal = TIERS.find(t => t.key === modalKey) || TIERS[0];
+  // Sprint-5.5.J: strict-max modal (matches Hero-Card after unification + matches curve peak).
+  const modal = TIERS.reduce(
+    (max,t) => (TPS[t.key] || 0) > (TPS[max.key] || 0) ? t : max, TIERS[0]);
+  const aspirationalKey = _rfModalTier(TPS);
+  const aspirationalTier = TIERS.find(t => t.key === aspirationalKey) || TIERS[0];
 
   // ── Gaussian-mixture density ──
   const N = 240;
@@ -6783,6 +6785,11 @@ function RfPwaCurve({p}) {
         <div className="text-right">
           <div className="text-xs uppercase tracking-wider" style={{color:"#9ca3af"}}>Modal Tier</div>
           <div className="text-base font-bold" style={{color:modal.color}}>{TIER_LABEL[modal.key]}</div>
+          {aspirationalKey !== modal.key && (
+            <div className="text-xs mt-1" style={{color:aspirationalTier.color,opacity:0.85}}>
+              Aspirational: {TIER_LABEL[aspirationalKey]}
+            </div>
+          )}
         </div>
       </div>
       <svg width="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
@@ -6868,9 +6875,11 @@ function RfTierForecast({p}) {
     {key: "superstar",   label: "Superstar",   color: "#fbbf24", lo: 20,  hi: 40},
   ];
   const total = TIERS.reduce((s,t) => s + (TPS[t.key] || 0), 0) || 1;
-  // Sprint-5.5.H: cumulative-threshold modal (matches Hero-Card recalibrateTier).
-  const modalKey = _rfModalTier(TPS);
-  const modal = TIERS.find(t => t.key === modalKey) || TIERS[0];
+  // Sprint-5.5.J: strict-max modal (matches Hero-Card after unification + matches curve peak).
+  const modal = TIERS.reduce(
+    (max,t) => (TPS[t.key] || 0) > (TPS[max.key] || 0) ? t : max, TIERS[0]);
+  const aspirationalKey = _rfModalTier(TPS);
+  const aspirationalTier = TIERS.find(t => t.key === aspirationalKey) || TIERS[0];
   const ax = (wa) => Math.max(0, Math.min(100, ((wa + 8) / 48) * 100));
   const riskColor = rp.outlierRisk === "high" ? "#ef4444"
                   : rp.outlierRisk === "medium" ? "#f59e0b" : "#10b981";
@@ -7167,8 +7176,46 @@ function OutcomeDistributionCurve({p}) {
 }
 
 
-function ProjectionTab({p}) {
-  if (!p) return null;
+function ProjectionTab({p: _pOrig}) {
+  if (!_pOrig) return null;
+  // Sprint-5.5.J: when RF Proximity (riskProfile.tierProbs) is available, use
+  // it as the single source-of-truth for all Hero-Card values. Eliminates the
+  // v2-PPWA vs RF-Proximity discrepancy.
+  const p = (() => {
+    const tps = _pOrig?.riskProfile?.tierProbs;
+    if (!tps || tps.starter == null) return _pOrig;
+    const M = {intl_career: -4, replacement: 0.25, roleplayer: 2.5,
+               starter: 9, all_star: 17, superstar: 30};
+    const ev = Object.entries(M).reduce((s, [k, m]) => s + (tps[k] || 0) * m, 0);
+    const keys = Object.keys(M);
+    const modalKey = keys.reduce(
+      (max, k) => (tps[k] || 0) > (tps[max] || 0) ? k : max, keys[0]);
+    const RF_TO_V2 = {
+      intl_career: "Negative", replacement: "Replacement",
+      roleplayer: "Role Player", starter: "Starter",
+      all_star: "All-Star", superstar: "Superstar",
+    };
+    const r = _pOrig?.riskProfile?.outlierRisk;
+    const confMap = {high: "Low", medium: "Medium", low: "High"};
+    const rfTierProbs = {
+      Superstar:     (tps.superstar   || 0) * 100,
+      "All-Star":    (tps.all_star    || 0) * 100,
+      Starter:       (tps.starter     || 0) * 100,
+      "Role Player": (tps.roleplayer  || 0) * 100,
+      Replacement:   (tps.replacement || 0) * 100,
+      Negative:      (tps.intl_career || 0) * 100,
+    };
+    return {
+      ..._pOrig,
+      war: ev,
+      ppwa: ev,
+      predTier: RF_TO_V2[modalKey],
+      pElite: (tps.all_star || 0) + (tps.superstar || 0),
+      v2Conf: confMap[r] || "Medium",
+      v2TierProbs: rfTierProbs,
+      pNba: 1 - (tps.intl_career || 0),
+    };
+  })();
   // Prefer v2TierProbs (new model, %-scale already) over legacy prob_* fields
   const v2Probs = p.v2TierProbs || null;
   const tiers = v2Probs || p.tiers || {};
