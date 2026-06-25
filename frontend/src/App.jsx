@@ -921,6 +921,16 @@ function Tip({children, content, wide=false, block=false}) {
 // METHODOLOGY DEFINITIONS
 // ═══════════════════════════════════════════════════════════
 const METHODS = {
+  // Sprint-5.5.E (2026-06-25): Player-tier probability via Random Forest
+  // proximity engine. Replaces the pick-relative bust-risk concept with
+  // pick-slot-independent tier prognosis. Six NBA tiers (Intl Career →
+  // Superstar). Bayesian combine of P(NBA) classifier and tier-KDE on
+  // historical NBA survivors.
+  outcomeTierForecast: {
+    name: "Outcome Tier Forecast",
+    formula: "P(Tier_i) = (1−p_NBA) · 1[Tier_i = Intl Career]  +  p_NBA · P_KDE(Tier_i | survivors)\nKDE weights = proximity(target, survivor) from 500-tree RandomForestRegressor on 21 pre-draft features\nProximity = fraction of trees where target & survivor land in the same leaf (Breiman 2001).",
+    desc: "A pick-slot-independent player-tier forecast — NOT a bust-risk score.\n\nTHE QUESTION: what NBA tier is this player most likely to reach, and what is the full probability distribution? Output is six probabilities summing to 1.0, plus the peak Wins Added distribution (mode, p20/p50/p80).\n\nTHE TIERS (peak Wins Added):\n  Intl Career     < 0    never produced NBA value\n  Replacement     0-0.5  bench-end / G-League\n  Roleplayer      0.5-5  solid rotation\n  Starter         5-14   quality NBA starter\n  All-Star        14-20  All-Star caliber\n  Superstar       ≥ 20   top-15 / MVP caliber\n\nHOW TO READ:\nModal tier is the most likely single outcome. p20/p80 mark the realistic floor and ceiling. The decision-maker interprets this against pick slot — a Modal=Roleplayer at #41 is a steal; at #2 it’s a bust.\n\nHOW THE MODEL WORKS:\n1. 500-tree RandomForestRegressor trained on 297 historical NBA survivors (peak_wa > 0) with 21 pre-draft features (BPM family, production stats, college_height, age, multi-season aggregates).\n2. For each prospect: leaf-co-occurrence proximity weights the survivor pool (Breiman 2001).\n3. Separate RandomForestClassifier predicts P(NBA) — probability of producing positive NBA value.\n4. Bayesian combine: P(Intl Career) = 1−P(NBA); P(Tier_i ≥ Replacement) = P(NBA) × P(Tier_i | survivor pool, weighted by proximity).\n5. peak_wa distribution = augmented mixture: (1−P(NBA)) mass at peak_wa = −4, P(NBA) × proximity-weighted survivor peak_wa.\n\nVALIDATION:\n5-fold temporal CV across 2014-2022. Stable: Top-1 accuracy 45.3% (Stdabw 2.6pp, random = 17%), Star+ discrimination +0.19 (Stdabw 0.027), Multi-class Brier 0.76. Single-slice OOT (2018-2022): Top-1 30.8%, Ordinal distance 1.04 tiers, Star+ discrimination +0.33.\n\nLIMITS:\n• Outlier stars (Anthony Edwards, Devin Booker style: pre-draft profile resembles wing-starter, outcome is All-NBA) are methodologically inherent — comp-based modeling cannot predict outcomes 2σ above the pool median.\n• Injury-driven busts (Markelle Fultz) are not predictable from pre-draft signal alone.\n• Outlier-risk flag (low/medium/high) surfaces these cases — high means thin comp pool, wide spread, or flat tier distribution. Trust scout eye-test more in these cases.\n\nFor the 0-100 grade visualization of the same forecast, see the Outcome Distribution panel.",
+  },
   feel: {
     name: "IQ & Feel",
     formula: "(pctl(AST%) × 0.6 + pctl(AST/TO) × 0.4) × League_Adj",
@@ -6676,6 +6686,134 @@ function DevTrajectoryTab({p}) {
 }
 
 // ═══════════════════════════════════════════════════════════
+// RF TIER FORECAST (Sprint-5.5.E)
+// Player-tier probability from the Random Forest Proximity engine.
+// 6 NBA tiers (peak Wins Added), Bayesian combine of P(NBA) classifier
+// and tier-KDE on historical NBA survivors. Reads riskProfile.tierProbs +
+// .pwDistribution + .outlierRisk populated by inject_draft_risk.py.
+// ═══════════════════════════════════════════════════════════
+function RfTierForecast({p}) {
+  const rp = p.riskProfile;
+  if (!rp?.tierProbs || rp.tierProbs.starter == null) return null;
+  const TPS = rp.tierProbs;
+  const dist = rp.pwDistribution || {};
+  const TIERS = [
+    {key: "intl_career", label: "Intl Career", color: "#6b7280", lo: -8,  hi: 0},
+    {key: "replacement", label: "Replacement", color: "#8b5cf6", lo: 0,   hi: 0.5},
+    {key: "roleplayer",  label: "Roleplayer",  color: "#06b6d4", lo: 0.5, hi: 5},
+    {key: "starter",     label: "Starter",     color: "#3b82f6", lo: 5,   hi: 14},
+    {key: "all_star",    label: "All-Star",    color: "#f97316", lo: 14,  hi: 20},
+    {key: "superstar",   label: "Superstar",   color: "#fbbf24", lo: 20,  hi: 40},
+  ];
+  const total = TIERS.reduce((s,t) => s + (TPS[t.key] || 0), 0) || 1;
+  const modal = TIERS.reduce(
+    (max,t) => (TPS[t.key] || 0) > (TPS[max.key] || 0) ? t : max, TIERS[0]);
+  const ax = (wa) => Math.max(0, Math.min(100, ((wa + 8) / 48) * 100));
+  const riskColor = rp.outlierRisk === "high" ? "#ef4444"
+                  : rp.outlierRisk === "medium" ? "#f59e0b" : "#10b981";
+  const confLabel = rp.outlierRisk === "high" ? "Uncertain"
+                  : rp.outlierRisk === "medium" ? "Moderate" : "Confident";
+  return (
+    <div className="rounded-2xl p-5" style={{background:"#0d1117",border:`1px solid ${modal.color}55`}}>
+      <div className="flex items-baseline justify-between mb-4 flex-wrap gap-2">
+        <div>
+          <div className="text-xs uppercase tracking-widest" style={{color:"#9ca3af"}}>Modal Outcome (RF Proximity)</div>
+          <div className="text-2xl font-bold mt-0.5" style={{color:modal.color, fontFamily:"\'Oswald\',sans-serif"}}>
+            {modal.label}
+          </div>
+          <div className="text-xs mt-0.5" style={{color:"#6b7280"}}>
+            {((TPS[modal.key]||0)*100).toFixed(0)}% modal probability
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-xs uppercase tracking-wider" style={{color:"#9ca3af"}}>Confidence</div>
+          <div className="text-sm font-bold px-2 py-0.5 rounded inline-block mt-0.5" style={{
+            color: riskColor, background: riskColor + "22",
+            border: `1px solid ${riskColor}55`
+          }}>{confLabel}</div>
+          {dist.nEffective != null && (
+            <div className="text-xs mt-1" style={{color:"#6b7280"}}>
+              n<sub>eff</sub> = {dist.nEffective.toFixed(0)}
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="mb-4">
+        {TIERS.map(t => {
+          const pct = ((TPS[t.key] || 0) / total) * 100;
+          const isModal = t.key === modal.key;
+          return (
+            <div key={t.key} className="flex items-center mb-1.5">
+              <div className="text-xs font-semibold w-24" style={{color: isModal ? t.color : "#9ca3af"}}>
+                {t.label}
+              </div>
+              <div className="flex-1 h-5 rounded relative overflow-hidden" style={{background:"#1f2937"}}>
+                <div className="h-full" style={{
+                  width: `${pct}%`, background: t.color, opacity: isModal ? 1 : 0.55
+                }}/>
+                <span className="absolute right-2 top-0.5 text-xs font-bold" style={{color:"#e5e7eb"}}>
+                  {pct.toFixed(0)}%
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {dist.mode != null && (
+        <div className="mt-5">
+          <div className="text-xs uppercase tracking-wider mb-3" style={{color:"#9ca3af"}}>
+            Peak Wins Added Distribution
+          </div>
+          <div className="relative" style={{height: 70}}>
+            <div className="absolute top-7 left-0 right-0 h-5 rounded flex overflow-hidden">
+              {TIERS.map((t,i) => {
+                const w = ax(t.hi) - ax(t.lo);
+                return (
+                  <div key={i} style={{width: `${w}%`, background: t.color, opacity: 0.18}} className="h-full border-r border-gray-800"/>
+                );
+              })}
+            </div>
+            {[
+              {key: "p20", v: dist.p20, label: "p20", c: "#6b7280", bold: false},
+              {key: "p50", v: dist.p50, label: "p50", c: "#9ca3af", bold: false},
+              {key: "p80", v: dist.p80, label: "p80", c: "#6b7280", bold: false},
+              {key: "mode", v: dist.mode, label: "Mode", c: modal.color, bold: true},
+            ].filter(m => m.v != null).map(m => (
+              <div key={m.key} className="absolute" style={{left: `${ax(m.v)}%`, top: 0}}>
+                <div className="text-xs font-bold whitespace-nowrap" style={{
+                  color: m.c, transform: "translateX(-50%)", marginBottom: 2,
+                  fontWeight: m.bold ? 800 : 600
+                }}>{m.label}</div>
+                <div style={{
+                  height: m.bold ? 28 : 22, width: m.bold ? 2 : 1,
+                  background: m.c,
+                  transform: "translateX(-50%)",
+                  marginLeft: m.bold ? -1 : 0
+                }}/>
+                <div className="text-xs whitespace-nowrap mt-1" style={{
+                  color: m.c, transform: "translateX(-50%)"
+                }}>{m.v.toFixed(1)}</div>
+              </div>
+            ))}
+            <div className="absolute bottom-0 left-0 right-0 flex justify-between text-xs" style={{color:"#4b5563"}}>
+              <span>-4</span><span>0</span><span>5</span><span>14</span><span>20</span><span>40</span>
+            </div>
+          </div>
+        </div>
+      )}
+      {rp.outlierRisk === "high" && (
+        <div className="mt-4 text-xs italic" style={{color:"#9ca3af", lineHeight:1.4}}>
+          High outlier-risk: thin comp pool or wide outcome spread. Modal tier is most likely
+          but uncertainty is elevated — comp-based forecasts cannot capture true outlier stars
+          or injury-driven busts. Trust scout eye-test more.
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════
 // OUTCOME DISTRIBUTION CURVE (Sprint-5.0, Tobias 2026-06-23)
 // Coleman-style probability-density curve of a prospect's outcome on
 // the 0-100 grade scale. Backed by ppwa + sigma + tier-probs — no new
@@ -7134,6 +7272,12 @@ function ProjectionTab({p}) {
           )}
         </div>
       </div>
+
+      {/* ═══ RF TIER FORECAST (Sprint-5.5.E) — Player-tier probability from RF Proximity engine ═══ */}
+      <Sec icon="▲" title="Outcome Tier Forecast"
+        sub="Player-tier probability distribution from the Random Forest Proximity engine (Sprint-5.5.E). Six NBA tiers (peak Wins Added) from a 500-tree RF trained on 21 pre-draft features. Bayesian combine separates \'makes NBA\' from \'what tier conditional on NBA\'. Modal tier is the most likely single outcome; the full distribution shows realistic floor (p20) and ceiling (p80). Pick-slot independent — bust/steal interpretation is the decision-maker\'s job.">
+        <RfTierForecast p={p}/>
+      </Sec>
 
       {/* ═══ OUTCOME DISTRIBUTION (Sprint-5.0) — Coleman-style density curve on 0-100 grade scale ═══ */}
       <Sec icon="◉" title="Outcome Distribution"
