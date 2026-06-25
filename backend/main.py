@@ -177,6 +177,12 @@ _BOARD_FIELDS = [
     "pred_mu", "pred_sigma", "pred_p_nba", "pred_tier",
     # Tier probabilities (old model — still used as fallback in tier chart)
     "prob_super", "prob_allstar", "prob_starter", "prob_role", "prob_repl", "prob_neg",
+    # Sprint-5.5.E RF Proximity engine output (nested object).
+    # riskProfile.tierProbs.{intl_career,replacement,roleplayer,starter,all_star,superstar}
+    # riskProfile.pwDistribution.{mode,p20,p50,p80,nEffective}
+    # riskProfile.outlierRisk = "low" | "medium" | "high"
+    # Used by Big Board RangeView + TierBoardView + Hero-Card single-source-of-truth.
+    "riskProfile",
     # Core stats (Overview + pReady check)
     "pctl_overall", "pctl", "bpm", "obpm", "dbpm", "ortg",
     "usg", "ts", "pts", "ast", "reb", "stl", "blk",
