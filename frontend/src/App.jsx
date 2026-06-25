@@ -6686,6 +6686,144 @@ function DevTrajectoryTab({p}) {
 }
 
 // ═══════════════════════════════════════════════════════════
+// RF PEAK WINS ADDED CURVE (Sprint-5.5.G)
+// Smooth Gaussian-mixture density on peak_wa axis. Each tier-prob
+// contributes a Gaussian centered at the tier-midpoint, scaled by
+// the probability mass. Same RF Proximity engine as RfTierForecast —
+// just rendered as a continuous outcome density on real basketball units.
+// ═══════════════════════════════════════════════════════════
+function RfPwaCurve({p}) {
+  const rp = p.riskProfile;
+  if (!rp?.tierProbs || rp.tierProbs.starter == null) return null;
+  const TPS = rp.tierProbs;
+  const dist = rp.pwDistribution || {};
+  const X_MIN = -5, X_MAX = 40;
+  const W = 700, H = 280;
+  const M = { top: 36, right: 24, bottom: 50, left: 32 };
+  const xS = (wa) => M.left + ((wa - X_MIN) / (X_MAX - X_MIN)) * (W - M.left - M.right);
+  const TIERS = [
+    {key:"intl_career", color:"#6b7280", lo:X_MIN, hi:0,    center:-2,    sigma:1.5},
+    {key:"replacement", color:"#8b5cf6", lo:0,     hi:0.5,  center:0.25,  sigma:0.4},
+    {key:"roleplayer",  color:"#06b6d4", lo:0.5,   hi:5,    center:2.5,   sigma:1.5},
+    {key:"starter",     color:"#3b82f6", lo:5,     hi:14,   center:9,     sigma:2.5},
+    {key:"all_star",    color:"#f97316", lo:14,    hi:20,   center:17,    sigma:2.0},
+    {key:"superstar",   color:"#fbbf24", lo:20,    hi:X_MAX, center:30,   sigma:5.0},
+  ];
+  const TIER_LABEL = {
+    intl_career: "Intl Career", replacement: "Replacement",
+    roleplayer: "Roleplayer", starter: "Starter",
+    all_star: "All-Star", superstar: "Superstar",
+  };
+  const total = TIERS.reduce((s,t) => s + (TPS[t.key] || 0), 0) || 1;
+  const modal = TIERS.reduce(
+    (max,t) => (TPS[t.key] || 0) > (TPS[max.key] || 0) ? t : max, TIERS[0]);
+
+  // ── Gaussian-mixture density ──
+  const N = 240;
+  let maxY = 0;
+  const samples = new Array(N + 1);
+  for (let i = 0; i <= N; i++) {
+    const wa = X_MIN + (i / N) * (X_MAX - X_MIN);
+    let density = 0;
+    TIERS.forEach(t => {
+      const prob = (TPS[t.key] || 0) / total;
+      if (prob === 0) return;
+      const z = (wa - t.center) / t.sigma;
+      density += prob * Math.exp(-0.5 * z * z) / (t.sigma * Math.sqrt(2 * Math.PI));
+    });
+    samples[i] = {wa, y: density};
+    if (density > maxY) maxY = density;
+  }
+  const yNorm = (y) => maxY > 0 ? y / maxY : 0;
+  const peakHeight = H - M.top - M.bottom;
+  const yS = (y) => M.top + (peakHeight - yNorm(y) * peakHeight);
+  const baselineY = H - M.bottom;
+  let outlineD = "";
+  for (let i = 0; i < samples.length; i++) {
+    outlineD += (i === 0 ? "M " : " L ") + xS(samples[i].wa).toFixed(2) + "," + yS(samples[i].y).toFixed(2);
+  }
+  const pathD = `M ${xS(X_MIN).toFixed(2)},${baselineY} ` + outlineD.slice(1) + ` L ${xS(X_MAX).toFixed(2)},${baselineY} Z`;
+
+  return (
+    <div className="rounded-2xl p-5" style={{background:"#0d1117",border:`1px solid ${modal.color}55`}}>
+      <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+        <div>
+          <div className="text-xs uppercase tracking-widest" style={{color:"#9ca3af"}}>Outcome Curve</div>
+          <div className="text-2xl font-bold mt-0.5" style={{color:modal.color, fontFamily:"'Oswald',sans-serif"}}>
+            Peak WA {dist.mode != null ? dist.mode.toFixed(1) : "—"}
+            <span className="text-sm font-normal ml-2" style={{color:"#9ca3af"}}>
+              ({dist.p20 != null ? dist.p20.toFixed(1) : "—"} – {dist.p80 != null ? dist.p80.toFixed(1) : "—"})
+            </span>
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-xs uppercase tracking-wider" style={{color:"#9ca3af"}}>Modal Tier</div>
+          <div className="text-base font-bold" style={{color:modal.color}}>{TIER_LABEL[modal.key]}</div>
+        </div>
+      </div>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
+        {/* Tier background bands */}
+        {TIERS.map((t,i) => (
+          <rect key={t.key}
+            x={xS(t.lo)}
+            y={M.top}
+            width={Math.max(1, xS(t.hi) - xS(t.lo))}
+            height={H - M.top - M.bottom}
+            fill={t.color}
+            opacity={t.key === modal.key ? 0.16 : 0.06}
+          />
+        ))}
+        {/* Curve filled area */}
+        <path d={pathD} fill={modal.color} opacity={0.55}/>
+        {/* Curve outline */}
+        <path d={outlineD} fill="none" stroke={modal.color} strokeWidth="1.5" opacity={0.9}/>
+        {/* p20 / mode / p80 markers */}
+        {[
+          {v: dist.p20, label: "p20", c: "#9ca3af", anchor: "start", bold: false},
+          {v: dist.mode, label: "MODE", c: modal.color, anchor: "middle", bold: true},
+          {v: dist.p80, label: "p80", c: "#9ca3af", anchor: "end", bold: false},
+        ].filter(m => m.v != null).map((m,i) => (
+          <g key={i}>
+            <line x1={xS(m.v)} x2={xS(m.v)} y1={M.top} y2={H - M.bottom}
+                  stroke={m.c} strokeWidth={m.bold ? 2 : 1}
+                  strokeDasharray={m.bold ? "0" : "3,3"}/>
+            <text x={xS(m.v) + (m.anchor==="start" ? 4 : m.anchor==="end" ? -4 : 0)}
+                  y={M.top - 14}
+                  textAnchor={m.anchor}
+                  fontSize="10"
+                  fontWeight="700"
+                  fill={m.c}>{m.label}</text>
+            <text x={xS(m.v) + (m.anchor==="start" ? 4 : m.anchor==="end" ? -4 : 0)}
+                  y={M.top - 3}
+                  textAnchor={m.anchor}
+                  fontSize="9"
+                  fill="#6b7280">{m.v.toFixed(1)}</text>
+          </g>
+        ))}
+        {/* X-axis ticks (peak_wa values) */}
+        {[-4, 0, 5, 14, 20, 30, 40].map(wa => (
+          <g key={wa}>
+            <line x1={xS(wa)} x2={xS(wa)} y1={H - M.bottom} y2={H - M.bottom + 4} stroke="#374151" strokeWidth="1"/>
+            <text x={xS(wa)} y={H - M.bottom + 18} textAnchor="middle" fontSize="10" fill="#6b7280">{wa}</text>
+          </g>
+        ))}
+        {/* Axis title */}
+        <text x={W/2} y={H - 8} textAnchor="middle" fontSize="11" fontWeight="600" fill="#9ca3af">
+          Peak Wins Added
+        </text>
+      </svg>
+      {rp.outlierRisk === "high" && (
+        <div className="mt-3 text-xs italic" style={{color:"#9ca3af", lineHeight:1.4}}>
+          High outlier-risk: density shape reflects thin comp pool. Mode is best estimate
+          but true outlier-stars are not capturable by comp-based engines.
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════
 // RF TIER FORECAST (Sprint-5.5.E)
 // Player-tier probability from the Random Forest Proximity engine.
 // 6 NBA tiers (peak Wins Added), Bayesian combine of P(NBA) classifier
@@ -7279,66 +7417,10 @@ function ProjectionTab({p}) {
         <RfTierForecast p={p}/>
       </Sec>
 
-      {/* ═══ OUTCOME DISTRIBUTION (Sprint-5.0) — Coleman-style density curve on 0-100 grade scale ═══ */}
-      <Sec icon="◉" title="Outcome Distribution"
-        sub="His projected outcome as a probability density on a 0–100 grade scale. The peak is the single most-likely outcome; the band around it is the range of plausible ones; the shape's lean shows whether the upside or the downside is heavier. Same engine as the Projection above (peak Wins Added + uncertainty + tier probabilities) — no new metric, just a more honest visualization of the risk profile.">
-        <OutcomeDistributionCurve p={p}/>
-      </Sec>
-
-      {/* ═══ TIER DISTRIBUTION ═══ */}
-      <Sec icon="◆" title="Tier Distribution"
-        sub={showNonNba
-          ? `Unconditional career outcome distribution — NBA tier bars scaled by P(NBA) ${(pNba*100).toFixed(0)}%. "Non-NBA" covers G League, international, or out of pro ball.`
-          : "How does the projected grade break down? Bars show each tier's probability, from the player's projected Added Wins and the model's uncertainty. Tiers are graded on the projection scale, calibrated to realistic per-class NBA output (~0.5 Superstar · 3 All-Star · 12 Starter per draft class)."}>
-        <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={tierData} margin={{top:5,right:5,bottom:5,left:5}}>
-            <XAxis dataKey="name" tick={{fill:"#9ca3af",fontSize:11}} axisLine={false} tickLine={false}/>
-            <YAxis tick={{fill:"#6b7280",fontSize:11}} axisLine={false} tickLine={false} domain={[0,Math.max(50,...tierData.map(t=>t.pct+5))]} tickFormatter={v=>`${v}%`}/>
-            <RTooltip
-              contentStyle={{background:"#1f2937",border:"1px solid #374151",borderRadius:8,color:"#e5e7eb"}}
-              content={({active,payload}) => {
-                if (!active || !payload?.length) return null;
-                const d = payload[0].payload;
-                return (
-                  <div style={{background:"#1f2937",border:"1px solid #374151",borderRadius:8,padding:"8px 12px"}}>
-                    <div className="font-bold mb-0.5" style={{color: d.isNonNba ? "#6b7280" : (TC[d.name.replace("Role","Role Player")] || "#e5e7eb")}}>{d.name}</div>
-                    <div style={{color:"#9ca3af",fontSize:"0.85em"}}>{d.pct.toFixed(1)}%</div>
-                    {d.isNonNba && <div style={{color:"#6b7280",fontSize:"0.78em",marginTop:3}}>G League · International · Out of pro ball</div>}
-                    {showNonNba && !d.isNonNba && <div style={{color:"#6b7280",fontSize:"0.78em",marginTop:3}}>= P(NBA) × P(tier | NBA career)</div>}
-                  </div>
-                );
-              }}
-            />
-            <Bar dataKey="pct" radius={[6,6,0,0]}>
-              {tierData.map((e,i) => {
-                // Tobias 2026-05-09: highlight the bin matching the assigned predicted tier
-                // (e.g. Boozer's "All-Star" label → highlight the All-Star bar even though
-                // Starter is the modal/highest bin).
-                const eName = e.name === "Role" ? "Role Player" : e.name;
-                const isSelected = eName === predTier;
-                return (
-                  <Cell key={i} fill={e.fill}
-                    stroke={isSelected ? "#fff" : "transparent"}
-                    strokeWidth={isSelected ? 2 : 0}
-                    strokeDasharray={isSelected ? "0" : "0"}
-                  />
-                );
-              })}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-        <div className="mt-2 text-xs text-center" style={{color:"#6b7280"}}>
-          <span style={{color:"#9ca3af"}}>White outline</span> = assigned tier (cumulative-threshold).
-          Highest bar = modal outcome (most likely single tier).
-        </div>
-        {/* Actual NBA outcome (if available) */}
-        {(p.actual || p.peakPie != null) && (
-          <div className="mt-3 flex items-center gap-3 p-3 rounded-lg" style={{background:"#0c1222",border:"1px solid #1e3a5f"}}>
-            <span className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Actual NBA Outcome:</span>
-            {p.actual && <TierBadge tier={p.actual}/>}
-            {p.peakPie != null && <span className="text-sm" style={{color:"#9ca3af"}}>Peak WA: <strong style={{color:"#fbbf24"}}>{fmt(p.peakPie,3)}</strong></span>}
-          </div>
-        )}
+      {/* ═══ OUTCOME CURVE (Sprint-5.5.G) — Peak Wins Added density from RF Proximity ═══ */}
+      <Sec icon="◉" title="Outcome Curve (Peak Wins Added)"
+        sub="Smooth probability density of his projected peak Wins Added — direct visualization of the Outcome Tier Forecast above. Tier band backgrounds show where curve mass concentrates. p20–p80 = realistic outcome range, mode = single most-likely peak. Same RF Proximity engine as the tier bars above.">
+        <RfPwaCurve p={p}/>
       </Sec>
 
       {/* ═══ PROJECTION DRIVERS — SHAP-based per-player feature contributions (Session 9) ═══ */}
