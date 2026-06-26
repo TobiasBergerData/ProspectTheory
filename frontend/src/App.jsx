@@ -1871,14 +1871,18 @@ function mapProfile(d) {
               : (_dist.p50 != null && isFinite(_dist.p50)) ? _dist.p50
               : (_dist.mode != null && isFinite(_dist.mode)) ? _dist.mode
               : _evFallback;
-    // Threshold-band tier (matches computeRangePpwa bands Z.12544)
+    // Sprint-5.5.J Phase 12: thresholds aligned to Pfad-3 calibrated WAR scale
+    // (quantile-mapped onto established players career_min ≥ 4500, peak_wa ≥ -2).
+    // Percentile-based from 10c re-run output:
+    //   Superstar p99.5 = 11.2, All-Star p98.5 = 6.9, Starter p95 = 2.1,
+    //   Role Player p70 = 0.3, Replacement p0 = 0.
     const _tierByPpwa = (w) => {
       if (w == null || !isFinite(w)) return "Negative";
-      if (w >= 25) return "Superstar";
-      if (w >= 10) return "All-Star";
-      if (w >= 4)  return "Starter";
-      if (w >= 1)  return "Role Player";
-      if (w >= -2) return "Replacement";
+      if (w >= 11.2) return "Superstar";
+      if (w >= 6.9)  return "All-Star";
+      if (w >= 2.1)  return "Starter";
+      if (w >= 0.3)  return "Role Player";
+      if (w >= 0)    return "Replacement";
       return "Negative";
     };
     const _ppwaTier = _tierByPpwa(_ev);
@@ -12574,13 +12578,14 @@ function computeRangePpwa(p) {
   const tiers = p?.tiers || p?.v2TierProbs;
   if (!tiers) return { floor: -2, med: 5, ceil: 15 };
   // (continuing with v2-format tier-CDF below)
+  // Sprint-5.5.J Phase 12: bands aligned to Pfad-3 calibrated WAR scale.
   const ORDER = [
-    { name:"Negative",    lo:-10, hi:-2  },
-    { name:"Replacement", lo:-2,  hi:1   },
-    { name:"Role Player", lo:1,   hi:4   },
-    { name:"Starter",     lo:4,   hi:10  },
-    { name:"All-Star",    lo:10,  hi:25  },
-    { name:"Superstar",   lo:25,  hi:50  },
+    { name:"Negative",    lo:-5,   hi:0    },
+    { name:"Replacement", lo:0,    hi:0.3  },
+    { name:"Role Player", lo:0.3,  hi:2.1  },
+    { name:"Starter",     lo:2.1,  hi:6.9  },
+    { name:"All-Star",    lo:6.9,  hi:11.2 },
+    { name:"Superstar",   lo:11.2, hi:50   },
   ];
   const total = ORDER.reduce((s, t) => s + (tiers[t.name] ?? 0), 0);
   if (total < 0.1) return { floor: -2, med: 5, ceil: 15 };
