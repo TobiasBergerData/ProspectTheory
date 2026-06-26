@@ -1847,9 +1847,30 @@ function mapProfile(d) {
   // the v2 fallback logic unchanged.
   const _tps = d?.riskProfile?.tierProbs;
   if (_tps && _tps.starter != null) {
+    // Sprint-5.5.J Phase 4: direct RF Proximity modeling output.
+    // ppwa = pwDistribution.p50 (Median peak_wa). Tier via threshold bands
+    // over p50 (aligned with computeRangePpwa). Fallback chain p50 -> mode
+    // -> tier-EV ensures legacy classes without pwDistribution still work.
     const _M = {intl_career:-4, replacement:0.25, roleplayer:2.5,
                 starter:9, all_star:17, superstar:30};
-    const _ev = Object.entries(_M).reduce((s,[k,m]) => s + (_tps[k]||0)*m, 0);
+    const _dist = d?.riskProfile?.pwDistribution || {};
+    const _evFallback = Object.entries(_M).reduce(
+      (s,[k,m]) => s + (_tps[k]||0)*m, 0);
+    const _ev = (_dist.p50 != null && isFinite(_dist.p50)) ? _dist.p50
+              : (_dist.mode != null && isFinite(_dist.mode)) ? _dist.mode
+              : _evFallback;
+    // Threshold-band tier (matches computeRangePpwa bands Z.12544)
+    const _tierByPpwa = (w) => {
+      if (w == null || !isFinite(w)) return "Negative";
+      if (w >= 25) return "Superstar";
+      if (w >= 10) return "All-Star";
+      if (w >= 4)  return "Starter";
+      if (w >= 1)  return "Role Player";
+      if (w >= -2) return "Replacement";
+      return "Negative";
+    };
+    const _ppwaTier = _tierByPpwa(_ev);
+    // Modal kept for sub-info (P(Star+) etc), not for tier label
     const _keys = Object.keys(_M);
     const _modalKey = _keys.reduce(
       (max,k) => (_tps[k]||0) > (_tps[max]||0) ? k : max, _keys[0]);
@@ -1880,22 +1901,22 @@ function mapProfile(d) {
       pNba: 1 - (_tps.intl_career || 0),
       pHighPro: (_tps.starter || 0) + (_tps.all_star || 0) + (_tps.superstar || 0),
       tierProbs: _rfV2TierProbs,
-      projTier: _RF_TO_V2[_modalKey],
+      projTier: _ppwaTier,
     };
     d = {
       ...d,
       // Sprint-5.5.J Phase 3f: override raw board tier column for Big Board
       // Table NBA Tier consistency. Without this, Table shows v2 cumulative
       // tier while curves show strict-max — discrepancy.
-      tier: _RF_TO_V2[_modalKey],
+      tier: _ppwaTier,
       addedWins: _rfAddedWins,
       ppwa: _ev,
       war: _ev,
       pred_mu: _ev,
       mu: _ev,
-      predTier: _RF_TO_V2[_modalKey],
-      v2Tier: _RF_TO_V2[_modalKey],
-      pred_tier: _RF_TO_V2[_modalKey],
+      predTier: _ppwaTier,
+      v2Tier: _ppwaTier,
+      pred_tier: _ppwaTier,
       pElite: (_tps.all_star || 0) + (_tps.superstar || 0),
       v2Conf: _confMap[_r] || "Medium",
       confidence: _confMap[_r] || "Medium",
