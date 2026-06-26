@@ -1853,10 +1853,15 @@ function mapProfile(d) {
     // -> tier-EV ensures legacy classes without pwDistribution still work.
     const _M = {intl_career:-4, replacement:0.25, roleplayer:2.5,
                 starter:9, all_star:17, superstar:30};
+    // Sprint-5.5.J Phase 5: source = d.ppwa (10c projected_war) direct.
+    // RF Proximity p50 demoted to fallback (10c is the headline composite
+    // model; RF KDE is for distribution plots). Fallback chain:
+    //   10c d.ppwa -> RF p50 -> RF mode -> tier-EV (last resort).
     const _dist = d?.riskProfile?.pwDistribution || {};
     const _evFallback = Object.entries(_M).reduce(
       (s,[k,m]) => s + (_tps[k]||0)*m, 0);
-    const _ev = (_dist.p50 != null && isFinite(_dist.p50)) ? _dist.p50
+    const _ev = (d.ppwa != null && isFinite(d.ppwa)) ? d.ppwa
+              : (_dist.p50 != null && isFinite(_dist.p50)) ? _dist.p50
               : (_dist.mode != null && isFinite(_dist.mode)) ? _dist.mode
               : _evFallback;
     // Threshold-band tier (matches computeRangePpwa bands Z.12544)
