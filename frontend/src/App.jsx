@@ -1853,14 +1853,17 @@ function mapProfile(d) {
     // -> tier-EV ensures legacy classes without pwDistribution still work.
     const _M = {intl_career:-4, replacement:0.25, roleplayer:2.5,
                 starter:9, all_star:17, superstar:30};
-    // Sprint-5.5.J Phase 5: source = d.ppwa (10c projected_war) direct.
-    // RF Proximity p50 demoted to fallback (10c is the headline composite
-    // model; RF KDE is for distribution plots). Fallback chain:
-    //   10c d.ppwa -> RF p50 -> RF mode -> tier-EV (last resort).
+    // Sprint-5.5.J Phase 6: source = d.projected_war (10c ML Calibration).
+    // Tobias' "ppwa peak modeling" — composite point estimate with
+    // kollin-cleaned features, humble-gates, conf-adj. Highest internal
+    // validity (r=0.612 in-sample, r=0.403 CV-honest, r=0.280 time-split).
+    // Fallback chain:
+    //   10c projected_war -> v2 ppwa -> RF p50 -> RF mode -> tier-EV.
     const _dist = d?.riskProfile?.pwDistribution || {};
     const _evFallback = Object.entries(_M).reduce(
       (s,[k,m]) => s + (_tps[k]||0)*m, 0);
-    const _ev = (d.ppwa != null && isFinite(d.ppwa)) ? d.ppwa
+    const _ev = (d.projected_war != null && isFinite(d.projected_war)) ? d.projected_war
+              : (d.ppwa != null && isFinite(d.ppwa)) ? d.ppwa
               : (_dist.p50 != null && isFinite(_dist.p50)) ? _dist.p50
               : (_dist.mode != null && isFinite(_dist.mode)) ? _dist.mode
               : _evFallback;

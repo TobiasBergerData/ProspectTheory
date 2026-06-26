@@ -168,7 +168,11 @@ _BOARD_FIELDS = [
     "name", "pos", "team", "yr", "source", "made_nba", "tier", "actual",
     "age", "conf_tier", "conf", "ht", "wt", "wingspan",
     # ppWA model v2 + Pfad-3-Output (war ist der primaere Wert, ppwa optional/legacy)
-    "war", "ppwa", "pElite", "waFloor", "waCeiling", "waSigma",
+    # Sprint-5.5.J Phase 6: projected_war = 10c ML Calibration
+    # composite peak_wa (Tobias' "ppwa peak modeling" with kollin-
+    # cleaned features + humble-gates). Primary source for Big Board
+    # headline (frontend mapProfile reads d.projected_war first).
+    "war", "ppwa", "projected_war", "pElite", "waFloor", "waCeiling", "waSigma",
     "v2Tier", "v2TierProbs", "v2Conf", "posGroup",
     # Added-Wins projection (NEW primary metric) — MUST be sent or the board falls
     # back to legacy ppWA and mixes scales (Tobias 2026-05-25).
