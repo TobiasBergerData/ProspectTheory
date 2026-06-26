@@ -1869,8 +1869,23 @@ function mapProfile(d) {
       Replacement:  (_tps.replacement || 0)*100,
       Negative:     (_tps.intl_career || 0)*100,
     };
+    // Sprint-5.5.J Phase 3d: also override addedWins so the mapProfile()
+    // return-statement (which prefers d.addedWins.ev via ?? chain) picks up
+    // Sprint-5.5.E values instead of v2.
+    const _rfAddedWins = {
+      ...(d.addedWins || {}),
+      ev: _ev,
+      condNba: _ev,
+      floor: _tps.intl_career > 0.3 ? -4 : (_ev * 0.5),
+      ceiling: _ev + 8,
+      pNba: 1 - (_tps.intl_career || 0),
+      pHighPro: (_tps.starter || 0) + (_tps.all_star || 0) + (_tps.superstar || 0),
+      tierProbs: _rfV2TierProbs,
+      projTier: _RF_TO_V2[_modalKey],
+    };
     d = {
       ...d,
+      addedWins: _rfAddedWins,
       ppwa: _ev,
       war: _ev,
       pred_mu: _ev,
