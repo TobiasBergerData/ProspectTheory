@@ -1862,7 +1862,11 @@ function mapProfile(d) {
     const _dist = d?.riskProfile?.pwDistribution || {};
     const _evFallback = Object.entries(_M).reduce(
       (s,[k,m]) => s + (_tps[k]||0)*m, 0);
+    // Sprint-5.5.J Phase 7: insert d.war between projected_war and ppwa.
+    // 11_compress_for_deploy renames 10c projected_war -> war in the
+    // profile blob, so d.war IS the 10c output (7.5 for Flemings).
     const _ev = (d.projected_war != null && isFinite(d.projected_war)) ? d.projected_war
+              : (d.war != null && isFinite(d.war)) ? d.war
               : (d.ppwa != null && isFinite(d.ppwa)) ? d.ppwa
               : (_dist.p50 != null && isFinite(_dist.p50)) ? _dist.p50
               : (_dist.mode != null && isFinite(_dist.mode)) ? _dist.mode
