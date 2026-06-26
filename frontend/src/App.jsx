@@ -1840,6 +1840,69 @@ function classifyConfTier(p) {
 
 function mapProfile(d) {
   if(!d) return null;
+  // ─── Sprint-5.5.J Phase 3b — RF Proximity central override ──────
+  // Override v2 fields with Sprint-5.5.E values at the entry point so
+  // every visualization (Big Board OutcomeCurveBoard, Range View, Tier
+  // Board, ProjectionTab, etc.) sees unified values without per-component
+  // overrides. Historical classes without riskProfile pass through to
+  // the v2 fallback logic unchanged.
+  const _tps = d?.riskProfile?.tierProbs;
+  if (_tps && _tps.starter != null) {
+    const _M = {intl_career:-4, replacement:0.25, roleplayer:2.5,
+                starter:9, all_star:17, superstar:30};
+    const _ev = Object.entries(_M).reduce((s,[k,m]) => s + (_tps[k]||0)*m, 0);
+    const _keys = Object.keys(_M);
+    const _modalKey = _keys.reduce(
+      (max,k) => (_tps[k]||0) > (_tps[max]||0) ? k : max, _keys[0]);
+    const _RF_TO_V2 = {
+      intl_career:"Negative", replacement:"Replacement",
+      roleplayer:"Role Player", starter:"Starter",
+      all_star:"All-Star", superstar:"Superstar",
+    };
+    const _r = d?.riskProfile?.outlierRisk;
+    const _confMap = {high:"Low", medium:"Medium", low:"High"};
+    const _rfV2TierProbs = {
+      Superstar:    (_tps.superstar   || 0)*100,
+      "All-Star":   (_tps.all_star    || 0)*100,
+      Starter:      (_tps.starter     || 0)*100,
+      "Role Player":(_tps.roleplayer  || 0)*100,
+      Replacement:  (_tps.replacement || 0)*100,
+      Negative:     (_tps.intl_career || 0)*100,
+    };
+    d = {
+      ...d,
+      ppwa: _ev,
+      war: _ev,
+      pred_mu: _ev,
+      mu: _ev,
+      predTier: _RF_TO_V2[_modalKey],
+      v2Tier: _RF_TO_V2[_modalKey],
+      pred_tier: _RF_TO_V2[_modalKey],
+      pElite: (_tps.all_star || 0) + (_tps.superstar || 0),
+      v2Conf: _confMap[_r] || "Medium",
+      confidence: _confMap[_r] || "Medium",
+      v2TierProbs: _rfV2TierProbs,
+      tiers: _rfV2TierProbs,
+      probs: {
+        superstar:  _tps.superstar   || 0,
+        allstar:    _tps.all_star    || 0,
+        starter:    _tps.starter     || 0,
+        roleplayer: _tps.roleplayer  || 0,
+        replacement:_tps.replacement || 0,
+        out:        _tps.intl_career || 0,
+      },
+      prob_super:   _tps.superstar,
+      prob_allstar: _tps.all_star,
+      prob_starter: _tps.starter,
+      prob_role:    _tps.roleplayer,
+      prob_repl:    _tps.replacement,
+      prob_neg:     _tps.intl_career,
+      prob_out:     _tps.intl_career,
+      pred_p_nba:   1 - (_tps.intl_career || 0),
+      pNba:         1 - (_tps.intl_career || 0),
+    };
+  }
+  // ─── end Sprint-5.5.J Phase 3b override ─────────────────────────
   // Normalize percentiles: pipeline sends 0-1, UI expects 0-100
   const normPctl = (v) => {
     if (v == null) return null;
