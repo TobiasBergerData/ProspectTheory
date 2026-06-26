@@ -14401,8 +14401,8 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
     setLoading(true);
     // Tobias 2026-05-09: n=500 ensures classRank computation has full per-year cohort
     const url = year && year!=="All"
-      ? `${API_BASE}/board?n=500&year=${year}`
-      : `${API_BASE}/board?n=500`;
+      ? `${API_BASE}/board?n=200&year=${year}`
+      : `${API_BASE}/board?n=200`;
     fetch(url)
       .then(r=>r.json())
       .then(d=>{
@@ -14916,7 +14916,7 @@ export default function App() {
         if (yearData.api_version) setApiVersion(yearData.api_version);
         const latestYear = yearData.latest || 2026;
         setYearFilter(String(latestYear));
-        return fetch(`${API_BASE}/board?n=500&year=${latestYear}`)
+        return fetch(`${API_BASE}/board?n=200&year=${latestYear}`)
           .then(r=>r.json())
           .then(d=>{
             const players = d.players||[];
