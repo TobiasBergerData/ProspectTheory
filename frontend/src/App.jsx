@@ -12414,11 +12414,52 @@ function MethodologyTab() {
 
 // ═══════════════════════════════════════════════════════════
 // ─────────────────────────────────────────────────────────
-// computeRangePpwa: p10/p50/p90 ppWA from tier distribution
-// Uses CDF interpolation within tier bounds
+// Sprint-5.5.J Phase 3 helpers — Sprint-5.5.E first, v2 fallback.
+// _get55ETiers: returns tier-probs in Sprint-5.5.E format (intl_career,
+//   replacement, roleplayer, starter, all_star, superstar). If RF
+//   Proximity engine output is present, uses it directly. Otherwise maps
+//   v2 tiers (Negative→intl_career, Role Player→roleplayer, etc.).
+// _get55EDist: returns pwDistribution (mode, p20, p50, p80) or null.
 // ─────────────────────────────────────────────────────────
-function computeRangePpwa(tiers) {
+function _get55ETiers(p) {
+  const tps = p?.riskProfile?.tierProbs;
+  if (tps && tps.starter != null) return tps;
+  // Fallback: map v2 (legacy) tier-probs to Sprint-5.5.E keys
+  const t = p?.v2TierProbs || p?.tiers || {};
+  return {
+    intl_career: (t.Negative      || 0) / 100,
+    replacement: (t.Replacement   || 0) / 100,
+    roleplayer:  (t["Role Player"]|| 0) / 100,
+    starter:     (t.Starter       || 0) / 100,
+    all_star:    (t["All-Star"]   || 0) / 100,
+    superstar:   (t.Superstar     || 0) / 100,
+  };
+}
+function _get55EDist(p) {
+  return p?.riskProfile?.pwDistribution || null;
+}
+function _get55EStrictModal(tps) {
+  const keys = ["intl_career", "replacement", "roleplayer", "starter", "all_star", "superstar"];
+  return keys.reduce((max, k) => (tps[k] || 0) > (tps[max] || 0) ? k : max, keys[0]);
+}
+
+
+// ─────────────────────────────────────────────────────────
+// computeRangePpwa: floor/median/ceiling peak_wa for range bars.
+// Sprint-5.5.J Phase 3: use pwDistribution.p20/p50/p80 directly when
+// available (= methodically correct from RF KDE). Fall back to tier-CDF
+// interpolation for historical classes without riskProfile.
+// ─────────────────────────────────────────────────────────
+function computeRangePpwa(p) {
+  // Sprint-5.5.J Phase 3 path: direct lookup from RF KDE
+  const dist = _get55EDist(p);
+  if (dist && dist.p20 != null && dist.p50 != null && dist.p80 != null) {
+    return { floor: dist.p20, med: dist.p50, ceil: dist.p80 };
+  }
+  // Fallback: v2 tier-CDF interpolation (historical classes)
+  const tiers = p?.tiers || p?.v2TierProbs;
   if (!tiers) return { floor: -2, med: 5, ceil: 15 };
+  // (continuing with v2-format tier-CDF below)
   const ORDER = [
     { name:"Negative",    lo:-10, hi:-2  },
     { name:"Replacement", lo:-2,  hi:1   },
@@ -12481,19 +12522,30 @@ function computeRangePpwa(tiers) {
 //   E[ppWA] computed via tier-probability-weighted midpoints.
 //   Equivalent to asking: "What is this player worth in expectation?"
 // ─────────────────────────────────────────────────────────────────────────
+// Sprint-5.5.J Phase 3: midpoints aligned with Sprint-5.5.E tier boundaries.
+// Both legacy v2 names AND Sprint-5.5.E keys mapped so computeGMUtility
+// works regardless of which tier-format flows in.
 const _GM_MIDPOINTS = {
-  "Negative":     -6,    // centre of [-10, -2]
-  "Replacement":  -0.5,  // centre of [ -2,  1]
-  "Role Player":   2.5,  // centre of [  1,  4]
-  "Starter":       7,    // centre of [  4, 10]
-  "All-Star":     17.5,  // centre of [ 10, 25]
-  "Superstar":    35,    // centre of [ 25, 50]
+  // Sprint-5.5.E keys
+  "intl_career": -2,   "replacement": 0.25, "roleplayer": 2.5,
+  "starter":      9,   "all_star":   17,    "superstar": 30,
+  // Legacy v2 names (mapped to same midpoints for fallback)
+  "Negative":    -2,   "Replacement": 0.25, "Role Player": 2.5,
+  "Starter":      9,   "All-Star":   17,    "Superstar":  30,
 };
 
-function computeGMUtility(tiers, mode) {
-  if (!tiers) return 0;
-  const total = Object.values(tiers).reduce((s, v) => s + v, 0);
-  if (total < 0.1) return 0;
+// Sprint-5.5.J Phase 3: accepts either a tier-probs object (legacy)
+// or a player object (preferred). When given a player, prefers
+// Sprint-5.5.E riskProfile.tierProbs over v2.
+function computeGMUtility(tiersOrPlayer, mode) {
+  if (!tiersOrPlayer) return 0;
+  // Detect if input is a player object — has riskProfile or v2TierProbs.
+  const isPlayer = tiersOrPlayer.riskProfile != null
+                || tiersOrPlayer.v2TierProbs != null
+                || tiersOrPlayer.tiers != null;
+  const tiers = isPlayer ? _get55ETiers(tiersOrPlayer) : tiersOrPlayer;
+  const total = Object.values(tiers).reduce((s, v) => s + (v || 0), 0);
+  if (total < 0.01) return 0;
 
   const U = {
     // Convex: Superstar ceiling disproportionately rewarded; bust barely punished.
@@ -12525,13 +12577,15 @@ function computeGMUtility(tiers, mode) {
 // RANGE VIEW — probabilistic outcome chart for Big Board
 // ═══════════════════════════════════════════════════════════
 // Tier order for stacked distribution bars (worst → best, left → right)
+// Sprint-5.5.J Phase 3: tier-boundaries matching Sprint-5.5.E peak_wa scale.
+// Range View, TierBoardView, computeGMUtility all read these.
 const TIER_STACK = [
-  { name:"Negative",     color:"#ef4444", lo:-10, hi:-2  },
-  { name:"Replacement",  color:"#8b5cf6", lo:-2,  hi:1   },
-  { name:"Role Player",  color:"#06b6d4", lo:1,   hi:4   },
-  { name:"Starter",      color:"#3b82f6", lo:4,   hi:10  },
-  { name:"All-Star",     color:"#f97316", lo:10,  hi:25  },
-  { name:"Superstar",    color:"#fbbf24", lo:25,  hi:50  },
+  { name:"Intl Career",  color:"#6b7280", lo:-5,  hi:0,   key:"intl_career" },
+  { name:"Replacement",  color:"#8b5cf6", lo:0,   hi:0.5, key:"replacement" },
+  { name:"Roleplayer",   color:"#06b6d4", lo:0.5, hi:5,   key:"roleplayer" },
+  { name:"Starter",      color:"#3b82f6", lo:5,   hi:14,  key:"starter" },
+  { name:"All-Star",     color:"#f97316", lo:14,  hi:20,  key:"all_star" },
+  { name:"Superstar",    color:"#fbbf24", lo:20,  hi:40,  key:"superstar" },
 ];
 
 // ═══════════════════════════════════════════════════════════
@@ -12849,14 +12903,14 @@ function RangeView({ players, gmRisk }) {
   const PAD_BOT  = 38;    // bottom: legend + caption
   const H = PAD_TOP + N * ROW_H + PAD_BOT;
 
-  // ppWA → x pixel
-  const PPWA_MIN = -10, PPWA_R = 60;
-  const xBar = ppwa => LEFT_CHT + (Math.max(-10, Math.min(50, ppwa)) - PPWA_MIN) / PPWA_R * CHART_W;
+  // Sprint-5.5.J Phase 3: ppWA-axis now [-5, 40] to match Sprint-5.5.E tier boundaries.
+  const PPWA_MIN = -5, PPWA_R = 45;
+  const xBar = ppwa => LEFT_CHT + (Math.max(-5, Math.min(40, ppwa)) - PPWA_MIN) / PPWA_R * CHART_W;
   // Row i → center y pixel
   const yC = i => PAD_TOP + i * ROW_H + ROW_H / 2;
 
-  const xTicks   = [-10, 0, 10, 20, 30, 40, 50];
-  const tierBnds = [-2, 1, 4, 10, 25];
+  const xTicks   = [-4, 0, 5, 14, 20, 30, 40];
+  const tierBnds = [0, 0.5, 5, 14, 20];
 
   const sortModeLabel = gmRisk === "ceiling"
     ? "Ceiling Sort — convex utility: Superstar probability rewarded disproportionately"
@@ -12924,7 +12978,7 @@ function RangeView({ players, gmRisk }) {
             statistically indistinguishable — prospects you can rank either way.
         ── */}
         {visible.map((p, i) => {
-          const { floor: rf, med: rm, ceil: rc } = computeRangePpwa(p.tiers);
+          const { floor: rf, med: rm, ceil: rc } = computeRangePpwa(p);
           const war    = p.war ?? rm;
           const xFloor = xBar(rf);
           const xCeil  = xBar(rc);
@@ -14340,8 +14394,8 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
 
     const withRanges = list.map(p => ({
       ...p,
-      _r: computeRangePpwa(p.tiers),
-      _u: utilityMode !== null ? computeGMUtility(p.tiers, utilityMode) : 0,
+      _r: computeRangePpwa(p),
+      _u: utilityMode !== null ? computeGMUtility(p, utilityMode) : 0,
     }));
 
     if (utilityMode !== null) {
