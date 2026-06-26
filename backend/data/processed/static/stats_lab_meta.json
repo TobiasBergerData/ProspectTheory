@@ -47,49 +47,65 @@
       "label": "Player",
       "g": "identity",
       "fmt": "name",
-      "pinned": true
+      "pinned": true,
+      "src": "pt",
+      "tip": "Click to open the player's full profile."
     },
     {
       "k": "year",
       "label": "Class",
       "g": "identity",
-      "fmt": "int"
+      "fmt": "int",
+      "src": "pt",
+      "tip": "Draft Class year \u2014 when he's eligible for the NBA Draft."
     },
     {
       "k": "cls",
       "label": "Yr",
       "g": "identity",
-      "fmt": "str"
+      "fmt": "str",
+      "src": "bt",
+      "tip": "College class: Fr/So/Jr/Sr/5 (5th-year senior). Younger players with comparable production have higher upside."
     },
     {
       "k": "pos",
       "label": "Pos",
       "g": "identity",
-      "fmt": "str"
+      "fmt": "str",
+      "src": "pt",
+      "tip": "Position group used across the site: Playmaker / Wing / Big. Height-based with usage + shot-block edge-case rules."
     },
     {
       "k": "pos2",
       "label": "Pos Det.",
       "g": "identity",
-      "fmt": "str"
+      "fmt": "str",
+      "src": "pt",
+      "tip": "Detailed 5-position bucket: PG/SG/SF/PF/C. Used for Body-Tab anthropometric tier comparisons."
     },
     {
       "k": "source",
       "label": "Src",
       "g": "identity",
-      "fmt": "str"
+      "fmt": "str",
+      "src": "pt",
+      "tip": "Data source: NCAA (BartTorvik) or INTL (RealGM / Euroleague / EuroCup PBP)."
     },
     {
       "k": "team",
       "label": "Team",
       "g": "identity",
-      "fmt": "str"
+      "fmt": "str",
+      "src": "bt",
+      "tip": "Latest school / club."
     },
     {
       "k": "conf",
       "label": "Conf",
       "g": "identity",
-      "fmt": "str"
+      "fmt": "str",
+      "src": "bt",
+      "tip": "NCAA Conference or international league. Strong conferences = competition-adjusted box stats."
     },
     {
       "k": "age",
@@ -99,7 +115,9 @@
       "range": [
         16,
         24
-      ]
+      ],
+      "src": "pt",
+      "tip": "Age (years) as of June 30 of draft year. Younger = bigger projection upside per equivalent stats."
     },
     {
       "k": "ht",
@@ -109,7 +127,9 @@
       "range": [
         70,
         90
-      ]
+      ],
+      "src": "bt",
+      "tip": "Height with shoes (inches). 72\" = 6'0\", 84\" = 7'0\"."
     },
     {
       "k": "war",
@@ -119,7 +139,9 @@
       "range": [
         -5,
         20
-      ]
+      ],
+      "src": "pt",
+      "tip": "Projected peak Wins Added \u2014 best 3-consecutive-season window in first 8 NBA years. Two-stage hurdle model: P(NBA) \u00d7 E[WA | NBA]. Sober: a college profile rarely signals stardom \u2014 star upside lives in the tier probabilities."
     },
     {
       "k": "pie",
@@ -129,7 +151,9 @@
       "range": [
         -5,
         25
-      ]
+      ],
+      "src": "pt",
+      "tip": "Predicted Peak PIE (Player Impact Estimate) \u2014 alternative outcome target on NBA's PIE scale."
     },
     {
       "k": "ceil",
@@ -315,19 +339,33 @@
       "range": [
         -5,
         20
-      ]
+      ],
+      "src": "bt",
+      "tip": "Box Plus/Minus \u2014 single-number all-in offensive+defensive value vs an average D-1 player, per 100 possessions. Higher = better. Elite \u2265 10, NBA-typical 4-9, role-player \u2264 2."
     },
     {
       "k": "obpm",
       "label": "OBPM",
       "g": "box",
-      "fmt": "dec1"
+      "fmt": "dec1",
+      "range": [
+        -5,
+        15
+      ],
+      "src": "bt",
+      "tip": "Offensive Box Plus/Minus \u2014 offensive component of BPM. Captures scoring + playmaking impact."
     },
     {
       "k": "dbpm",
       "label": "DBPM",
       "g": "box",
-      "fmt": "dec1"
+      "fmt": "dec1",
+      "range": [
+        -5,
+        8
+      ],
+      "src": "bt",
+      "tip": "Defensive Box Plus/Minus \u2014 defensive component of BPM. Box-based proxy, less reliable than impact stats for guards."
     },
     {
       "k": "ts",
@@ -337,7 +375,9 @@
       "range": [
         40,
         75
-      ]
+      ],
+      "src": "bt",
+      "tip": "True Shooting% \u2014 points per scoring possession including FTs (PTS / 2\u00b7(FGA + 0.44\u00b7FTA)). Captures shot quality + free-throw merit. D-1 league average ~ 53%."
     },
     {
       "k": "usg",
@@ -347,163 +387,297 @@
       "range": [
         10,
         40
-      ]
+      ],
+      "src": "bt",
+      "tip": "Usage Rate \u2014 % of his team's possessions he ends (FGA + 0.44\u00b7FTA + TO) while on floor. High-usage = primary option (\u2265 25%), low-usage = specialist (< 18%)."
     },
     {
       "k": "ast_p",
       "label": "AST%",
       "g": "box",
-      "fmt": "dec1"
+      "fmt": "dec1",
+      "range": [
+        0,
+        45
+      ],
+      "src": "bt",
+      "tip": "Assist Rate \u2014 % of teammate FGM he assisted while on floor. Pure playmaking volume. Lead-guard \u2265 25, wing 8-15, big < 8."
     },
     {
       "k": "to_p",
       "label": "TO%",
       "g": "box",
-      "fmt": "dec1"
+      "fmt": "dec1",
+      "range": [
+        5,
+        30
+      ],
+      "src": "bt",
+      "tip": "Turnover Rate \u2014 turnovers per 100 possessions used. LOWER is better. High-usage initiators sit naturally higher (16-22)."
     },
     {
       "k": "orb_p",
       "label": "ORB%",
       "g": "box",
-      "fmt": "dec1"
+      "fmt": "dec1",
+      "range": [
+        0,
+        20
+      ],
+      "src": "bt",
+      "tip": "Offensive Rebound Rate \u2014 % of available ORBs he secured while on floor. Activity + positioning signal. Big \u2265 10, wing 3-8, guard \u2264 3."
     },
     {
       "k": "drb_p",
       "label": "DRB%",
       "g": "box",
-      "fmt": "dec1"
+      "fmt": "dec1",
+      "range": [
+        0,
+        30
+      ],
+      "src": "bt",
+      "tip": "Defensive Rebound Rate \u2014 % of available DRBs he secured while on floor. Big \u2265 20, wing 12-18, guard 6-10."
     },
     {
       "k": "stl_p",
       "label": "STL%",
       "g": "box",
-      "fmt": "dec1"
+      "fmt": "dec1",
+      "range": [
+        0,
+        5
+      ],
+      "src": "bt",
+      "tip": "Steal Rate \u2014 % of opp possessions ending in his steal. Anticipation + hand-activity. \u2265 3% is elite event-creator territory."
     },
     {
       "k": "blk_p",
       "label": "BLK%",
       "g": "box",
-      "fmt": "dec1"
+      "fmt": "dec1",
+      "range": [
+        0,
+        14
+      ],
+      "src": "bt",
+      "tip": "Block Rate \u2014 % of opp 2P attempts he blocked. Bigs \u2265 6 = rim-protector signal. Wing 1.5-3 = vertical contestor."
     },
     {
       "k": "ftr",
       "label": "FTr",
       "g": "box",
-      "fmt": "dec1"
+      "fmt": "dec1",
+      "range": [
+        0,
+        100
+      ],
+      "src": "bt",
+      "tip": "Free-Throw Rate \u2014 FTA / FGA \u00d7 100. Foul-drawing skill + interior aggression. \u2265 50 = drives + plays through contact, \u2264 25 = jumpshooter."
     },
     {
       "k": "rim_f",
       "label": "Rim Freq",
       "g": "box",
-      "fmt": "dec1"
+      "fmt": "dec1",
+      "range": [
+        0,
+        80
+      ],
+      "src": "bt",
+      "tip": "Rim Frequency \u2014 % of his FGA at the rim. Shot-distribution signal."
     },
     {
       "k": "mid_f",
       "label": "Mid Freq",
       "g": "box",
-      "fmt": "dec1"
+      "fmt": "dec1",
+      "range": [
+        0,
+        60
+      ],
+      "src": "bt",
+      "tip": "Mid-range Frequency \u2014 % of his FGA from mid-range (2P, non-rim). Modern NBA discount this \u2014 high mid % is usually a red flag for translation."
     },
     {
       "k": "three_f",
       "label": "3PAr",
       "g": "box",
-      "fmt": "dec1"
+      "fmt": "dec1",
+      "range": [
+        0,
+        80
+      ],
+      "src": "bt",
+      "tip": "Three-Point Attempt Rate \u2014 % of his FGA from 3. Shooting volume / range signal. \u2265 45 = modern stretch, \u2264 20 = no-range."
     },
     {
       "k": "dunk_r",
       "label": "Dunk Rate",
       "g": "box",
-      "fmt": "dec1"
+      "fmt": "dec1",
+      "range": [
+        0,
+        30
+      ],
+      "src": "bt",
+      "tip": "Dunk Rate \u2014 % of his FGA that were dunks. Vertical-athlete signal for bigs + cutters."
     },
     {
       "k": "rim_pct",
       "label": "Rim FG%",
       "g": "box",
-      "fmt": "dec1"
+      "fmt": "dec1",
+      "range": [
+        40,
+        90
+      ],
+      "src": "bt",
+      "tip": "Rim Finishing% \u2014 FG% on attempts at the rim. Touch + strength at the basket. \u2265 70 = elite finisher."
     },
     {
       "k": "mid_pct",
       "label": "Mid FG%",
       "g": "box",
-      "fmt": "dec1"
+      "fmt": "dec1",
+      "range": [
+        20,
+        60
+      ],
+      "src": "bt",
+      "tip": "Mid-range FG% \u2014 efficiency in the mid-range zone. D-1 average ~ 38%."
     },
     {
       "k": "tp_pct",
       "label": "3P%",
       "g": "box",
-      "fmt": "dec1"
+      "fmt": "dec1",
+      "range": [
+        20,
+        50
+      ],
+      "src": "bt",
+      "tip": "Three-point % \u2014 raw 3P make rate. \u2265 38 with volume = projectable shooter; \u2264 30 with volume = red flag."
     },
     {
       "k": "fg_pct",
       "label": "FG%",
       "g": "box",
-      "fmt": "dec1"
+      "fmt": "dec1",
+      "range": [
+        30,
+        65
+      ],
+      "src": "bt",
+      "tip": "Overall FG% \u2014 total makes / total attempts. Less informative than eFG/TS because it doesn't credit the extra value of 3s or FTs."
     },
     {
       "k": "ft_pct",
       "label": "FT%",
       "g": "box",
-      "fmt": "dec1"
+      "fmt": "dec1",
+      "range": [
+        50,
+        95
+      ],
+      "src": "bt",
+      "tip": "Free-Throw % \u2014 strong forward-looking signal for shooting translation. \u2265 80 = projectable shooter, \u2264 65 = touch concern."
     },
     {
       "k": "efg",
       "label": "eFG%",
       "g": "box",
-      "fmt": "dec1"
+      "fmt": "dec1",
+      "range": [
+        40,
+        70
+      ],
+      "src": "bt",
+      "tip": "Effective Field Goal % \u2014 FG% adjusted for the bonus value of 3s ((FGM + 0.5\u00b73PM) / FGA). Cleaner shot-quality lens than raw FG%."
     },
     {
       "k": "ortg",
       "label": "ORtg",
       "g": "box",
-      "fmt": "dec1"
+      "fmt": "dec1",
+      "range": [
+        80,
+        130
+      ],
+      "src": "bt",
+      "tip": "Offensive Rating \u2014 points produced per 100 possessions used. Composite score-and-distribute lens. \u2265 115 with high usage = star territory."
     },
     {
       "k": "fouls_40",
       "label": "PF/40",
       "g": "box",
-      "fmt": "dec1"
+      "fmt": "dec1",
+      "range": [
+        0,
+        7
+      ],
+      "src": "bt",
+      "tip": "Personal Fouls per 40 minutes. Discipline + defensive footwork signal. \u2264 3 = clean, \u2265 5 = foul-prone."
     },
     {
       "k": "pts",
       "label": "PPG",
       "g": "box",
-      "fmt": "dec1"
+      "fmt": "dec1",
+      "src": "bt",
+      "tip": "Points per game \u2014 raw scoring volume. Less context-aware than per-possession metrics."
     },
     {
       "k": "reb",
       "label": "RPG",
       "g": "box",
-      "fmt": "dec1"
+      "fmt": "dec1",
+      "src": "bt",
+      "tip": "Rebounds per game (total)."
     },
     {
       "k": "ast",
       "label": "APG",
       "g": "box",
-      "fmt": "dec1"
+      "fmt": "dec1",
+      "src": "bt",
+      "tip": "Assists per game."
     },
     {
       "k": "stl",
       "label": "SPG",
       "g": "box",
-      "fmt": "dec1"
+      "fmt": "dec1",
+      "src": "bt",
+      "tip": "Steals per game."
     },
     {
       "k": "blk",
       "label": "BPG",
       "g": "box",
-      "fmt": "dec1"
+      "fmt": "dec1",
+      "src": "bt",
+      "tip": "Blocks per game."
     },
     {
       "k": "gp",
       "label": "GP",
       "g": "box",
-      "fmt": "int"
+      "fmt": "int",
+      "src": "bt",
+      "tip": "Games Played in the latest season. Sample-size watchdog \u2014 single-digit GP makes rate stats noisy."
     },
     {
       "k": "mp",
       "label": "MPG",
       "g": "box",
-      "fmt": "dec1"
+      "fmt": "dec1",
+      "range": [
+        0,
+        40
+      ],
+      "src": "bt",
+      "tip": "Minutes per Game \u2014 role-volume signal. \u2265 30 = clear starter, \u2264 18 = rotation depth."
     },
     {
       "k": "pp_bpm",
@@ -1024,8 +1198,49 @@
   ],
   "presets": [
     {
+      "id": "bt_standard",
+      "label": "BartTorvik Standard",
+      "cols": [
+        "name",
+        "year",
+        "cls",
+        "pos",
+        "team",
+        "conf",
+        "gp",
+        "mp",
+        "ortg",
+        "usg",
+        "bpm",
+        "obpm",
+        "dbpm",
+        "ts",
+        "efg",
+        "ft_pct",
+        "tp_pct",
+        "ast_p",
+        "to_p",
+        "orb_p",
+        "drb_p",
+        "stl_p",
+        "blk_p",
+        "ftr",
+        "three_f",
+        "rim_pct",
+        "mid_pct",
+        "dunk_r",
+        "fouls_40",
+        "war",
+        "p_all",
+        "feel",
+        "shoot",
+        "def",
+        "athl"
+      ]
+    },
+    {
       "id": "default",
-      "label": "Default",
+      "label": "Projection Lens",
       "cols": [
         "name",
         "year",
@@ -1141,7 +1356,10 @@
   "filter_defaults": {
     "year": [
       2026
-    ]
+    ],
+    "preset": "bt_standard",
+    "sort_key": "bpm",
+    "sort_dir": "desc"
   },
-  "schema_version": 1
+  "schema_version": 2
 }
