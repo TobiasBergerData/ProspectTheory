@@ -599,16 +599,15 @@ function buildOutcomeCurveMixture(p) {
   const predTierLabel = p.predTier || null;
   const band = predTierLabel && TIER_PEAK_BANDS[predTierLabel];
 
+  // Sprint-5.5.J Phase 3e: removed tier-band clamping. peakGrade comes
+  // DIRECTLY from ppwa-mapped grade so visual position is honest. Tier color
+  // is derived from actual peakGrade band, not predTier. Real differentiation
+  // between players in same modal tier.
   let peakGrade;
-  if (band) {
-    if (mu != null && isFinite(mu)) {
-      const ppwaMapped = peakWaToOutcomeGrade(mu).grade;
-      peakGrade = Math.max(band.lo, Math.min(band.hi, ppwaMapped));
-    } else {
-      peakGrade = band.center;
-    }
-  } else if (mu != null && isFinite(mu)) {
+  if (mu != null && isFinite(mu)) {
     peakGrade = peakWaToOutcomeGrade(mu).grade;
+  } else if (band) {
+    peakGrade = band.center;
   } else {
     peakGrade = probMean;
   }
@@ -1885,6 +1884,10 @@ function mapProfile(d) {
     };
     d = {
       ...d,
+      // Sprint-5.5.J Phase 3f: override raw board tier column for Big Board
+      // Table NBA Tier consistency. Without this, Table shows v2 cumulative
+      // tier while curves show strict-max — discrepancy.
+      tier: _RF_TO_V2[_modalKey],
       addedWins: _rfAddedWins,
       ppwa: _ev,
       war: _ev,
