@@ -1,10 +1,18 @@
-# Tobias 2026-05-05: Build-on-Deploy → DB ist NICHT mehr im Repo.
-# Alle Source-JSONs sind <90 MB (api_profiles.json gesplittet in parts).
-# Kein Git LFS noetig fuer DB oder JSONs. Bandwidth-Limit-frei.
-# Render baut die DB beim Deploy via build_db.py.
+# Sprint-5.7 E: enforce LF line endings repo-wide — ends recurring CRLF↔LF churn.
+* text=auto eol=lf
 
-# Falls einzelne JSONs doch >90 MB werden: hier wieder LFS aktivieren.
-# Aktuell: keine LFS-Tracker mehr aktiv.
+# Windows batch files must keep CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
 
-# Behalten als Sicherheit fuer DB-Snapshots (Backup-Branch nutzt ggf. noch LFS)
+# Binary — never EOL-munge
+*.pkl  binary
+*.gz   binary
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.zip  binary
+
+# DB: kept as LFS safety for DB snapshots (build-on-deploy means the DB is
+# normally NOT in the repo; Render builds it via build_db.py at deploy).
 *.db filter=lfs diff=lfs merge=lfs -text
