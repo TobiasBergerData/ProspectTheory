@@ -76,6 +76,8 @@ def _build_board_payload(conn: sqlite3.Connection, year: int | None, n: int = BO
     if year:
         where.append("year=?")
         params.append(year)
+    else:
+        where.append("is_current_class=1")  # Sprint-5.7 D: default = current draft class
     where.append("(age IS NULL OR age <= 24.5)")
     where_sql = " AND ".join(where)
 
@@ -178,12 +180,13 @@ def main():
         total_bytes += size
         print(f"  ✓ board_{year}.json  ({len(payload['players']):>4} players, {size/1024:>7.1f} KB)")
 
-    # ── 2) "Alle Jahre" Board (kein Year-Filter) ────────────────────────────
-    payload_all = _build_board_payload(conn, year=None, n=BOARD_N)
-    out_all = STATIC_DIR / "board_all.json"
-    size_all = _write_json(out_all, payload_all)
-    total_bytes += size_all
-    print(f"  ✓ board_all.json   ({len(payload_all['players']):>4} players, {size_all/1024:>7.1f} KB)")
+    # ── 2) Default Board = current draft class (kein Year-Filter → is_current_class=1) ──
+    # Sprint-5.7 D: the default view is now the current class (not the all-time WAR top).
+    payload_current = _build_board_payload(conn, year=None, n=BOARD_N)
+    out_current = STATIC_DIR / "board_current.json"
+    size_current = _write_json(out_current, payload_current)
+    total_bytes += size_current
+    print(f"  ✓ board_current.json ({len(payload_current['players']):>4} players, {size_current/1024:>7.1f} KB)")
 
     # ── 3) Years-Liste ──────────────────────────────────────────────────────
     years_payload = {

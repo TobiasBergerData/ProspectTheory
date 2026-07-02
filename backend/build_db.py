@@ -92,10 +92,12 @@ def create_tables(cur):
             overall REAL, ceiling REAL, bpm REAL,
             prob_super REAL, prob_allstar REAL, prob_starter REAL,
             prob_role REAL, prob_repl REAL, prob_out REAL,
-            archetype TEXT, confidence TEXT DEFAULT 'full'
+            archetype TEXT, confidence TEXT DEFAULT 'full',
+            is_current_class INTEGER DEFAULT 0
         )
     """)
     cur.execute("CREATE INDEX IF NOT EXISTS idx_board_year ON board(year)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_board_current ON board(is_current_class)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_board_war  ON board(war DESC)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_board_name_lower ON board(name_lower)")
     cur.execute("""
@@ -155,6 +157,15 @@ def iter_profiles_data():
     yield from data.items()
 
 
+def _flag1(v):
+    """Sprint-5.7 D: robust 1/0 for is_current_class across int/float/str/bool JSON
+    reprs (pandas may serialize the flag as 1, 1.0, "1", "True", or true)."""
+    try:
+        return 1 if float(v) == 1.0 else 0
+    except (TypeError, ValueError):
+        return 1 if str(v).strip().lower() == "true" else 0
+
+
 def load_profiles(cur):
     """Sprint-3.34: stream from generator + batch-insert every CHUNK_SIZE rows.
     Caps peak memory at ~one part (~45 MB) + one chunk (~5 MB) instead of
@@ -170,8 +181,8 @@ def load_profiles(cur):
             overall, ceiling, bpm,
             prob_super, prob_allstar, prob_starter,
             prob_role, prob_repl, prob_out,
-            archetype, confidence)
-           VALUES (?,?,?,?, ?,?,?,?,?,?,?, ?,?,?,?,?,?,?, ?,?,?, ?,?,?, ?,?,?, ?,?)"""
+            archetype, confidence, is_current_class)
+           VALUES (?,?,?,?, ?,?,?,?,?,?,?, ?,?,?,?,?,?,?, ?,?,?, ?,?,?, ?,?,?, ?,?,?)"""
     season_sql = "INSERT OR REPLACE INTO season_lines (player_id, slug, data) VALUES (?,?,?)"
 
     def flush():
@@ -211,6 +222,7 @@ def load_profiles(cur):
             _float(p.get("prob_starter")), _float(p.get("prob_role")),
             _float(p.get("prob_repl")), _float(p.get("prob_out")),
             p.get("archetype", ""), p.get("confidence", "full"),
+            _flag1(p.get("is_current_class")),
         ))
 
         if len(batch_profiles) >= BATCH_SIZE:

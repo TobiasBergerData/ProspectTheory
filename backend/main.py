@@ -1395,7 +1395,7 @@ async def get_board(
     # Plus Static-Path nur für den Hot-Path (n=200, kein position-Filter).
     # Filter wie position=Wing sind selten und lohnen sich nicht zum Materialisieren.
     if n == BOARD_N_STATIC and position is None:
-        filename = f"board_{year}.json" if year else "board_all.json"
+        filename = f"board_{year}.json" if year else "board_current.json"
         static = _serve_static_or_none(filename, response, max_age=600)
         if static:
             return static
@@ -1415,6 +1415,8 @@ async def get_board(
     if year:
         where.append("year=?")
         params.append(year)
+    else:
+        where.append("is_current_class=1")  # Sprint-5.7 D: default board = current draft class
     if position:
         where.append("pos=?")
         params.append(position)
