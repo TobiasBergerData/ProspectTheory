@@ -112,8 +112,6 @@ app.add_middleware(GZipMiddleware, minimum_size=500)
 DATA_DIR = Path(os.getenv("DATA_DIR", "data/processed"))
 
 _profiles = None
-_stat_comps = None
-_anthro_comps = None
 _comps_v5 = None       # Sprint-3.10.A NBA-Profi 5-dim Comps Engine
 _search_index = None
 _years_cache = None   # sorted list of unique draft years
@@ -372,70 +370,8 @@ def _ensure_indexes():
     _ensure_db_present()
 
 
-def get_stat_comps() -> dict:
-    """Lazy stat-comps Lookup ueber SQLite."""
-    return _SqliteStatCompsDict()
-
-
-def get_anthro_comps() -> dict:
-    """Lazy anthro-comps Lookup ueber SQLite."""
-    return _SqliteAnthroCompsDict()
-
-
-class _SqliteStatCompsDict:
-    """Lazy dict fuer stat_comps - decompress nur bei Lookup."""
-    def __getitem__(self, pid):
-        row = _db().execute("SELECT data FROM stat_comps WHERE player_id=?", (pid,)).fetchone()
-        if row is None: raise KeyError(pid)
-        return _decompress_blob(row[0]) or {}
-    def get(self, pid, default=None):
-        try: return self[pid]
-        except KeyError: return default
-    def __contains__(self, pid):
-        return _db().execute("SELECT 1 FROM stat_comps WHERE player_id=? LIMIT 1", (pid,)).fetchone() is not None
-    def __len__(self):
-        return _db().execute("SELECT COUNT(*) FROM stat_comps").fetchone()[0]
-    # Tobias 2026-06-12: Iteration-Methoden fuer Endpoints die alle Entries
-    # streamen (z.B. anthro_comps fallback wenn kein pre-computed Match).
-    # Vorsicht — full table scan, nicht in hot paths nutzen.
-    def items(self):
-        for row in _db().execute("SELECT player_id, data FROM stat_comps"):
-            yield row[0], (_decompress_blob(row[1]) or {})
-    def values(self):
-        for _pid, entry in self.items():
-            yield entry
-    def keys(self):
-        for row in _db().execute("SELECT player_id FROM stat_comps"):
-            yield row[0]
-
-
-class _SqliteAnthroCompsDict:
-    """Lazy dict fuer anthro_comps."""
-    def __getitem__(self, pid):
-        row = _db().execute("SELECT data FROM anthro_comps WHERE player_id=?", (pid,)).fetchone()
-        if row is None: raise KeyError(pid)
-        return _decompress_blob(row[0]) or {}
-    def get(self, pid, default=None):
-        try: return self[pid]
-        except KeyError: return default
-    def __contains__(self, pid):
-        return _db().execute("SELECT 1 FROM anthro_comps WHERE player_id=? LIMIT 1", (pid,)).fetchone() is not None
-    def __len__(self):
-        return _db().execute("SELECT COUNT(*) FROM anthro_comps").fetchone()[0]
-    # Tobias 2026-06-12: Iteration-Methoden — analog zu _SqliteProfilesDict.
-    # Wird in route_anthro_comps Z.969+976 fuer den Fallback-Pfad (live-comp-
-    # berechnung wenn kein pre-computed Eintrag existiert) benoetigt.
-    # Vorsicht — full table scan ueber ~35k Entries, kann auf Free-Tier
-    # 5-30s dauern; langfristig in eigenen Endpoint extrahieren mit Index.
-    def items(self):
-        for row in _db().execute("SELECT player_id, data FROM anthro_comps"):
-            yield row[0], (_decompress_blob(row[1]) or {})
-    def values(self):
-        for _pid, entry in self.items():
-            yield entry
-    def keys(self):
-        for row in _db().execute("SELECT player_id FROM anthro_comps"):
-            yield row[0]
+# 5.8.2: get_stat_comps / get_anthro_comps + their lazy SQLite dict classes
+# REMOVED — legacy stat/anthro comps superseded by comps_v5 (see route_comps_v5).
 
 
 class _SqliteCompsV5Dict:
@@ -617,11 +553,9 @@ async def root():
 @app.get("/health")
 async def health():
     profiles = get_profiles()
-    stats = get_stat_comps()
     return {
         "status": "ok",
         "profiles": len(profiles),
-        "stat_comps": len(stats),
     }
 
 
@@ -926,204 +860,11 @@ def _lookup_comp_profile(c: dict) -> tuple:
     return None, {}
 
 
-@app.get("/api/comps/stats/{slug}")
-async def get_statistical_comps(
-    slug: str,
-    nba_only: bool = False,
-    limit: int = Query(15, ge=1, le=50),
-):
-    """Statistical comparisons for a player (slug / player_id / name)."""
-    pid, profile = find_player(slug)
-    if pid is None:
-        raise HTTPException(404, f"Player '{slug}' not found")
-
-    comps = get_stat_comps()
-    # Primary key: player_id (v3). Legacy fallback: lookup by display name.
-    entry = comps.get(pid) or comps.get(profile.get("name", "")) or {}
-    comp_list = entry.get("c", [])
-
-    if nba_only:
-        comp_list = [c for c in comp_list if c.get("nba")]
-
-    # Enrich comp data with profile info
-    # s = Euclidean distance in percentile space; observed range [0.635, 1.716]
-    # → normalize to 0–100% similarity: sim = (1.716 - s) / 1.081 * 100
-    _S_MAX, _S_RANGE = 1.716, 1.081
-    enriched = []
-    for c in comp_list[:limit]:
-        c_pid, cp = _lookup_comp_profile(c)
-        raw_s = c.get("s", _S_MAX)
-        similarity = max(0, min(100, round((_S_MAX - raw_s) / _S_RANGE * 100)))
-        enriched.append({
-            "player_id": c_pid,
-            "slug": c.get("slug") or (_pid_to_slug.get(c_pid) if c_pid else None),
-            "name": c.get("n", ""),
-            # Profile pos is authoritative; comp p-field is a fallback
-            "position": cp.get("pos") or c.get("p") or "",
-            "similarity": similarity,
-            "made_nba": c.get("nba", False) or bool(cp.get("made_nba")),
-            "tier": cp.get("v2Tier") or c.get("tier") or cp.get("tier") or "",
-            # Tobias 2026-05-09: peak_pie added for frontend lenient tier-display.
-            # Backend tier label is too strict (Tatum=Starter, Brunson=Roleplayer).
-            "peak_pie": cp.get("peak_pie") or cp.get("nba_peak_actual"),
-            # Key stats from profile for comparison table
-            "bpm": cp.get("bpm"),
-            "usg": cp.get("usg"),
-            "ts": cp.get("ts"),
-            "ast_p": cp.get("ast_p"),
-            "to_p": cp.get("to_p"),
-            "orb_p": cp.get("orb_p"),
-            "drb_p": cp.get("drb_p"),
-            "blk_p": cp.get("blk_p"),
-            "stl_p": cp.get("stl_p"),
-            "ftr": cp.get("ftr"),
-            "rim_pct": cp.get("rim_pct"),
-            "mid_pct": cp.get("mid_pct"),
-            "tp_pct": cp.get("tp_pct"),
-            "ft_pct": cp.get("ft_pct"),
-            "dunk_r": cp.get("dunk_r"),
-            "three_par": cp.get("three_par"),
-            "min": cp.get("min"),
-            "overall": cp.get("overall"),
-            "height": cp.get("ht"),
-            "badges": cp.get("badges", ""),
-        })
-
-    return {**_identity_fields(pid, profile), "count": len(enriched), "comps": enriched}
+# 5.8.2: /api/comps/stats route REMOVED — legacy stat comps superseded by comps_v5.
 
 
-@app.get("/api/comps/anthro/{slug}")
-async def route_anthro_comps(
-    slug: str,
-    nba_only: bool = False,
-    weight_adj: float = 0,
-    wingspan_adj: float = 0,
-    limit: int = Query(15, ge=1, le=50),
-):
-    """Anthropometric comparisons with optional weight/wingspan adjustment."""
-    pid, profile = find_player(slug)
-    if pid is None:
-        raise HTTPException(404, f"Player '{slug}' not found")
-
-    canonical = profile.get("name", "")
-    comps = get_anthro_comps()
-    entry = comps.get(pid) or comps.get(canonical) or {}
-    comp_list = entry.get("c", [])
-    measurements = entry.get("m", {})
-
-    # Normalize measurements: combine_* keys → height/weight/wingspan
-    m_ht = measurements.get("height") or measurements.get("combine_hgt_no_shoes") or profile.get("ht")
-    m_wt = measurements.get("weight") or measurements.get("combine_wgt") or profile.get("wt")
-    m_ws = measurements.get("wingspan") or measurements.get("combine_wngspn")
-    m_ws_delta = measurements.get("combine_wingspan_delta") or measurements.get("wingspan_delta")
-
-    # Live-search fallback: if no pre-computed comps (e.g. 2026 prospects without combine data),
-    # search the entire anthro_comps database using estimated target measurements.
-    # Only players in anthro_comps have actual NBA combine measurements (height/weight/wingspan),
-    # making them the only valid basis for physical comparison.
-    if not comp_list:
-        base_ht = m_ht or 78
-        # Estimate weight from position/height when unmeasured
-        pos = profile.get("pos", "Wing")
-        htM = base_ht * 0.0254  # inches → meters
-        pos_bmi = 23.5 if pos == "Playmaker" else 26.5 if pos == "Big" else 24.8
-        est_wt = round(pos_bmi * htM * htM * 2.205)  # BMI → lbs
-        base_wt = est_wt + weight_adj
-        # Estimate wingspan via position ape index
-        ape = 1.04 if pos == "Playmaker" else 1.06 if pos == "Big" else 1.05
-        base_ws = round(base_ht * ape, 1) + wingspan_adj
-
-        all_anthro = get_anthro_comps()
-        all_profs = get_profiles()  # Load once outside loop
-        # Build NBA player set from pre-computed comps (ground truth).
-        # Keys can be pid or name; we resolve both to player_id so the set is
-        # collision-safe.
-        nba_set = set()
-        for _k, _e in all_anthro.items():
-            for c in _e.get("c", []):
-                if c.get("nba"):
-                    cid = c.get("id") or _name_to_pid.get((c.get("n", "") or "").lower())
-                    if cid:
-                        nba_set.add(cid)
-        live = []
-        for pkey, pentry in all_anthro.items():
-            # pkey is player_id in v3, display name in legacy
-            ppid = pentry.get("player_id") or (pkey if ":" in pkey else
-                                                _name_to_pid.get(pkey.lower()))
-            if ppid == pid:
-                continue
-            pm = pentry.get("m", {})
-            pht = pm.get("combine_hgt_no_shoes") or pm.get("height")
-            pwt = pm.get("combine_wgt") or pm.get("weight")
-            pws = pm.get("combine_wngspn") or pm.get("wingspan")
-            if not pht:  # Must have at least height measurement
-                continue
-            pp = all_profs.get(ppid, {}) if ppid else {}
-            pname_disp = pentry.get("name") or pp.get("name") or (pkey if ":" not in pkey else "")
-            ht_d = abs(pht - base_ht)
-            wt_d = abs((pwt or base_wt) - base_wt) * 0.5
-            ws_d = abs((pws or base_ws) - base_ws) * 1.5
-            dist = (ht_d**2 + wt_d**2 + ws_d**2) ** 0.5
-            live.append({
-                "id": ppid,
-                "slug": pentry.get("slug") or (_pid_to_slug.get(ppid) if ppid else None),
-                "n": pname_disp, "_dist": dist,
-                "nba": ppid in nba_set,
-                "tier": pp.get("v2Tier") or pp.get("tier") or "",
-                "ht": pht, "wt": pwt, "ws": pws,
-            })
-        live.sort(key=lambda c: c["_dist"])
-        comp_list = live[:50]  # Keep top 50 so nba_only filter still has enough candidates
-
-    if nba_only:
-        comp_list = [c for c in comp_list if c.get("nba")]
-
-    # If adjustments on pre-computed comps (live comps already used adjusted base), recalculate
-    if weight_adj != 0 or wingspan_adj != 0 and measurements:
-        base_ht = m_ht or 78
-        base_wt = (m_wt or 200) + weight_adj
-        base_ws = (m_ws or 0) + wingspan_adj
-        for c in comp_list:
-            ht_d = abs((c.get("ht") or base_ht) - base_ht)
-            wt_d = abs((c.get("wt") or base_wt) - base_wt) * 0.5
-            ws_d = abs((c.get("ws") or base_ws) - base_ws) * 1.5
-            c["_dist"] = (ht_d**2 + wt_d**2 + ws_d**2) ** 0.5
-        comp_list.sort(key=lambda c: c.get("_dist", 999))
-
-    # Enrich comp measurements from profiles; normalize field names
-    # d = Euclidean distance in inch-space; range [0, ~5.6], typical best < 2.0
-    # → similarity: linear 0–3" → 100%–0%
-    enriched_anthro = []
-    for c in comp_list[:limit]:
-        c_pid, cp = _lookup_comp_profile(c)
-        dist = c.get("_dist", c.get("d", 0)) or 0
-        sim = max(0, min(100, round((3.0 - dist) / 3.0 * 100)))
-        enriched_anthro.append({
-            "player_id": c_pid,
-            "slug": c.get("slug") or (_pid_to_slug.get(c_pid) if c_pid else None),
-            "name": c.get("n", ""),
-            "distance": round(dist, 3),
-            "similarity": sim,
-            "made_nba": bool(c.get("nba", False)),
-            "tier": c.get("tier", cp.get("v2Tier", cp.get("tier", ""))),
-            # Measurements: prefer comp-stored values, fall back to profile
-            "height": c.get("ht") or cp.get("ht"),
-            "weight": c.get("wt") or cp.get("wt"),
-            "wingspan": c.get("ws") or cp.get("ws"),
-        })
-
-    return {
-        **_identity_fields(pid, profile),
-        "measurements": {
-            "height": m_ht,
-            "weight": m_wt,
-            "wingspan": m_ws,
-            "wingspan_delta": m_ws_delta,
-        },
-        "adjustments": {"weight": weight_adj, "wingspan": wingspan_adj},
-        "count": len(enriched_anthro),
-        "comps": enriched_anthro,
-    }
+# 5.8.2: /api/comps/anthro route REMOVED — legacy anthro comps superseded by
+# comps_v5. (Body-Tab anthropometry is served separately via the /anthro endpoint.)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

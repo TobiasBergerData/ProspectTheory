@@ -2665,7 +2665,7 @@ function mapProfile(d) {
     // Session 9: per-player feature contribution drivers
     projectionBoosters: d.projection_boosters ?? d.proj_boost ?? "",
     projectionLimiters: d.projection_limiters ?? d.proj_limit ?? "",
-    statComps:[], anthroComps:[], hasCombine: null,
+    hasCombine: null,
     // Filter seasonLines: realistic pre-draft window around the player's draft year (d.yr).
     //  • Upper bound (yr <= d.yr) blocks future-season collisions (Donovan Mitchell 2017 vs 2021 namesake).
     //  • Lower bound blocks past-season collisions (Brandon Jennings 2026 VCU vs 2008 Italy / 2009 Bucks)
@@ -15203,51 +15203,10 @@ export default function App() {
       setProfileCache(prev => ({...prev, [name]: boardProfile}));
       // Fetch full profile + comps in background (non-blocking)
       // This ensures Shooting/Scouting/Projection tabs always get complete data
-      Promise.all([
-        fetch(`${API_BASE}/player/${apiIdent}`).then(r=>r.ok?r.json():null).catch(()=>null),
-        fetch(`${API_BASE}/comps/stats/${apiIdent}`).then(r=>r.ok?r.json():null).catch(()=>null),
-        fetch(`${API_BASE}/comps/anthro/${apiIdent}`).then(r=>r.ok?r.json():null).catch(()=>null),
-      ]).then(([profRes, statsRes, anthroRes]) => {
+      fetch(`${API_BASE}/player/${apiIdent}`).then(r=>r.ok?r.json():null).catch(()=>null)
+      .then(profRes => {
         // Use full profile if available, fall back to board profile
         const updated = profRes?.profile ? mapProfile(profRes.profile) : {...boardProfile};
-        if (statsRes?.comps) {
-          // Tobias 2026-05-06 v2: Re-Skalierung INNERHALB der gezeigten Top-N Comps.
-          // Backend liefert globale 0-100 similarity (Z-Distance-Skala). Für unique
-          // Spieler (Cooper Flagg, Darryn Peterson) liegen die Top-10 alle bei ~38%
-          // → optisch ununterscheidbar.
-          // Lösung: skaliere die gezeigte Liste auf 50-95% relativ — Top-Comp = 95%,
-          // Worst-Comp der Liste = 50%. Das ist ehrlich, weil:
-          //  (a) Sortierung bleibt korrekt (höchster Match oben)
-          //  (b) Differenzierung sichtbar (Spannweite 45 Pp innerhalb Top-10)
-          //  (c) absolute Skala bleibt im Tooltip einsehbar
-          const rawSims = (statsRes.comps || []).map(c => Number(c.similarity ?? 0)).filter(v => v > 0);
-          const maxRaw = rawSims.length ? Math.max(...rawSims) : 1;
-          const minRaw = rawSims.length ? Math.min(...rawSims) : 0;
-          const range = maxRaw - minRaw || 1;
-          updated.statComps = (statsRes.comps || []).map(c => {
-            const rawSim = c.similarity != null ? Math.round(Number(c.similarity)) : null;
-            // Relative score innerhalb der angezeigten Liste: 50-95
-            const sim = rawSim != null ? Math.round(50 + (rawSim - minRaw) / range * 45) : null;
-          return {
-            name:c.name, pos:c.position||c.pos, sim, rawSim,
-            tier: tierFromPeakPie(c.peak_pie) || c.tier || "",
-            nba:!!c.made_nba, bpm:c.bpm, usg:c.usg, ts:c.ts,
-            astP:c.ast_p, toP:c.to_p, orbP:c.orb_p, drbP:c.drb_p,
-            stlP:c.stl_p, blkP:c.blk_p, ftr:c.ftr,
-            rimPct:c.rim_pct, tp:c.tp_pct, ft:c.ft_pct, dunkR:c.dunk_r,
-            ht:c.height||c.ht,
-            badges:c.badges?c.badges.split("|").filter(Boolean):[],
-          };
-        });
-        } // end statComps mapping
-        if (anthroRes) {
-          updated.hasCombine = anthroRes.has_combine ?? (anthroRes.comps?.length > 0);
-          updated.anthroComps = (anthroRes.comps||[]).map(c=>({
-            name:c.name, dist:c.distance, sim:Math.round(c.similarity||0),
-            ht:c.height||c.ht, wt:c.weight||c.wt, ws:c.wingspan||c.ws,
-            nba:!!c.made_nba, tier: tierFromPeakPie(c.peak_pie) || c.tier || "",
-          }));
-        }
         PLAYERS[name] = updated;
         setProfileCache(prev => ({...prev, [name]: updated}));
       }).catch(() => {});
@@ -15257,11 +15216,7 @@ export default function App() {
     // Full fetch for players not in board cache (search results, etc.)
     setProfileLoading(true);
     try {
-      const [profRes, statsRes, anthroRes] = await Promise.all([
-        fetch(`${API_BASE}/player/${apiIdent}`).then(r=>r.ok?r.json():null),
-        fetch(`${API_BASE}/comps/stats/${apiIdent}`).then(r=>r.ok?r.json():null).catch(()=>null),
-        fetch(`${API_BASE}/comps/anthro/${apiIdent}`).then(r=>r.ok?r.json():null).catch(()=>null),
-      ]);
+      const profRes = await fetch(`${API_BASE}/player/${apiIdent}`).then(r=>r.ok?r.json():null);
       if (profRes?.profile) {
         const mapped = mapProfile(profRes.profile);
         // Carry canonical identity onto the cached entry so downstream
@@ -15269,35 +15224,6 @@ export default function App() {
         mapped.player_id = profRes.player_id || profRes.profile.player_id || mapped.player_id;
         mapped.slug = profRes.slug || profRes.profile.slug || mapped.slug;
         mapped.name = profRes.name || profRes.profile.name || mapped.name;
-        if (statsRes?.comps) {
-          // Tobias 2026-05-06 v2: Re-Skalierung 50-95 innerhalb der gezeigten Top-N Comps.
-          const rawSims2 = (statsRes.comps || []).map(c => Number(c.similarity ?? 0)).filter(v => v > 0);
-          const maxRaw2 = rawSims2.length ? Math.max(...rawSims2) : 1;
-          const minRaw2 = rawSims2.length ? Math.min(...rawSims2) : 0;
-          const range2 = maxRaw2 - minRaw2 || 1;
-          mapped.statComps = (statsRes.comps || []).map(c => {
-            const rawSim = c.similarity != null ? Math.round(Number(c.similarity)) : null;
-            const sim = rawSim != null ? Math.round(50 + (rawSim - minRaw2) / range2 * 45) : null;
-            return {
-              name:c.name, pos:c.position||c.pos, sim, rawSim,
-              tier: tierFromPeakPie(c.peak_pie) || c.tier || "",
-            nba:!!c.made_nba, bpm:c.bpm, usg:c.usg, ts:c.ts,
-              astP:c.ast_p, toP:c.to_p, orbP:c.orb_p, drbP:c.drb_p,
-              stlP:c.stl_p, blkP:c.blk_p, ftr:c.ftr,
-              rimPct:c.rim_pct, tp:c.tp_pct, ft:c.ft_pct, dunkR:c.dunk_r,
-              ht:c.height||c.ht,
-              badges:c.badges?c.badges.split("|").filter(Boolean):[],
-            };
-          });
-        }
-        if (anthroRes) {
-          mapped.hasCombine = anthroRes.has_combine ?? (anthroRes.comps?.length > 0);
-          mapped.anthroComps = (anthroRes.comps||[]).map(c=>({
-            name:c.name, dist:c.distance, sim:Math.round(c.similarity||0),
-            ht:c.height||c.ht, wt:c.weight||c.wt, ws:c.wingspan||c.ws,
-            nba:!!c.made_nba, tier: tierFromPeakPie(c.peak_pie) || c.tier || "",
-          }));
-        }
         PLAYERS[name] = mapped;
         setProfileCache(prev => ({...prev, [name]: mapped}));
       }

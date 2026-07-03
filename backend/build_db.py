@@ -109,7 +109,7 @@ def create_tables(cur):
         )
     """)
     cur.execute("CREATE INDEX IF NOT EXISTS idx_search_name_lower ON search(name_lower)")
-    for t in ("stat_comps", "anthro_comps", "season_lines", "comps_v5"):
+    for t in ("season_lines", "comps_v5"):
         cur.execute(f"""
             CREATE TABLE IF NOT EXISTS {t} (
                 player_id TEXT PRIMARY KEY,
@@ -378,13 +378,9 @@ def main():
     conn.commit()
     gc.collect()
 
-    load_comps(cur, "stat_comps", "api_stat_comps.json")
-    conn.commit()
-    gc.collect()
-
-    load_comps(cur, "anthro_comps", "api_anthro_comps.json")
-    conn.commit()
-    gc.collect()
+    # 5.8.2: legacy stat_comps + anthro_comps REMOVED (superseded by comps_v5).
+    # No longer produced by 11_compress or consumed by frontend/backend → not loaded.
+    # (Saves ~105 MB of source JSON + the two DB tables.)
 
     load_comps_v5(cur)  # Sprint-3.10.A + Sprint-3.14 streaming load
     conn.commit()
