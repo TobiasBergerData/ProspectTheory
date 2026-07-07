@@ -1845,7 +1845,20 @@ function mapProfile(d) {
   // Board, ProjectionTab, etc.) sees unified values without per-component
   // overrides. Historical classes without riskProfile pass through to
   // the v2 fallback logic unchanged.
-  const _tps = d?.riskProfile?.tierProbs;
+  // Sprint-5.10: Tier-Quelle auf das kalibrierte 10c-Ordinal (Backend) konsolidiert.
+  // Head-to-Head (strikt OOT 2019-22): Ordinal schlägt RF-Proximity auf Brier
+  // (0.72 vs 0.96), Top-1 (0.40 vs 0.32), ECE (0.037 vs 0.098) und Aggregat-Sanity
+  // (2026: 3.6 vs 10.0 erwartete Superstars). Backend-Ordinal-Probs bevorzugt;
+  // RF-Proximity nur noch Fallback für Klassen ohne Backend-Verteilung.
+  const _ordTps = (d.prob_super != null || d.prob_superstar != null) ? {
+    superstar:   d.prob_super   ?? d.prob_superstar  ?? 0,
+    all_star:    d.prob_allstar ?? 0,
+    starter:     d.prob_starter ?? 0,
+    roleplayer:  d.prob_role    ?? d.prob_roleplayer ?? 0,
+    replacement: d.prob_repl    ?? d.prob_replacement ?? 0,
+    intl_career: d.prob_out     ?? d.prob_neg ?? d.prob_negative ?? 0,
+  } : null;
+  const _tps = _ordTps ?? d?.riskProfile?.tierProbs;
   if (_tps && _tps.starter != null) {
     // Sprint-5.5.J Phase 4: direct RF Proximity modeling output.
     // ppwa = pwDistribution.p50 (Median peak_wa). Tier via threshold bands
@@ -1888,7 +1901,17 @@ function mapProfile(d) {
       if (w >= 0)    return "Replacement";
       return "Negative";
     };
-    const _ppwaTier = _tierByPpwa(_ev);
+    // Sprint-5.10: Label = kalibriertes Backend-Quota-Tier (predicted_tier, Base-Rate
+    // pro Klasse). _tierByPpwa (eingefrorene WAR-Schwelle) nur noch Fallback für
+    // Alt-Klassen ohne Backend-Label. Backend-Namen → Frontend-Namen mappen.
+    const _BE_TIER_MAP = {
+      Superstar: "Superstar", "All-Star": "All-Star", Starter: "Starter",
+      Roleplayer: "Role Player", "Role Player": "Role Player",
+      Replacement: "Replacement", Out: "Negative", Negative: "Negative",
+    };
+    const _beTier = d.predicted_tier ?? d.predicted_best_tier ?? d.tier;
+    const _ppwaTier = (_beTier && _BE_TIER_MAP[_beTier]) ? _BE_TIER_MAP[_beTier]
+                    : _tierByPpwa(_ev);
     // Modal kept for sub-info (P(Star+) etc), not for tier label
     const _keys = Object.keys(_M);
     const _modalKey = _keys.reduce(
