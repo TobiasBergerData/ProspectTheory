@@ -13327,7 +13327,8 @@ function IntlBoardView({ players, onSelect }) {
                       + (Number(p.tiers?.Starter) || 0) + (Number(p.tiers?.["Role Player"]) || 0);
   const rows = players
     .filter(p => p.intlTierProbs && nbaPct(p) < 20)
-    .sort((a, b) => (b.intlLevelEv || 0) - (a.intlLevelEv || 0));
+    .sort((a, b) => (b.intlLevelEv || 0) - (a.intlLevelEv || 0))
+    .slice(0, 100);
   const tierColor = (t) => (INTL_TIERS.find(x => x.key === t)?.color) || "#9ca3af";
   if (!rows.length) return (
     <div style={{ padding: 24, color: "#9ca3af", background: "#111827", borderRadius: 12, border: "1px solid #1f2937" }}>
@@ -14623,7 +14624,9 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
     // Tobias 2026-04-30: Front Offices brauchen Sicht auf Spieler die als
     // Undrafted-Free-Agent ins Camp kommen koennen, plus intl-Teams die fuer
     // ihre Roster-Entscheidungen Talent ueber den NBA-Cut hinaus einschaetzen.
-    return withRanges.slice(0, 100);
+    // International-Board braucht den vollen Pool (Spieler mit NBA% < 20 % liegen
+    // gerade UNTER dem WAR-Top-100); IntlBoardView filtert + capped selbst.
+    return boardView === "intl" ? withRanges : withRanges.slice(0, 100);
   }, [allPlayers, sortBy, posFilter, gmRisk, boardView]);
 
   const posColors = {Playmaker:"#3b82f6", Wing:"#f97316", Big:"#8b5cf6"};
