@@ -2653,7 +2653,10 @@ function mapProfile(d) {
     // (0..1, censored: Σ = P(Pro-Karriere)). Array-Form {tier, prob(%), leagues, color}.
     intlTier: d.pred_intl_tier ?? d.intl_tier ?? d.intlTier ?? null,
     intlTierProbs: (() => {
-      if (d.prob_intl_euroleague == null) return d.intlTierProbs ?? null;
+      // Gate auf pred_intl_tier / intl_level_ev (immer präsent für gescorte Spieler);
+      // die einzelnen prob_intl_* können 0 sein und von 11_compress gestrippt werden
+      // → dürfen NICHT das Gate sein, sonst fallen alle außer EuroLeague-Talenten raus.
+      if (d.pred_intl_tier == null && d.intl_level_ev == null) return d.intlTierProbs ?? null;
       const META = {
         "EuroLeague":       {color:"#fbbf24", leagues:"EuroLeague"},
         "Top-Continental":  {color:"#f97316", leagues:"ACB · EuroCup · LNB · Serie A · BSL"},
