@@ -13325,9 +13325,13 @@ function IntlBoardView({ players, onSelect }) {
   const posColors = { Playmaker: "#3b82f6", Wing: "#f97316", Big: "#8b5cf6" };
   const nbaPct = (p) => (Number(p.tiers?.Superstar) || 0) + (Number(p.tiers?.["All-Star"]) || 0)
                       + (Number(p.tiers?.Starter) || 0) + (Number(p.tiers?.["Role Player"]) || 0);
+  // Nach Tier ordnen (EuroLeague oben → Second Division unten), innerhalb eines
+  // Tiers nach intl_level_ev. Flache Liste, kein Tier-Split.
+  const tierRank = { "EuroLeague": 4, "Top-Continental": 3, "Strong National": 2, "Solid Pro": 1, "Second Division": 0 };
   const rows = players
     .filter(p => p.intlTierProbs && nbaPct(p) < 20)
-    .sort((a, b) => (b.intlLevelEv || 0) - (a.intlLevelEv || 0))
+    .sort((a, b) => ((tierRank[b.predIntlTier] ?? -1) - (tierRank[a.predIntlTier] ?? -1))
+                 || ((b.intlLevelEv || 0) - (a.intlLevelEv || 0)))
     .slice(0, 100);
   const tierColor = (t) => (INTL_TIERS.find(x => x.key === t)?.color) || "#9ca3af";
   if (!rows.length) return (
