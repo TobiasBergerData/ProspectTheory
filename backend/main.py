@@ -228,10 +228,10 @@ _BOARD_FIELDS = [
     # Projection drivers
     "projection_boosters", "projection_limiters",
     "v2Boosters", "v2Limiters",
-    # 10e: Sekundaeres Intl-Tier-Modell (Board-Spalte + Player-Page-Block)
-    "intl_tier",
-    "p_intl_eu_impact", "p_intl_eu", "p_intl_top_eu",
-    "p_intl_pro", "p_intl_fringe",
+    # Sprint-5.11: International Career Model (intl_tier_model_v2) — eigenes Board
+    "pred_intl_tier", "intl_level_ev", "p_intl_career",
+    "prob_intl_euroleague", "prob_intl_topkont", "prob_intl_starknat",
+    "prob_intl_solide", "prob_intl_unterbau",
     # Tobias 2026-05-05: Injury-Saison-Fallback
     # injury_fallback_season = die uebersprungene (verletzte) Saison
     # display_season = die Saison fuer UI (Team/Class-Anzeige) — bleibt aktuelle Saison

@@ -2591,6 +2591,12 @@ function mapProfile(d) {
     // predicted_tier "All-Star" bleibt. Macht Pre-Draft-Potenzial sichtbar.
     potentialTier: d.potential_tier ?? null,
     countingStatsImputed: d.counting_stats_imputed ?? false,
+    // Sprint-5.11: International Career Model — durchreichen fürs eigene Board.
+    // NCAA-Verteilungen bewusst diffus → immer die volle Verteilung zeigen.
+    // intlTier + intlTierProbs (Array-Form) werden unten aktualisiert (kein Duplikat).
+    predIntlTier: d.pred_intl_tier ?? null,
+    intlLevelEv: d.intl_level_ev ?? null,
+    pIntlCareer: d.p_intl_career ?? null,
     ups: d.ups ?? d.ups_raw,
     // Tobias 2026-05-25: PRIMARY VALUE METRIC converged to Added Wins (inject_added_wins.py).
     // Prefer addedWins.* everywhere; fall back to legacy ppWA so players without a new
@@ -2642,30 +2648,28 @@ function mapProfile(d) {
     nbaName: d.nba_name || "",
     madeNba:d.made_nba, draftYear:d.draftYear??d.draft_year, draftPick:d.draft_pick,
     classRank: d.classRank ?? null,
-    // ── Intl-Tier-Modell (10e_intl_tier_classifier.py) ──
-    // Backend liefert: intl_tier (string) + p_intl_eu_impact / p_intl_eu /
-    // p_intl_top_eu / p_intl_pro / p_intl_fringe (probabilities 0..1).
-    // Wir bauen die UI-Struktur intlTierProbs als sortiertes Array {tier, prob, leagues, desc}.
-    intlTier: d.intl_tier ?? d.intlTier ?? null,
+    // ── Intl-Tier-Modell v2 (intl_tier_model_v2.py, Sprint-5.11) ──
+    // Backend liefert pred_intl_tier + prob_intl_[euroleague/topkont/starknat/solide/unterbau]
+    // (0..1, censored: Σ = P(Pro-Karriere)). Array-Form {tier, prob(%), leagues, color}.
+    intlTier: d.pred_intl_tier ?? d.intl_tier ?? d.intlTier ?? null,
     intlTierProbs: (() => {
-      const has = d.intl_tier || d.p_intl_eu_impact != null || d.p_intl_eu != null;
-      if (!has) return d.intlTierProbs ?? null;
-      const TIER_META = {
-        "EuroLeague Impact": {leagues:"Euroleague", desc:"Top international impact player; rotation regular in the strongest league."},
-        "EuroLeague":        {leagues:"Euroleague / Eurocup",     desc:"Solid Euroleague regular or top EuroCup player."},
-        "Top European Liga": {leagues:"ACB / Italian-A / Adriatic", desc:"Regular in one of Europe's strong top leagues."},
-        "Pro Basketball":    {leagues:"German-BBL / Lithuanian-LKL", desc:"Roster player in a pro league below top European tier."},
-        "Fringe Pro":        {leagues:"Lower Pro / Domestic-only",   desc:"Marginal pro status; short or domestic-only career."},
+      if (d.prob_intl_euroleague == null) return d.intlTierProbs ?? null;
+      const META = {
+        "EuroLeague":          {color:"#fbbf24", leagues:"EuroLeague"},
+        "Top-Kontinental":     {color:"#f97316", leagues:"ACB · EuroCup · LNB · Serie A · BSL"},
+        "Starke Nationalliga": {color:"#3b82f6", leagues:"BBL · Greek A1 · ABA · Israeli"},
+        "Solide Pro":          {color:"#06b6d4", leagues:"starke 2. Div (FEB/Pro B) · mittlere"},
+        "Unterbau":            {color:"#6b7280", leagues:"schwache Nationalligen · 2. Div"},
       };
-      const order = ["EuroLeague Impact","EuroLeague","Top European Liga","Pro Basketball","Fringe Pro"];
+      const order = ["EuroLeague","Top-Kontinental","Starke Nationalliga","Solide Pro","Unterbau"];
       const probs = {
-        "EuroLeague Impact": Number(d.p_intl_eu_impact ?? 0),
-        "EuroLeague":        Number(d.p_intl_eu ?? 0),
-        "Top European Liga": Number(d.p_intl_top_eu ?? 0),
-        "Pro Basketball":    Number(d.p_intl_pro ?? 0),
-        "Fringe Pro":        Number(d.p_intl_fringe ?? 0),
+        "EuroLeague":          Number(d.prob_intl_euroleague ?? 0) * 100,
+        "Top-Kontinental":     Number(d.prob_intl_topkont ?? 0) * 100,
+        "Starke Nationalliga": Number(d.prob_intl_starknat ?? 0) * 100,
+        "Solide Pro":          Number(d.prob_intl_solide ?? 0) * 100,
+        "Unterbau":            Number(d.prob_intl_unterbau ?? 0) * 100,
       };
-      return order.map(t => ({ tier:t, prob:probs[t]||0, leagues:TIER_META[t].leagues, desc:TIER_META[t].desc }));
+      return order.map(t => ({ tier:t, prob:probs[t]||0, color:META[t].color, leagues:META[t].leagues }));
     })(),
     actualIntlLeague:  d.actualIntlLeague  ?? null,
     actualIntlTier:    d.actualIntlTier    ?? null,
@@ -13307,6 +13311,73 @@ const ARCHETYPE_TO_GROUP = Object.fromEntries(
   ARCHETYPE_CLUSTERS.flatMap(c => c.archetypes.map(a => [a, c.group]))
 );
 
+// Sprint-5.11: International Board — "wenn nicht NBA, welches intl-Level (3yr-Peak)?"
+// Getrennt vom NBA-Board. Zeigt nur Prospects mit NBA-Wahrscheinlichkeit < 20 %,
+// gerankt nach intl_level_ev. Volle Tier-Verteilung (NCAA bewusst diffus = ehrlich).
+const INTL_TIERS = [
+  { key: "EuroLeague", color: "#fbbf24" },
+  { key: "Top-Kontinental", color: "#f97316" },
+  { key: "Starke Nationalliga", color: "#3b82f6" },
+  { key: "Solide Pro", color: "#06b6d4" },
+  { key: "Unterbau", color: "#6b7280" },
+];
+function IntlBoardView({ players, onSelect }) {
+  const posColors = { Playmaker: "#3b82f6", Wing: "#f97316", Big: "#8b5cf6" };
+  const nbaPct = (p) => (Number(p.tiers?.Superstar) || 0) + (Number(p.tiers?.["All-Star"]) || 0)
+                      + (Number(p.tiers?.Starter) || 0) + (Number(p.tiers?.["Role Player"]) || 0);
+  const rows = players
+    .filter(p => p.intlTierProbs && nbaPct(p) < 20)
+    .sort((a, b) => (b.intlLevelEv || 0) - (a.intlLevelEv || 0));
+  const tierColor = (t) => (INTL_TIERS.find(x => x.key === t)?.color) || "#9ca3af";
+  if (!rows.length) return (
+    <div style={{ padding: 24, color: "#9ca3af", background: "#111827", borderRadius: 12, border: "1px solid #1f2937" }}>
+      Keine Prospects mit NBA-Wahrscheinlichkeit &lt; 20 % in dieser Auswahl.
+    </div>
+  );
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ background: "#111827", border: "1px solid #1f2937" }}>
+      <div style={{ padding: "10px 14px", fontSize: 12, color: "#9ca3af", borderBottom: "1px solid #1f2937" }}>
+        <b style={{ color: "#e5e7eb" }}>International Board</b> — projizierter 3-Jahres-Peak, <b>wenn nicht NBA</b> (NBA-Wahrsch. &lt; 20 %),
+        an der empirischen Liga-Stärke verankert. Die Verteilung zeigt die Unsicherheit — bei College-Spielern bewusst breiter.
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead><tr style={{ background: "#0a0e17" }}>
+            {["#", "Player", "Pos", "Team", "Age", "NBA%", "Intl-Peak-Tier", "Verteilung (EuroLeague → Unterbau)"].map((h, i) => (
+              <th key={i} className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold"
+                  style={{ color: "#6b7280", borderBottom: "1px solid #1f2937" }}>{h}</th>))}
+          </tr></thead>
+          <tbody>
+            {rows.map((p, i) => (
+              <tr key={p.name} className="cursor-pointer hover:bg-white hover:bg-opacity-5 transition-colors"
+                  onClick={() => onSelect(p.name)} style={{ borderBottom: "1px solid #1f293744" }}>
+                <td className="px-3 py-2.5 font-bold text-xs" style={{ color: "#475569" }}>{i + 1}</td>
+                <td className="px-3 py-2.5 font-semibold" style={{ color: "#e5e7eb" }}>{p.name}
+                  {p.source && p.source !== "ncaa" && <span className="text-xs" style={{ color: "#10b981" }}> 🌐</span>}</td>
+                <td className="px-3 py-2.5"><span className="px-2 py-0.5 rounded text-xs font-semibold"
+                    style={{ background: (posColors[p.pos] || "#6b7280") + "22", color: posColors[p.pos] || "#6b7280" }}>{p.pos}</span></td>
+                <td className="px-3 py-2.5 text-xs" style={{ color: "#9ca3af" }}>{p.team || p.conf}</td>
+                <td className="px-3 py-2.5 text-xs" style={{ color: "#9ca3af" }}>{p.age != null ? ageOnDraftDay(p.age).toFixed(1) : "—"}</td>
+                <td className="px-3 py-2.5 text-xs" style={{ color: "#6b7280" }}>{nbaPct(p).toFixed(0)}%</td>
+                <td className="px-3 py-2.5 text-xs font-bold" style={{ color: tierColor(p.predIntlTier) }}>{p.predIntlTier || "—"}</td>
+                <td className="px-3 py-2.5" style={{ minWidth: 210 }}>
+                  <div style={{ display: "flex", height: 14, borderRadius: 4, overflow: "hidden", width: 200, background: "#0a0e1755" }}>
+                    {(p.intlTierProbs || []).map(t => {
+                      const v = Number(t.prob) || 0;
+                      return v > 0.5 ? <div key={t.tier} title={`${t.tier}: ${v.toFixed(0)}%`}
+                        style={{ width: `${v}%`, background: t.color }} /> : null;
+                    })}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function TierBoardView({ players, onSelect }) {
   // Top 100 nach war (= NBA-roster-relevanter Pool)
   const visible = players.slice(0, 100);
@@ -14622,7 +14693,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
         </div>
         {/* View toggle (Sprint-5.2: Range view consolidated into Curves) */}
         <div className="flex gap-1 ml-auto">
-          {[["table","☰ Table"],["curves","◉ Curves"],["tier","▥ Tier Board"]].map(([v,l])=>(
+          {[["table","☰ Table"],["curves","◉ Curves"],["tier","▥ Tier Board"],["intl","🌍 International"]].map(([v,l])=>(
             <button key={v} onClick={()=>setBoardView(v)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
               style={{background:boardView===v?"#6d28d9":"#1f2937",color:boardView===v?"#e9d5ff":"#9ca3af"}}>
               {l}
@@ -14645,6 +14716,13 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
       {boardView === "tier" && (
         <div>
           <TierBoardView players={filtered} onSelect={onSelect} />
+        </div>
+      )}
+
+      {/* Sprint-5.11: International Board — eigenes Board, "wenn nicht NBA" */}
+      {boardView === "intl" && (
+        <div>
+          <IntlBoardView players={filtered} onSelect={onSelect} />
         </div>
       )}
 
