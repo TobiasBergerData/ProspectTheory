@@ -2674,6 +2674,27 @@ function mapProfile(d) {
       };
       return order.map(t => ({ tier:t, prob:probs[t]||0, color:META[t].color, leagues:META[t].leagues }));
     })(),
+    // Sprint-5.11: Potenzial-/Ceiling-Tier = bestes Level mit ≥20% Chance WENN Profi
+    // (bedingt: prob_intl_* / p_intl_career). Surfaced das realistische Upside statt
+    // des pessimistischen Modals. EuroLeague bleibt selten (echte Base Rate).
+    intlCeiling: (() => {
+      if (d.pred_intl_tier == null) return null;
+      const names = ["EuroLeague", "Top-Continental", "Strong National", "Solid Pro", "Second Division"]; // idx0 = bestes
+      // (1) intl-Modell-Ceiling: bestes Level mit ≥20% Chance WENN Profi (bedingt)
+      const car = Number(d.p_intl_career ?? 0) || 1;
+      const cond = [d.prob_intl_euroleague, d.prob_intl_topkont, d.prob_intl_starknat,
+                    d.prob_intl_solide, d.prob_intl_unterbau].map(x => Number(x ?? 0) / car);
+      let cum = 0, modelIdx = 4, modelPct = 0;
+      for (let i = 0; i < 5; i++) { cum += cond[i]; if (cum >= 0.20) { modelIdx = i; modelPct = Math.round(cum * 100); break; } if (i === 4) modelPct = Math.round(cum * 100); }
+      // (2) WAR-Anker: NBA-Talent → EU-Level (empirisch: WAR 5+ → EuroLeague-Kaliber,
+      //     2-5 → Top-Continental, 0.8-2 → Strong National, 0.3-0.8 → Solid Pro)
+      const war = Number(d.war ?? d.projected_war ?? 0);
+      const warIdx = war >= 5 ? 0 : war >= 2 ? 1 : war >= 0.8 ? 2 : war >= 0.3 ? 3 : 4;
+      // (3) Blend: das HÖHERE Ceiling (kleinerer Index gewinnt)
+      const idx = Math.min(modelIdx, warIdx);
+      const byWar = warIdx < modelIdx;
+      return { tier: names[idx], pct: byWar ? null : modelPct, byWar, war };
+    })(),
     actualIntlLeague:  d.actualIntlLeague  ?? null,
     actualIntlTier:    d.actualIntlTier    ?? null,
     actualIntlLeagues: d.actualIntlLeagues ?? null,
@@ -13331,27 +13352,32 @@ function IntlBoardView({ players, onSelect }) {
   // Nach Tier ordnen (EuroLeague oben → Second Division unten), innerhalb eines
   // Tiers nach intl_level_ev. Flache Liste, kein Tier-Split.
   const tierRank = { "EuroLeague": 4, "Top-Continental": 3, "Strong National": 2, "Solid Pro": 1, "Second Division": 0 };
+  const warOf = p => Number(p.war ?? p.ppwa ?? 0);
+  // NBA-Locks (≥85%) raus — die SIND NBA, keine "Optionen". Fringe-Talente (unsichere
+  // NBA, aber EuroLeague-Kaliber via WAR) bleiben und stehen oben. NBA% als Kontext.
+  const NBA_LOCK = 85;
   const rows = players
-    .filter(p => p.intlTierProbs && nbaPct(p) < 20)
-    .sort((a, b) => ((tierRank[b.predIntlTier] ?? -1) - (tierRank[a.predIntlTier] ?? -1))
-                 || ((b.intlLevelEv || 0) - (a.intlLevelEv || 0)))
+    .filter(p => p.intlCeiling && nbaPct(p) < NBA_LOCK)
+    .sort((a, b) => ((tierRank[b.intlCeiling.tier] ?? -1) - (tierRank[a.intlCeiling.tier] ?? -1))
+                 || (warOf(b) - warOf(a)))
     .slice(0, 100);
   const tierColor = (t) => (INTL_TIERS.find(x => x.key === t)?.color) || "#9ca3af";
   if (!rows.length) return (
     <div style={{ padding: 24, color: "#9ca3af", background: "#111827", borderRadius: 12, border: "1px solid #1f2937" }}>
-      No prospects with NBA probability &lt; 20% in this selection.
+      No prospects match the current selection.
     </div>
   );
   return (
     <div className="rounded-xl overflow-hidden" style={{ background: "#111827", border: "1px solid #1f2937" }}>
       <div style={{ padding: "10px 14px", fontSize: 12, color: "#9ca3af", borderBottom: "1px solid #1f2937" }}>
-        <b style={{ color: "#e5e7eb" }}>International Board</b> — projected 3-year peak <b>if not NBA</b> (NBA probability &lt; 20%),
-        anchored to empirical league strength. The distribution shows the uncertainty — deliberately wider for college players.
+        <b style={{ color: "#e5e7eb" }}>International Board</b> — best European option each prospect projects to <b>if not NBA</b>. Fringe-NBA talents
+        are EuroLeague-caliber (empirically: prospects with NBA WAR 5+ who went to Europe reached EuroLeague/Top-Continental far more often), so the
+        ceiling is anchored to <b>NBA WAR</b> and blended with the calibrated intl model. <b>NBA%</b> = chance of an NBA career — a high value means "likely NBA, but this is his European floor if not."
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr style={{ background: "#0a0e17" }}>
-            {["#", "Player", "Pos", "Team", "Age", "NBA%", "Intl Peak Tier", "Distribution (EuroLeague → 2nd Div)"].map((h, i) => (
+            {["#", "Player", "Pos", "Team", "Age", "NBA WAR", "NBA%", "Potential League Tier"].map((h, i) => (
               <th key={i} className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold"
                   style={{ color: "#6b7280", borderBottom: "1px solid #1f2937" }}>{h}</th>))}
           </tr></thead>
@@ -13366,16 +13392,10 @@ function IntlBoardView({ players, onSelect }) {
                     style={{ background: (posColors[p.pos] || "#6b7280") + "22", color: posColors[p.pos] || "#6b7280" }}>{p.pos}</span></td>
                 <td className="px-3 py-2.5 text-xs" style={{ color: "#9ca3af" }}>{p.team || p.conf}</td>
                 <td className="px-3 py-2.5 text-xs" style={{ color: "#9ca3af" }}>{p.age != null ? ageOnDraftDay(p.age).toFixed(1) : "—"}</td>
+                <td className="px-3 py-2.5 text-xs font-semibold" style={{ color: warOf(p) >= 5 ? "#fbbf24" : warOf(p) >= 2 ? "#86efac" : "#9ca3af" }}>{warOf(p) > 0 ? warOf(p).toFixed(1) : "—"}</td>
                 <td className="px-3 py-2.5 text-xs" style={{ color: "#6b7280" }}>{nbaPct(p).toFixed(0)}%</td>
-                <td className="px-3 py-2.5 text-xs font-bold" style={{ color: tierColor(p.predIntlTier) }}>{p.predIntlTier || "—"}</td>
-                <td className="px-3 py-2.5" style={{ minWidth: 210 }}>
-                  <div style={{ display: "flex", height: 14, borderRadius: 4, overflow: "hidden", width: 200, background: "#0a0e1755" }}>
-                    {(p.intlTierProbs || []).map(t => {
-                      const v = Number(t.prob) || 0;
-                      return v > 0.5 ? <div key={t.tier} title={`${t.tier}: ${v.toFixed(0)}%`}
-                        style={{ width: `${v}%`, background: t.color }} /> : null;
-                    })}
-                  </div>
+                <td className="px-3 py-2.5 text-xs font-bold" style={{ color: tierColor(p.intlCeiling.tier) }}>
+                  {p.intlCeiling.tier} <span style={{ color: "#6b7280", fontWeight: 400 }}>{p.intlCeiling.byWar ? "(NBA talent)" : `(${p.intlCeiling.pct}%)`}</span>
                 </td>
               </tr>
             ))}
