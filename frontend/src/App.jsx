@@ -2655,19 +2655,19 @@ function mapProfile(d) {
     intlTierProbs: (() => {
       if (d.prob_intl_euroleague == null) return d.intlTierProbs ?? null;
       const META = {
-        "EuroLeague":          {color:"#fbbf24", leagues:"EuroLeague"},
-        "Top-Kontinental":     {color:"#f97316", leagues:"ACB · EuroCup · LNB · Serie A · BSL"},
-        "Starke Nationalliga": {color:"#3b82f6", leagues:"BBL · Greek A1 · ABA · Israeli"},
-        "Solide Pro":          {color:"#06b6d4", leagues:"starke 2. Div (FEB/Pro B) · mittlere"},
-        "Unterbau":            {color:"#6b7280", leagues:"schwache Nationalligen · 2. Div"},
+        "EuroLeague":       {color:"#fbbf24", leagues:"EuroLeague"},
+        "Top-Continental":  {color:"#f97316", leagues:"ACB · EuroCup · LNB · Serie A · BSL"},
+        "Strong National":  {color:"#3b82f6", leagues:"BBL · Greek A1 · ABA · Israeli"},
+        "Solid Pro":        {color:"#06b6d4", leagues:"strong 2nd div (FEB/Pro B) · mid-tier"},
+        "Second Division":  {color:"#6b7280", leagues:"weaker national leagues · 2nd div"},
       };
-      const order = ["EuroLeague","Top-Kontinental","Starke Nationalliga","Solide Pro","Unterbau"];
+      const order = ["EuroLeague","Top-Continental","Strong National","Solid Pro","Second Division"];
       const probs = {
-        "EuroLeague":          Number(d.prob_intl_euroleague ?? 0) * 100,
-        "Top-Kontinental":     Number(d.prob_intl_topkont ?? 0) * 100,
-        "Starke Nationalliga": Number(d.prob_intl_starknat ?? 0) * 100,
-        "Solide Pro":          Number(d.prob_intl_solide ?? 0) * 100,
-        "Unterbau":            Number(d.prob_intl_unterbau ?? 0) * 100,
+        "EuroLeague":      Number(d.prob_intl_euroleague ?? 0) * 100,
+        "Top-Continental": Number(d.prob_intl_topkont ?? 0) * 100,
+        "Strong National": Number(d.prob_intl_starknat ?? 0) * 100,
+        "Solid Pro":       Number(d.prob_intl_solide ?? 0) * 100,
+        "Second Division": Number(d.prob_intl_unterbau ?? 0) * 100,
       };
       return order.map(t => ({ tier:t, prob:probs[t]||0, color:META[t].color, leagues:META[t].leagues }));
     })(),
@@ -13316,10 +13316,10 @@ const ARCHETYPE_TO_GROUP = Object.fromEntries(
 // gerankt nach intl_level_ev. Volle Tier-Verteilung (NCAA bewusst diffus = ehrlich).
 const INTL_TIERS = [
   { key: "EuroLeague", color: "#fbbf24" },
-  { key: "Top-Kontinental", color: "#f97316" },
-  { key: "Starke Nationalliga", color: "#3b82f6" },
-  { key: "Solide Pro", color: "#06b6d4" },
-  { key: "Unterbau", color: "#6b7280" },
+  { key: "Top-Continental", color: "#f97316" },
+  { key: "Strong National", color: "#3b82f6" },
+  { key: "Solid Pro", color: "#06b6d4" },
+  { key: "Second Division", color: "#6b7280" },
 ];
 function IntlBoardView({ players, onSelect }) {
   const posColors = { Playmaker: "#3b82f6", Wing: "#f97316", Big: "#8b5cf6" };
@@ -13331,19 +13331,19 @@ function IntlBoardView({ players, onSelect }) {
   const tierColor = (t) => (INTL_TIERS.find(x => x.key === t)?.color) || "#9ca3af";
   if (!rows.length) return (
     <div style={{ padding: 24, color: "#9ca3af", background: "#111827", borderRadius: 12, border: "1px solid #1f2937" }}>
-      Keine Prospects mit NBA-Wahrscheinlichkeit &lt; 20 % in dieser Auswahl.
+      No prospects with NBA probability &lt; 20% in this selection.
     </div>
   );
   return (
     <div className="rounded-xl overflow-hidden" style={{ background: "#111827", border: "1px solid #1f2937" }}>
       <div style={{ padding: "10px 14px", fontSize: 12, color: "#9ca3af", borderBottom: "1px solid #1f2937" }}>
-        <b style={{ color: "#e5e7eb" }}>International Board</b> — projizierter 3-Jahres-Peak, <b>wenn nicht NBA</b> (NBA-Wahrsch. &lt; 20 %),
-        an der empirischen Liga-Stärke verankert. Die Verteilung zeigt die Unsicherheit — bei College-Spielern bewusst breiter.
+        <b style={{ color: "#e5e7eb" }}>International Board</b> — projected 3-year peak <b>if not NBA</b> (NBA probability &lt; 20%),
+        anchored to empirical league strength. The distribution shows the uncertainty — deliberately wider for college players.
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr style={{ background: "#0a0e17" }}>
-            {["#", "Player", "Pos", "Team", "Age", "NBA%", "Intl-Peak-Tier", "Verteilung (EuroLeague → Unterbau)"].map((h, i) => (
+            {["#", "Player", "Pos", "Team", "Age", "NBA%", "Intl Peak Tier", "Distribution (EuroLeague → 2nd Div)"].map((h, i) => (
               <th key={i} className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold"
                   style={{ color: "#6b7280", borderBottom: "1px solid #1f2937" }}>{h}</th>))}
           </tr></thead>
