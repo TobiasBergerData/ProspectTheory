@@ -12781,15 +12781,14 @@ const TIER_STACK = [
 // anchor scale at the top.
 // ═══════════════════════════════════════════════════════════
 function OutcomeCurveBoard({ players, onSelect, gmRisk, setGmRisk }) {
-  // Layout dimensions for the per-row mini-curve SVG. Sprint-5.2d
-  // widened the curve area (540 → 820) so the lateral shift between
-  // prospects' peaks on the shared 0-100 grade scale is visible at a
-  // glance — matching Coleman's reference board where Tier-A curves
-  // sit clearly to the right of Tier-D curves on the same axis.
+  // Layout dimensions for the per-row mini-curve SVG. Sprint-5.11 widened
+  // the curve area (820 → 960) on the shared Peak-WA axis so the lateral
+  // shift between prospects — which IS the quality gap — reads at a glance:
+  // Tier-A curves sit clearly right of Tier-D curves on the same ruler.
   const ROW_H = 56;
   const NAME_COL_W  = 200;
   const GRADE_COL_W = 64;
-  const CURVE_W = 820;
+  const CURVE_W = 960;
   const CURVE_H = ROW_H - 12;
   const M = { left: 8, right: 8, top: 4, bottom: 4 };
   const px = (g) => M.left + (g / 100) * (CURVE_W - M.left - M.right);
@@ -12893,18 +12892,16 @@ function OutcomeCurveBoard({ players, onSelect, gmRisk, setGmRisk }) {
     );
   };
 
-  // Tier-anchor scale (top sticky header) — Coleman's "0-19 / 20-39 / ... / 95+"
-  const TIER_HEADER = [
-    {lo:1,  hi:19,  label:"0-19",    color:"#ec4899"},
-    {lo:20, hi:39,  label:"20-39",   color:"#f97316"},
-    {lo:40, hi:49,  label:"40-49",   color:"#fbbf24"},
-    {lo:50, hi:59,  label:"50-59",   color:"#86efac"},
-    {lo:60, hi:69,  label:"60-69",   color:"#22c55e"},
-    {lo:70, hi:79,  label:"70-79",   color:"#60a5fa"},
-    {lo:80, hi:87,  label:"80-87",   color:"#3b82f6"},
-    {lo:88, hi:94,  label:"88-94",   color:"#2563eb"},
-    {lo:95, hi:100, label:"95+",     color:"#1d4ed8"},
+  // Sprint-5.11: Kopf-Lineal auf der geteilten Peak-WA-Achse (identisch zu den Kurven).
+  // Tier-Zonen mit Klartext-Label + WA-Ticks, damit die Userin sieht, WO auf der Skala
+  // eine Kurve sitzt und dass die Verschiebung zwischen Prospects die Güte beschreibt.
+  const WA_ZONES = [
+    {label:"Role",      lo:0.5, hi:5,        color:"#06b6d4"},
+    {label:"Starter",   lo:5,   hi:14,       color:"#3b82f6"},
+    {label:"All-Star",  lo:14,  hi:20,       color:"#f97316"},
+    {label:"Superstar", lo:20,  hi:PWA_X_MAX,color:"#fbbf24"},
   ];
+  const WA_TICKS = [0, 5, 10, 15, 20, 25, 30, 35, 40];
 
   return (
     <div className="rounded-2xl overflow-hidden" style={{background:"#0a0e16", border:"1px solid #1f2937"}}>
@@ -12939,14 +12936,15 @@ function OutcomeCurveBoard({ players, onSelect, gmRisk, setGmRisk }) {
           </div>
         )}
         <p className="text-xs mt-3" style={{color:"#9ca3af", lineHeight:1.5}}>
-          Each curve is the model's <strong style={{color:"#cbd5e1"}}>mixture distribution</strong> over its six calibrated outcome tiers,
-          placed on the 0-100 grade scale. Tall narrow peak = confident tier judgement; wide curve = spread across several tiers;
-          bimodal shape = genuine boom-or-bust profile (substantial mass at two non-adjacent tiers). The tier-letter pill (A/B/C/D)
-          is the model's own tier verdict, not derived from the peak position — so it always agrees with the Big Board.
+          Every prospect is drawn against the <strong style={{color:"#cbd5e1"}}>same Peak-Wins-Added ruler</strong> — the identical axis and
+          curve you see on each player's page. That shared scale is the point: a curve sitting <strong style={{color:"#cbd5e1"}}>further right
+          means a stronger projected peak</strong>, so the lateral shift from one prospect to the next <em>is</em> the quality gap. A tall,
+          narrow curve = a confident projection; a wide or two-humped curve = more uncertainty or a genuine boom-or-bust profile. The
+          tier-letter pill (A/B/C/D) is the model's own tier verdict, consistent with the Big Board.
         </p>
       </div>
 
-      {/* Sticky tier-anchor scale header */}
+      {/* Sticky shared Peak-WA ruler — same axis as every curve below */}
       <div className="px-5 py-3" style={{background:"#0d1117", borderBottom:"1px solid #1f2937"}}>
         <div className="flex items-center gap-4">
           <div style={{width: 36}}/>
@@ -12956,21 +12954,33 @@ function OutcomeCurveBoard({ players, onSelect, gmRisk, setGmRisk }) {
           <div style={{width: GRADE_COL_W}}>
             <div className="text-[10px] uppercase tracking-widest font-semibold" style={{color:"#6b7280"}}>Grade</div>
           </div>
-          <div style={{width: CURVE_W, position: "relative", height: 20}}>
-            {/* Tier-anchor labels positioned over the curve area */}
-            {TIER_HEADER.map(t => (
-              <div key={t.label} style={{
-                position: "absolute",
-                left: px(t.lo),
-                width: Math.max(8, px(t.hi) - px(t.lo)),
-                top: 0,
-                textAlign: "center",
-                fontSize: 9,
-                color: t.color,
-                fontWeight: 600,
-                opacity: 0.75,
+          <div style={{width: CURVE_W, position: "relative", height: 34}}>
+            {/* Weaker → stronger direction cue */}
+            <div style={{position:"absolute", left: M.left, top: 0, fontSize: 9, color:"#4b5563", fontWeight:600, letterSpacing:"0.05em"}}>
+              ← weaker future
+            </div>
+            <div style={{position:"absolute", right: M.right, top: 0, fontSize: 9, color:"#6b7280", fontWeight:600, letterSpacing:"0.05em"}}>
+              stronger future →
+            </div>
+            {/* Tier-zone labels centred over their band on the WA axis */}
+            {WA_ZONES.map(z => {
+              const lo = Math.max(z.lo, PWA_X_MIN), hi = Math.min(z.hi, PWA_X_MAX);
+              return (
+                <div key={z.label} style={{
+                  position:"absolute", left: xW(lo), width: Math.max(8, xW(hi) - xW(lo)),
+                  top: 12, textAlign:"center", fontSize: 9, color: z.color, fontWeight: 700, opacity: 0.85,
+                }}>
+                  {z.label}
+                </div>
+              );
+            })}
+            {/* WA tick numbers on the same ruler */}
+            {WA_TICKS.map(w => (
+              <div key={`tick-${w}`} style={{
+                position:"absolute", left: xW(w), top: 24, transform:"translateX(-50%)",
+                fontSize: 8, color:"#4b5563", fontWeight: 600,
               }}>
-                {t.label}
+                {w}
               </div>
             ))}
           </div>
