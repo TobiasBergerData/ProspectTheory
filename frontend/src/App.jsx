@@ -495,6 +495,20 @@ const MIXTURE_TIER_ANCHORS = [
   {key:"Negative",    grade:10, sigma:4.5, color:"#ec4899", letter:"D"},
 ];
 
+// Sprint-5.11: Peak-WA-Achsen-Anker als EINZIGE Quelle. Von der Player-Page-Kurve
+// (RfPwaCurve) UND dem Curves-Tab-Mini-Chart genutzt, damit beide Kurven auf
+// derselben Achse mit denselben Tier-Zentren identisch rendern. Zentren/Sigmas =
+// die kalibrierten WA-Bänder (schwache Tiers klumpen bei 0, Superstar weit rechts).
+const PWA_X_MIN = -5, PWA_X_MAX = 40;
+const PWA_TIER_ANCHORS = [
+  {key:"intl_career", color:"#6b7280", lo:PWA_X_MIN, hi:0,       center:-2,   sigma:3.0},
+  {key:"replacement", color:"#8b5cf6", lo:0,         hi:0.5,     center:0.25, sigma:1.5},
+  {key:"roleplayer",  color:"#06b6d4", lo:0.5,       hi:5,       center:2.5,  sigma:2.5},
+  {key:"starter",     color:"#3b82f6", lo:5,         hi:14,      center:9,    sigma:3.0},
+  {key:"all_star",    color:"#f97316", lo:14,        hi:20,      center:17,   sigma:3.0},
+  {key:"superstar",   color:"#fbbf24", lo:20,        hi:PWA_X_MAX, center:30, sigma:6.0},
+];
+
 /** Evaluate the mixture density at grade x.
  *  components = [{center, sigma, weight}, ...] with weights summing to 1.
  */
@@ -6891,19 +6905,12 @@ function RfPwaCurve({p}) {
   if (!rp?.tierProbs || rp.tierProbs.starter == null) return null;
   const TPS = rp.tierProbs;
   const dist = rp.pwDistribution || {};
-  const X_MIN = -5, X_MAX = 40;
+  const X_MIN = PWA_X_MIN, X_MAX = PWA_X_MAX;
   const W = 700, H = 280;
   const M = { top: 36, right: 24, bottom: 50, left: 32 };
   const xS = (wa) => M.left + ((wa - X_MIN) / (X_MAX - X_MIN)) * (W - M.left - M.right);
-  const TIERS = [
-    // Sprint-5.5.H: smoother sigmas — original values produced 6 visible per-tier peaks.
-    {key:"intl_career", color:"#6b7280", lo:X_MIN, hi:0,    center:-2,    sigma:3.0},
-    {key:"replacement", color:"#8b5cf6", lo:0,     hi:0.5,  center:0.25,  sigma:1.5},
-    {key:"roleplayer",  color:"#06b6d4", lo:0.5,   hi:5,    center:2.5,   sigma:2.5},
-    {key:"starter",     color:"#3b82f6", lo:5,     hi:14,   center:9,     sigma:3.0},
-    {key:"all_star",    color:"#f97316", lo:14,    hi:20,   center:17,    sigma:3.0},
-    {key:"superstar",   color:"#fbbf24", lo:20,    hi:X_MAX, center:30,   sigma:6.0},
-  ];
+  // Sprint-5.11: gemeinsame Anker-Quelle (identisch zum Curves-Tab-Mini-Chart).
+  const TIERS = PWA_TIER_ANCHORS;
   const TIER_LABEL = {
     intl_career: "Intl Career", replacement: "Replacement",
     roleplayer: "Roleplayer", starter: "Starter",
@@ -12786,6 +12793,9 @@ function OutcomeCurveBoard({ players, onSelect, gmRisk, setGmRisk }) {
   const CURVE_H = ROW_H - 12;
   const M = { left: 8, right: 8, top: 4, bottom: 4 };
   const px = (g) => M.left + (g / 100) * (CURVE_W - M.left - M.right);
+  // Sprint-5.11: Peak-WA-Abbildung — dieselbe Achse wie die Player-Page-Kurve, damit
+  // die Mini-Kurve hier IDENTISCH zur detaillierten Player-Page-Kurve ist.
+  const xW = (wa) => M.left + ((wa - PWA_X_MIN) / (PWA_X_MAX - PWA_X_MIN)) * (CURVE_W - M.left - M.right);
 
   // Pre-compute curve params for every prospect so we can sort the
   // board by mixture-quantile (matches GM-risk preference).
@@ -12841,40 +12851,44 @@ function OutcomeCurveBoard({ players, onSelect, gmRisk, setGmRisk }) {
   // damit Header/Grade-Spalte weiter passen. So sind Player-Page und Curves-Tab dieselbe
   // detaillierte Kurve aus einer Quelle.
   const renderMiniCurve = (p, params) => {
-    if (!params) return null;
-    const tier = params.tier;
-    const tps = p?.tiers || p?.v2TierProbs || {};
-    let total = 0;
-    const comps = MIXTURE_TIER_ANCHORS.map(a => {
-      const w = Math.max(0, Number(tps[a.key]) || 0); total += w;
-      return { grade: a.grade, sigma: a.sigma, w };
-    });
-    const N = 140;
-    let maxY = 0, modeG = params.peakGrade ?? 50;
+    // Board-Tier-Probs (%-Skala, kapitalisierte Keys) → RfPwaCurve-Keys mappen.
+    // Normalisierung durch total → die *100-Skalierung fällt raus.
+    const cap = p?.tiers || p?.v2TierProbs || {};
+    const TPS = {
+      superstar:   cap["Superstar"]   || 0, all_star:  cap["All-Star"]    || 0,
+      starter:     cap["Starter"]     || 0, roleplayer:cap["Role Player"] || 0,
+      replacement: cap["Replacement"] || 0, intl_career:cap["Negative"]   || 0,
+    };
+    const total = PWA_TIER_ANCHORS.reduce((s, t) => s + (TPS[t.key] || 0), 0);
+    if (total <= 0) return null;
+    const col = params?.tier?.color || "#3b82f6";
+    const N = 160;
     const ys = new Array(N + 1);
+    let maxY = 0, modeWa = PWA_X_MIN;
     for (let i = 0; i <= N; i++) {
-      const g = (i / N) * 100;
+      const wa = PWA_X_MIN + (i / N) * (PWA_X_MAX - PWA_X_MIN);
       let d = 0;
-      if (total > 0) comps.forEach(c => {
-        if (c.w) { const z = (g - c.grade) / c.sigma; d += (c.w / total) * Math.exp(-0.5 * z * z) / (c.sigma * Math.sqrt(2 * Math.PI)); }
+      PWA_TIER_ANCHORS.forEach(t => {
+        const pr = (TPS[t.key] || 0) / total;
+        if (pr) { const z = (wa - t.center) / t.sigma; d += pr * Math.exp(-0.5 * z * z) / (t.sigma * Math.sqrt(2 * Math.PI)); }
       });
-      ys[i] = d; if (d > maxY) { maxY = d; modeG = g; }
+      ys[i] = d; if (d > maxY) { maxY = d; modeWa = wa; }
     }
     if (maxY <= 0) return null;
     const baseY = CURVE_H - M.bottom, peakY = M.top;
     let outline = "";
     for (let i = 0; i <= N; i++) {
-      const g = (i / N) * 100;
+      const wa = PWA_X_MIN + (i / N) * (PWA_X_MAX - PWA_X_MIN);
       const yN = ys[i] / maxY;
-      outline += (i === 0 ? "M " : " L ") + px(g).toFixed(2) + "," + (baseY - yN * (baseY - peakY)).toFixed(2);
+      outline += (i === 0 ? "M " : " L ") + xW(wa).toFixed(2) + "," + (baseY - yN * (baseY - peakY)).toFixed(2);
     }
-    const path = `M ${px(0).toFixed(2)},${baseY} ` + outline.slice(1) + ` L ${px(100).toFixed(2)},${baseY} Z`;
+    const path = `M ${xW(PWA_X_MIN).toFixed(2)},${baseY} ` + outline.slice(1) + ` L ${xW(PWA_X_MAX).toFixed(2)},${baseY} Z`;
     return (
       <>
-        <path d={path} fill={tier.color} opacity={0.55}/>
-        <path d={outline} fill="none" stroke={tier.color} strokeWidth={1.4} opacity={0.95}/>
-        <line x1={px(modeG)} x2={px(modeG)} y1={M.top} y2={baseY}
-              stroke={tier.color} strokeWidth={1.5} strokeDasharray="2,2" opacity={0.95}/>
+        <path d={path} fill={col} opacity={0.55}/>
+        <path d={outline} fill="none" stroke={col} strokeWidth={1.4} opacity={0.95}/>
+        <line x1={xW(modeWa)} x2={xW(modeWa)} y1={M.top} y2={baseY}
+              stroke={col} strokeWidth={1.5} strokeDasharray="2,2" opacity={0.95}/>
       </>
     );
   };
@@ -13023,16 +13037,20 @@ function OutcomeCurveBoard({ players, onSelect, gmRisk, setGmRisk }) {
               {/* Mini density curve */}
               <svg width={CURVE_W} height={CURVE_H}>
                 {/* Tier-bucket faint background bands */}
-                {OUTCOME_GRADE_TIERS.map(t => (
-                  <rect key={`bg-${t.name}-${rank}`}
-                    x={px(t.grade_lo)}
-                    y={M.top}
-                    width={px(t.grade_hi) - px(t.grade_lo)}
-                    height={CURVE_H - M.top - M.bottom}
-                    fill={t.color}
-                    opacity={t.name === tier.name ? 0.12 : 0.04}
-                  />
-                ))}
+                {/* Sprint-5.11: Peak-WA-Tier-Zonen — dieselbe Achse wie die Kurve. */}
+                {PWA_TIER_ANCHORS.map(t => {
+                  const lo = Math.max(t.lo, PWA_X_MIN), hi = Math.min(t.hi, PWA_X_MAX);
+                  return (
+                    <rect key={`bg-${t.key}-${rank}`}
+                      x={xW(lo)}
+                      y={M.top}
+                      width={xW(hi) - xW(lo)}
+                      height={CURVE_H - M.top - M.bottom}
+                      fill={t.color}
+                      opacity={0.06}
+                    />
+                  );
+                })}
                 {renderMiniCurve(p, params)}
               </svg>
             </div>
@@ -15599,4 +15617,3 @@ export default function App() {
     </div>
   );
 }
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
