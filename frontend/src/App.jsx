@@ -6932,6 +6932,18 @@ function RfPwaCurve({p}) {
     samples[i] = {wa, y: density};
     if (density > maxY) maxY = density;
   }
+  // Sprint-5.11: mode / p20 / p80 aus DER MISCHUNG (konsistent mit der Kurve + Quelle),
+  // statt aus dem RF-pwDistribution — sonst würden Header-Zahlen und Kurve auseinanderlaufen.
+  const _dwa = (X_MAX - X_MIN) / N;
+  const _area = samples.reduce((s, sm) => s + sm.y, 0) * _dwa || 1;
+  let _mode = samples[0], _cum = 0, _p20 = null, _p80 = null;
+  for (const sm of samples) if (sm.y > _mode.y) _mode = sm;
+  for (const sm of samples) {
+    _cum += sm.y * _dwa / _area;
+    if (_p20 == null && _cum >= 0.20) _p20 = sm.wa;
+    if (_p80 == null && _cum >= 0.80) { _p80 = sm.wa; break; }
+  }
+  const hdrMode = _mode.wa, hdrP20 = _p20, hdrP80 = _p80;
   const yNorm = (y) => maxY > 0 ? y / maxY : 0;
   const peakHeight = H - M.top - M.bottom;
   const yS = (y) => M.top + (peakHeight - yNorm(y) * peakHeight);
@@ -6948,9 +6960,9 @@ function RfPwaCurve({p}) {
         <div>
           <div className="text-xs uppercase tracking-widest" style={{color:"#9ca3af"}}>Outcome Curve</div>
           <div className="text-2xl font-bold mt-0.5" style={{color:modal.color, fontFamily:"'Oswald',sans-serif"}}>
-            Peak WA {dist.mode != null ? dist.mode.toFixed(1) : "—"}
+            Peak WA {hdrMode != null ? hdrMode.toFixed(1) : "—"}
             <span className="text-sm font-normal ml-2" style={{color:"#9ca3af"}}>
-              ({dist.p20 != null ? dist.p20.toFixed(1) : "—"} – {dist.p80 != null ? dist.p80.toFixed(1) : "—"})
+              ({hdrP20 != null ? hdrP20.toFixed(1) : "—"} – {hdrP80 != null ? hdrP80.toFixed(1) : "—"})
             </span>
           </div>
         </div>
@@ -7353,12 +7365,11 @@ function ProjectionTab({p: _pOrig}) {
   // Sprint-5.5.J: when RF Proximity (riskProfile.tierProbs) is available, use
   // it as the single source-of-truth for all Hero-Card values. Eliminates the
   // v2-PPWA vs RF-Proximity discrepancy.
-  // Sprint-5.11: EINE Quelle. Vorher überschrieb die ProjectionTab alles mit der
-  // RF-Proximity-Verteilung → Player-Page (RF) wich vom Board/Curves-Tab (kalibriertes
-  // Backend-Ordinal) ab (andere Zahl, andere Kurve). Jetzt füttern wir die bestehenden
-  // RF-Komponenten (RfTierForecast) mit dem BACKEND-Ordinal (via riskProfile.tierProbs),
-  // Hero + Kurve laufen ohnehin auf dem Backend (mapProfile) → alles aus einer Quelle,
-  // konsistent mit Board + Curves-Tab. Head-to-Head (5.10): Ordinal schlägt RF-Proximity.
+  // Sprint-5.11: EINE Quelle, detaillierte Optik behalten. Die detaillierte Mischung-
+  // Kurve (RfPwaCurve) + die Tier-Balken (RfTierForecast) lesen riskProfile.tierProbs.
+  // Wir speisen sie mit dem KALIBRIERTEN BACKEND-ORDINAL (statt RF-Proximity) → gleiche
+  // reiche Mischung-Optik, aber konsistent mit Board-Tiers/Ranking (Ordinal). Hero-Zahl
+  // (war) kommt ohnehin schon aus dem Ordinal (mapProfile). Head-to-Head 5.10: Ordinal >.
   const p = (() => {
     const be = _pOrig?.v2TierProbs;   // Backend-Ordinal, %-Skala {Superstar,"All-Star",...}
     if (!be) return _pOrig;
@@ -7367,12 +7378,12 @@ function ProjectionTab({p: _pOrig}) {
       riskProfile: {
         ...(_pOrig.riskProfile || {}),
         tierProbs: {
-          superstar:   (be.Superstar     || 0) / 100,
-          all_star:    (be["All-Star"]   || 0) / 100,
-          starter:     (be.Starter       || 0) / 100,
-          roleplayer:  (be["Role Player"] || 0) / 100,
-          replacement: (be.Replacement   || 0) / 100,
-          intl_career: (be.Negative      || 0) / 100,
+          superstar:   (Number(be.Superstar)     || 0) / 100,
+          all_star:    (Number(be["All-Star"])   || 0) / 100,
+          starter:     (Number(be.Starter)       || 0) / 100,
+          roleplayer:  (Number(be["Role Player"]) || 0) / 100,
+          replacement: (Number(be.Replacement)   || 0) / 100,
+          intl_career: (Number(be.Negative)      || 0) / 100,
         },
       },
     };
@@ -7650,11 +7661,10 @@ function ProjectionTab({p: _pOrig}) {
         <RfTierForecast p={p}/>
       </Sec>
 
-      {/* ═══ OUTCOME CURVE — Sprint-5.11: unified engine (buildOutcomeCurveMixture),
-             identical to the board's Curves tab (same calibrated backend ordinal). ═══ */}
-      <Sec icon="◉" title="Outcome Distribution"
-        sub="Smooth probability density of the projected outcome across the six NBA tiers. Same curve engine and calibrated projection as the board's Curves tab, so the player page and the board show this player identically. The dashed marker is the single most-likely outcome; the spread is his realistic range.">
-        <ProjOutcomeCurve p={p}/>
+      {/* ═══ OUTCOME CURVE (Sprint-5.5.G) — Peak Wins Added density from RF Proximity ═══ */}
+      <Sec icon="◉" title="Outcome Curve (Peak Wins Added)"
+        sub="Smooth probability density of his projected peak Wins Added — direct visualization of the Outcome Tier Forecast above. Tier band backgrounds show where curve mass concentrates. p20–p80 = realistic outcome range, mode = single most-likely peak. Same RF Proximity engine as the tier bars above.">
+        <RfPwaCurve p={p}/>
       </Sec>
 
       {/* ═══ PROJECTION DRIVERS — SHAP-based per-player feature contributions (Session 9) ═══ */}
@@ -12763,41 +12773,6 @@ const TIER_STACK = [
 // large curve per page to one small curve per row + a global tier-
 // anchor scale at the top.
 // ═══════════════════════════════════════════════════════════
-// Sprint-5.11: Player-Page Outcome-Kurve — DIESELBE Engine wie das Curves-Board
-// (buildOutcomeCurveMixture + outcomeCurveDensity), groß gerendert. Ersetzt die alte
-// RfPwaCurve (RF-Proximity), damit Player-Page und Curves-Tab denselben Spieler gleich
-// zeigen (eine Quelle: kalibriertes Backend-Ordinal via mapProfile).
-function ProjOutcomeCurve({ p }) {
-  const params = buildOutcomeCurveMixture(p);
-  if (!params) return null;
-  const W = 700, H = 150, ML = 14, MR = 14, MT = 16, MB = 22;
-  const px = g => ML + (g / 100) * (W - ML - MR);
-  const N = 160, ys = new Array(N + 1);
-  let maxY = 0;
-  for (let i = 0; i <= N; i++) { const y = outcomeCurveDensity((i / N) * 100, params); ys[i] = y; if (y > maxY) maxY = y; }
-  const baseY = H - MB, peakY = MT;
-  let outline = "";
-  for (let i = 0; i <= N; i++) {
-    const g = (i / N) * 100;
-    const yN = maxY > 0 ? ys[i] / maxY : 0;
-    outline += (i === 0 ? "M " : " L ") + px(g).toFixed(1) + "," + (baseY - yN * (baseY - peakY)).toFixed(1);
-  }
-  const area = `M ${px(0).toFixed(1)},${baseY} ` + outline.slice(1) + ` L ${px(100).toFixed(1)},${baseY} Z`;
-  const marks = [[8, "Bust"], [30, "Replacement"], [48, "Role Player"], [63, "Starter"], [82, "All-Star"], [95, "Superstar"]];
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block" }} role="img"
-         aria-label="Projected outcome distribution across NBA tiers">
-      {marks.map(([g]) => <line key={g} x1={px(g)} x2={px(g)} y1={MT} y2={baseY} stroke="#1f2937" strokeWidth={1} />)}
-      <line x1={px(0)} x2={px(100)} y1={baseY} y2={baseY} stroke="#1f2937" strokeWidth={1} />
-      <path d={area} fill={params.tier.color} opacity={0.45} />
-      <path d={outline} fill="none" stroke={params.tier.color} strokeWidth={2} opacity={0.95} />
-      <line x1={px(params.peakGrade)} x2={px(params.peakGrade)} y1={MT} y2={baseY}
-            stroke={params.tier.color} strokeWidth={1.5} strokeDasharray="3,3" opacity={0.95} />
-      {marks.map(([g, l]) => <text key={l} x={px(g)} y={H - 6} fontSize="9" fill="#6b7280" textAnchor="middle">{l}</text>)}
-    </svg>
-  );
-}
-
 function OutcomeCurveBoard({ players, onSelect, gmRisk, setGmRisk }) {
   // Layout dimensions for the per-row mini-curve SVG. Sprint-5.2d
   // widened the curve area (540 → 820) so the lateral shift between
@@ -12860,37 +12835,45 @@ function OutcomeCurveBoard({ players, onSelect, gmRisk, setGmRisk }) {
   // Helper: render the mini smooth-density path for one prospect.
   // Sprint-5.2c uses outcomeCurveDensity (asymmetric Gauss for unimodal,
   // two-bump for genuine boom-or-bust) rather than per-tier bumps.
-  const renderMiniCurve = (params) => {
+  // Sprint-5.11: volle 6-Tier-Mischung (Multi-Bump, so detailliert wie die Player-Page-
+  // Kurve), getrieben vom KALIBRIERTEN ORDINAL (p.tiers) — nicht mehr die einzelne
+  // moment-gematchte Gauss. Grade-Achse + Tier-Anker (MIXTURE_TIER_ANCHORS) bleiben,
+  // damit Header/Grade-Spalte weiter passen. So sind Player-Page und Curves-Tab dieselbe
+  // detaillierte Kurve aus einer Quelle.
+  const renderMiniCurve = (p, params) => {
     if (!params) return null;
-    const { tier, peakGrade } = params;
-    const N = 120;
-    let maxY = 0;
+    const tier = params.tier;
+    const tps = p?.tiers || p?.v2TierProbs || {};
+    let total = 0;
+    const comps = MIXTURE_TIER_ANCHORS.map(a => {
+      const w = Math.max(0, Number(tps[a.key]) || 0); total += w;
+      return { grade: a.grade, sigma: a.sigma, w };
+    });
+    const N = 140;
+    let maxY = 0, modeG = params.peakGrade ?? 50;
     const ys = new Array(N + 1);
     for (let i = 0; i <= N; i++) {
       const g = (i / N) * 100;
-      const y = outcomeCurveDensity(g, params);
-      ys[i] = y;
-      if (y > maxY) maxY = y;
+      let d = 0;
+      if (total > 0) comps.forEach(c => {
+        if (c.w) { const z = (g - c.grade) / c.sigma; d += (c.w / total) * Math.exp(-0.5 * z * z) / (c.sigma * Math.sqrt(2 * Math.PI)); }
+      });
+      ys[i] = d; if (d > maxY) { maxY = d; modeG = g; }
     }
+    if (maxY <= 0) return null;
+    const baseY = CURVE_H - M.bottom, peakY = M.top;
     let outline = "";
-    const baseY = CURVE_H - M.bottom;
-    const peakY = M.top;
     for (let i = 0; i <= N; i++) {
       const g = (i / N) * 100;
-      const yN = maxY > 0 ? ys[i] / maxY : 0;
-      const X = px(g).toFixed(2);
-      const Y = (baseY - yN * (baseY - peakY)).toFixed(2);
-      outline += (i === 0 ? "M " : " L ") + X + "," + Y;
+      const yN = ys[i] / maxY;
+      outline += (i === 0 ? "M " : " L ") + px(g).toFixed(2) + "," + (baseY - yN * (baseY - peakY)).toFixed(2);
     }
     const path = `M ${px(0).toFixed(2)},${baseY} ` + outline.slice(1) + ` L ${px(100).toFixed(2)},${baseY} Z`;
     return (
       <>
         <path d={path} fill={tier.color} opacity={0.55}/>
         <path d={outline} fill="none" stroke={tier.color} strokeWidth={1.4} opacity={0.95}/>
-        {/* Peak marker — vertical tick at the headline Grade so the user can
-            see at-a-glance where each prospect sits laterally on the scale.
-            Aligns with the Grade number printed in the row's grade column. */}
-        <line x1={px(peakGrade)} x2={px(peakGrade)} y1={M.top} y2={baseY}
+        <line x1={px(modeG)} x2={px(modeG)} y1={M.top} y2={baseY}
               stroke={tier.color} strokeWidth={1.5} strokeDasharray="2,2" opacity={0.95}/>
       </>
     );
@@ -13050,7 +13033,7 @@ function OutcomeCurveBoard({ players, onSelect, gmRisk, setGmRisk }) {
                     opacity={t.name === tier.name ? 0.12 : 0.04}
                   />
                 ))}
-                {renderMiniCurve(params)}
+                {renderMiniCurve(p, params)}
               </svg>
             </div>
           );
@@ -15616,3 +15599,4 @@ export default function App() {
     </div>
   );
 }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
