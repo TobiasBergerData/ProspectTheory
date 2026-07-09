@@ -811,18 +811,22 @@ async def get_player(slug: str):
     return {**_identity_fields(pid, profile), "profile": profile}
 
 
-# ─── Pipeline-Bug-Workaround ──────────────────────────────────────────────
-# api_season_lines.json (BartTorvik-Quelle) liefert ab 2008 das `min`-Feld als
-# Min_per (% der verfuegbaren Spielzeit), NICHT als MPG. 05a_fix_minutes.py
-# konvertiert das fuer die Modell-Features, aber nicht fuer die seasonLines-
-# JSON-Ausgabe. Verteilungs-Audit: 100% aller BartTorvik-Saisons (NCAA ab 2008)
-# sind Prozentwerte; pre-2008 (realgm) und alle intl-cls-Saisons sind echte MPG.
-# Wir korrigieren on-the-fly anhand der Klassen-Markierung.
-_NCAA_CLASSES = {"Fr", "So", "Jr", "Sr", "Gr", "5y", "FR", "SO", "JR", "SR"}
+# ─── Season-Minutes Normalisierung (Sprint-5.11 Einheiten-Fix) ────────────
+# Das seasonLines-`min`-Feld ist inzwischen QUELLENÜBERGREIFEND bereits MPG —
+# verifiziert an bekannten Spielern: Zach Edey 2024 = 31.7, Cooper Flagg 2025 =
+# 29.1, Dylan Harper = 35.0, Cameron Boozer 2026 = 33.4 (reale Minuten/Spiel).
+# Wären es Prozentwerte, lägen Starter bei 70–95; Maximum ist aber 42 → MPG.
+#
+# Der frühere pauschale ×0.40 auf NCAA-Saisons (alte Annahme: BartTorvik min =
+# Min%) korrumpierte diese bereits korrekten MPG-Werte: NCAA wurde auf ~40 %
+# gestaucht (Edey 31.7 → 12.7), INTL blieb korrekt (~20–40) → sichtbarer
+# Mismatch. Deshalb: KEINE pauschale Klassen-Konvertierung mehr. Wir rescalen
+# nur noch physikalisch unmögliche MPG (> 48 = Legacy-Prozentwert), falls je
+# eine alte %-Kohorte durchrutscht. Aktuelle Daten (max 42) triggern das nie.
+_MAX_PLAUSIBLE_MPG = 48.0   # 40-min-Spiel + reichlich OT-Puffer
 
 def _normalize_season_minutes(seasons):
-    """Konvertiert BartTorvik Min_per (%) zu MPG (× 0.40) fuer NCAA-Saisons ab 2008.
-    Andere Saisons (intl, pre-2008-NCAA) bleiben unangetastet."""
+    """Lässt echte MPG unangetastet; rescaled nur Legacy-%-Werte (min > 48)."""
     if not isinstance(seasons, list):
         return
     for s in seasons:
@@ -831,14 +835,7 @@ def _normalize_season_minutes(seasons):
         m = s.get("min")
         if m is None or not isinstance(m, (int, float)):
             continue
-        cls = s.get("cls", "")
-        try:
-            yr = int(float(s.get("yr") or 0))
-        except (TypeError, ValueError):
-            yr = 0
-        # Heuristik: NCAA-Klassenmarkierung (Fr/So/Jr/Sr) + Jahr >= 2008 = BartTorvik
-        # → min ist Min_per und muss × 0.40 multipliziert werden.
-        if cls in _NCAA_CLASSES and yr >= 2008:
+        if m > _MAX_PLAUSIBLE_MPG:      # unmöglich als MPG → Legacy-Min% → MPG
             s["min"] = round(m * 0.40, 1)
 
 
