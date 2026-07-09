@@ -7353,39 +7353,28 @@ function ProjectionTab({p: _pOrig}) {
   // Sprint-5.5.J: when RF Proximity (riskProfile.tierProbs) is available, use
   // it as the single source-of-truth for all Hero-Card values. Eliminates the
   // v2-PPWA vs RF-Proximity discrepancy.
+  // Sprint-5.11: EINE Quelle. Vorher überschrieb die ProjectionTab alles mit der
+  // RF-Proximity-Verteilung → Player-Page (RF) wich vom Board/Curves-Tab (kalibriertes
+  // Backend-Ordinal) ab (andere Zahl, andere Kurve). Jetzt füttern wir die bestehenden
+  // RF-Komponenten (RfTierForecast) mit dem BACKEND-Ordinal (via riskProfile.tierProbs),
+  // Hero + Kurve laufen ohnehin auf dem Backend (mapProfile) → alles aus einer Quelle,
+  // konsistent mit Board + Curves-Tab. Head-to-Head (5.10): Ordinal schlägt RF-Proximity.
   const p = (() => {
-    const tps = _pOrig?.riskProfile?.tierProbs;
-    if (!tps || tps.starter == null) return _pOrig;
-    const M = {intl_career: -4, replacement: 0.25, roleplayer: 2.5,
-               starter: 9, all_star: 17, superstar: 30};
-    const ev = Object.entries(M).reduce((s, [k, m]) => s + (tps[k] || 0) * m, 0);
-    const keys = Object.keys(M);
-    const modalKey = keys.reduce(
-      (max, k) => (tps[k] || 0) > (tps[max] || 0) ? k : max, keys[0]);
-    const RF_TO_V2 = {
-      intl_career: "Negative", replacement: "Replacement",
-      roleplayer: "Role Player", starter: "Starter",
-      all_star: "All-Star", superstar: "Superstar",
-    };
-    const r = _pOrig?.riskProfile?.outlierRisk;
-    const confMap = {high: "Low", medium: "Medium", low: "High"};
-    const rfTierProbs = {
-      Superstar:     (tps.superstar   || 0) * 100,
-      "All-Star":    (tps.all_star    || 0) * 100,
-      Starter:       (tps.starter     || 0) * 100,
-      "Role Player": (tps.roleplayer  || 0) * 100,
-      Replacement:   (tps.replacement || 0) * 100,
-      Negative:      (tps.intl_career || 0) * 100,
-    };
+    const be = _pOrig?.v2TierProbs;   // Backend-Ordinal, %-Skala {Superstar,"All-Star",...}
+    if (!be) return _pOrig;
     return {
       ..._pOrig,
-      war: ev,
-      ppwa: ev,
-      predTier: RF_TO_V2[modalKey],
-      pElite: (tps.all_star || 0) + (tps.superstar || 0),
-      v2Conf: confMap[r] || "Medium",
-      v2TierProbs: rfTierProbs,
-      pNba: 1 - (tps.intl_career || 0),
+      riskProfile: {
+        ...(_pOrig.riskProfile || {}),
+        tierProbs: {
+          superstar:   (be.Superstar     || 0) / 100,
+          all_star:    (be["All-Star"]   || 0) / 100,
+          starter:     (be.Starter       || 0) / 100,
+          roleplayer:  (be["Role Player"] || 0) / 100,
+          replacement: (be.Replacement   || 0) / 100,
+          intl_career: (be.Negative      || 0) / 100,
+        },
+      },
     };
   })();
   // Prefer v2TierProbs (new model, %-scale already) over legacy prob_* fields
@@ -7661,10 +7650,11 @@ function ProjectionTab({p: _pOrig}) {
         <RfTierForecast p={p}/>
       </Sec>
 
-      {/* ═══ OUTCOME CURVE (Sprint-5.5.G) — Peak Wins Added density from RF Proximity ═══ */}
-      <Sec icon="◉" title="Outcome Curve (Peak Wins Added)"
-        sub="Smooth probability density of his projected peak Wins Added — direct visualization of the Outcome Tier Forecast above. Tier band backgrounds show where curve mass concentrates. p20–p80 = realistic outcome range, mode = single most-likely peak. Same RF Proximity engine as the tier bars above.">
-        <RfPwaCurve p={p}/>
+      {/* ═══ OUTCOME CURVE — Sprint-5.11: unified engine (buildOutcomeCurveMixture),
+             identical to the board's Curves tab (same calibrated backend ordinal). ═══ */}
+      <Sec icon="◉" title="Outcome Distribution"
+        sub="Smooth probability density of the projected outcome across the six NBA tiers. Same curve engine and calibrated projection as the board's Curves tab, so the player page and the board show this player identically. The dashed marker is the single most-likely outcome; the spread is his realistic range.">
+        <ProjOutcomeCurve p={p}/>
       </Sec>
 
       {/* ═══ PROJECTION DRIVERS — SHAP-based per-player feature contributions (Session 9) ═══ */}
@@ -12773,6 +12763,41 @@ const TIER_STACK = [
 // large curve per page to one small curve per row + a global tier-
 // anchor scale at the top.
 // ═══════════════════════════════════════════════════════════
+// Sprint-5.11: Player-Page Outcome-Kurve — DIESELBE Engine wie das Curves-Board
+// (buildOutcomeCurveMixture + outcomeCurveDensity), groß gerendert. Ersetzt die alte
+// RfPwaCurve (RF-Proximity), damit Player-Page und Curves-Tab denselben Spieler gleich
+// zeigen (eine Quelle: kalibriertes Backend-Ordinal via mapProfile).
+function ProjOutcomeCurve({ p }) {
+  const params = buildOutcomeCurveMixture(p);
+  if (!params) return null;
+  const W = 700, H = 150, ML = 14, MR = 14, MT = 16, MB = 22;
+  const px = g => ML + (g / 100) * (W - ML - MR);
+  const N = 160, ys = new Array(N + 1);
+  let maxY = 0;
+  for (let i = 0; i <= N; i++) { const y = outcomeCurveDensity((i / N) * 100, params); ys[i] = y; if (y > maxY) maxY = y; }
+  const baseY = H - MB, peakY = MT;
+  let outline = "";
+  for (let i = 0; i <= N; i++) {
+    const g = (i / N) * 100;
+    const yN = maxY > 0 ? ys[i] / maxY : 0;
+    outline += (i === 0 ? "M " : " L ") + px(g).toFixed(1) + "," + (baseY - yN * (baseY - peakY)).toFixed(1);
+  }
+  const area = `M ${px(0).toFixed(1)},${baseY} ` + outline.slice(1) + ` L ${px(100).toFixed(1)},${baseY} Z`;
+  const marks = [[8, "Bust"], [30, "Replacement"], [48, "Role Player"], [63, "Starter"], [82, "All-Star"], [95, "Superstar"]];
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block" }} role="img"
+         aria-label="Projected outcome distribution across NBA tiers">
+      {marks.map(([g]) => <line key={g} x1={px(g)} x2={px(g)} y1={MT} y2={baseY} stroke="#1f2937" strokeWidth={1} />)}
+      <line x1={px(0)} x2={px(100)} y1={baseY} y2={baseY} stroke="#1f2937" strokeWidth={1} />
+      <path d={area} fill={params.tier.color} opacity={0.45} />
+      <path d={outline} fill="none" stroke={params.tier.color} strokeWidth={2} opacity={0.95} />
+      <line x1={px(params.peakGrade)} x2={px(params.peakGrade)} y1={MT} y2={baseY}
+            stroke={params.tier.color} strokeWidth={1.5} strokeDasharray="3,3" opacity={0.95} />
+      {marks.map(([g, l]) => <text key={l} x={px(g)} y={H - 6} fontSize="9" fill="#6b7280" textAnchor="middle">{l}</text>)}
+    </svg>
+  );
+}
+
 function OutcomeCurveBoard({ players, onSelect, gmRisk, setGmRisk }) {
   // Layout dimensions for the per-row mini-curve SVG. Sprint-5.2d
   // widened the curve area (540 → 820) so the lateral shift between
@@ -14771,7 +14796,6 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
                 <SortTh sortKey="war">Added Wins</SortTh>
                 <SortTh sortKey="bpm">BPM</SortTh>
                 <SortTh sortKey="tier">NBA Tier</SortTh>
-                <th className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>Intl Tier</th>
               </tr>
             </thead>
             <tbody>
@@ -14810,41 +14834,8 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
                     <td className="px-3 py-2.5 text-xs font-semibold" style={{color: p.bpm != null ? (p.bpm > 8 ? "#22c55e" : p.bpm > 4 ? "#86efac" : "#9ca3af") : "#374151"}}>{p.bpm != null ? fmt(p.bpm, 1) : "—"}</td>
                     {/* NBA Tier */}
                     <td className="px-3 py-2.5 text-xs font-bold" style={{color:TC[p.predTier]||"#6b7280"}}>{p.predTier||"—"}</td>
-                    {/* International Tier — ML-Prediction aus 10e_intl_tier_classifier.
-                        Conditional: nur anzeigen wenn die kumulierte NBA-Wahrscheinlichkeit
-                        (Superstar+All-Star+Starter+Role) < 25%. Bei hoher NBA-Wahrsch. ist
-                        die was-if-non-NBA-Aussage inkonsistent und verwirrt User.
-                        Tobias-Vorgabe (2026-04-29): Credibility durch Plausibilitaet. */}
-                    {(() => {
-                      const pNbaTot = (Number(p.tiers?.Superstar)||0) + (Number(p.tiers?.["All-Star"])||0)
-                                    + (Number(p.tiers?.Starter)||0)  + (Number(p.tiers?.["Role Player"])||0);
-                      const tier = p.intlTier;
-                      // Hide wenn NBA-Wahrsch. >= 25% ODER kein intl_tier vorhanden
-                      // ODER Spieler hat bereits NBA-Karriere (made_nba)
-                      if (!tier || pNbaTot >= 25 || p.madeNba) {
-                        return <td className="px-3 py-2.5 text-xs" style={{color:"#374151"}}>—</td>;
-                      }
-                      const INTL_COLORS = {
-                        "EuroLeague Impact": "#fbbf24",
-                        "EuroLeague":        "#f97316",
-                        "Top European Liga": "#60a5fa",
-                        "Pro Basketball":    "#a78bfa",
-                        "Fringe Pro":        "#6b7280",
-                      };
-                      const SHORT = {
-                        "EuroLeague Impact": "EL Impact",
-                        "EuroLeague":        "EuroLeague",
-                        "Top European Liga": "Top Euro",
-                        "Pro Basketball":    "Pro Ball",
-                        "Fringe Pro":        "Fringe",
-                      };
-                      const color = INTL_COLORS[tier] || "#6b7280";
-                      return (
-                        <td className="px-3 py-2.5 text-xs font-semibold" style={{color}} title={tier}>
-                          🌍 {SHORT[tier] || tier}
-                        </td>
-                      );
-                    })()}
+                    {/* Sprint-5.11: Intl-Tier-Spalte entfernt — lebt jetzt im eigenen
+                        International Board (🌍-Tab). */}
                   </tr>
                 );
               })}
