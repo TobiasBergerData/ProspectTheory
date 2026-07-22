@@ -1099,6 +1099,18 @@ async def get_stats_lab_meta(response: Response):
     raise HTTPException(status_code=503, detail="stats_lab_meta.json not yet built")
 
 
+@app.get("/api/model-card")
+async def get_model_card(response: Response):
+    """Sprint-5.12 Living Model Card: ehrliche OOT-Metriken, bei jedem Refresh
+    von generate_model_card.py neu berechnet. Quelle für den Methods-Tab —
+    die Doku kann dem deployten Modell damit nicht mehr hinterherhinken."""
+    p = Path(os.environ.get("DATA_DIR", "data/processed")) / "api_model_card.json"
+    if not p.exists():
+        raise HTTPException(status_code=503, detail="model card not yet generated")
+    response.headers["Cache-Control"] = "public, max-age=3600"
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
 @app.get("/api/years")
 async def get_years(response: Response):
     """Available draft years, sorted descending. Returns latest year for default view."""
