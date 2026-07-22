@@ -12018,6 +12018,16 @@ function ResearchTab({p}) {
 // ═══════════════════════════════════════════════════════════
 function MethodologyTab() {
   const [methodView, setMethodView] = useState("quick"); // "quick" | "deep"
+  // Sprint-5.12 Living Model Card: ehrliche Validierungszahlen, von der Pipeline
+  // bei jedem Refresh out-of-time NEU berechnet (generate_model_card.py) und über
+  // /api/model-card serviert. Anzeige nur aus den Zahlenfeldern (Site = English).
+  const [mc, setMc] = useState(null);
+  useEffect(() => {
+    fetch(`${API_BASE}/model-card`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(setMc)
+      .catch(() => {});
+  }, []);
 
   const sections = [
     {cat:"Added Wins Projection Model",items:["monteCarlo","posClassification"],desc:"The core engine: a two-stage (hurdle) value model. Stage 1 estimates P(NBA) on the FULL prospect pool (~15k NCAA + international players, NBA reached or not) — a calibrated logistic model, ROC-AUC 0.98 on a 2017–2019 holdout. Stage 2 predicts the expected value if he reaches the league — a regularized, fully-explainable ElasticNet trained on 752 NBA careers. The headline = P(NBA) × E[Added Wins | NBA]. Target variable: Added Wins — the best 3-consecutive-season window in the first 8 NBA years, a team-anchored blend of player-isolated on-court impact (xRAPM, 70%) and box production (30%), scaled so a roster's player-wins sum to the team's actual wins-above-replacement (additivity). Trained with a temporal split (≤2016 train, 2017–2019 holdout, no future leakage). Validated: value-model Spearman ρ = 0.41 out-of-sample (vs craftednba.com benchmark 0.373). Output: a single interpretable number plus a full tier-probability distribution. Honest caveat: the number is an EXPECTED value and is deliberately modest — a college profile rarely signals stardom (e.g. SGA looked ordinary at Kentucky), so star upside is shown via the tier distribution, not inflated into the point estimate. A separate high-floor model (P(NBA or EuroLeague-tier), trained on international career outcomes too) gives the downside. Projections for undrafted/fringe players are extrapolations beyond the training distribution."},
@@ -12167,6 +12177,46 @@ function MethodologyTab() {
           </button>
         ))}
       </div>
+
+      {/* ── Live Validation (Living Model Card) — always visible ── */}
+      {mc && mc.nba_peak_model && (() => {
+        const m = mc.nba_peak_model, cr = mc.clean_room_backtest || {},
+              ic = mc.interval_coverage || {}, tc = mc.tier_calibration || {};
+        const stat = (label, val, sub, color="#f97316") => (
+          <div key={label} style={{background:"#0d1117",border:"1px solid #1f2937",borderRadius:10,padding:"10px 12px"}}>
+            <div style={{color:"#6b7280",fontSize:10,textTransform:"uppercase",letterSpacing:"0.08em"}}>{label}</div>
+            <div style={{color,fontSize:20,fontWeight:700,fontFamily:"'Oswald',sans-serif"}}>{val}</div>
+            <div style={{color:"#6b7280",fontSize:10,marginTop:2}}>{sub}</div>
+          </div>
+        );
+        return (
+          <Sec icon="🔬" title="Live Validation"
+               sub={`Every number below is recomputed out-of-time on each data refresh (last: ${mc.generated_at}) — no hand-curated claims.`}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:8,marginBottom:12}}>
+              {stat("Out-of-time correlation", `r = ${m.oot_r_mean}`,
+                    `range ${m.oot_r_min}–${m.oot_r_max} across ${m.n_splits} time splits · N=${m.n_training_outcomes} realized careers`)}
+              {stat("Precision@25 vs scouts", `${(m.prec_at_25_model*100).toFixed(0)}% vs ${(m.prec_at_25_consensus*100).toFixed(0)}%`,
+                    "share of top outcomes in our top-25 vs scout consensus, same players", "#22c55e")}
+              {stat("Bust@25 vs scouts", `${(m.bust_at_25_model*100).toFixed(0)}% vs ${(m.bust_at_25_consensus*100).toFixed(0)}%`,
+                    "share of busts in our top-25 vs scout consensus (lower is better)", "#22c55e")}
+              {ic.coverage_p20_p80 != null && stat("Range honesty", `${(ic.coverage_p20_p80*100).toFixed(0)}%`,
+                    `of realized careers land inside the displayed p20–p80 range (target 60% — slightly conservative, never overconfident)`, "#60a5fa")}
+              {tc.expected_superstars != null && stat("Base-rate sanity", `${tc.expected_superstars} · ${tc.expected_allstars}`,
+                    `expected superstars · all-stars in the current class (historical base: ~${tc.base_rate_superstars} · ~${tc.base_rate_allstars})`, "#fbbf24")}
+            </div>
+            {cr.top14_peak_model != null && (
+              <div style={{padding:"10px 12px",background:"#1a1f2e",borderRadius:8,border:"1px solid #1e3a5f",fontSize:12,color:"#d1d5db",lineHeight:1.7}}>
+                <strong style={{color:"#fbbf24"}}>Clean-room honesty check:</strong> stripped of all
+                market/scout signal, our model does <strong>not</strong> beat real NBA front offices
+                (top-14 realized peak {cr.top14_peak_model} vs {cr.top14_peak_draft} for the actual
+                draft order, {cr.n_draft_classes} mature classes). Front-office scouting carries real
+                information beyond the box score. Our edge is the <strong style={{color:"#f97316"}}>combination</strong>:
+                market signal + statistical modeling beats the market alone on every decision metric above.
+              </div>
+            )}
+          </Sec>
+        );
+      })()}
 
       {/* ── QUICK VIEW ── */}
       {methodView === "quick" && (
