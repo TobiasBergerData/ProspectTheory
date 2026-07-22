@@ -27,6 +27,7 @@ Build-Time: ca. 30-60 Sekunden auf Render Free Tier.
 """
 from __future__ import annotations
 
+import gzip
 import json
 import sqlite3
 import sys
@@ -35,6 +36,22 @@ from pathlib import Path
 
 DATA_DIR = Path(__file__).resolve().parent / "data" / "processed"
 DB_PATH = DATA_DIR / "prospecttheory.db"
+
+
+def _open_json(path):
+    """Sprint-5.12: liest .json UND .json.gz transparent (Größen-Kur Stufe 1 —
+    Artefakte werden gzip-komprimiert deployt, ~70% kleiner im Repo/LFS)."""
+    if str(path).endswith(".gz"):
+        with gzip.open(path, "rt", encoding="utf-8") as f:
+            return json.load(f)
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _glob_pref_gz(pattern_base):
+    """Glob, das .json.gz bevorzugt: existieren gz-Parts, nur diese; sonst plain."""
+    gz = sorted(DATA_DIR.glob(pattern_base + ".gz"))
+    return gz if gz else sorted(DATA_DIR.glob(pattern_base))
 
 
 def compress(obj):
@@ -132,15 +149,14 @@ def iter_profiles_data():
     drops from ~250 MB merged dict to ~45 MB per part. Same pattern as
     load_comps_v5 (Sprint-3.14).
     """
-    split_files = sorted(DATA_DIR.glob("api_profiles_part*.json"))
+    split_files = _glob_pref_gz("api_profiles_part*.json")
     if split_files:
         total = 0
         for sp in split_files:
             sz = sp.stat().st_size
             total += sz
             print(f"  Loading {sp.name} ({sz/1e6:.1f} MB)...")
-            with open(sp, "r", encoding="utf-8") as f:
-                part = json.load(f)
+            part = _open_json(sp)
             yield from part.items()
             del part
             import gc
@@ -234,12 +250,13 @@ def load_profiles(cur):
 
 
 def load_search(cur):
-    path = DATA_DIR / "api_search_index.json"
+    path = DATA_DIR / "api_search_index.json.gz"
+    if not path.exists():
+        path = DATA_DIR / "api_search_index.json"
     if not path.exists():
         return
     print(f"  Loading {path.name} ({path.stat().st_size/1e6:.1f} MB)...")
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    data = _open_json(path)
     batch = []
     items = data.values() if isinstance(data, dict) else data
     for entry in items:
@@ -311,7 +328,7 @@ def load_comps_v5(cur):
     load the JSON, batch-insert into SQLite, free the dict, move on. Peak
     memory drops from ~500 MB merged to ~50 MB per part.
     """
-    split_files = sorted(DATA_DIR.glob("api_comps_v5_part*.json"))
+    split_files = _glob_pref_gz("api_comps_v5_part*.json")
     if not split_files:
         single = DATA_DIR / "api_comps_v5.json"
         if not single.exists():
@@ -325,8 +342,7 @@ def load_comps_v5(cur):
         sz_mb = sp.stat().st_size / 1e6
         total_mb += sz_mb
         print(f"  Loading {sp.name} ({sz_mb:.1f} MB)...")
-        with open(sp, "r", encoding="utf-8") as f:
-            part_data = json.load(f)
+        part_data = _open_json(sp)
 
         batch = []
         for pid, entry in part_data.items():
