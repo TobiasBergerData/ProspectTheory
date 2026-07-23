@@ -232,6 +232,8 @@ _BOARD_FIELDS = [
     "pred_intl_tier", "intl_level_ev", "p_intl_career",
     "prob_intl_euroleague", "prob_intl_topkont", "prob_intl_starknat",
     "prob_intl_solide", "prob_intl_unterbau",
+    # Sprint-5.13 Recruiting-Board: Karriere-Comps + aktuelles Umfeld-Level
+    "intl_comps", "conf_strength",
     # Tobias 2026-05-05: Injury-Saison-Fallback
     # injury_fallback_season = die uebersprungene (verletzte) Saison
     # display_season = die Saison fuer UI (Team/Class-Anzeige) — bleibt aktuelle Saison

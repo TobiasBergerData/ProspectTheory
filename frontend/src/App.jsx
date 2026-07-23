@@ -2579,6 +2579,10 @@ function mapProfile(d) {
     predIntlTier: d.pred_intl_tier ?? null,
     intlLevelEv: d.intl_level_ev ?? null,
     pIntlCareer: d.p_intl_career ?? null,
+    // Sprint-5.13 Recruiting-Board: Karriere-Comps ("Name → Tier | ...") +
+    // aktuelles Umfeld-Level (NCAA=1.0-Skala) für das Value-Delta (Buy-Low-Signal)
+    intlComps: d.intl_comps ?? null,
+    confStrength: d.conf_strength != null ? Number(d.conf_strength) : null,
     ups: d.ups ?? d.ups_raw,
     // Tobias 2026-05-25: PRIMARY VALUE METRIC converged to Added Wins (inject_added_wins.py).
     // Prefer addedWins.* everywhere; fall back to legacy ppWA so players without a new
@@ -12956,22 +12960,23 @@ const INTL_TIERS = [
   { key: "Second Division", color: "#6b7280" },
 ];
 function IntlBoardView({ players, onSelect }) {
+  // Sprint-5.13: Recruiting-Board — Einkaufshilfe für internationale Front Offices,
+  // KEINE Draft-Logik. Fragen eines Sportdirektors: Auf welchem Level spielt er
+  // nachhaltig (3yr-Peak, kalibriert auf ~19k historische Karrieren)? Spielt er
+  // aktuell UNTER seinem projizierten Level (Value/Buy-Low)? Verliere ich ihn an
+  // die NBA (Flight Risk)? Und welche historischen Profile ähneln ihm (Comps)?
   const posColors = { Playmaker: "#3b82f6", Wing: "#f97316", Big: "#8b5cf6" };
   const nbaPct = (p) => (Number(p.tiers?.Superstar) || 0) + (Number(p.tiers?.["All-Star"]) || 0)
                       + (Number(p.tiers?.Starter) || 0) + (Number(p.tiers?.["Role Player"]) || 0);
-  // Nach Tier ordnen (EuroLeague oben → Second Division unten), innerhalb eines
-  // Tiers nach intl_level_ev. Flache Liste, kein Tier-Split.
-  const tierRank = { "EuroLeague": 4, "Top-Continental": 3, "Strong National": 2, "Solid Pro": 1, "Second Division": 0 };
-  const warOf = p => Number(p.war ?? p.ppwa ?? 0);
-  // NBA-Locks (≥85%) raus — die SIND NBA, keine "Optionen". Fringe-Talente (unsichere
-  // NBA, aber EuroLeague-Kaliber via WAR) bleiben und stehen oben. NBA% als Kontext.
+  // NBA-Locks (≥85%) raus — nicht verpflichtbar. Alles darunter ist realer Markt.
   const NBA_LOCK = 85;
+  const evOf = (p) => Number(p.intlLevelEv ?? 0);
   const rows = players
-    .filter(p => p.intlCeiling && nbaPct(p) < NBA_LOCK)
-    .sort((a, b) => ((tierRank[b.intlCeiling.tier] ?? -1) - (tierRank[a.intlCeiling.tier] ?? -1))
-                 || (warOf(b) - warOf(a)))
+    .filter(p => (p.predIntlTier || p.intlLevelEv != null) && nbaPct(p) < NBA_LOCK)
+    .sort((a, b) => evOf(b) - evOf(a))          // Einkaufs-Reihenfolge: erwartetes Level
     .slice(0, 100);
   const tierColor = (t) => (INTL_TIERS.find(x => x.key === t)?.color) || "#9ca3af";
+  const flight = (pct) => pct >= 60 ? { l: "high", c: "#ef4444" } : pct >= 30 ? { l: "med", c: "#f97316" } : { l: "low", c: "#22c55e" };
   if (!rows.length) return (
     <div style={{ padding: 24, color: "#9ca3af", background: "#111827", borderRadius: 12, border: "1px solid #1f2937" }}>
       No prospects match the current selection.
@@ -12979,36 +12984,67 @@ function IntlBoardView({ players, onSelect }) {
   );
   return (
     <div className="rounded-xl overflow-hidden" style={{ background: "#111827", border: "1px solid #1f2937" }}>
-      <div style={{ padding: "10px 14px", fontSize: 12, color: "#9ca3af", borderBottom: "1px solid #1f2937" }}>
-        <b style={{ color: "#e5e7eb" }}>International Board</b> — best European option each prospect projects to <b>if not NBA</b>. Fringe-NBA talents
-        are EuroLeague-caliber (empirically: prospects with NBA WAR 5+ who went to Europe reached EuroLeague/Top-Continental far more often), so the
-        ceiling is anchored to <b>NBA WAR</b> and blended with the calibrated intl model. <b>NBA%</b> = chance of an NBA career — a high value means "likely NBA, but this is his European floor if not."
+      <div style={{ padding: "10px 14px", fontSize: 12, color: "#9ca3af", borderBottom: "1px solid #1f2937", lineHeight: 1.6 }}>
+        <b style={{ color: "#e5e7eb" }}>International Recruiting Board</b> — a scouting aid for international front offices.
+        For every young prospect (NCAA + international) the model projects the <b>sustainable league level of his next 3-year
+        peak</b>, calibrated on ~19,000 historical careers. <b style={{ color: "#22c55e" }}>Value ▲</b> flags players projected
+        clearly <i>above</i> their current environment (buy-low candidates). <b>NBA risk</b> = chance you lose him to the NBA;
+        near-locks (≥{NBA_LOCK}%) are excluded — they are not signable. Comps show historical players with the most similar
+        pre-career profile and where they actually ended up.
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr style={{ background: "#0a0e17" }}>
-            {["#", "Player", "Pos", "Team", "Age", "NBA WAR", "NBA%", "Potential League Tier"].map((h, i) => (
+            {["#", "Player & career comps", "Pos", "Age", "Current level", "Projected level", "P(pro)", "Value", "NBA risk"].map((h, i) => (
               <th key={i} className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold"
                   style={{ color: "#6b7280", borderBottom: "1px solid #1f2937" }}>{h}</th>))}
           </tr></thead>
           <tbody>
-            {rows.map((p, i) => (
-              <tr key={p.name} className="cursor-pointer hover:bg-white hover:bg-opacity-5 transition-colors"
-                  onClick={() => onSelect(p.name)} style={{ borderBottom: "1px solid #1f293744" }}>
-                <td className="px-3 py-2.5 font-bold text-xs" style={{ color: "#475569" }}>{i + 1}</td>
-                <td className="px-3 py-2.5 font-semibold" style={{ color: "#e5e7eb" }}>{p.name}
-                  {p.source && p.source !== "ncaa" && <span className="text-xs" style={{ color: "#10b981" }}> 🌐</span>}</td>
-                <td className="px-3 py-2.5"><span className="px-2 py-0.5 rounded text-xs font-semibold"
-                    style={{ background: (posColors[p.pos] || "#6b7280") + "22", color: posColors[p.pos] || "#6b7280" }}>{p.pos}</span></td>
-                <td className="px-3 py-2.5 text-xs" style={{ color: "#9ca3af" }}>{p.team || p.conf}</td>
-                <td className="px-3 py-2.5 text-xs" style={{ color: "#9ca3af" }}>{p.age != null ? ageOnDraftDay(p.age).toFixed(1) : "—"}</td>
-                <td className="px-3 py-2.5 text-xs font-semibold" style={{ color: warOf(p) >= 5 ? "#fbbf24" : warOf(p) >= 2 ? "#86efac" : "#9ca3af" }}>{warOf(p) > 0 ? warOf(p).toFixed(1) : "—"}</td>
-                <td className="px-3 py-2.5 text-xs" style={{ color: "#6b7280" }}>{nbaPct(p).toFixed(0)}%</td>
-                <td className="px-3 py-2.5 text-xs font-bold" style={{ color: tierColor(p.intlCeiling.tier) }}>
-                  {p.intlCeiling.tier} <span style={{ color: "#6b7280", fontWeight: 400 }}>{p.intlCeiling.byWar ? "(NBA talent)" : `(${p.intlCeiling.pct}%)`}</span>
-                </td>
-              </tr>
-            ))}
+            {rows.map((p, i) => {
+              const cs = p.confStrength;
+              const delta = (p.intlLevelEv != null && cs != null) ? p.intlLevelEv - cs : null;
+              const fr = flight(nbaPct(p));
+              return (
+                <tr key={p.name} className="cursor-pointer hover:bg-white hover:bg-opacity-5 transition-colors"
+                    onClick={() => onSelect(p.name)} style={{ borderBottom: "1px solid #1f293744" }}>
+                  <td className="px-3 py-2.5 font-bold text-xs" style={{ color: "#475569" }}>{i + 1}</td>
+                  <td className="px-3 py-2.5">
+                    <div className="font-semibold" style={{ color: "#e5e7eb" }}>{p.name}
+                      {p.source && p.source !== "ncaa" && <span className="text-xs" style={{ color: "#10b981" }}> 🌐</span>}
+                      <span className="text-xs" style={{ color: "#6b7280", fontWeight: 400 }}>  {p.team || p.conf}</span>
+                    </div>
+                    {p.intlComps && (
+                      <div style={{ fontSize: 10, color: "#6b7280", marginTop: 1 }}>
+                        ≈ {p.intlComps.split(" | ").slice(0, 3).map((c, j) => {
+                          const [nm, tr] = c.split(" → ");
+                          return (
+                            <span key={j}>{j > 0 && <span style={{ color: "#374151" }}> · </span>}
+                              <span style={{ color: "#9ca3af" }}>{nm}</span>
+                              <span style={{ color: tierColor(tr) }}> ({tr})</span>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5"><span className="px-2 py-0.5 rounded text-xs font-semibold"
+                      style={{ background: (posColors[p.pos] || "#6b7280") + "22", color: posColors[p.pos] || "#6b7280" }}>{p.pos}</span></td>
+                  <td className="px-3 py-2.5 text-xs" style={{ color: p.age != null && p.age < 20 ? "#86efac" : "#9ca3af" }}>{p.age != null ? ageOnDraftDay(p.age).toFixed(1) : "—"}</td>
+                  <td className="px-3 py-2.5 text-xs" style={{ color: "#9ca3af" }}>{cs != null ? cs.toFixed(2) : "—"}</td>
+                  <td className="px-3 py-2.5 text-xs font-bold" style={{ color: tierColor(p.predIntlTier) }}>
+                    {p.predIntlTier || "—"}
+                    {p.intlLevelEv != null && <span style={{ color: "#6b7280", fontWeight: 400 }}> ({p.intlLevelEv.toFixed(2)})</span>}
+                  </td>
+                  <td className="px-3 py-2.5 text-xs" style={{ color: p.pIntlCareer >= 0.7 ? "#22c55e" : p.pIntlCareer >= 0.4 ? "#86efac" : "#9ca3af" }}>
+                    {p.pIntlCareer != null ? `${(p.pIntlCareer * 100).toFixed(0)}%` : "—"}
+                  </td>
+                  <td className="px-3 py-2.5 text-xs font-semibold" style={{ color: delta == null ? "#374151" : delta >= 0.08 ? "#22c55e" : delta <= -0.08 ? "#6b7280" : "#9ca3af" }}>
+                    {delta == null ? "—" : delta >= 0.08 ? `▲ +${delta.toFixed(2)}` : delta <= -0.08 ? `▼ ${delta.toFixed(2)}` : "="}
+                  </td>
+                  <td className="px-3 py-2.5 text-xs font-semibold" style={{ color: fr.c }}>{nbaPct(p).toFixed(0)}% <span style={{ fontWeight: 400, color: "#6b7280" }}>({fr.l})</span></td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
