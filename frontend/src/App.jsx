@@ -14675,8 +14675,26 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
                       return TC[p.predTier] || "#6b7280";
                     })(), fontFamily:"'Oswald',sans-serif"}}>{p.war != null ? (p.war >= 10 ? fmt(p.war, 0) : fmt(p.war, 1)) : "—"}</td>
                     <td className="px-3 py-2.5 text-xs font-semibold" style={{color: p.bpm != null ? (p.bpm > 8 ? "#22c55e" : p.bpm > 4 ? "#86efac" : "#9ca3af") : "#374151"}}>{p.bpm != null ? fmt(p.bpm, 1) : "—"}</td>
-                    {/* NBA Tier */}
-                    <td className="px-3 py-2.5 text-xs font-bold" style={{color:TC[p.predTier]||"#6b7280"}}>{p.predTier||"—"}</td>
+                    {/* NBA Tier — Sprint-5.12 #28: nie ein nacktes Label. Upside
+                        (P(All-Star+)) und Floor-Risiko (P(Out)) aus den kalibrierten
+                        Ordinal-Probs direkt daneben, damit "Starter" mit 30% AS+ und
+                        "Starter" mit 5% AS+ unterscheidbar sind. */}
+                    <td className="px-3 py-2.5 text-xs">
+                      <div className="font-bold" style={{color:TC[p.predTier]||"#6b7280"}}>{p.predTier||"—"}</div>
+                      {(() => {
+                        const t = p.tiers || p.v2TierProbs || {};
+                        const up = (t["Superstar"]||0) + (t["All-Star"]||0);
+                        const out = t["Negative"]||0;
+                        if (!(up > 0 || out > 0)) return null;
+                        return (
+                          <div style={{fontSize:9, marginTop:1, whiteSpace:"nowrap"}}>
+                            <span style={{color: up >= 25 ? "#22c55e" : up >= 10 ? "#86efac" : "#6b7280"}}>▲{up.toFixed(0)}% AS+</span>
+                            <span style={{color:"#374151"}}> · </span>
+                            <span style={{color: out >= 30 ? "#ef4444" : out >= 15 ? "#f97316" : "#6b7280"}}>▼{out.toFixed(0)}% out</span>
+                          </div>
+                        );
+                      })()}
+                    </td>
                     {/* Sprint-5.11: Intl-Tier-Spalte entfernt — lebt jetzt im eigenen
                         International Board (🌍-Tab). */}
                   </tr>
