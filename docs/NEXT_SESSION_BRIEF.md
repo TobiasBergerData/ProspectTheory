@@ -80,6 +80,19 @@ Kontext zuerst lesen: `data-pipeline/docs/SPRINT_5_12_13_SUMMARY.md` ·
    Prognose. Wiedervorlage wenn PBP-Ära-Outcomes reifen (~2028, n>400) oder
    NBA-USG-Daten angebunden. V2-Ideen: Hover-Tooltips pro Punkt (Gegner/Datum),
    Multi-Season-Overlay, Intl-PBP-Anbindung (EuroLeague-PBP existiert).
+4d. **League-Awards-Pipeline (2026-07-24, Nacht-Block): GEBAUT, Scrape ausstehend.**
+   RealGM hat per-Liga-Awards-DBs (MVP, **Best Young Player**, All-League, …).
+   URL-Schema gelöst: `/awards/by_season/{ENDJAHR}` direkt — KEIN Selenium-
+   Dropdown nötig. Kette: `scrape_league_awards.py` (74 Ligen, rückwärts-Scan
+   mit Early-Stop, checkpoint-sicher, DB `league_awards` + `league_awards_log`
+   = Abdeckungs-Fenster) → `build_award_features.py` (dokumentierte Regexes;
+   „Newcomer" bewusst NICHT young; Monatsnamen-Falle „MVP of October" gefixt;
+   by_season-CSV ohne Look-Ahead) → **GATE** `validate_award_signal.py`
+   (Test E: Climb-Test + P(NBA)-Quintile; Entscheidungsregel VORAB fixiert).
+   In auto_intl_refresh: wöchentlich `--current-only` (~5 min) + Feature-Build
+   (no-op-sicher). **Modell/UI-Integration erst NACH positivem Gate** —
+   sonst nur deskriptives 🏆-Badge (analog Usage Load Curve). Voll-Backfill
+   (~60-90 min) macht der User am Host: docs/AWARDS_RUNBOOK.md.
 5. **Stats Lab → Cross-Market-Datenbank ausbauen** (nächster größerer Block):
    Intl-Spalten (pred_intl_tier, intl_level_ev, p_intl_career, Flight Risk,
    Value-Delta) in export_stats_lab.py + Column-Picker + eigenes Preset
