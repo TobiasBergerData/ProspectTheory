@@ -1,82 +1,66 @@
-# NEXT_SESSION_BRIEF — Lens-Struktur + Draft-Room
+# NEXT_SESSION_BRIEF — Stand nach 2026-07-24
 
-**Status 2026-07-24: BEIDE AUFTRÄGE UMGESETZT** (App.jsx + SITE_COPY_MAP.md,
-esbuild-verifiziert, 0 NUL-Bytes). Details unten im Abschnitt „Umsetzungsnotizen".
-Git-Commit/-Push macht der User am Host.
+Kontext zuerst lesen: `data-pipeline/docs/SPRINT_5_12_13_SUMMARY.md` ·
+`data-pipeline/docs/EL_HISTORY_BACKFILL_RUNBOOK.md` (inkl. Ergebnis-Block) ·
+`docs/SITE_COPY_MAP.md`. Frontend: `frontend/src/App.jsx` (eine Datei, ~15.9k Zeilen).
 
-## Umsetzungsnotizen (für die nächste Session)
+## Erledigt am 2026-07-24 (alles committed + gepusht)
 
-- **Lens-State:** `lens` ("nba" | "intl") in `App()`, URL-Hash `#lens=recruiting`
-  (replaceState-Sync auch nach Player-Navigation, hashchange-Listener). Switcher
-  über der Meta-Nav; erste Meta-Nav-Kachel heißt lens-abhängig Big Board /
-  Recruiting Board. `BigBoardView` bekommt `lens`-Prop: intl → `IntlBoardView`
-  (voller Pool), View-Toggle/Sorts nur in NBA-Lens; 4. Toggle „intl" entfernt.
-- **Player-Hero:** `ProjectionTab` bekommt `lens`-Prop; Recruiting-Lens rendert
-  `RecruitingHeroCard` (Projected Level + Value + P(pro) + Flight Risk + Comps,
-  ~L7159) statt ppWA-Hero. Helper `nbaFlightPct()` = eine Quelle für Board + Hero.
-- **Draft Room:** `DraftRoomView` (~L14394) + `pwaBoardMixture()` (Mischung +
-  p20/p80 auf PWA_TIER_ANCHORS — gleiche Engine, nicht neu). Einstieg: ⚔-Buttons
-  in der Table-View (max 3) + Sticky-Quick-Bar + „⚔ Draft Room"-Toggle.
-  Win-Now = max p20 · Balanced = max EV (computeGMUtility neutral) ·
-  Rebuild = max P(AS+). Empfehlung + 1-Satz-Begründung.
-- **Erklärstellen (Regel 1 erfüllt):** Methods Quick „What This Is" (Zwei-Lens-
-  Absatz) · Methods Deep „Draft Room" (nach „GM Risk Profile") · Inline-Explainer
-  in DraftRoomView/RecruitingHeroCard · SITE_COPY_MAP um 3 Zeilen + Lens-Sprachregel
-  ergänzt.
-- **Offen/Nice-to-have:** Watchlist in der Recruiting-Lens · Compare-Einstieg auch
-  auf Curves/Tier-Board · Draft-Room-Deep-Link (z. B. Hash-Param für Picks) ·
-  Sicht-Check live nach Deploy.
+1. **Zwei-Lens-IA**: Top-Level NBA Draft | International Recruiting, Hash
+   `lens=recruiting`, lens-abhängiger Player-Hero (`RecruitingHeroCard`),
+   Recruiting Board gleichrangig (voller Pool).
+2. **Draft Room** (NBA-Lens): 2–3 Spieler, Kurven-Overlay auf einer Peak-WA-Achse
+   (`pwaBoardMixture`, gleiche Engine), Tier-Odds, Boosters/Limiters,
+   Win-Now/Balanced/Rebuild-Empfehlung. Einstieg via ⚔ auf **allen** Board-Views;
+   Auswahl als `room=<slugs>` im Hash (teilbar, überlebt Player-Abstecher —
+   `lens=`/`room=` sind getrennte Hash-Params, nie den Ganz-Hash ersetzen!).
+3. **Watchlist** (Recruiting-Lens): ★-Buttons, localStorage
+   (`prospecttheory_recruiting_watchlist_v1`), eigene Ansicht. Design-Regeln:
+   NBA-Locks bleiben in der Watchlist SICHTBAR (Flight-Risk-Monitoring);
+   vom Jahrgangsfilter verdeckte Einträge werden als Fußzeile gelistet.
+4. **Six-Factor-Experiment**: OOS-Test (scripts/validate_six_factors.py):
+   4F offense-only R²≈0, 6F positiv, made-NBA-AUC 0.708→0.779, FTr redundant.
+   UI-Umbau gebaut, auf User-Entscheid **revertiert** (BLK% ≠ Shot Suppression —
+   Label überdehnt). Skript + Befund bleiben; Wiederaufnahme nur mit ehrlichem
+   Labeling ("Defensive Activity") und nur auf User-Wunsch.
+5. **EL-Anker (Pipeline)**: Backfill 2016–2026 für EL + Wettbewerbe + 10 Top-
+   Domestic (301 Jobs, 0 Fails, 83k Rows, 47 min — Klick-Pagination ist schnell).
+   Zweite Drift-Falle gefunden+gefixt: Gewichts-Skala komprimierte (EL 1.149 <
+   statischer Kohorten-Kante 1.20) → Top-Kohorten-Kante jetzt DYNAMISCH aus der
+   größten Leiter-Lücke (Commit 4caacc9). Endstand: **Tier 4 = p25 von N=538
+   EL-Stammspielern, EuroLg-Disc +0.303** (vorher +0.226). Kanten in
+   unified_board_scores.csv — live erst nach nächstem Refresh.
 
----
+## Nächste Session — Reihenfolge
 
-Ursprünglicher Auftrag (erledigt):
+1. **Sicht-Checks live** (nach Sonntagslauf So 03:00, der die neuen Kanten
+   deployt): Recruiting Board (Projected Levels/Value ▲ verschieben sich — ganze
+   Leiter neu, ACB jetzt 1.011) · Watchlist-Flow · Draft-Room-Deep-Link
+   (URL kopieren → neuer Tab → Auswahl kommt wieder) · Lens-Hero.
+2. **Sonntagsläufe beobachten** (2–3 saubere Läufe) → `--deploy` scharfschalten.
+3. **ANGT-Scrape + Scouting-Lane** (größtes offenes Feature): YOUTH_LEAGUES
+   (20 Ligen) liegen bereit via `--include-youth`; fehlt: Lane ins Produkt
+   (U18-Sichtbarkeit vor Senior-Debüt). Eigene Session einplanen.
+4. Kleinvieh: G-League-Historie (URL-Discovery, 404-Problem von April) ·
+   R2 aktivieren (braucht Cloudflare-Account, Code liegt bereit).
 
-Kontext zuerst lesen: `data-pipeline/docs/SPRINT_5_12_13_SUMMARY.md` + `docs/SITE_COPY_MAP.md`.
-Alles Frontend: `frontend/src/App.jsx` (eine Datei, ~15.3k Zeilen). Kein Backend nötig.
+## Geparkt (bewusst, nicht vergessen)
 
-## Arbeitsauftrag 1 — Zwei Lenses (IA-Umbau)
+- Tier-3/4-Trennschärfe: Korridor ist schmal (Kanten 1.011 vs. 1.031, Blend-
+  Verwässerung durch Domestic-Minuten der EL-Spieler). Nur anfassen, falls
+  OOT-Disc kippt; Hebel: Kohorten-peak3 nur über Top-Wettbewerb-Saisons.
+- Six Factors v2 (ehrliches Labeling) · EL-Historie vor 2016 · intl TIER_REP
+  (1.26-Repräsentant liegt über EL-Gewicht 1.149 — Value-▲-Skala leicht
+  gestaucht, Ranking unberührt; bei Gelegenheit datengetrieben ableiten).
 
-**Warum:** Zwei Berufe, zwei Fragen. NBA-Scout: „wen draften?" · Intl-Sportdirektor:
-„wen verpflichten?". Das Recruiting-Board ist aktuell als 4. Toggle im Big Board
-versteckt — soll gleichrangig werden.
+## Arbeits-Setup (Fallen)
 
-**Ziel-Struktur:**
-- Top-Level: **NBA Draft** | **International Recruiting** (statt Board-View-Toggle
-  `[table, curves, tier, intl]` in `BigBoardView`, Toggle-Leiste bei `boardView`).
-- NBA-Lens enthält: Table / Curves / Tier Board (+ später Draft Room).
-- Recruiting-Lens enthält: `IntlBoardView` (existiert fertig: Value ▲, Flight Risk,
-  Comps) + Platz für Watchlist später.
-- Shared: Suche, Player-Pages, Stats Lab, Research, Methods (Live Validation global).
-- **Player-Page-Hero lens-abhängig:** aus NBA-Lens → Peak-WA + Tier-Odds führen
-  (heutiger Zustand, `ProjectionTab`-Hero ~L7245). Aus Recruiting-Lens →
-  Projected Level + Value + `intlComps` führen, NBA nur als „Flight Risk: x%".
-  Lens-State per React-State + URL-Param (kein Router vorhanden — Hash reicht).
-
-**Sprachregel je Lens (SITE_COPY_MAP gilt):** NBA = Added Wins / Tier-Odds /
-Bust-Risk · Recruiting = Projected Level / Value / Flight Risk. Skalen nie mischen.
-
-## Arbeitsauftrag 2 — Draft-Room-Vergleich (NBA-Lens)
-
-**Was:** 2–3 Spieler nebeneinander für die On-the-clock-Entscheidung.
-- Overlay der Outcome-Kurven auf EINER Peak-WA-Achse (Engine existiert:
-  `PWA_TIER_ANCHORS` ~L502 + Mischungs-Logik wie `renderMiniCurve` in
-  `OutcomeCurveBoard` ~L12800 / `RfPwaCurve` ~L6890 — wiederverwenden, nicht neu).
-- Daneben: Tier-Odds (`p.tiers`, %-Skala), ▲AS+/▼out, Boosters/Limiters.
-- Schalter Win-Now / Balanced / Rebuild (Logik existiert: `gmRisk` +
-  `computeGMUtility` ~L12690): Win-Now empfiehlt höchsten p20-Floor,
-  Rebuild höchste P(AS+), Balanced höchsten EV. Empfehlung + 1-Satz-Begründung.
-- Einstieg: Checkbox/„Compare"-Buttons auf dem Board (Vorbild: `CompareModal`
-  im Stats Lab ~L14100) → eigener Draft-Room-View in der NBA-Lens.
-- Alle Daten sind client-seitig im Board-Payload vorhanden — keine neuen Fetches.
-
-## Arbeits-Setup (Fallen aus 5.12/5.13)
-
-- **Verify:** Sandbox-Mount trunkiert App.jsx oft → `tr -d '\000' < src/App.jsx`,
-  bei Trunkierung Host-Tail via Read splicen, dann
-  `npx esbuild /tmp/full.jsx --bundle --loader:.jsx=jsx --jsx=automatic
+- Verify: `npx esbuild App.jsx --bundle --loader:.jsx=jsx --jsx=automatic
   --external:react --external:react/jsx-runtime --external:recharts
-  --external:react-dom --outfile=/dev/null`.
-- Git-Push macht immer der User am Host (Sandbox hat keine Credentials).
-- Sichtbare Copy: Englisch, keine Sprint-Marker, keine Refresh-Zahlen hardcoden
-  (Regeln in SITE_COPY_MAP.md). Neue Elemente → beide Erklärstellen im selben Commit.
-- Reihenfolge: erst Auftrag 1 (Struktur), dann 2 (Feature an seinen Platz).
+  --external:react-dom --outfile=/dev/null` + NUL-Byte-Check.
+- Git-Push macht immer der User am Host.
+- Sichtbare Copy: Englisch, keine Sprint-Marker, keine Refresh-Zahlen hardcoden;
+  neue Elemente → beide Erklärstellen im selben Commit (SITE_COPY_MAP).
+- Cloud-Session: Staging-Kopien gleicher Pfade können auf alte Snapshots
+  zurückfallen — bei Zweifel Datei am Host unter neuem Namen kopieren und
+  diese stagen (Byte-Größe gegen Host prüfen).
