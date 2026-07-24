@@ -26,6 +26,7 @@ wegdriften (wie beim α-Blend-Narrativ, das das Modell um Monate überlebt hat).
 | Big Board **Tier Board** | Kurzzeile in `TierBoardView` | Deep: Archetype-Abschnitte |
 | **International Recruiting Board** | Header in `IntlBoardView` (Buying-Guide-Framing, Value ▲, NBA risk, Comps, ★-Hinweis) | Deep: „International Adjustments" + Pipeline-Box „Intl Career Projection" |
 | **Watchlist** (Recruiting-Lens; ★-Buttons, localStorage, Locks bleiben sichtbar) | Header-Text in `IntlBoardView` (`watchOnly`-Variante) + Empty-State | Deep: „International Adjustments" (Watchlist-Satz) |
+| **Youth Radar** (Recruiting-Lens; ANGT + Jugend-Klubligen + FIBA-U16–U20-Natio-Turniere, modellfrei, `/api/youth`) | Header-Text in `YouthRadarView` + Empty-States | Deep: „Youth Radar (clubs + national teams, U16-U20)" |
 | Player **Projection**-Tab (Hero, Tier Forecast, Outcome Curve) — Hero ist **lens-abhängig**: NBA-Lens = ppWA + Tier-Odds, Recruiting-Lens = `RecruitingHeroCard` (Projected Level + Value + Comps, NBA nur als Flight Risk) | Hero-Tooltips (beide Varianten) + `Sec sub=` der beiden Kurven-Sektionen | Deep: „Methodology & Model Documentation" (NBA) · Deep: „International Adjustments" (Recruiting) |
 | **Comps**-Tab (v5) | `Sec sub=` in `CompsV5Tab` | Deep: `sections`-Eintrag „Comps Tab" |
 | **Mind**-Tab | Sec-Subs im Tab | Quick: „Mind Tab" + Caveat-Box |
@@ -36,6 +37,8 @@ wegdriften (wie beim α-Blend-Narrativ, das das Modell um Monate überlebt hat).
 
 - **NBA-Lens** spricht in: Added Wins · Tier-Odds · Bust-Risk (▼out).
 - **Recruiting-Lens** spricht in: Projected Level · Value ▲/▼ · Flight Risk.
+- **Youth Radar** spricht nur in Roh-Produktion (PTS/REB/AST/…, TS%) — NIE in
+  Modell-Skalen (keine Tiers, Levels, Added Wins; U18 ist nicht kalibriert).
 - Skalen **nie mischen** — je Lens führt genau eine Skala. Auf der Player-Page
   entscheidet die aktive Lens, welcher Hero führt; die jeweils andere Welt
   erscheint nur als Ein-Zeilen-Verweis (z. B. „NBA Flight Risk: x%").

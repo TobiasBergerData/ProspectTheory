@@ -11884,6 +11884,7 @@ function MethodologyTab() {
     {cat:"Tier Probabilities — Calibrated Ordinal Model",items:[],desc:"The six tier probabilities (Superstar / All-Star / Starter / Role Player / Replacement / Out) come from an ordinal classifier trained on the full prospect population — including everyone who never reached the NBA, kept as informative negatives. Its outputs are calibrated against historical base rates: summed over a draft class, the probabilities add up to realistic totals (~1 superstar, ~4 all-stars, ~12 starters per class), because that is how often those careers actually happen. WHY THIS MATTERS: without base-rate anchoring, probability models quietly inflate — a board can end up showing a dozen 'likely all-stars' in one class, which has never happened in draft history. Anchored odds mean a 40% superstar probability is a genuinely rare, strong statement. The tier LABEL shown on the board is assigned top-down along projected peak Wins Added using the same class quotas, so label and probabilities never contradict each other. Out-of-time calibration error is near zero per tier (see Live Validation). CAVEAT: probabilities are pre-team-context and conditional on the information in the model — a unique profile with no historical precedent carries wider real uncertainty than any model can quantify."},
     {cat:"Archetype Value Bands (Research — this tab)",items:[],desc:"A draft-strategy research sub-section shown above (Method tab). For each of 16 NBA archetypes we compute the realized peak Wins Added distribution of past players of that type (~1,210 NBA players, draft classes ~2008–2024): floor (25th percentile = downside), median (typical), and ceiling (90th percentile = upside). Displayed as horizontal value bands so you can read draft strategy by player type: highest ceiling = swing-for-upside pick (Scoring Playmaker / Stretch Rim Protector, ceiling ~28–29 WA); highest floor = safest pick (Stretch Rim Protector); highest median = best balanced bet. Each band carries its SAMPLE SIZE (n) as a data-confidence signal — a type observed 374 times (Scoring Wing) is far better understood than one seen 19 times (3-and-D Wing), whose edges are noisier. Rarity is shown for confidence, NOT as a value claim (rare ≠ better). Hover any band (or see the highlighted card for the current player's type) for EXAMPLE NBA PLAYERS grouped by the tier they reached — a concrete sense of the range (note: these are pre-draft archetypes; some players, like Jokic from a pre-draft 'Scoring Wing', evolved into a different NBA role). The same archetype-value numbers also appear in the Roles & Archetypes tab (each archetype's NBA ceiling tier + % reaching Starter+/All-Star+). PRE-DRAFT → NBA TRANSITION: a second view shows, per pre-draft archetype, what those players actually became in the NBA (drafted classes ≤2020) — including an honest 'Did Not Stick' (never established a rotation role). E.g. a pre-draft Scoring Wing most often does not stick or becomes a role-filler; a Stretch Rim Protector usually becomes a Stretch Big / Rim Protector. A talent overlay then splits the same type by projected-value tier: an elite-projected Scoring Playmaker sticks 75% / All-Star 38%, a marginal one 6% / 0% — quantifying 'a scoring guard has to be elite to be worth it'. (Drafted-player population, so it carries a draft-position confound; thin pre-draft types omitted.)"},
     {cat:"International Adjustments",items:[],desc:"International players receive three adjustments: (1) League Strength — every league's weight is derived empirically from bridge players (players who appeared in multiple leagues), anchored to NCAA Power = 1.0 and shrunk toward a conservative prior where the evidence is thin. Weights cover 60+ leagues worldwide and are recomputed on every data refresh, never hand-set. (2) League-BPM translation: the raw BPM proxy (PER+eDiff) is scaled per league so international seasons read on the NCAA-equivalent scale before feature engineering. (3) League-strength-adjusted projection with usage-translatability caps for strong leagues. The International Recruiting Board additionally offers a browser-local watchlist (★): tracked targets keep showing even once they become NBA near-locks — a rising flight risk on a tracked player is a signal, not something to hide. The list is stored in this browser only."},
+    {cat:"Youth Radar (clubs + national teams, U16-U20)",items:[],desc:"A scouting radar over three youth sources: the adidas Next Generation Tournament (EuroLeague U18 club circuit — qualifiers and finals), the Junior Adriatic / VTB Youth / Youth BCL club leagues, and the FIBA national-team championships from U16 to U20 (European Championships divisions A and B plus the U17 and U19 World Cups, covering the last and the current summer — editions carry a year tag). Per-event leaderboards are aggregated per player, game-weighted across events. Deliberately model-free — samples range from a 2-8-game tournament to a youth-league season, youth events carry no empirically calibrated league weight (they are excluded from the bridge graph on purpose), and the career models are not calibrated for youth populations. So the radar shows raw production only: minutes, scoring, rebounding, playmaking, stocks, true shooting. Two honest reading rules: there is no age adjustment (leaderboards carry no birthdates), so older prospects outproducing the field is expected; and mixing age brackets means raw numbers compare cleanly only within an event, not U16-vs-U20. Intended use: build an early watch universe here, then follow players into their senior-league seasons, where the full model (league weights, tier odds, projected levels) applies."},
     {cat:"The 5 Pillars (DNA Scores)",items:["feel","shootScore","defScore","funcAth","selfCreation","overall"],desc:"Position-adjusted percentile scores (0–100) capturing the fundamental dimensions of prospect evaluation. Each pillar uses era-adjusted percentiles computed against ~34k college + ~9k international players since 2008. ALL FIVE PILLARS MEASURE CURRENT SKILL — what the prospect actually does now — not projections of future NBA outcomes. NBA outcome forecasts live in the NBA Projections section (Tier Probabilities, Star+ Creator Projection, etc.). For example: the Creation pillar measures Self-Adjusted Box Creation = Self-Created Scoring (USG × TS × Self-Share) + Passing Creation (AST% × clamp(AST/TO,0.5,2.5)/2.5), position-weighted. The separate Star+ Creator Projection answers a different question — will this skill translate into a Star+ Creator role in the NBA — via a calibrated Logistic Regression model."},
     {cat:"Shooting Projection (Diss-M1/M4, Berger 2022)",items:["projNba3p","projNba3pa","projNba3par","touchPrior"],desc:"Two-stage model from the underlying dissertation (Ch. 7). Stage 1: empirical Bayes shrinkage of college 3P% against the NCAA league-wide distribution (α₀, β₀ fitted via method-of-moments from 16,771 NCAA players ≥20 3PA — league median μ₀=34.8%, effective κ=69). Small samples (Boozer 0%/2 attempts, Saraf 0%/2) get pulled toward the league median. Stage 2: beta regression M1 for NBA 3P% translation = FT% + 2PJ% (PBP, NCAA only) + pre-draft 3P% estimate. Coefficients freshly fitted on the resolved holdout (n=675 NCAA RMSE 0.0380, n=392 intl RMSE 0.0367). Intl gets M1-light without 2PJ% — NO imputation for missing PBP. All values data-driven, no hand-tuning."},
     {cat:"Possession Impact (CFFR)",items:["fourFactors"],desc:"Context-Free Four Factor Rating measuring possession efficiency per Dean Oliver's framework. Usage-role adjusted: Primary (USG≥28%), Secondary (≥22%), Finisher (≥15%), Low-Usage (<15%). Each factor (eFG% 40%, TO% 25%, ORB% 20%, FTr 15%) is percentiled WITHIN the player's usage bucket, so a primary scorer with 52% eFG rates correctly against peers, not low-usage finishers."},
@@ -11910,6 +11911,7 @@ function MethodologyTab() {
     {cat:"Comps Tab",items:[],desc:"Multi-dimensional comparable-player engine. Instead of one opaque similarity score, each prospect is matched along five explicit dimensions (production, efficiency, physical profile, role, age/stage) against historical pre-draft seasons — you see WHERE two players are alike, not just that they are. Cohort forecasts show how the prospect's closest historical peers actually turned out (realized NBA outcomes), giving the projection a human-readable reference set. Pre-draft seasons only — comparing what players looked like before the NBA."},
     {cat:"Position Reclassification",items:[],desc:"Stats-driven position groups (Playmaker / Wing / Big) used throughout the site. Rules: Big = Height ≥84\" unconditional, OR Height ≥82\" with non-wing usage profile (USG<25 AND AST%<15), OR Height ≥80\" with elite shot-blocking (BLK%≥5 AND non-wing usage). Playmaker = AST%≥25 AND Height ≤6'5\", OR AST%≥30 AND Height ≤6'7\". Wing = everything else. Designed to keep tall wings (Bailey-style 6'10\" forwards) classified as Wings rather than misclassified to Big purely by height."},
     {cat:"International Adjustments",items:[],desc:"International players receive three adjustments: (1) League Strength — every league's weight is derived empirically from bridge players (players who appeared in multiple leagues), anchored to NCAA Power = 1.0 and shrunk toward a conservative prior where evidence is thin. Weights cover 60+ leagues worldwide and are recomputed on every data refresh — never hand-set. (2) League-BPM translation: the raw BPM proxy is scaled by league so an international season reads on the NCAA-equivalent scale before feature engineering. (3) League-strength-adjusted projection with usage-translatability caps for strong leagues. For Athleticism, an FT-Rate + ORB%-based formula replaces dunk rate (unavailable for most international players). The International Recruiting Board additionally offers a browser-local watchlist (★): tracked targets keep showing even once they become NBA near-locks — a rising flight risk on a tracked player is a signal, not something to hide. The list is stored in this browser only."},
+    {cat:"Youth Radar (clubs + national teams, U16-U20)",items:[],desc:"A scouting radar over three youth sources: the adidas Next Generation Tournament (EuroLeague U18 club circuit — qualifiers and finals), the Junior Adriatic / VTB Youth / Youth BCL club leagues, and the FIBA national-team championships from U16 to U20 (European Championships divisions A and B plus the U17 and U19 World Cups, covering the last and the current summer — editions carry a year tag). Per-event leaderboards are aggregated per player, game-weighted across events. Deliberately model-free — samples range from a 2-8-game tournament to a youth-league season, youth events carry no empirically calibrated league weight (they are excluded from the bridge graph on purpose), and the career models are not calibrated for youth populations. So the radar shows raw production only: minutes, scoring, rebounding, playmaking, stocks, true shooting. Two honest reading rules: there is no age adjustment (leaderboards carry no birthdates), so older prospects outproducing the field is expected; and mixing age brackets means raw numbers compare cleanly only within an event, not U16-vs-U20. Intended use: build an early watch universe here, then follow players into their senior-league seasons, where the full model (league weights, tier odds, projected levels) applies."},
     {cat:"Tier Feasibility (vs NBA)",items:[],desc:"How does this prospect stack up against the actual pre-draft college numbers of players who reached each NBA tier? Built from the mature draft cohort 2008-2018 (n=353 NBA players with realized peak Wins Added). We grouped them by their realized NBA outcome - Replacement, Role Player, Starter, All-Star - using peak-WA percentile cuts (10/30/60/85). For each (tier x position) we then took the MEDIAN of every pre-draft college stat (BPM, USG%, TS%, AST%, TO%, STL%, BLK%, ORB%, DRB%, AdjOE) and used that as the in-range center. Frontend automatically derives p25 = median x 0.75 and p75 = median x 1.30 around it: above median is green (In-Range), below median is orange (Below Median), below p25 is red (Critical Gap) - or yellow (Compensated) if a position-core metric is elite enough to offset (Wings core = TS% + 3P%; Playmakers core = AST% + TO%; Bigs core = BLK% + ORB%). Thresholds are MONOTONIZED along the tier axis (a higher tier's threshold never sits below a lower tier's; TO% inverse), at the cost of small distortion - pre-draft college stats only weakly separate Starter from All-Star, because the real talent spike happens AFTER the draft via role + minutes + team context. So a player can clear all Starter thresholds and still NOT clear All-Star simply because the Starter and All-Star pre-draft stats overlap. Read this view as a diagnostic - how many tier markers does he hit - not as a forecast."},
     {cat:"Data Sources & Coverage",items:[],desc:"NCAA Box Stats: BartTorvik (34k+ player-seasons 2008–2026, per-game + advanced + shooting zones — barttorvik.com). NCAA Play-by-Play: ESPN Play-by-Play (event-level data 2017-18 through 2025-26, ~700k player-game-events tracked). International Box Stats: RealGM (~20k player-seasons across 70+ leagues worldwide — every senior national league plus continental competitions — realgm.com). NBA Outcomes: NBA Stats API Advanced stats (27 seasons, used for peak Wins-Added computation). Anthropometrics: NBA Draft Combine measurements (NBA.com) + Databallr wingspan dataset. National Team / FIBA: FIBA event statistics for international youth and senior tournaments. All data is processed through our own pipeline — no external services are queried at runtime."},
   ];
@@ -13091,6 +13093,100 @@ function nbaFlightPct(p) {
   return (Number(t.Superstar) || 0) + (Number(t["All-Star"]) || 0)
        + (Number(t.Starter) || 0) + (Number(t["Role Player"]) || 0);
 }
+// ═══════════════════════════════════════════════════════════
+// YOUTH RADAR (ANGT) — Recruiting-Lens, dritte Ansicht.
+// U18-Turnier-Produktion (adidas Next Generation Tournament), GP-gewichtet
+// über Qualifier + Finals aggregiert. BEWUSST MODELLFREI: 2-8 Spiele Sample,
+// Youth-Turniere sind absichtlich NICHT im Liga-Gewichts-Bridge-Graph, und
+// die Karriere-Modelle sind für U18 nicht kalibriert → nur Roh-Produktion,
+// keine Tiers/Levels/Added Wins (Skalen nie mischen). Quelle: /api/youth
+// (statisch, gebaut von export_youth_radar.py).
+// ═══════════════════════════════════════════════════════════
+function YouthRadarView() {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    fetch(`${API_BASE}/youth`)
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(d => { if (alive) setData(d); })
+      .catch(() => { if (alive) setErr(true); });
+    return () => { alive = false; };
+  }, []);
+
+  const posColors = { G: "#3b82f6", F: "#f97316", C: "#8b5cf6" };
+  const empty = (msg) => (
+    <div style={{ padding: 24, color: "#9ca3af", background: "#111827", borderRadius: 12, border: "1px solid #1f2937", lineHeight: 1.6 }}>{msg}</div>
+  );
+  if (err) return empty("Youth radar is not available in this build yet.");
+  if (!data) return empty("Loading youth tournament data…");
+  const players = data.players || [];
+  if (!players.length) return empty(
+    <>No youth tournament data in this build yet — the radar fills up once the ANGT circuit has been scraped for the current season.</>
+  );
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ background: "#111827", border: "1px solid #1f2937" }}>
+      <div style={{ padding: "10px 14px", fontSize: 12, color: "#9ca3af", borderBottom: "1px solid #1f2937", lineHeight: 1.6 }}>
+        <b style={{ color: "#e5e7eb" }}>Youth Radar</b> — youth production from three sources, aggregated per player
+        (game-weighted): the adidas Next Generation Tournament (EuroLeague U18 club circuit, qualifiers + finals), the
+        Junior Adriatic / VTB Youth / Youth BCL club leagues, and the <b>FIBA national-team championships U16–U20</b>
+        (Euro A/B + U17/U19 World Cups, last and current summer — year tags like '25 mark the edition). This is a
+        <b> scouting radar, not a projection</b>: samples range from a 2–8-game tournament to a youth-league season,
+        youth events carry no calibrated league weight, and the career models are not calibrated for youth populations —
+        so you see raw production only, no tiers, no projected levels. No age adjustment either: an older prospect
+        outproducing the field is expected, and mixing age brackets (U16 vs U20) makes raw numbers comparable only within
+        an event. Use it to build an early watch universe, then follow players into their senior seasons where the full
+        model applies.
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead><tr style={{ background: "#0a0e17" }}>
+            {["#", "Player", "Pos", "Ht", "GP", "MPG", "PTS", "REB", "AST", "STL", "BLK", "TOV", "TS%", ""].map((h, i) => (
+              <th key={i} className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold"
+                  style={{ color: "#6b7280", borderBottom: "1px solid #1f2937" }}>{h}</th>))}
+          </tr></thead>
+          <tbody>
+            {players.map((p, i) => (
+              <tr key={p.slug || p.name} style={{ borderBottom: "1px solid #1f293744" }}>
+                <td className="px-3 py-2.5 font-bold text-xs" style={{ color: "#475569" }}>{i + 1}</td>
+                <td className="px-3 py-2.5">
+                  <div className="font-semibold" style={{ color: "#e5e7eb" }}>{p.name}</div>
+                  <div style={{ fontSize: 10, color: "#6b7280" }}>
+                    {[p.club, p.country].filter(Boolean).join(" · ")}
+                    {p.tournaments?.length > 1 && <span style={{ color: "#4b5563" }}> · {p.tournaments.length} tournaments</span>}
+                  </div>
+                </td>
+                <td className="px-3 py-2.5 text-xs"><span className="px-2 py-0.5 rounded font-semibold"
+                    style={{ background: (posColors[(p.pos || "")[0]] || "#6b7280") + "22", color: posColors[(p.pos || "")[0]] || "#6b7280" }}>{p.pos || "—"}</span></td>
+                <td className="px-3 py-2.5 text-xs" style={{ color: "#9ca3af" }}>{p.height || "—"}</td>
+                <td className="px-3 py-2.5 text-xs" style={{ color: "#6b7280" }}>{p.gp}</td>
+                <td className="px-3 py-2.5 text-xs" style={{ color: "#9ca3af" }}>{p.mpg ?? "—"}</td>
+                <td className="px-3 py-2.5 font-bold text-xs" style={{ color: "#e5e7eb", fontFamily: "'Oswald',sans-serif" }}>{p.ppg ?? "—"}</td>
+                <td className="px-3 py-2.5 text-xs" style={{ color: "#9ca3af" }}>{p.rpg ?? "—"}</td>
+                <td className="px-3 py-2.5 text-xs" style={{ color: "#9ca3af" }}>{p.apg ?? "—"}</td>
+                <td className="px-3 py-2.5 text-xs" style={{ color: "#9ca3af" }}>{p.spg ?? "—"}</td>
+                <td className="px-3 py-2.5 text-xs" style={{ color: "#9ca3af" }}>{p.bpg ?? "—"}</td>
+                <td className="px-3 py-2.5 text-xs" style={{ color: "#9ca3af" }}>{p.tov ?? "—"}</td>
+                <td className="px-3 py-2.5 text-xs" style={{ color: p.ts_pct >= 58 ? "#22c55e" : p.ts_pct >= 52 ? "#86efac" : "#9ca3af" }}>{p.ts_pct ?? "—"}</td>
+                <td className="px-3 py-2.5 text-xs">
+                  {p.slug && p.realgm_id && (
+                    <a href={`https://basketball.realgm.com/player/${p.slug}/Summary/${p.realgm_id}`}
+                       target="_blank" rel="noopener noreferrer" title="Open RealGM profile"
+                       style={{ color: "#6b7280" }}>↗</a>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ padding: "10px 16px", color: "#6b7280", fontSize: 10, borderTop: "1px solid #1f2937" }}>
+        Sorted by points per game · min {data.min_gp ?? 2} games · {data.tournaments?.length ?? 0} events this season · ↗ opens the RealGM profile
+      </div>
+    </div>
+  );
+}
+
 function IntlBoardView({ players, onSelect, watchlist = null, onToggleWatch = null, watchOnly = false }) {
   // Sprint-5.13: Recruiting-Board — Einkaufshilfe für internationale Front Offices,
   // KEINE Draft-Logik. Fragen eines Sportdirektors: Auf welchem Level spielt er
@@ -14927,16 +15023,20 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
       {lens === "intl" && (
         <div>
           <div className="flex gap-1 mb-3">
-            {[["board","☰ Recruiting Board"],["watch",`★ Watchlist${watchlist.length?` (${watchlist.length})`:""}`]].map(([v,l])=>(
+            {[["board","☰ Recruiting Board"],["watch",`★ Watchlist${watchlist.length?` (${watchlist.length})`:""}`],["youth","🔭 Youth Radar"]].map(([v,l])=>(
               <button key={v} onClick={()=>setIntlView(v)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
                 style={{background:intlView===v?"#10b981":"#1f2937",color:intlView===v?"#000":"#9ca3af"}}>
                 {l}
               </button>
             ))}
           </div>
-          <IntlBoardView players={filtered} onSelect={onSelect}
-                         watchlist={watchlist} onToggleWatch={toggleWatch}
-                         watchOnly={intlView==="watch"}/>
+          {intlView==="youth" ? (
+            <YouthRadarView/>
+          ) : (
+            <IntlBoardView players={filtered} onSelect={onSelect}
+                           watchlist={watchlist} onToggleWatch={toggleWatch}
+                           watchOnly={intlView==="watch"}/>
+          )}
         </div>
       )}
 

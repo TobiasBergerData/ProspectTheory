@@ -38,9 +38,22 @@ Kontext zuerst lesen: `data-pipeline/docs/SPRINT_5_12_13_SUMMARY.md` ·
    Leiter neu, ACB jetzt 1.011) · Watchlist-Flow · Draft-Room-Deep-Link
    (URL kopieren → neuer Tab → Auswahl kommt wieder) · Lens-Hero.
 2. **Sonntagsläufe beobachten** (2–3 saubere Läufe) → `--deploy` scharfschalten.
-3. **ANGT-Scrape + Scouting-Lane** (größtes offenes Feature): YOUTH_LEAGUES
-   (20 Ligen) liegen bereit via `--include-youth`; fehlt: Lane ins Produkt
-   (U18-Sichtbarkeit vor Senior-Debüt). Eigene Session einplanen.
+3. **ANGT Youth Radar V1: GEBAUT (2026-07-24, gleiche Session).** Kette:
+   `scrape_intl_2026 --include-youth` → `export_youth_radar.py` (GP-gewichtete
+   Turnier-Aggregation, no-op-sicher, hängt in auto_intl_refresh) →
+   `/api/youth` (FileResponse) → „🔭 Youth Radar" in der Recruiting-Lens.
+   BEWUSST MODELLFREI (Roh-Produktion; Youth nicht kalibriert, kein Age-Adjust).
+   Abdeckung: ANGT-Turnierserie + Jugend-Klubligen (Junior ABA, VTB Youth,
+   Youth BCL) + **FIBA-U16–U20-Nationalteam-Turniere** (Euro A/B, U17/U19-WM;
+   eigenes RealGM-Schema `/national/tournament/{id}/{slug}/0/stats/{JAHR}/...`,
+   Kalenderjahr-Semantik → letzter + laufender Sommer, NATIO_YOUTH_EVENTS in
+   scrape_intl_2026). Erst-Scrape + Task-Neuregistrierung mit `-IncludeYouth`
+   macht der User.
+   **V2-Kandidaten:** Age via Bio-Scrape (06a) für die Youth-Kohorte ·
+   Youth-Historie (mehrere Saisons → Wiedererkennung Jahr über Jahr) ·
+   Watchlist-Anbindung (Youth-Spieler sind nicht im Board-Pool — braucht
+   eigenes Resolving) · per-Event-Filter im Radar, falls die Mischliste
+   (U16 bis U20) unübersichtlich wird.
 4. Kleinvieh: G-League-Historie (URL-Discovery, 404-Problem von April) ·
    R2 aktivieren (braucht Cloudflare-Account, Code liegt bereit).
 

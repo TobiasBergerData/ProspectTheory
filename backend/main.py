@@ -18,6 +18,7 @@ Endpoints:
   GET /api/comps/v5/{slug}               → NBA-Profi 5-dim Comp Engine (Sprint-3.10)
   GET /api/tiers/{slug}                  → Tier probabilities
   GET /api/players/top?n=50              → Top N by ppWA
+  GET /api/youth                         → ANGT Youth Radar (U18 tournament production)
   GET /api/players/draft/{year}          → All players from a draft year
 
 All `{slug}` path parameters also accept a player_id (bt:…, rg:…) or a
@@ -1109,6 +1110,19 @@ async def get_model_card(response: Response):
     p = Path(os.environ.get("DATA_DIR", "data/processed")) / "api_model_card.json"
     if not p.exists():
         raise HTTPException(status_code=503, detail="model card not yet generated")
+    response.headers["Cache-Control"] = "public, max-age=3600"
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
+@app.get("/api/youth")
+async def get_youth_radar(response: Response):
+    """ANGT Youth Radar (Recruiting-Lens): U18-Turnier-Produktion, GP-gewichtet
+    über Turniere aggregiert. Bewusst modellfrei (kein Tier, keine Added Wins) —
+    gebaut von export_youth_radar.py, leer-aber-valide solange kein Youth-Scrape
+    gelaufen ist."""
+    p = Path(os.environ.get("DATA_DIR", "data/processed")) / "api_youth_radar.json"
+    if not p.exists():
+        raise HTTPException(status_code=503, detail="youth radar not yet built")
     response.headers["Cache-Control"] = "public, max-age=3600"
     return json.loads(p.read_text(encoding="utf-8"))
 
