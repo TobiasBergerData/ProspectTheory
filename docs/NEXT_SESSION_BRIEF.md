@@ -97,9 +97,13 @@ Kontext zuerst lesen: `data-pipeline/docs/SPRINT_5_12_13_SUMMARY.md` ·
    **🏆-Badge**: `export_awards_badges.py` (Namens-Join, ambige Namen
    gedroppt) → `/api/awards` → `AwardBadge` in Board/Level-Up/College-Targets/
    Similar + Hero-Zeile; Sonntagslauf zieht `--current-only` + Features +
-   Badge-Export nach, do_deploy synct api_awards.json. Test B (P(NBA))
-   crashte an Bridge-Präfix `rg_id="rg:…"` — gefixt, **Rerun ausstehend** →
-   Ergebnis in docs/AWARDS_RUNBOOK.md (ERGEBNIS-Block) nachtragen.
+   Badge-Export nach, do_deploy synct api_awards.json. **Gate-Lauf 2: v2
+   BESTANDEN** (adj. Effekt +0.057, CI [+0.042,+0.073], zeitstabil) ⇒
+   Modell-Integration zulässig; Entscheid zweistufig: Badge live (1.553
+   Badges, 4 ambige Namen gedroppt), Modell-Aufnahme optional nur mit
+   eigenem OOT-Nachweis des Intl-Level-Modells. Test B: zwei Join-Bugs
+   nacheinander (rg:-Präfix; \D-Strip zerstörte Float-IDs) — gefixt,
+   **Lauf 3 ausstehend** → Ergebnis in docs/AWARDS_RUNBOOK.md nachtragen.
 5. **Stats Lab → Cross-Market-Datenbank ausbauen** (nächster größerer Block):
    Intl-Spalten (pred_intl_tier, intl_level_ev, p_intl_career, Flight Risk,
    Value-Delta) in export_stats_lab.py + Column-Picker + eigenes Preset
