@@ -71,6 +71,15 @@ Kontext zuerst lesen: `data-pipeline/docs/SPRINT_5_12_13_SUMMARY.md` ·
    nur 11.9% vs 9.6% → Markt-Ineffizienz; Test C in validate_level_up.py).
    V2-Ideen: Team-Needs-Profil (Kader-Eingabe) · Watchlist-Digest aus dem
    Sonntagslauf · Preis-/Vertragsdaten (externe Quelle nötig).
+4c. **Usage Load Curve (2026-07-24, Spät-Block):** BartTorvik-Stil per-Game
+   Usage×Effizienz im Roles-Tab (`UsageLoadCurve`, aus p.gameLogs u/o2 — kein
+   neuer Fetch). Drei ehrliche Zonen: proven (≥3 Spiele, ≥Peer−8) · fall-off ·
+   untested ("nie gefordert ≠ gescheitert"). WICHTIG: Prädiktions-Test NEGATIV
+   (validate_usage_ceiling.py: n=146, PIE-Proxy, partial rho ≈ 0, Archetyp-
+   Cutoffs nicht schätzbar) → Sektion ist bewusst DESKRIPTIV, keine Rollen-
+   Prognose. Wiedervorlage wenn PBP-Ära-Outcomes reifen (~2028, n>400) oder
+   NBA-USG-Daten angebunden. V2-Ideen: Hover-Tooltips pro Punkt (Gegner/Datum),
+   Multi-Season-Overlay, Intl-PBP-Anbindung (EuroLeague-PBP existiert).
 5. **Stats Lab → Cross-Market-Datenbank ausbauen** (nächster größerer Block):
    Intl-Spalten (pred_intl_tier, intl_level_ev, p_intl_career, Flight Risk,
    Value-Delta) in export_stats_lab.py + Column-Picker + eigenes Preset

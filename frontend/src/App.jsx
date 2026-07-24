@@ -4197,6 +4197,125 @@ function ShootingTab({p}) {
   }
 }
 // ═══════════════════════════════════════════════════════════
+// USAGE LOAD CURVE — per-game Usage vs. Adjusted ORtg (BartTorvik-Stil).
+// Quelle: p.gameLogs.games (PBP-aggregiert, Keys u = usg_proxy, o2 = ortg_proxy).
+// Peer-Referenz: dieselbe individuelle Erwartungskurve wie im Class Scatter.
+// Buckets (4pp): proven (≥3 Spiele, mittl. Effizienz ≥ Referenz −8) ·
+// fall-off (≥3 Spiele, < Referenz −8) · untested (nie ≥3 Spiele gefordert).
+// Deskriptiv, nicht prädiktiv — siehe Methods → Usage Load Curve.
+// ═══════════════════════════════════════════════════════════
+function UsageLoadCurve({ p }) {
+  const games = (p?.gameLogs?.games || []).filter(g => g.u != null && g.o2 != null && g.u >= 3);
+  if (games.length < 8) return null;   // zu wenig Spiele für eine ehrliche Kurve
+  const peerExp = (usg) => 160 - 1.2 * usg - 0.015 * usg * usg;  // identisch zu ClassScatter
+  const TOL = -8, MIN_G = 3;
+
+  // Buckets à 4pp Usage
+  const buckets = {};
+  games.forEach(g => {
+    const b = Math.min(40, Math.max(4, Math.floor(g.u / 4) * 4));
+    (buckets[b] = buckets[b] || []).push(g.o2 - peerExp(g.u));
+  });
+  const bstats = Object.entries(buckets).map(([b, v]) => ({
+    b: +b, n: v.length, eff: v.reduce((s, x) => s + x, 0) / v.length,
+  })).sort((a, c) => a.b - c.b);
+  const tested = bstats.filter(x => x.n >= MIN_G);
+  const proven = tested.filter(x => x.eff >= TOL);
+  const provenMax = proven.length ? Math.max(...proven.map(x => x.b)) + 4 : null;
+  const fallOff = tested.find(x => provenMax != null && x.b >= provenMax && x.eff < TOL);
+  const maxTested = tested.length ? Math.max(...tested.map(x => x.b)) + 4 : null;
+  const untestedBeyond = fallOff ? null : maxTested;
+
+  // Geometrie
+  const W = 640, H = 300, PAD = { l: 46, r: 16, t: 16, b: 40 };
+  const IW = W - PAD.l - PAD.r, IH = H - PAD.t - PAD.b;
+  const uMin = 2, uMax = Math.max(34, Math.min(46, Math.max(...games.map(g => g.u)) + 3));
+  const oVals = games.map(g => g.o2);
+  const oMin = Math.max(30, Math.min(...oVals, 80) - 8), oMax = Math.min(190, Math.max(...oVals, 150) + 8);
+  const xS = (u) => PAD.l + (u - uMin) / (uMax - uMin) * IW;
+  const yS = (o) => PAD.t + IH - (Math.min(oMax, Math.max(oMin, o)) - oMin) / (oMax - oMin) * IH;
+
+  // Geglättete Spieler-Kurve: Gauß-Kern über Usage (bw 3), nur wo lokal ≥3 Spiele
+  const smooth = [];
+  for (let u = uMin + 2; u <= uMax - 1; u += 1) {
+    let sw = 0, sv = 0, nLoc = 0;
+    games.forEach(g => {
+      const d = (g.u - u) / 3;
+      const w = Math.exp(-0.5 * d * d);
+      sw += w; sv += w * g.o2;
+      if (Math.abs(g.u - u) <= 4) nLoc += 1;
+    });
+    if (nLoc >= 3) smooth.push([u, sv / sw]);
+  }
+  const smoothPath = smooth.map(([u, o], i) => `${i ? "L" : "M"} ${xS(u).toFixed(1)},${yS(o).toFixed(1)}`).join(" ");
+  const refPath = (() => {
+    const pts = []; for (let u = uMin; u <= uMax; u += 1) pts.push(`${xS(u).toFixed(1)},${yS(peerExp(u)).toFixed(1)}`);
+    return "M " + pts.join(" L ");
+  })();
+
+  const loadLabel = provenMax == null ? null
+    : provenMax >= 28 ? "primary-level load carried"
+    : provenMax >= 22 ? "secondary-level load carried"
+    : provenMax >= 16 ? "connector-level load carried"
+    : "low-usage role so far";
+
+  return (
+    <Sec icon="⚖" title="Usage Load Curve" sub="Every dot is one game: how much offensive load (usage) he carried and how efficiently (adjusted offensive rating). The blue line is his own smoothed curve, the orange line the peer expectation at that usage. This is EVIDENCE about this player, not a projection: green marks the load range he has proven (≥3 games at or above peer expectation −8), red a fall-off (efficiency breaking below that reference), grey the range he has simply never been asked to carry — 'untested' is not 'failed'. A validation attempt to predict NBA roles from this curve found no incremental signal over season usage — so we deliberately present it as scouting evidence, not as an outcome model (see Methods → Usage Load Curve).">
+      <div className="rounded-xl p-4" style={{ background: "#0d1117", border: "1px solid #1f2937" }}>
+        <svg width="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
+          {/* Zonen-Leiste oben: proven / fall-off / untested */}
+          {provenMax != null && (
+            <rect x={xS(uMin)} y={PAD.t - 10} width={xS(Math.min(provenMax, uMax)) - xS(uMin)} height={5} fill="#22c55e" opacity={0.5}/>
+          )}
+          {fallOff && (
+            <rect x={xS(fallOff.b)} y={PAD.t - 10} width={xS(Math.min(fallOff.b + 4, uMax)) - xS(fallOff.b)} height={5} fill="#ef4444" opacity={0.6}/>
+          )}
+          {untestedBeyond != null && untestedBeyond < uMax && (
+            <rect x={xS(untestedBeyond)} y={PAD.t - 10} width={xS(uMax) - xS(untestedBeyond)} height={5} fill="#4b5563" opacity={0.5}/>
+          )}
+          {/* Achsen-Ticks */}
+          {[10, 15, 20, 25, 30, 35, 40].filter(u => u > uMin && u < uMax).map(u => (
+            <g key={u}>
+              <line x1={xS(u)} x2={xS(u)} y1={PAD.t} y2={PAD.t + IH} stroke="#1f2937" strokeWidth={1}/>
+              <text x={xS(u)} y={H - 22} fontSize={9} fill="#4b5563" textAnchor="middle">{u}</text>
+            </g>
+          ))}
+          {[80, 100, 120, 140, 160].filter(o => o > oMin && o < oMax).map(o => (
+            <g key={o}>
+              <line x1={PAD.l} x2={PAD.l + IW} y1={yS(o)} y2={yS(o)} stroke="#1f2937" strokeWidth={1}/>
+              <text x={PAD.l - 6} y={yS(o) + 3} fontSize={9} fill="#4b5563" textAnchor="end">{o}</text>
+            </g>
+          ))}
+          <text x={PAD.l + IW / 2} y={H - 6} fontSize={10} fill="#6b7280" textAnchor="middle">Usage in game (%)</text>
+          <text x={12} y={PAD.t + IH / 2} fontSize={10} fill="#6b7280" textAnchor="middle" transform={`rotate(-90 12 ${PAD.t + IH / 2})`}>Adj. Off. Rating</text>
+          {/* Peer-Referenz + Spieler-Kurve + Punkte */}
+          <path d={refPath} fill="none" stroke="#f97316" strokeWidth={1.5} opacity={0.7} strokeDasharray="4,3"/>
+          {games.map((g, i) => (
+            <circle key={i} cx={xS(g.u)} cy={yS(g.o2)} r={3.2} fill="#3b82f6" opacity={0.75}/>
+          ))}
+          {smooth.length >= 4 && <path d={smoothPath} fill="none" stroke="#60a5fa" strokeWidth={2.2} opacity={0.95}/>}
+          <text x={xS(uMax) - 4} y={yS(peerExp(uMax)) - 5} fontSize={8} fill="#f97316" textAnchor="end" opacity={0.8}>peer expectation</text>
+        </svg>
+        {/* Verdikt-Zeile */}
+        <div className="flex items-center gap-3 flex-wrap mt-2 text-xs" style={{ color: "#9ca3af" }}>
+          <span>{games.length} games</span>
+          {provenMax != null && (
+            <span><span style={{ color: "#22c55e", fontWeight: 700 }}>Proven load:</span> up to ~{provenMax}% usage
+              {loadLabel && <span style={{ color: "#6b7280" }}> ({loadLabel})</span>}</span>
+          )}
+          {fallOff && (
+            <span><span style={{ color: "#ef4444", fontWeight: 700 }}>Fall-off:</span> at ~{fallOff.b}–{fallOff.b + 4}% usage efficiency drops {Math.abs(fallOff.eff).toFixed(0)} pts below peer expectation</span>
+          )}
+          {!fallOff && untestedBeyond != null && (
+            <span><span style={{ color: "#9ca3af", fontWeight: 700 }}>Untested beyond ~{untestedBeyond}%</span> — never asked to carry more, which is not the same as failing at it</span>
+          )}
+        </div>
+      </div>
+    </Sec>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
 // CLASS SCATTER + IN-SEASON DEVELOPMENT
 // Feature 3 of Mind Tab — fetches cohort & game log data
 // ═══════════════════════════════════════════════════════════
@@ -8614,6 +8733,15 @@ function ScoutingTab({p, mode="scouting"}) {
       </>)}
 
       {mode === "roles" && (<>
+      {/* ── USAGE LOAD CURVE — per-game Usage vs. Effizienz (BartTorvik-Stil) ──
+          DESKRIPTIVES Evidenz-Display, KEINE Rollen-Prognose: Der Versuch,
+          aus dem Proven-Ceiling NBA-Rollen vorherzusagen, scheiterte ehrlich
+          (validate_usage_ceiling.py: n=146, PIE-Proxy, kein inkrementelles
+          Signal über Saison-USG; Archetyp-Cutoffs auf dem n nicht schätzbar).
+          Was das Display leistet: Es trennt die zwei Fall-off-Typen sauber —
+          "failed" (Effizienz bricht unter Peer-Referenz ein) vs. "untested"
+          (nie gefordert) — das ist Scouting-Evidenz über DIESEN Spieler. */}
+      <UsageLoadCurve p={p}/>
       {/* ── ROLE INFERENCE MATRIX — hoverable with inputs ── */}
       <Sec icon="📊" title="Role Inference Matrix" sub="13 NBA roles, each scored against position peers. The z-score tells you how far this prospect stands above or below the average peer in that role. +2.0σ = Elite (top ~2%), +1.0σ = Impact, −1.0σ or lower = Liability. Hover any role to see the statistical inputs feeding it.">
         {(() => {
@@ -11886,6 +12014,7 @@ function MethodologyTab() {
     {cat:"International Adjustments",items:[],desc:"International players receive three adjustments: (1) League Strength — every league's weight is derived empirically from bridge players (players who appeared in multiple leagues), anchored to NCAA Power = 1.0 and shrunk toward a conservative prior where the evidence is thin. Weights cover 60+ leagues worldwide and are recomputed on every data refresh, never hand-set. (2) League-BPM translation: the raw BPM proxy (PER+eDiff) is scaled per league so international seasons read on the NCAA-equivalent scale before feature engineering. (3) League-strength-adjusted projection with usage-translatability caps for strong leagues. The International Recruiting Board additionally offers a browser-local watchlist (★): tracked targets keep showing even once they become NBA near-locks — a rising flight risk on a tracked player is a signal, not something to hide. The list is stored in this browser only."},
     {cat:"Youth Radar (clubs + national teams, U16-U20)",items:[],desc:"A scouting radar over three youth sources: the adidas Next Generation Tournament (EuroLeague U18 club circuit — qualifiers and finals), the Junior Adriatic / VTB Youth / Youth BCL club leagues, and the FIBA national-team championships from U16 to U20 (European Championships divisions A and B plus the U17 and U19 World Cups, covering the last and the current summer — editions carry a year tag). Per-event leaderboards are aggregated per player, game-weighted across events. Deliberately model-free — samples range from a 2-8-game tournament to a youth-league season, youth events carry no empirically calibrated league weight (they are excluded from the bridge graph on purpose), and the career models are not calibrated for youth populations. So the radar shows raw production only: minutes, scoring, rebounding, playmaking, stocks, true shooting. Two honest reading rules: there is no age adjustment (leaderboards carry no birthdates), so older prospects outproducing the field is expected; and mixing age brackets means raw numbers compare cleanly only within an event, not U16-vs-U20. Intended use: build an early watch universe here, then follow players into their senior-league seasons, where the full model (league weights, tier odds, projected levels) applies."},
     {cat:"Cross-Market Views: College Targets · Level-Up · Source Filter",items:[],desc:"The recruiting lens covers three player markets beyond the main board. COLLEGE TARGETS (audience: college programs in the NIL era) lists international prospects inside the college-age window (draft-day age ≤ 21), ranked by projected peak Added Wins — deliberately the talent scale rather than the league-level scale, because for a college program NBA upside is a selling point (draft-pipeline visibility, NIL value), not a flight risk. Eligibility is explicitly out of scope: amateur status, professional contracts and seasons-of-competition rules are case-by-case decisions, so the view is a talent radar, not an eligibility determination. LEVEL-UP (audience: front offices one or two league levels up) lists international players projected clearly above their current environment, sorted by the size of the climb (projected sustainable level minus current level — the same calibrated quantity as Value ▲ on the board, but ranked by the gap instead of the absolute level, so second-division and mid-league dominators surface before the market prices them in); league-adjusted BPM is shown as the production evidence. SOURCE FILTER on the Recruiting Board splits the market into college players (NCAA players an international club could sign away) and international players (already abroad). PORTAL RADAR (audience: college programs) applies the same undervaluation idea inside the NCAA: players below the high-major stage whose projected peak talent (Added Wins) exceeds their platform — the transfer-portal/NIL shortlist; we do not track actual portal status, the view ranks who is worth the call if available. FIND ME ANOTHER (replacement search) takes a reference player and returns the statistically closest signable profiles in the market pool — similarity over position-stratified percentiles measures profile shape, not equal quality, which is why level, age and value columns sit next to the fit score. LURKERS (🕵 badge + filter) flag a third undervaluation source beyond level mispricing: role headroom — top-30% efficiency on a bottom-40% usage role while staying productive. Backtested on ~3,800 historical role expansions: players with this profile carried a materially larger role (+4pp usage) with above-league-average efficiency and rising production, yet received that larger role barely more often than anyone else — a market inefficiency, flagged honestly as a low-risk expansion candidate rather than a breakout guarantee. All views reuse the same calibrated models — nothing is recomputed per view. VALIDATION (out-of-time backtest, reproducible via validate_level_up.py): the underlying premise holds model-free — top-decile producers of a league historically moved up a level about five times as often as below-median producers (over ten times in weak leagues) — and the model's climb signal adds real precision: among international prospects in the holdout window, flagged players (projected ≥0.08 above their current level) climbed about eight times as often as unflagged ones, projected level correlated strongly with realized level (rank correlation ~0.7), and the calibration is monotone in both directions — strongly negative projections identified actual decliners. The signal is strongest for players under 23 and weakens with age; the flag threshold sits at a validated break point (hit rates roughly quadruple just above it). Honest limits: promotion is market-endogenous (clubs decide, not only ability), the observation window censors late climbers, and near-miss cases show the direction is often right when the magnitude falls just short."},
+    {cat:"Usage Load Curve (Roles tab)",items:[],desc:"A per-game view of offensive load: every dot is one game (usage share vs. adjusted offensive rating from play-by-play), with the player's own smoothed curve against a peer-expectation reference at the same usage. The display classifies the usage range in three honest zones: PROVEN (at least three games in a 4-point usage bucket with average efficiency no worse than 8 points below peer expectation), FALL-OFF (a tested bucket where efficiency breaks below that reference) and UNTESTED (load he was simply never asked to carry) — the distinction matters because 'never asked' is evidence-absence, not failure. Scope: players with play-by-play game logs (NCAA 2017-18 onward). WHY THIS IS DESCRIPTIVE, NOT PREDICTIVE: we tested whether the proven-usage ceiling predicts NBA offensive roles (peak-3-season PIE as the role proxy) on the NBA-careered pool of recent classes — it added no incremental signal over plain season usage (partial rank correlation ≈ 0), and archetype-specific cutoffs were not estimable at that sample size; the attempt is reproducible in validate_usage_ceiling.py. So the section is presented as scouting evidence about this player's demonstrated load tolerance — a conversation-starter for film work and role planning, not an outcome model. The cutoff parameters shown (−8 vs. peer, 3-game minimum) are the most stable cells of a small sensitivity grid, not empirically optimal constants."},
     {cat:"The 5 Pillars (DNA Scores)",items:["feel","shootScore","defScore","funcAth","selfCreation","overall"],desc:"Position-adjusted percentile scores (0–100) capturing the fundamental dimensions of prospect evaluation. Each pillar uses era-adjusted percentiles computed against ~34k college + ~9k international players since 2008. ALL FIVE PILLARS MEASURE CURRENT SKILL — what the prospect actually does now — not projections of future NBA outcomes. NBA outcome forecasts live in the NBA Projections section (Tier Probabilities, Star+ Creator Projection, etc.). For example: the Creation pillar measures Self-Adjusted Box Creation = Self-Created Scoring (USG × TS × Self-Share) + Passing Creation (AST% × clamp(AST/TO,0.5,2.5)/2.5), position-weighted. The separate Star+ Creator Projection answers a different question — will this skill translate into a Star+ Creator role in the NBA — via a calibrated Logistic Regression model."},
     {cat:"Shooting Projection (Diss-M1/M4, Berger 2022)",items:["projNba3p","projNba3pa","projNba3par","touchPrior"],desc:"Two-stage model from the underlying dissertation (Ch. 7). Stage 1: empirical Bayes shrinkage of college 3P% against the NCAA league-wide distribution (α₀, β₀ fitted via method-of-moments from 16,771 NCAA players ≥20 3PA — league median μ₀=34.8%, effective κ=69). Small samples (Boozer 0%/2 attempts, Saraf 0%/2) get pulled toward the league median. Stage 2: beta regression M1 for NBA 3P% translation = FT% + 2PJ% (PBP, NCAA only) + pre-draft 3P% estimate. Coefficients freshly fitted on the resolved holdout (n=675 NCAA RMSE 0.0380, n=392 intl RMSE 0.0367). Intl gets M1-light without 2PJ% — NO imputation for missing PBP. All values data-driven, no hand-tuning."},
     {cat:"Possession Impact (CFFR)",items:["fourFactors"],desc:"Context-Free Four Factor Rating measuring possession efficiency per Dean Oliver's framework. Usage-role adjusted: Primary (USG≥28%), Secondary (≥22%), Finisher (≥15%), Low-Usage (<15%). Each factor (eFG% 40%, TO% 25%, ORB% 20%, FTr 15%) is percentiled WITHIN the player's usage bucket, so a primary scorer with 52% eFG rates correctly against peers, not low-usage finishers."},
@@ -11914,6 +12043,7 @@ function MethodologyTab() {
     {cat:"International Adjustments",items:[],desc:"International players receive three adjustments: (1) League Strength — every league's weight is derived empirically from bridge players (players who appeared in multiple leagues), anchored to NCAA Power = 1.0 and shrunk toward a conservative prior where evidence is thin. Weights cover 60+ leagues worldwide and are recomputed on every data refresh — never hand-set. (2) League-BPM translation: the raw BPM proxy is scaled by league so an international season reads on the NCAA-equivalent scale before feature engineering. (3) League-strength-adjusted projection with usage-translatability caps for strong leagues. For Athleticism, an FT-Rate + ORB%-based formula replaces dunk rate (unavailable for most international players). The International Recruiting Board additionally offers a browser-local watchlist (★): tracked targets keep showing even once they become NBA near-locks — a rising flight risk on a tracked player is a signal, not something to hide. The list is stored in this browser only."},
     {cat:"Youth Radar (clubs + national teams, U16-U20)",items:[],desc:"A scouting radar over three youth sources: the adidas Next Generation Tournament (EuroLeague U18 club circuit — qualifiers and finals), the Junior Adriatic / VTB Youth / Youth BCL club leagues, and the FIBA national-team championships from U16 to U20 (European Championships divisions A and B plus the U17 and U19 World Cups, covering the last and the current summer — editions carry a year tag). Per-event leaderboards are aggregated per player, game-weighted across events. Deliberately model-free — samples range from a 2-8-game tournament to a youth-league season, youth events carry no empirically calibrated league weight (they are excluded from the bridge graph on purpose), and the career models are not calibrated for youth populations. So the radar shows raw production only: minutes, scoring, rebounding, playmaking, stocks, true shooting. Two honest reading rules: there is no age adjustment (leaderboards carry no birthdates), so older prospects outproducing the field is expected; and mixing age brackets means raw numbers compare cleanly only within an event, not U16-vs-U20. Intended use: build an early watch universe here, then follow players into their senior-league seasons, where the full model (league weights, tier odds, projected levels) applies."},
     {cat:"Cross-Market Views: College Targets · Level-Up · Source Filter",items:[],desc:"The recruiting lens covers three player markets beyond the main board. COLLEGE TARGETS (audience: college programs in the NIL era) lists international prospects inside the college-age window (draft-day age ≤ 21), ranked by projected peak Added Wins — deliberately the talent scale rather than the league-level scale, because for a college program NBA upside is a selling point (draft-pipeline visibility, NIL value), not a flight risk. Eligibility is explicitly out of scope: amateur status, professional contracts and seasons-of-competition rules are case-by-case decisions, so the view is a talent radar, not an eligibility determination. LEVEL-UP (audience: front offices one or two league levels up) lists international players projected clearly above their current environment, sorted by the size of the climb (projected sustainable level minus current level — the same calibrated quantity as Value ▲ on the board, but ranked by the gap instead of the absolute level, so second-division and mid-league dominators surface before the market prices them in); league-adjusted BPM is shown as the production evidence. SOURCE FILTER on the Recruiting Board splits the market into college players (NCAA players an international club could sign away) and international players (already abroad). PORTAL RADAR (audience: college programs) applies the same undervaluation idea inside the NCAA: players below the high-major stage whose projected peak talent (Added Wins) exceeds their platform — the transfer-portal/NIL shortlist; we do not track actual portal status, the view ranks who is worth the call if available. FIND ME ANOTHER (replacement search) takes a reference player and returns the statistically closest signable profiles in the market pool — similarity over position-stratified percentiles measures profile shape, not equal quality, which is why level, age and value columns sit next to the fit score. LURKERS (🕵 badge + filter) flag a third undervaluation source beyond level mispricing: role headroom — top-30% efficiency on a bottom-40% usage role while staying productive. Backtested on ~3,800 historical role expansions: players with this profile carried a materially larger role (+4pp usage) with above-league-average efficiency and rising production, yet received that larger role barely more often than anyone else — a market inefficiency, flagged honestly as a low-risk expansion candidate rather than a breakout guarantee. All views reuse the same calibrated models — nothing is recomputed per view. VALIDATION (out-of-time backtest, reproducible via validate_level_up.py): the underlying premise holds model-free — top-decile producers of a league historically moved up a level about five times as often as below-median producers (over ten times in weak leagues) — and the model's climb signal adds real precision: among international prospects in the holdout window, flagged players (projected ≥0.08 above their current level) climbed about eight times as often as unflagged ones, projected level correlated strongly with realized level (rank correlation ~0.7), and the calibration is monotone in both directions — strongly negative projections identified actual decliners. The signal is strongest for players under 23 and weakens with age; the flag threshold sits at a validated break point (hit rates roughly quadruple just above it). Honest limits: promotion is market-endogenous (clubs decide, not only ability), the observation window censors late climbers, and near-miss cases show the direction is often right when the magnitude falls just short."},
+    {cat:"Usage Load Curve (Roles tab)",items:[],desc:"A per-game view of offensive load: every dot is one game (usage share vs. adjusted offensive rating from play-by-play), with the player's own smoothed curve against a peer-expectation reference at the same usage. The display classifies the usage range in three honest zones: PROVEN (at least three games in a 4-point usage bucket with average efficiency no worse than 8 points below peer expectation), FALL-OFF (a tested bucket where efficiency breaks below that reference) and UNTESTED (load he was simply never asked to carry) — the distinction matters because 'never asked' is evidence-absence, not failure. Scope: players with play-by-play game logs (NCAA 2017-18 onward). WHY THIS IS DESCRIPTIVE, NOT PREDICTIVE: we tested whether the proven-usage ceiling predicts NBA offensive roles (peak-3-season PIE as the role proxy) on the NBA-careered pool of recent classes — it added no incremental signal over plain season usage (partial rank correlation ≈ 0), and archetype-specific cutoffs were not estimable at that sample size; the attempt is reproducible in validate_usage_ceiling.py. So the section is presented as scouting evidence about this player's demonstrated load tolerance — a conversation-starter for film work and role planning, not an outcome model. The cutoff parameters shown (−8 vs. peer, 3-game minimum) are the most stable cells of a small sensitivity grid, not empirically optimal constants."},
     {cat:"Tier Feasibility (vs NBA)",items:[],desc:"How does this prospect stack up against the actual pre-draft college numbers of players who reached each NBA tier? Built from the mature draft cohort 2008-2018 (n=353 NBA players with realized peak Wins Added). We grouped them by their realized NBA outcome - Replacement, Role Player, Starter, All-Star - using peak-WA percentile cuts (10/30/60/85). For each (tier x position) we then took the MEDIAN of every pre-draft college stat (BPM, USG%, TS%, AST%, TO%, STL%, BLK%, ORB%, DRB%, AdjOE) and used that as the in-range center. Frontend automatically derives p25 = median x 0.75 and p75 = median x 1.30 around it: above median is green (In-Range), below median is orange (Below Median), below p25 is red (Critical Gap) - or yellow (Compensated) if a position-core metric is elite enough to offset (Wings core = TS% + 3P%; Playmakers core = AST% + TO%; Bigs core = BLK% + ORB%). Thresholds are MONOTONIZED along the tier axis (a higher tier's threshold never sits below a lower tier's; TO% inverse), at the cost of small distortion - pre-draft college stats only weakly separate Starter from All-Star, because the real talent spike happens AFTER the draft via role + minutes + team context. So a player can clear all Starter thresholds and still NOT clear All-Star simply because the Starter and All-Star pre-draft stats overlap. Read this view as a diagnostic - how many tier markers does he hit - not as a forecast."},
     {cat:"Data Sources & Coverage",items:[],desc:"NCAA Box Stats: BartTorvik (34k+ player-seasons 2008–2026, per-game + advanced + shooting zones — barttorvik.com). NCAA Play-by-Play: ESPN Play-by-Play (event-level data 2017-18 through 2025-26, ~700k player-game-events tracked). International Box Stats: RealGM (~20k player-seasons across 70+ leagues worldwide — every senior national league plus continental competitions — realgm.com). NBA Outcomes: NBA Stats API Advanced stats (27 seasons, used for peak Wins-Added computation). Anthropometrics: NBA Draft Combine measurements (NBA.com) + Databallr wingspan dataset. National Team / FIBA: FIBA event statistics for international youth and senior tournaments. All data is processed through our own pipeline — no external services are queried at runtime."},
   ];
