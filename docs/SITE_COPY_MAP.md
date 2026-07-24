@@ -30,6 +30,9 @@ wegdriften (wie beim α-Blend-Narrativ, das das Modell um Monate überlebt hat).
 | **College Targets** (Recruiting-Lens; Internationals ≤21 für NCAA-Programme, NIL-Framing, Eligibility-Disclaimer) | Header-Text in `CollegeTargetsView` | Deep: „Cross-Market Views" |
 | **Level-Up Portal** (Recruiting-Lens; Climb-Sortierung = projiziert − aktuell, Liga-Dominatoren) | Header-Text in `LevelUpView` | Deep: „Cross-Market Views" |
 | **Source-Filter** (Recruiting Board: All / College / International) | Chip-Tooltips im Board-Header | Deep: „Cross-Market Views" |
+| **Portal Radar** (Recruiting-Lens; NCAA-Low/Mid-Major nach Peak-WA, kein Portal-Status-Tracking!) | Header-Text in `PortalRadarView` | Deep: „Cross-Market Views" |
+| **Find me another / Similar** (Ersatzsuche; Fit = Perzentil-Distanz, keine Qualitätsgleichheit) | Header-Text + Footer in `SimilarView` | Deep: „Cross-Market Views" |
+| **Lurker-Badge 🕵 + Filter** (Rollen-Headroom, backtestet) | `LURKER_TIP`-Tooltip (eine Quelle für alle Views) | Deep: „Cross-Market Views" (Lurkers-Absatz) |
 | Player **Projection**-Tab (Hero, Tier Forecast, Outcome Curve) — Hero ist **lens-abhängig**: NBA-Lens = ppWA + Tier-Odds, Recruiting-Lens = `RecruitingHeroCard` (Projected Level + Value + Comps, NBA nur als Flight Risk) | Hero-Tooltips (beide Varianten) + `Sec sub=` der beiden Kurven-Sektionen | Deep: „Methodology & Model Documentation" (NBA) · Deep: „International Adjustments" (Recruiting) |
 | **Comps**-Tab (v5) | `Sec sub=` in `CompsV5Tab` | Deep: `sections`-Eintrag „Comps Tab" |
 | **Mind**-Tab | Sec-Subs im Tab | Quick: „Mind Tab" + Caveat-Box |

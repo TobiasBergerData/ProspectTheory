@@ -60,7 +60,24 @@ Kontext zuerst lesen: `data-pipeline/docs/SPRINT_5_12_13_SUMMARY.md` ·
    Dominatoren) · College Targets (Internationals ≤21 für NCAA-Programme,
    NIL-Framing, Added-Wins-Skala als dokumentierte Ausnahme, Eligibility-
    Disclaimer) · Youth Radar. Alles client-seitig aus dem Board-Payload.
-5. Kleinvieh: G-League-Historie (URL-Discovery, 404-Problem von April) ·
+4b. **Markt-Tool-Ausbau (2026-07-24, Abend-Block):** Recruiting-Lens hat jetzt
+   7 Ansichten + erweiterte Filter (Level · Age U19/U21/U23 · Role/Archetyp ·
+   🕵 Lurkers only). NEU: **Portal Radar** (NCAA-Low/Mid-Major nach validierter
+   Peak-WA-Skala — bewusst OHNE diffuse NCAA-Intl-Level; kein Portal-Status-
+   Tracking, ehrlich gelabelt) · **Find me another / Similar** (Ersatzsuche:
+   Perzentil-Distanz über 9 Kanäle, nur verpflichtbare Ergebnisse, Fit ≠
+   Qualität) · **Lurker-Signal** (backtestet an 3.840 Rollenexpansionen:
+   Effizienz-Erhalt über Liga-Schnitt bei +4pp-USG-Sprüngen, aber P(Rolle)
+   nur 11.9% vs 9.6% → Markt-Ineffizienz; Test C in validate_level_up.py).
+   V2-Ideen: Team-Needs-Profil (Kader-Eingabe) · Watchlist-Digest aus dem
+   Sonntagslauf · Preis-/Vertragsdaten (externe Quelle nötig).
+5. **Stats Lab → Cross-Market-Datenbank ausbauen** (nächster größerer Block):
+   Intl-Spalten (pred_intl_tier, intl_level_ev, p_intl_career, Flight Risk,
+   Value-Delta) in export_stats_lab.py + Column-Picker + eigenes Preset
+   „Recruiting" — dann ist das Lab die echte Such-Datenbank für Colleges UND
+   intl Klubs (Rollen/Perzentile/Level kombinierbar). Recruiting-Ansichten
+   haben seit 2026-07-24 bereits Level- + Alters-Filter (client-seitig).
+6. Kleinvieh: G-League-Historie (URL-Discovery, 404-Problem von April) ·
    R2 aktivieren (braucht Cloudflare-Account, Code liegt bereit).
 
 ## Geparkt (bewusst, nicht vergessen)

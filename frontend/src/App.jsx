@@ -11885,7 +11885,7 @@ function MethodologyTab() {
     {cat:"Archetype Value Bands (Research — this tab)",items:[],desc:"A draft-strategy research sub-section shown above (Method tab). For each of 16 NBA archetypes we compute the realized peak Wins Added distribution of past players of that type (~1,210 NBA players, draft classes ~2008–2024): floor (25th percentile = downside), median (typical), and ceiling (90th percentile = upside). Displayed as horizontal value bands so you can read draft strategy by player type: highest ceiling = swing-for-upside pick (Scoring Playmaker / Stretch Rim Protector, ceiling ~28–29 WA); highest floor = safest pick (Stretch Rim Protector); highest median = best balanced bet. Each band carries its SAMPLE SIZE (n) as a data-confidence signal — a type observed 374 times (Scoring Wing) is far better understood than one seen 19 times (3-and-D Wing), whose edges are noisier. Rarity is shown for confidence, NOT as a value claim (rare ≠ better). Hover any band (or see the highlighted card for the current player's type) for EXAMPLE NBA PLAYERS grouped by the tier they reached — a concrete sense of the range (note: these are pre-draft archetypes; some players, like Jokic from a pre-draft 'Scoring Wing', evolved into a different NBA role). The same archetype-value numbers also appear in the Roles & Archetypes tab (each archetype's NBA ceiling tier + % reaching Starter+/All-Star+). PRE-DRAFT → NBA TRANSITION: a second view shows, per pre-draft archetype, what those players actually became in the NBA (drafted classes ≤2020) — including an honest 'Did Not Stick' (never established a rotation role). E.g. a pre-draft Scoring Wing most often does not stick or becomes a role-filler; a Stretch Rim Protector usually becomes a Stretch Big / Rim Protector. A talent overlay then splits the same type by projected-value tier: an elite-projected Scoring Playmaker sticks 75% / All-Star 38%, a marginal one 6% / 0% — quantifying 'a scoring guard has to be elite to be worth it'. (Drafted-player population, so it carries a draft-position confound; thin pre-draft types omitted.)"},
     {cat:"International Adjustments",items:[],desc:"International players receive three adjustments: (1) League Strength — every league's weight is derived empirically from bridge players (players who appeared in multiple leagues), anchored to NCAA Power = 1.0 and shrunk toward a conservative prior where the evidence is thin. Weights cover 60+ leagues worldwide and are recomputed on every data refresh, never hand-set. (2) League-BPM translation: the raw BPM proxy (PER+eDiff) is scaled per league so international seasons read on the NCAA-equivalent scale before feature engineering. (3) League-strength-adjusted projection with usage-translatability caps for strong leagues. The International Recruiting Board additionally offers a browser-local watchlist (★): tracked targets keep showing even once they become NBA near-locks — a rising flight risk on a tracked player is a signal, not something to hide. The list is stored in this browser only."},
     {cat:"Youth Radar (clubs + national teams, U16-U20)",items:[],desc:"A scouting radar over three youth sources: the adidas Next Generation Tournament (EuroLeague U18 club circuit — qualifiers and finals), the Junior Adriatic / VTB Youth / Youth BCL club leagues, and the FIBA national-team championships from U16 to U20 (European Championships divisions A and B plus the U17 and U19 World Cups, covering the last and the current summer — editions carry a year tag). Per-event leaderboards are aggregated per player, game-weighted across events. Deliberately model-free — samples range from a 2-8-game tournament to a youth-league season, youth events carry no empirically calibrated league weight (they are excluded from the bridge graph on purpose), and the career models are not calibrated for youth populations. So the radar shows raw production only: minutes, scoring, rebounding, playmaking, stocks, true shooting. Two honest reading rules: there is no age adjustment (leaderboards carry no birthdates), so older prospects outproducing the field is expected; and mixing age brackets means raw numbers compare cleanly only within an event, not U16-vs-U20. Intended use: build an early watch universe here, then follow players into their senior-league seasons, where the full model (league weights, tier odds, projected levels) applies."},
-    {cat:"Cross-Market Views: College Targets · Level-Up · Source Filter",items:[],desc:"The recruiting lens covers three player markets beyond the main board. COLLEGE TARGETS (audience: college programs in the NIL era) lists international prospects inside the college-age window (draft-day age ≤ 21), ranked by projected peak Added Wins — deliberately the talent scale rather than the league-level scale, because for a college program NBA upside is a selling point (draft-pipeline visibility, NIL value), not a flight risk. Eligibility is explicitly out of scope: amateur status, professional contracts and seasons-of-competition rules are case-by-case decisions, so the view is a talent radar, not an eligibility determination. LEVEL-UP (audience: front offices one or two league levels up) lists international players projected clearly above their current environment, sorted by the size of the climb (projected sustainable level minus current level — the same calibrated quantity as Value ▲ on the board, but ranked by the gap instead of the absolute level, so second-division and mid-league dominators surface before the market prices them in); league-adjusted BPM is shown as the production evidence. SOURCE FILTER on the Recruiting Board splits the market into college players (NCAA players an international club could sign away) and international players (already abroad). All three views reuse the same calibrated models — nothing is recomputed per view. VALIDATION (out-of-time backtest, reproducible via validate_level_up.py): the underlying premise holds model-free — top-decile producers of a league historically moved up a level about five times as often as below-median producers (over ten times in weak leagues) — and the model's climb signal adds real precision: among international prospects in the holdout window, flagged players (projected ≥0.08 above their current level) climbed about eight times as often as unflagged ones, projected level correlated strongly with realized level (rank correlation ~0.7), and the calibration is monotone in both directions — strongly negative projections identified actual decliners. The signal is strongest for players under 23 and weakens with age; the flag threshold sits at a validated break point (hit rates roughly quadruple just above it). Honest limits: promotion is market-endogenous (clubs decide, not only ability), the observation window censors late climbers, and near-miss cases show the direction is often right when the magnitude falls just short."},
+    {cat:"Cross-Market Views: College Targets · Level-Up · Source Filter",items:[],desc:"The recruiting lens covers three player markets beyond the main board. COLLEGE TARGETS (audience: college programs in the NIL era) lists international prospects inside the college-age window (draft-day age ≤ 21), ranked by projected peak Added Wins — deliberately the talent scale rather than the league-level scale, because for a college program NBA upside is a selling point (draft-pipeline visibility, NIL value), not a flight risk. Eligibility is explicitly out of scope: amateur status, professional contracts and seasons-of-competition rules are case-by-case decisions, so the view is a talent radar, not an eligibility determination. LEVEL-UP (audience: front offices one or two league levels up) lists international players projected clearly above their current environment, sorted by the size of the climb (projected sustainable level minus current level — the same calibrated quantity as Value ▲ on the board, but ranked by the gap instead of the absolute level, so second-division and mid-league dominators surface before the market prices them in); league-adjusted BPM is shown as the production evidence. SOURCE FILTER on the Recruiting Board splits the market into college players (NCAA players an international club could sign away) and international players (already abroad). PORTAL RADAR (audience: college programs) applies the same undervaluation idea inside the NCAA: players below the high-major stage whose projected peak talent (Added Wins) exceeds their platform — the transfer-portal/NIL shortlist; we do not track actual portal status, the view ranks who is worth the call if available. FIND ME ANOTHER (replacement search) takes a reference player and returns the statistically closest signable profiles in the market pool — similarity over position-stratified percentiles measures profile shape, not equal quality, which is why level, age and value columns sit next to the fit score. LURKERS (🕵 badge + filter) flag a third undervaluation source beyond level mispricing: role headroom — top-30% efficiency on a bottom-40% usage role while staying productive. Backtested on ~3,800 historical role expansions: players with this profile carried a materially larger role (+4pp usage) with above-league-average efficiency and rising production, yet received that larger role barely more often than anyone else — a market inefficiency, flagged honestly as a low-risk expansion candidate rather than a breakout guarantee. All views reuse the same calibrated models — nothing is recomputed per view. VALIDATION (out-of-time backtest, reproducible via validate_level_up.py): the underlying premise holds model-free — top-decile producers of a league historically moved up a level about five times as often as below-median producers (over ten times in weak leagues) — and the model's climb signal adds real precision: among international prospects in the holdout window, flagged players (projected ≥0.08 above their current level) climbed about eight times as often as unflagged ones, projected level correlated strongly with realized level (rank correlation ~0.7), and the calibration is monotone in both directions — strongly negative projections identified actual decliners. The signal is strongest for players under 23 and weakens with age; the flag threshold sits at a validated break point (hit rates roughly quadruple just above it). Honest limits: promotion is market-endogenous (clubs decide, not only ability), the observation window censors late climbers, and near-miss cases show the direction is often right when the magnitude falls just short."},
     {cat:"The 5 Pillars (DNA Scores)",items:["feel","shootScore","defScore","funcAth","selfCreation","overall"],desc:"Position-adjusted percentile scores (0–100) capturing the fundamental dimensions of prospect evaluation. Each pillar uses era-adjusted percentiles computed against ~34k college + ~9k international players since 2008. ALL FIVE PILLARS MEASURE CURRENT SKILL — what the prospect actually does now — not projections of future NBA outcomes. NBA outcome forecasts live in the NBA Projections section (Tier Probabilities, Star+ Creator Projection, etc.). For example: the Creation pillar measures Self-Adjusted Box Creation = Self-Created Scoring (USG × TS × Self-Share) + Passing Creation (AST% × clamp(AST/TO,0.5,2.5)/2.5), position-weighted. The separate Star+ Creator Projection answers a different question — will this skill translate into a Star+ Creator role in the NBA — via a calibrated Logistic Regression model."},
     {cat:"Shooting Projection (Diss-M1/M4, Berger 2022)",items:["projNba3p","projNba3pa","projNba3par","touchPrior"],desc:"Two-stage model from the underlying dissertation (Ch. 7). Stage 1: empirical Bayes shrinkage of college 3P% against the NCAA league-wide distribution (α₀, β₀ fitted via method-of-moments from 16,771 NCAA players ≥20 3PA — league median μ₀=34.8%, effective κ=69). Small samples (Boozer 0%/2 attempts, Saraf 0%/2) get pulled toward the league median. Stage 2: beta regression M1 for NBA 3P% translation = FT% + 2PJ% (PBP, NCAA only) + pre-draft 3P% estimate. Coefficients freshly fitted on the resolved holdout (n=675 NCAA RMSE 0.0380, n=392 intl RMSE 0.0367). Intl gets M1-light without 2PJ% — NO imputation for missing PBP. All values data-driven, no hand-tuning."},
     {cat:"Possession Impact (CFFR)",items:["fourFactors"],desc:"Context-Free Four Factor Rating measuring possession efficiency per Dean Oliver's framework. Usage-role adjusted: Primary (USG≥28%), Secondary (≥22%), Finisher (≥15%), Low-Usage (<15%). Each factor (eFG% 40%, TO% 25%, ORB% 20%, FTr 15%) is percentiled WITHIN the player's usage bucket, so a primary scorer with 52% eFG rates correctly against peers, not low-usage finishers."},
@@ -11913,7 +11913,7 @@ function MethodologyTab() {
     {cat:"Position Reclassification",items:[],desc:"Stats-driven position groups (Playmaker / Wing / Big) used throughout the site. Rules: Big = Height ≥84\" unconditional, OR Height ≥82\" with non-wing usage profile (USG<25 AND AST%<15), OR Height ≥80\" with elite shot-blocking (BLK%≥5 AND non-wing usage). Playmaker = AST%≥25 AND Height ≤6'5\", OR AST%≥30 AND Height ≤6'7\". Wing = everything else. Designed to keep tall wings (Bailey-style 6'10\" forwards) classified as Wings rather than misclassified to Big purely by height."},
     {cat:"International Adjustments",items:[],desc:"International players receive three adjustments: (1) League Strength — every league's weight is derived empirically from bridge players (players who appeared in multiple leagues), anchored to NCAA Power = 1.0 and shrunk toward a conservative prior where evidence is thin. Weights cover 60+ leagues worldwide and are recomputed on every data refresh — never hand-set. (2) League-BPM translation: the raw BPM proxy is scaled by league so an international season reads on the NCAA-equivalent scale before feature engineering. (3) League-strength-adjusted projection with usage-translatability caps for strong leagues. For Athleticism, an FT-Rate + ORB%-based formula replaces dunk rate (unavailable for most international players). The International Recruiting Board additionally offers a browser-local watchlist (★): tracked targets keep showing even once they become NBA near-locks — a rising flight risk on a tracked player is a signal, not something to hide. The list is stored in this browser only."},
     {cat:"Youth Radar (clubs + national teams, U16-U20)",items:[],desc:"A scouting radar over three youth sources: the adidas Next Generation Tournament (EuroLeague U18 club circuit — qualifiers and finals), the Junior Adriatic / VTB Youth / Youth BCL club leagues, and the FIBA national-team championships from U16 to U20 (European Championships divisions A and B plus the U17 and U19 World Cups, covering the last and the current summer — editions carry a year tag). Per-event leaderboards are aggregated per player, game-weighted across events. Deliberately model-free — samples range from a 2-8-game tournament to a youth-league season, youth events carry no empirically calibrated league weight (they are excluded from the bridge graph on purpose), and the career models are not calibrated for youth populations. So the radar shows raw production only: minutes, scoring, rebounding, playmaking, stocks, true shooting. Two honest reading rules: there is no age adjustment (leaderboards carry no birthdates), so older prospects outproducing the field is expected; and mixing age brackets means raw numbers compare cleanly only within an event, not U16-vs-U20. Intended use: build an early watch universe here, then follow players into their senior-league seasons, where the full model (league weights, tier odds, projected levels) applies."},
-    {cat:"Cross-Market Views: College Targets · Level-Up · Source Filter",items:[],desc:"The recruiting lens covers three player markets beyond the main board. COLLEGE TARGETS (audience: college programs in the NIL era) lists international prospects inside the college-age window (draft-day age ≤ 21), ranked by projected peak Added Wins — deliberately the talent scale rather than the league-level scale, because for a college program NBA upside is a selling point (draft-pipeline visibility, NIL value), not a flight risk. Eligibility is explicitly out of scope: amateur status, professional contracts and seasons-of-competition rules are case-by-case decisions, so the view is a talent radar, not an eligibility determination. LEVEL-UP (audience: front offices one or two league levels up) lists international players projected clearly above their current environment, sorted by the size of the climb (projected sustainable level minus current level — the same calibrated quantity as Value ▲ on the board, but ranked by the gap instead of the absolute level, so second-division and mid-league dominators surface before the market prices them in); league-adjusted BPM is shown as the production evidence. SOURCE FILTER on the Recruiting Board splits the market into college players (NCAA players an international club could sign away) and international players (already abroad). All three views reuse the same calibrated models — nothing is recomputed per view. VALIDATION (out-of-time backtest, reproducible via validate_level_up.py): the underlying premise holds model-free — top-decile producers of a league historically moved up a level about five times as often as below-median producers (over ten times in weak leagues) — and the model's climb signal adds real precision: among international prospects in the holdout window, flagged players (projected ≥0.08 above their current level) climbed about eight times as often as unflagged ones, projected level correlated strongly with realized level (rank correlation ~0.7), and the calibration is monotone in both directions — strongly negative projections identified actual decliners. The signal is strongest for players under 23 and weakens with age; the flag threshold sits at a validated break point (hit rates roughly quadruple just above it). Honest limits: promotion is market-endogenous (clubs decide, not only ability), the observation window censors late climbers, and near-miss cases show the direction is often right when the magnitude falls just short."},
+    {cat:"Cross-Market Views: College Targets · Level-Up · Source Filter",items:[],desc:"The recruiting lens covers three player markets beyond the main board. COLLEGE TARGETS (audience: college programs in the NIL era) lists international prospects inside the college-age window (draft-day age ≤ 21), ranked by projected peak Added Wins — deliberately the talent scale rather than the league-level scale, because for a college program NBA upside is a selling point (draft-pipeline visibility, NIL value), not a flight risk. Eligibility is explicitly out of scope: amateur status, professional contracts and seasons-of-competition rules are case-by-case decisions, so the view is a talent radar, not an eligibility determination. LEVEL-UP (audience: front offices one or two league levels up) lists international players projected clearly above their current environment, sorted by the size of the climb (projected sustainable level minus current level — the same calibrated quantity as Value ▲ on the board, but ranked by the gap instead of the absolute level, so second-division and mid-league dominators surface before the market prices them in); league-adjusted BPM is shown as the production evidence. SOURCE FILTER on the Recruiting Board splits the market into college players (NCAA players an international club could sign away) and international players (already abroad). PORTAL RADAR (audience: college programs) applies the same undervaluation idea inside the NCAA: players below the high-major stage whose projected peak talent (Added Wins) exceeds their platform — the transfer-portal/NIL shortlist; we do not track actual portal status, the view ranks who is worth the call if available. FIND ME ANOTHER (replacement search) takes a reference player and returns the statistically closest signable profiles in the market pool — similarity over position-stratified percentiles measures profile shape, not equal quality, which is why level, age and value columns sit next to the fit score. LURKERS (🕵 badge + filter) flag a third undervaluation source beyond level mispricing: role headroom — top-30% efficiency on a bottom-40% usage role while staying productive. Backtested on ~3,800 historical role expansions: players with this profile carried a materially larger role (+4pp usage) with above-league-average efficiency and rising production, yet received that larger role barely more often than anyone else — a market inefficiency, flagged honestly as a low-risk expansion candidate rather than a breakout guarantee. All views reuse the same calibrated models — nothing is recomputed per view. VALIDATION (out-of-time backtest, reproducible via validate_level_up.py): the underlying premise holds model-free — top-decile producers of a league historically moved up a level about five times as often as below-median producers (over ten times in weak leagues) — and the model's climb signal adds real precision: among international prospects in the holdout window, flagged players (projected ≥0.08 above their current level) climbed about eight times as often as unflagged ones, projected level correlated strongly with realized level (rank correlation ~0.7), and the calibration is monotone in both directions — strongly negative projections identified actual decliners. The signal is strongest for players under 23 and weakens with age; the flag threshold sits at a validated break point (hit rates roughly quadruple just above it). Honest limits: promotion is market-endogenous (clubs decide, not only ability), the observation window censors late climbers, and near-miss cases show the direction is often right when the magnitude falls just short."},
     {cat:"Tier Feasibility (vs NBA)",items:[],desc:"How does this prospect stack up against the actual pre-draft college numbers of players who reached each NBA tier? Built from the mature draft cohort 2008-2018 (n=353 NBA players with realized peak Wins Added). We grouped them by their realized NBA outcome - Replacement, Role Player, Starter, All-Star - using peak-WA percentile cuts (10/30/60/85). For each (tier x position) we then took the MEDIAN of every pre-draft college stat (BPM, USG%, TS%, AST%, TO%, STL%, BLK%, ORB%, DRB%, AdjOE) and used that as the in-range center. Frontend automatically derives p25 = median x 0.75 and p75 = median x 1.30 around it: above median is green (In-Range), below median is orange (Below Median), below p25 is red (Critical Gap) - or yellow (Compensated) if a position-core metric is elite enough to offset (Wings core = TS% + 3P%; Playmakers core = AST% + TO%; Bigs core = BLK% + ORB%). Thresholds are MONOTONIZED along the tier axis (a higher tier's threshold never sits below a lower tier's; TO% inverse), at the cost of small distortion - pre-draft college stats only weakly separate Starter from All-Star, because the real talent spike happens AFTER the draft via role + minutes + team context. So a player can clear all Starter thresholds and still NOT clear All-Star simply because the Starter and All-Star pre-draft stats overlap. Read this view as a diagnostic - how many tier markers does he hit - not as a forecast."},
     {cat:"Data Sources & Coverage",items:[],desc:"NCAA Box Stats: BartTorvik (34k+ player-seasons 2008–2026, per-game + advanced + shooting zones — barttorvik.com). NCAA Play-by-Play: ESPN Play-by-Play (event-level data 2017-18 through 2025-26, ~700k player-game-events tracked). International Box Stats: RealGM (~20k player-seasons across 70+ leagues worldwide — every senior national league plus continental competitions — realgm.com). NBA Outcomes: NBA Stats API Advanced stats (27 seasons, used for peak Wins-Added computation). Anthropometrics: NBA Draft Combine measurements (NBA.com) + Databallr wingspan dataset. National Team / FIBA: FIBA event statistics for international youth and senior tournaments. All data is processed through our own pipeline — no external services are queried at runtime."},
   ];
@@ -13095,6 +13095,23 @@ function nbaFlightPct(p) {
   return (Number(t.Superstar) || 0) + (Number(t["All-Star"]) || 0)
        + (Number(t.Starter) || 0) + (Number(t["Role Player"]) || 0);
 }
+
+// LURKER — Rollen-Headroom-Signal (backtestet, validate_level_up-Panel 2026-07-24):
+// Definition: Top-30% Effizienz (TS-Pctl ≥70) bei kleiner Rolle (USG-Pctl ≤40)
+// und trotzdem produktiv (OBPM/BPM-Pctl ≥55). Befund aus 3.840 historischen
+// Rollenexpansionen (+4pp USG in Folgesaison): Lurker halten dabei ÜBER-
+// durchschnittliche Effizienz (TS vs. Liga-Schnitt +0.037 vs. +0.006 bei
+// anderen Expandern) und steigern Produktion weiter — die größere Rolle ist
+// risikoarm. Gleichzeitig BEKOMMEN sie die Rolle kaum öfter (11.9% vs. 9.6%)
+// — der Markt übersieht sie. Ehrlich: kein "Explosions"-Signal (Mean Reversion
+// drückt die Spitzen-TS), sondern "role-ready + vom Markt ungenutzt".
+function isLurker(p) {
+  const pc = p?.pctl || {};
+  const prod = pc.obpm ?? pc.bpm;
+  return pc.ts != null && pc.usg != null && prod != null
+      && pc.ts >= 70 && pc.usg <= 40 && prod >= 55;
+}
+const LURKER_TIP = "Lurker — role headroom: top-30% efficiency on a small role (bottom-40% usage) while staying productive. Backtested: players with this profile carried real role expansions with above-average efficiency and rising production — yet the market hands them the bigger role barely more often than anyone else. Low-risk expansion candidate, not a breakout guarantee.";
 // ═══════════════════════════════════════════════════════════
 // YOUTH RADAR (ANGT) — Recruiting-Lens, dritte Ansicht.
 // U18-Turnier-Produktion (adidas Next Generation Tournament), GP-gewichtet
@@ -13253,6 +13270,7 @@ function CollegeTargetsView({ players, onSelect, watchlist = null, onToggleWatch
                   <td className="px-3 py-2.5">
                     <div className="font-semibold" style={{ color: "#e5e7eb" }}>{p.name}
                       <span className="text-xs" style={{ color: "#10b981" }}> 🌐</span>
+                      {isLurker(p) && <span title={LURKER_TIP} style={{ cursor: "help", marginLeft: 4 }}>🕵</span>}
                     </div>
                     {p.intlComps && (
                       <div style={{ fontSize: 10, color: "#6b7280", marginTop: 1 }}>
@@ -13360,6 +13378,7 @@ function LevelUpView({ players, onSelect, watchlist = null, onToggleWatch = null
                   <td className="px-3 py-2.5">
                     <div className="font-semibold" style={{ color: "#e5e7eb" }}>{p.name}
                       <span className="text-xs" style={{ color: "#10b981" }}> 🌐</span>
+                      {isLurker(p) && <span title={LURKER_TIP} style={{ cursor: "help", marginLeft: 4 }}>🕵</span>}
                     </div>
                     {p.intlComps && (
                       <div style={{ fontSize: 10, color: "#6b7280", marginTop: 1 }}>
@@ -13394,6 +13413,208 @@ function LevelUpView({ players, onSelect, watchlist = null, onToggleWatch = null
       </div>
       <div style={{ padding: "10px 16px", color: "#6b7280", fontSize: 10, borderTop: "1px solid #1f2937" }}>
         Sorted by climb (projected − current level, min +{CLIMB_MIN.toFixed(2)}) · NBA near-locks excluded · adj. BPM = production translated onto the NCAA-equivalent scale · Click = full profile
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// PORTAL RADAR — Recruiting-Lens, College-Einkauf INNERHALB der NCAA.
+// Low-/Mid-Major-Spieler, deren projiziertes Talent (Peak Added Wins — die
+// validierte Talent-Skala) über ihrer Bühne liegt: die Transfer-Portal-/
+// NIL-Einkaufsliste. EHRLICH: Wir tracken KEINEN Portal-Status — das Radar
+// sagt "wen ein Anruf lohnt, falls verfügbar", nicht "wer im Portal ist".
+// Bewusst KEINE Intl-Level-Skala (NCAA-Intl-Projektion ist diffus, s. Methods).
+// ═══════════════════════════════════════════════════════════
+function PortalRadarView({ players, onSelect, watchlist = null, onToggleWatch = null }) {
+  const HIGH_MAJOR = 0.98;   // Power-Conferences ≈ 1.0 — Radar zeigt die Bühnen darunter
+  const rows = players
+    .filter(p => (!p.source || p.source === "ncaa"))
+    .filter(p => p.confStrength != null && p.confStrength < HIGH_MAJOR)
+    .sort((a, b) => (b.war ?? -99) - (a.war ?? -99))
+    .slice(0, 100);
+  if (!rows.length) return (
+    <div style={{ padding: 24, color: "#9ca3af", background: "#111827", borderRadius: 12, border: "1px solid #1f2937" }}>
+      No non-high-major college players match the current selection — try a different year filter.
+    </div>
+  );
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ background: "#111827", border: "1px solid #1f2937" }}>
+      <div style={{ padding: "10px 14px", fontSize: 12, color: "#9ca3af", borderBottom: "1px solid #1f2937", lineHeight: 1.6 }}>
+        <b style={{ color: "#e5e7eb" }}>Portal Radar</b> — college players <b>below the high-major stage</b> whose projected
+        peak talent (Added Wins, the out-of-time-validated scale) exceeds their current platform: the shortlist for
+        transfer-portal and NIL recruiting. Sorted by projected talent, with the honest context columns next to it (stage
+        strength, upside odds, age). <b style={{color:"#fbbf24"}}>We do not track actual portal status</b> — this ranks who
+        is worth the call if he becomes available, not who has entered the portal. 🕵 marks lurkers: efficient low-usage
+        players who historically carried bigger roles without losing above-average efficiency.
+        {onToggleWatch && <> Use <b style={{color:"#10b981"}}>☆</b> to track a target.</>}
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead><tr style={{ background: "#0a0e17" }}>
+            {[...(onToggleWatch ? ["★"] : []), "#", "Player", "Pos", "Age", "Team · Conference", "Stage", "Peak Added Wins", "▲ AS+"].map((h, i) => (
+              <th key={i} className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold"
+                  style={{ color: "#6b7280", borderBottom: "1px solid #1f2937" }}>{h}</th>))}
+          </tr></thead>
+          <tbody>
+            {rows.map((p, i) => {
+              const up = (Number(p.tiers?.Superstar) || 0) + (Number(p.tiers?.["All-Star"]) || 0);
+              return (
+                <tr key={p.name} className="cursor-pointer hover:bg-white hover:bg-opacity-5 transition-colors"
+                    onClick={() => onSelect(p.name)} style={{ borderBottom: "1px solid #1f293744" }}>
+                  {onToggleWatch && (
+                    <td className="px-2 py-2.5">
+                      <button onClick={(e) => { e.stopPropagation(); onToggleWatch(p.name); }}
+                        title={(watchlist || []).includes(p.name) ? "Remove from watchlist" : "Add to watchlist (saved in this browser)"}
+                        className="w-6 h-6 rounded text-xs font-bold"
+                        style={{ background: (watchlist || []).includes(p.name) ? "#10b981" : "#1f2937",
+                                 color: (watchlist || []).includes(p.name) ? "#000" : "#6b7280",
+                                 border: `1px solid ${(watchlist || []).includes(p.name) ? "#34d399" : "#374151"}` }}>
+                        {(watchlist || []).includes(p.name) ? "★" : "☆"}
+                      </button>
+                    </td>
+                  )}
+                  <td className="px-3 py-2.5 font-bold text-xs" style={{ color: "#475569" }}>{i + 1}</td>
+                  <td className="px-3 py-2.5">
+                    <div className="font-semibold" style={{ color: "#e5e7eb" }}>{p.name}
+                      {isLurker(p) && <span title={LURKER_TIP} style={{ cursor: "help", marginLeft: 4 }}>🕵</span>}
+                    </div>
+                    <div style={{ fontSize: 10, color: "#6b7280" }}>{p.archetype || ""}</div>
+                  </td>
+                  <td className="px-3 py-2.5 text-xs" style={{ color: "#9ca3af" }}>{p.pos || "—"}</td>
+                  <td className="px-3 py-2.5 text-xs" style={{ color: p.age != null && ageOnDraftDay(p.age) < 20 ? "#86efac" : "#9ca3af" }}>{p.age != null ? ageOnDraftDay(p.age).toFixed(1) : "—"}</td>
+                  <td className="px-3 py-2.5 text-xs" style={{ color: "#9ca3af" }}>{[p.team, p.conf].filter(Boolean).join(" · ")}</td>
+                  <td className="px-3 py-2.5 text-xs" style={{ color: "#9ca3af" }}>{p.confStrength.toFixed(2)}</td>
+                  <td className="px-3 py-2.5 font-bold" style={{ color: TC[p.predTier] || "#9ca3af", fontFamily: "'Oswald',sans-serif" }}>
+                    {p.war != null ? fmt(p.war, 1) : "—"}
+                    <span className="text-xs font-normal ml-1" style={{ color: "#6b7280" }}>{p.predTier || ""}</span>
+                  </td>
+                  <td className="px-3 py-2.5 text-xs font-semibold" style={{ color: up >= 15 ? "#22c55e" : up >= 5 ? "#86efac" : "#6b7280" }}>{up.toFixed(0)}%</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ padding: "10px 16px", color: "#6b7280", fontSize: 10, borderTop: "1px solid #1f2937" }}>
+        Sorted by projected peak Added Wins · Stage = empirical conference strength (below high-major ≈ {"<"}0.98) · no portal-status data · Click = full profile
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// SIMILAR — Ersatzsuche "Find me another X" (Recruiting-Lens).
+// Anker-Spieler wählen (z.B. der abgehende Starter) → statistisch ähnlichste
+// VERPFLICHTBARE Profile im aktuellen Markt-Pool (NBA-Locks raus), Distanz
+// über positions-stratifizierte Perzentile. EHRLICH: Profil-Ähnlichkeit,
+// keine Qualitätsgleichheit — Level/Alter/Value-Spalten daneben lesen.
+// ═══════════════════════════════════════════════════════════
+function SimilarView({ players, onSelect, watchlist = null, onToggleWatch = null }) {
+  const [anchorName, setAnchorName] = useState("");
+  const SIM_FEATS = ["ts", "usg", "ast", "to", "orb", "drb", "stl", "blk", "bpm"];
+  const anchor = players.find(p => p.name === anchorName) || null;
+  const tierColor = (t) => (INTL_TIERS.find(x => x.key === t)?.color) || "#9ca3af";
+  const results = (() => {
+    if (!anchor) return [];
+    const av = anchor.pctl || {};
+    return players
+      .filter(p => p.name !== anchor.name && nbaFlightPct(p) < 85)
+      .map(p => {
+        const pc = p.pctl || {};
+        let s = 0, n = 0;
+        SIM_FEATS.forEach(k => {
+          if (av[k] != null && pc[k] != null) { const d = av[k] - pc[k]; s += d * d; n += 1; }
+        });
+        if (n < 6) return null;
+        return { p, dist: Math.sqrt(s / n), posMatch: p.pos === anchor.pos };
+      })
+      .filter(Boolean)
+      .sort((a, b) => (a.posMatch === b.posMatch ? a.dist - b.dist : (a.posMatch ? -1 : 1)))
+      .slice(0, 15);
+  })();
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ background: "#111827", border: "1px solid #1f2937" }}>
+      <div style={{ padding: "10px 14px", fontSize: 12, color: "#9ca3af", borderBottom: "1px solid #1f2937", lineHeight: 1.6 }}>
+        <b style={{ color: "#e5e7eb" }}>Find me another…</b> — pick a reference player (the starter you are losing, a
+        target you cannot afford) and get the statistically closest <b>signable</b> profiles in the current market pool
+        (NBA near-locks excluded, same-position matches first). Similarity is computed on position-stratified stat
+        percentiles — it measures <b>profile shape, not equal quality</b>: always read the level, age and value columns
+        next to it. 🕵 marks lurkers (role headroom).
+      </div>
+      <div style={{ padding: "10px 14px", borderBottom: "1px solid #1f2937" }}>
+        <input list="sim-anchor-list" value={anchorName} onChange={e => setAnchorName(e.target.value)}
+          placeholder="Type a player name…" className="px-3 py-2 rounded-lg text-sm w-72"
+          style={{ background: "#0d1117", border: "1px solid #374151", color: "#e5e7eb" }}/>
+        <datalist id="sim-anchor-list">
+          {players.slice(0, 400).map(p => <option key={p.name} value={p.name}/>)}
+        </datalist>
+        {anchor && <span className="ml-3 text-xs" style={{ color: "#6b7280" }}>
+          Reference: <b style={{ color: "#e5e7eb" }}>{anchor.name}</b> · {anchor.pos || "—"} · {anchor.team || anchor.conf || "—"}
+        </span>}
+      </div>
+      {!anchor ? (
+        <div style={{ padding: 24, color: "#6b7280", fontSize: 13 }}>Start typing a name above — the reference can be anyone on the board (even an NBA lock); results are limited to signable players.</div>
+      ) : !results.length ? (
+        <div style={{ padding: 24, color: "#6b7280", fontSize: 13 }}>Not enough comparable stat coverage for this reference in the current selection.</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead><tr style={{ background: "#0a0e17" }}>
+              {[...(onToggleWatch ? ["★"] : []), "Fit", "Player", "Pos", "Age", "Team / League", "Current level", "Projected level", "Value", "NBA risk"].map((h, i) => (
+                <th key={i} className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold"
+                    style={{ color: "#6b7280", borderBottom: "1px solid #1f2937" }}>{h}</th>))}
+            </tr></thead>
+            <tbody>
+              {results.map(({ p, dist, posMatch }) => {
+                const sim = Math.max(0, 100 - dist);
+                const cs = p.confStrength, ev = p.intlLevelEv;
+                const delta = (ev != null && cs != null) ? ev - cs : null;
+                const fr = nbaFlightPct(p);
+                return (
+                  <tr key={p.name} className="cursor-pointer hover:bg-white hover:bg-opacity-5 transition-colors"
+                      onClick={() => onSelect(p.name)} style={{ borderBottom: "1px solid #1f293744" }}>
+                    {onToggleWatch && (
+                      <td className="px-2 py-2.5">
+                        <button onClick={(e) => { e.stopPropagation(); onToggleWatch(p.name); }}
+                          className="w-6 h-6 rounded text-xs font-bold"
+                          style={{ background: (watchlist || []).includes(p.name) ? "#10b981" : "#1f2937",
+                                   color: (watchlist || []).includes(p.name) ? "#000" : "#6b7280",
+                                   border: `1px solid ${(watchlist || []).includes(p.name) ? "#34d399" : "#374151"}` }}>
+                          {(watchlist || []).includes(p.name) ? "★" : "☆"}
+                        </button>
+                      </td>
+                    )}
+                    <td className="px-3 py-2.5 font-bold text-sm" style={{ color: sim >= 85 ? "#22c55e" : sim >= 70 ? "#86efac" : "#9ca3af", fontFamily: "'Oswald',sans-serif" }}>
+                      {sim.toFixed(0)}{posMatch ? "" : "*"}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <div className="font-semibold" style={{ color: "#e5e7eb" }}>{p.name}
+                        {p.source && p.source !== "ncaa" && <span className="text-xs" style={{ color: "#10b981" }}> 🌐</span>}
+                        {isLurker(p) && <span title={LURKER_TIP} style={{ cursor: "help", marginLeft: 4 }}>🕵</span>}
+                      </div>
+                      <div style={{ fontSize: 10, color: "#6b7280" }}>{p.archetype || ""}</div>
+                    </td>
+                    <td className="px-3 py-2.5 text-xs" style={{ color: "#9ca3af" }}>{p.pos || "—"}</td>
+                    <td className="px-3 py-2.5 text-xs" style={{ color: "#9ca3af" }}>{p.age != null ? ageOnDraftDay(p.age).toFixed(1) : "—"}</td>
+                    <td className="px-3 py-2.5 text-xs" style={{ color: "#9ca3af" }}>{p.team || p.conf || "—"}</td>
+                    <td className="px-3 py-2.5 text-xs" style={{ color: "#9ca3af" }}>{cs != null ? cs.toFixed(2) : "—"}</td>
+                    <td className="px-3 py-2.5 text-xs font-bold" style={{ color: tierColor(p.predIntlTier) }}>
+                      {p.predIntlTier || "—"}{ev != null && <span style={{ color: "#6b7280", fontWeight: 400 }}> ({ev.toFixed(2)})</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs font-semibold" style={{ color: delta == null ? "#374151" : delta >= 0.08 ? "#22c55e" : "#9ca3af" }}>
+                      {delta == null ? "—" : delta >= 0.08 ? `▲ +${delta.toFixed(2)}` : delta.toFixed(2)}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs font-semibold" style={{ color: fr >= 60 ? "#ef4444" : fr >= 30 ? "#f97316" : "#22c55e" }}>{fr.toFixed(0)}%</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div style={{ padding: "10px 16px", color: "#6b7280", fontSize: 10, borderTop: "1px solid #1f2937" }}>
+        Fit = 100 − mean percentile distance across up to 9 stat channels · * = different position group · signable pool only (NBA near-locks excluded)
       </div>
     </div>
   );
@@ -13497,6 +13718,7 @@ function IntlBoardView({ players, onSelect, watchlist = null, onToggleWatch = nu
                   <td className="px-3 py-2.5">
                     <div className="font-semibold" style={{ color: "#e5e7eb" }}>{p.name}
                       {p.source && p.source !== "ncaa" && <span className="text-xs" style={{ color: "#10b981" }}> 🌐</span>}
+                      {isLurker(p) && <span title={LURKER_TIP} style={{ cursor: "help", marginLeft: 4 }}>🕵</span>}
                       <span className="text-xs" style={{ color: "#6b7280", fontWeight: 400 }}>  {p.team || p.conf}</span>
                     </div>
                     {p.intlComps && (
@@ -15023,7 +15245,13 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
   const [watchlist,setWatchlist]=useState(()=>{
     try { return JSON.parse(window.localStorage.getItem(WATCHLIST_KEY)) || []; } catch { return []; }
   });
-  const [intlView,setIntlView]=useState("board"); // "board" | "watch"
+  const [intlView,setIntlView]=useState("board"); // "board" | "watch" | "levelup" | "college" | "youth"
+  // Recruiting-Suchfilter: Projected Level + Alters-Fenster — wirken auf alle
+  // spielerbasierten Recruiting-Ansichten (nicht auf das modellfreie Youth Radar).
+  const [intlLevelFilter,setIntlLevelFilter]=useState("All");
+  const [intlAgeMax,setIntlAgeMax]=useState(99);
+  const [intlRoleFilter,setIntlRoleFilter]=useState("All");
+  const [intlLurkOnly,setIntlLurkOnly]=useState(false);
   const toggleWatch=(name)=>setWatchlist(prev=>{
     const next = prev.includes(name) ? prev.filter(n=>n!==name) : [...prev, name];
     try { window.localStorage.setItem(WATCHLIST_KEY, JSON.stringify(next)); } catch {}
@@ -15252,26 +15480,80 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
         <div>
           <div className="flex gap-1 mb-3 flex-wrap">
             {[["board","☰ Recruiting Board"],["watch",`★ Watchlist${watchlist.length?` (${watchlist.length})`:""}`],
-              ["levelup","📈 Level-Up"],["college","🎓 College Targets"],["youth","🔭 Youth Radar"]].map(([v,l])=>(
+              ["levelup","📈 Level-Up"],["portal","🌀 Portal Radar"],["college","🎓 College Targets"],
+              ["similar","⇄ Similar"],["youth","🔭 Youth Radar"]].map(([v,l])=>(
               <button key={v} onClick={()=>setIntlView(v)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
                 style={{background:intlView===v?"#10b981":"#1f2937",color:intlView===v?"#000":"#9ca3af"}}>
                 {l}
               </button>
             ))}
           </div>
-          {intlView==="youth" ? (
-            <YouthRadarView/>
-          ) : intlView==="college" ? (
-            <CollegeTargetsView players={filtered} onSelect={onSelect}
-                                watchlist={watchlist} onToggleWatch={toggleWatch}/>
-          ) : intlView==="levelup" ? (
-            <LevelUpView players={filtered} onSelect={onSelect}
-                         watchlist={watchlist} onToggleWatch={toggleWatch}/>
-          ) : (
-            <IntlBoardView players={filtered} onSelect={onSelect}
-                           watchlist={watchlist} onToggleWatch={toggleWatch}
-                           watchOnly={intlView==="watch"}/>
+          {/* Suchfilter: Projected Level + Alter (gelten für Board/Watchlist/Level-Up/College) */}
+          {intlView!=="youth" && (
+            <div className="flex items-center gap-3 mb-3 flex-wrap">
+              <div className="flex gap-1 items-center">
+                <span className="text-[10px] uppercase tracking-wider" style={{color:"#4b5563"}}>Level</span>
+                {[["All",null], ...INTL_TIERS.map(t=>[t.key,t.color])].map(([v,c])=>(
+                  <button key={v} onClick={()=>setIntlLevelFilter(v)}
+                    className="px-2 py-1 rounded text-xs font-semibold"
+                    style={{background:intlLevelFilter===v?(c||"#10b981"):"#1f2937",
+                            color:intlLevelFilter===v?"#000":(c||"#9ca3af")}}>
+                    {v==="All"?"All":v}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-1 items-center">
+                <span className="text-[10px] uppercase tracking-wider" style={{color:"#4b5563"}}>Age</span>
+                {[["All",99],["U19",19],["U21",21],["U23",23]].map(([l,v])=>(
+                  <button key={l} onClick={()=>setIntlAgeMax(v)}
+                    className="px-2 py-1 rounded text-xs font-semibold"
+                    style={{background:intlAgeMax===v?"#10b981":"#1f2937",color:intlAgeMax===v?"#000":"#9ca3af"}}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-1 items-center">
+                <span className="text-[10px] uppercase tracking-wider" style={{color:"#4b5563"}}>Role</span>
+                <select value={intlRoleFilter} onChange={e=>setIntlRoleFilter(e.target.value)}
+                  className="px-2 py-1 rounded text-xs font-semibold"
+                  style={{background:intlRoleFilter==="All"?"#1f2937":"#10b981",color:intlRoleFilter==="All"?"#9ca3af":"#000",border:"1px solid #374151"}}>
+                  <option value="All">All roles</option>
+                  {ARCHETYPE_ORDER.map(a=><option key={a} value={a}>{a}</option>)}
+                </select>
+              </div>
+              <button onClick={()=>setIntlLurkOnly(v=>!v)} title={LURKER_TIP}
+                className="px-2 py-1 rounded text-xs font-semibold"
+                style={{background:intlLurkOnly?"#10b981":"#1f2937",color:intlLurkOnly?"#000":"#9ca3af"}}>
+                🕵 Lurkers only
+              </button>
+            </div>
           )}
+          {(()=>{
+            const intlFiltered = intlView==="youth" ? filtered : filtered.filter(p =>
+              (intlLevelFilter==="All" || p.predIntlTier===intlLevelFilter) &&
+              (intlAgeMax>=99 || (p.age!=null && ageOnDraftDay(p.age)<=intlAgeMax)) &&
+              (intlRoleFilter==="All" || (p.archetypesAll || p.archetype || "").split("|").includes(intlRoleFilter)) &&
+              (!intlLurkOnly || isLurker(p)));
+            return intlView==="youth" ? (
+              <YouthRadarView/>
+            ) : intlView==="college" ? (
+              <CollegeTargetsView players={intlFiltered} onSelect={onSelect}
+                                  watchlist={watchlist} onToggleWatch={toggleWatch}/>
+            ) : intlView==="portal" ? (
+              <PortalRadarView players={intlFiltered} onSelect={onSelect}
+                               watchlist={watchlist} onToggleWatch={toggleWatch}/>
+            ) : intlView==="similar" ? (
+              <SimilarView players={intlFiltered} onSelect={onSelect}
+                           watchlist={watchlist} onToggleWatch={toggleWatch}/>
+            ) : intlView==="levelup" ? (
+              <LevelUpView players={intlFiltered} onSelect={onSelect}
+                           watchlist={watchlist} onToggleWatch={toggleWatch}/>
+            ) : (
+              <IntlBoardView players={intlFiltered} onSelect={onSelect}
+                             watchlist={watchlist} onToggleWatch={toggleWatch}
+                             watchOnly={intlView==="watch"}/>
+            );
+          })()}
         </div>
       )}
 
