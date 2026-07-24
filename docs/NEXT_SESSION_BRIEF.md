@@ -80,19 +80,26 @@ Kontext zuerst lesen: `data-pipeline/docs/SPRINT_5_12_13_SUMMARY.md` ·
    Prognose. Wiedervorlage wenn PBP-Ära-Outcomes reifen (~2028, n>400) oder
    NBA-USG-Daten angebunden. V2-Ideen: Hover-Tooltips pro Punkt (Gegner/Datum),
    Multi-Season-Overlay, Intl-PBP-Anbindung (EuroLeague-PBP existiert).
-4d. **League-Awards-Pipeline (2026-07-24, Nacht-Block): GEBAUT, Scrape ausstehend.**
-   RealGM hat per-Liga-Awards-DBs (MVP, **Best Young Player**, All-League, …).
-   URL-Schema gelöst: `/awards/by_season/{ENDJAHR}` direkt — KEIN Selenium-
-   Dropdown nötig. Kette: `scrape_league_awards.py` (74 Ligen, rückwärts-Scan
-   mit Early-Stop, checkpoint-sicher, DB `league_awards` + `league_awards_log`
-   = Abdeckungs-Fenster) → `build_award_features.py` (dokumentierte Regexes;
-   „Newcomer" bewusst NICHT young; Monatsnamen-Falle „MVP of October" gefixt;
-   by_season-CSV ohne Look-Ahead) → **GATE** `validate_award_signal.py`
-   (Test E: Climb-Test + P(NBA)-Quintile; Entscheidungsregel VORAB fixiert).
-   In auto_intl_refresh: wöchentlich `--current-only` (~5 min) + Feature-Build
-   (no-op-sicher). **Modell/UI-Integration erst NACH positivem Gate** —
-   sonst nur deskriptives 🏆-Badge (analog Usage Load Curve). Voll-Backfill
-   (~60-90 min) macht der User am Host: docs/AWARDS_RUNBOOK.md.
+4d. **League-Awards-Pipeline (2026-07-24, Nacht-Block): KOMPLETT.**
+   RealGM-per-Liga-Awards (MVP, **Best Young Player**, All-League, …); URL-
+   Schema `/awards/by_season/{ENDJAHR}` direkt, kein Selenium-Dropdown. Kette:
+   `scrape_league_awards.py` (rückwärts-Scan + Early-Stop, checkpoint-sicher,
+   `league_awards` + `league_awards_log` = Abdeckungs-Fenster) →
+   `build_award_features.py` („Newcomer" bewusst NICHT young; Monatsnamen-
+   Falle „MVP of October" gefixt) → GATE `validate_award_signal.py`.
+   **Backfill GELAUFEN:** 7.569 Rows, 58/76 Ligen, 141 min (Austria via
+   `--resume` nachholen). **Gate-Ergebnis Test A:** Climb +0.062 vs +0.006
+   (CI95 [+0.04,+0.07], zeitstabil) — partial-rho-Kriterium v1 war bei 0.42%
+   Prävalenz mechanisch verfehlbar (punkt-biseriale Obergrenze ~0.03) →
+   v2-Gate = adjustierter Effekt + Bootstrap-CI (im Skript transparent
+   begründet, kein Ergebnis-Tuning). **ENTSCHEIDUNG: kein Modell-Feature**
+   (Prävalenz — würde <1% der Vorhersagen berühren), stattdessen deskriptives
+   **🏆-Badge**: `export_awards_badges.py` (Namens-Join, ambige Namen
+   gedroppt) → `/api/awards` → `AwardBadge` in Board/Level-Up/College-Targets/
+   Similar + Hero-Zeile; Sonntagslauf zieht `--current-only` + Features +
+   Badge-Export nach, do_deploy synct api_awards.json. Test B (P(NBA))
+   crashte an Bridge-Präfix `rg_id="rg:…"` — gefixt, **Rerun ausstehend** →
+   Ergebnis in docs/AWARDS_RUNBOOK.md (ERGEBNIS-Block) nachtragen.
 5. **Stats Lab → Cross-Market-Datenbank ausbauen** (nächster größerer Block):
    Intl-Spalten (pred_intl_tier, intl_level_ev, p_intl_career, Flight Risk,
    Value-Delta) in export_stats_lab.py + Column-Picker + eigenes Preset

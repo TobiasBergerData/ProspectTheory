@@ -19,6 +19,7 @@ Endpoints:
   GET /api/tiers/{slug}                  → Tier probabilities
   GET /api/players/top?n=50              → Top N by ppWA
   GET /api/youth                         → ANGT Youth Radar (U18 tournament production)
+  GET /api/awards                        → League-Award-Badges (deskriptiv, Namens-Key)
   GET /api/players/draft/{year}          → All players from a draft year
 
 All `{slug}` path parameters also accept a player_id (bt:…, rg:…) or a
@@ -1123,6 +1124,18 @@ async def get_youth_radar(response: Response):
     p = Path(os.environ.get("DATA_DIR", "data/processed")) / "api_youth_radar.json"
     if not p.exists():
         raise HTTPException(status_code=503, detail="youth radar not yet built")
+    response.headers["Cache-Control"] = "public, max-age=3600"
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
+@app.get("/api/awards")
+async def get_awards(response: Response):
+    """League-Award-Badges (Recruiting-Lens): deskriptive Major-Awards je Spieler,
+    Namens-Key mit Ambiguitäts-Drop. Gebaut von export_awards_badges.py,
+    leer-aber-valide solange kein Awards-Scrape gelaufen ist."""
+    p = Path(os.environ.get("DATA_DIR", "data/processed")) / "api_awards.json"
+    if not p.exists():
+        raise HTTPException(status_code=503, detail="awards not yet built")
     response.headers["Cache-Control"] = "public, max-age=3600"
     return json.loads(p.read_text(encoding="utf-8"))
 
