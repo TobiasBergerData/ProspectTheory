@@ -11883,7 +11883,7 @@ function MethodologyTab() {
     {cat:"Comps Engine — Matching Principles",items:[],desc:"Three principles keep the comparable-player engine honest. (1) SELF-MATCH EXCLUSION: a player is never returned as his own comp — the filter runs centrally at output assembly, covering all five comp dimensions (style, skill, physical, trajectory, outcome) and both the cohort and cluster example lists. No self-fulfilling 100% matches. (2) FULL POOL COVERAGE: historic NBA stars from the pre-play-by-play era (Anthony Davis 2012, Embiid, Wiggins) stay in the comparison pool whenever a known NBA peak exists, even if their college-era tracking data is incomplete — otherwise the most instructive outcomes would be missing from every comp list. (3) FACE-VALIDITY CHECKS: reference prospects are verified to return sensible comps (Davis 2012 → Walker Kessler, Brandon Clarke, Myles Turner — fellow shot-blocking bigs), and mismatches trigger review of the matching weights."},
     {cat:"Tier Probabilities — Calibrated Ordinal Model",items:[],desc:"The six tier probabilities (Superstar / All-Star / Starter / Role Player / Replacement / Out) come from an ordinal classifier trained on the full prospect population — including everyone who never reached the NBA, kept as informative negatives. Its outputs are calibrated against historical base rates: summed over a draft class, the probabilities add up to realistic totals (~1 superstar, ~4 all-stars, ~12 starters per class), because that is how often those careers actually happen. WHY THIS MATTERS: without base-rate anchoring, probability models quietly inflate — a board can end up showing a dozen 'likely all-stars' in one class, which has never happened in draft history. Anchored odds mean a 40% superstar probability is a genuinely rare, strong statement. The tier LABEL shown on the board is assigned top-down along projected peak Wins Added using the same class quotas, so label and probabilities never contradict each other. Out-of-time calibration error is near zero per tier (see Live Validation). CAVEAT: probabilities are pre-team-context and conditional on the information in the model — a unique profile with no historical precedent carries wider real uncertainty than any model can quantify."},
     {cat:"Archetype Value Bands (Research — this tab)",items:[],desc:"A draft-strategy research sub-section shown above (Method tab). For each of 16 NBA archetypes we compute the realized peak Wins Added distribution of past players of that type (~1,210 NBA players, draft classes ~2008–2024): floor (25th percentile = downside), median (typical), and ceiling (90th percentile = upside). Displayed as horizontal value bands so you can read draft strategy by player type: highest ceiling = swing-for-upside pick (Scoring Playmaker / Stretch Rim Protector, ceiling ~28–29 WA); highest floor = safest pick (Stretch Rim Protector); highest median = best balanced bet. Each band carries its SAMPLE SIZE (n) as a data-confidence signal — a type observed 374 times (Scoring Wing) is far better understood than one seen 19 times (3-and-D Wing), whose edges are noisier. Rarity is shown for confidence, NOT as a value claim (rare ≠ better). Hover any band (or see the highlighted card for the current player's type) for EXAMPLE NBA PLAYERS grouped by the tier they reached — a concrete sense of the range (note: these are pre-draft archetypes; some players, like Jokic from a pre-draft 'Scoring Wing', evolved into a different NBA role). The same archetype-value numbers also appear in the Roles & Archetypes tab (each archetype's NBA ceiling tier + % reaching Starter+/All-Star+). PRE-DRAFT → NBA TRANSITION: a second view shows, per pre-draft archetype, what those players actually became in the NBA (drafted classes ≤2020) — including an honest 'Did Not Stick' (never established a rotation role). E.g. a pre-draft Scoring Wing most often does not stick or becomes a role-filler; a Stretch Rim Protector usually becomes a Stretch Big / Rim Protector. A talent overlay then splits the same type by projected-value tier: an elite-projected Scoring Playmaker sticks 75% / All-Star 38%, a marginal one 6% / 0% — quantifying 'a scoring guard has to be elite to be worth it'. (Drafted-player population, so it carries a draft-position confound; thin pre-draft types omitted.)"},
-    {cat:"International Adjustments",items:[],desc:"International players receive three adjustments: (1) League Strength — every league's weight is derived empirically from bridge players (players who appeared in multiple leagues), anchored to NCAA Power = 1.0 and shrunk toward a conservative prior where the evidence is thin. Weights cover 60+ leagues worldwide and are recomputed on every data refresh, never hand-set. (2) League-BPM translation: the raw BPM proxy (PER+eDiff) is scaled per league so international seasons read on the NCAA-equivalent scale before feature engineering. (3) League-strength-adjusted projection with usage-translatability caps for strong leagues."},
+    {cat:"International Adjustments",items:[],desc:"International players receive three adjustments: (1) League Strength — every league's weight is derived empirically from bridge players (players who appeared in multiple leagues), anchored to NCAA Power = 1.0 and shrunk toward a conservative prior where the evidence is thin. Weights cover 60+ leagues worldwide and are recomputed on every data refresh, never hand-set. (2) League-BPM translation: the raw BPM proxy (PER+eDiff) is scaled per league so international seasons read on the NCAA-equivalent scale before feature engineering. (3) League-strength-adjusted projection with usage-translatability caps for strong leagues. The International Recruiting Board additionally offers a browser-local watchlist (★): tracked targets keep showing even once they become NBA near-locks — a rising flight risk on a tracked player is a signal, not something to hide. The list is stored in this browser only."},
     {cat:"The 5 Pillars (DNA Scores)",items:["feel","shootScore","defScore","funcAth","selfCreation","overall"],desc:"Position-adjusted percentile scores (0–100) capturing the fundamental dimensions of prospect evaluation. Each pillar uses era-adjusted percentiles computed against ~34k college + ~9k international players since 2008. ALL FIVE PILLARS MEASURE CURRENT SKILL — what the prospect actually does now — not projections of future NBA outcomes. NBA outcome forecasts live in the NBA Projections section (Tier Probabilities, Star+ Creator Projection, etc.). For example: the Creation pillar measures Self-Adjusted Box Creation = Self-Created Scoring (USG × TS × Self-Share) + Passing Creation (AST% × clamp(AST/TO,0.5,2.5)/2.5), position-weighted. The separate Star+ Creator Projection answers a different question — will this skill translate into a Star+ Creator role in the NBA — via a calibrated Logistic Regression model."},
     {cat:"Shooting Projection (Diss-M1/M4, Berger 2022)",items:["projNba3p","projNba3pa","projNba3par","touchPrior"],desc:"Two-stage model from the underlying dissertation (Ch. 7). Stage 1: empirical Bayes shrinkage of college 3P% against the NCAA league-wide distribution (α₀, β₀ fitted via method-of-moments from 16,771 NCAA players ≥20 3PA — league median μ₀=34.8%, effective κ=69). Small samples (Boozer 0%/2 attempts, Saraf 0%/2) get pulled toward the league median. Stage 2: beta regression M1 for NBA 3P% translation = FT% + 2PJ% (PBP, NCAA only) + pre-draft 3P% estimate. Coefficients freshly fitted on the resolved holdout (n=675 NCAA RMSE 0.0380, n=392 intl RMSE 0.0367). Intl gets M1-light without 2PJ% — NO imputation for missing PBP. All values data-driven, no hand-tuning."},
     {cat:"Possession Impact (CFFR)",items:["fourFactors"],desc:"Context-Free Four Factor Rating measuring possession efficiency per Dean Oliver's framework. Usage-role adjusted: Primary (USG≥28%), Secondary (≥22%), Finisher (≥15%), Low-Usage (<15%). Each factor (eFG% 40%, TO% 25%, ORB% 20%, FTr 15%) is percentiled WITHIN the player's usage bucket, so a primary scorer with 52% eFG rates correctly against peers, not low-usage finishers."},
@@ -11909,7 +11909,7 @@ function MethodologyTab() {
     {cat:"Possession Impact (CFFR)",items:["fourFactors"],desc:"Context-Free Four Factor Rating measuring possession efficiency per Dean Oliver's Four Factors framework. Usage-role adjusted: Primary (USG≥28%), Secondary (≥22%), Finisher (≥15%), Low-Usage (<15%). Each factor (eFG% 40%, TO% 25%, ORB% 20%, FTr 15%) is percentiled WITHIN the player's usage bucket — so a primary scorer with 52% eFG rates against fellow primaries, not against low-usage finishers. Composite: Net Possession Value (0–100). Verdict tiers: Elite Floor Raiser (≥70), Winning Piece (55–70), Role Dependent (45–55), High Maintenance (<45)."},
     {cat:"Comps Tab",items:[],desc:"Multi-dimensional comparable-player engine. Instead of one opaque similarity score, each prospect is matched along five explicit dimensions (production, efficiency, physical profile, role, age/stage) against historical pre-draft seasons — you see WHERE two players are alike, not just that they are. Cohort forecasts show how the prospect's closest historical peers actually turned out (realized NBA outcomes), giving the projection a human-readable reference set. Pre-draft seasons only — comparing what players looked like before the NBA."},
     {cat:"Position Reclassification",items:[],desc:"Stats-driven position groups (Playmaker / Wing / Big) used throughout the site. Rules: Big = Height ≥84\" unconditional, OR Height ≥82\" with non-wing usage profile (USG<25 AND AST%<15), OR Height ≥80\" with elite shot-blocking (BLK%≥5 AND non-wing usage). Playmaker = AST%≥25 AND Height ≤6'5\", OR AST%≥30 AND Height ≤6'7\". Wing = everything else. Designed to keep tall wings (Bailey-style 6'10\" forwards) classified as Wings rather than misclassified to Big purely by height."},
-    {cat:"International Adjustments",items:[],desc:"International players receive three adjustments: (1) League Strength — every league's weight is derived empirically from bridge players (players who appeared in multiple leagues), anchored to NCAA Power = 1.0 and shrunk toward a conservative prior where evidence is thin. Weights cover 60+ leagues worldwide and are recomputed on every data refresh — never hand-set. (2) League-BPM translation: the raw BPM proxy is scaled by league so an international season reads on the NCAA-equivalent scale before feature engineering. (3) League-strength-adjusted projection with usage-translatability caps for strong leagues. For Athleticism, an FT-Rate + ORB%-based formula replaces dunk rate (unavailable for most international players)."},
+    {cat:"International Adjustments",items:[],desc:"International players receive three adjustments: (1) League Strength — every league's weight is derived empirically from bridge players (players who appeared in multiple leagues), anchored to NCAA Power = 1.0 and shrunk toward a conservative prior where evidence is thin. Weights cover 60+ leagues worldwide and are recomputed on every data refresh — never hand-set. (2) League-BPM translation: the raw BPM proxy is scaled by league so an international season reads on the NCAA-equivalent scale before feature engineering. (3) League-strength-adjusted projection with usage-translatability caps for strong leagues. For Athleticism, an FT-Rate + ORB%-based formula replaces dunk rate (unavailable for most international players). The International Recruiting Board additionally offers a browser-local watchlist (★): tracked targets keep showing even once they become NBA near-locks — a rising flight risk on a tracked player is a signal, not something to hide. The list is stored in this browser only."},
     {cat:"Tier Feasibility (vs NBA)",items:[],desc:"How does this prospect stack up against the actual pre-draft college numbers of players who reached each NBA tier? Built from the mature draft cohort 2008-2018 (n=353 NBA players with realized peak Wins Added). We grouped them by their realized NBA outcome - Replacement, Role Player, Starter, All-Star - using peak-WA percentile cuts (10/30/60/85). For each (tier x position) we then took the MEDIAN of every pre-draft college stat (BPM, USG%, TS%, AST%, TO%, STL%, BLK%, ORB%, DRB%, AdjOE) and used that as the in-range center. Frontend automatically derives p25 = median x 0.75 and p75 = median x 1.30 around it: above median is green (In-Range), below median is orange (Below Median), below p25 is red (Critical Gap) - or yellow (Compensated) if a position-core metric is elite enough to offset (Wings core = TS% + 3P%; Playmakers core = AST% + TO%; Bigs core = BLK% + ORB%). Thresholds are MONOTONIZED along the tier axis (a higher tier's threshold never sits below a lower tier's; TO% inverse), at the cost of small distortion - pre-draft college stats only weakly separate Starter from All-Star, because the real talent spike happens AFTER the draft via role + minutes + team context. So a player can clear all Starter thresholds and still NOT clear All-Star simply because the Starter and All-Star pre-draft stats overlap. Read this view as a diagnostic - how many tier markers does he hit - not as a forecast."},
     {cat:"Data Sources & Coverage",items:[],desc:"NCAA Box Stats: BartTorvik (34k+ player-seasons 2008–2026, per-game + advanced + shooting zones — barttorvik.com). NCAA Play-by-Play: ESPN Play-by-Play (event-level data 2017-18 through 2025-26, ~700k player-game-events tracked). International Box Stats: RealGM (~20k player-seasons across 70+ leagues worldwide — every senior national league plus continental competitions — realgm.com). NBA Outcomes: NBA Stats API Advanced stats (27 seasons, used for peak Wins-Added computation). Anthropometrics: NBA Draft Combine measurements (NBA.com) + Databallr wingspan dataset. National Team / FIBA: FIBA event statistics for international youth and senior tournaments. All data is processed through our own pipeline — no external services are queried at runtime."},
   ];
@@ -12244,11 +12244,12 @@ function MethodologyTab() {
         sub="On-the-clock comparison of 2-3 prospects — same engine as the board, framed for a single decision.">
         <div className="space-y-3 text-sm" style={{color:"#cbd5e1"}}>
           <p style={{color:"#94a3b8"}}>
-            The Draft Room (NBA Draft lens → ⚔ Draft Room, entered via the ⚔ buttons on the Table view) overlays
-            the selected prospects' outcome curves on one shared peak-Wins-Added axis and puts their calibrated
-            tier odds, upside/downside markers (▲ All-Star-or-better, ▼ out of the league) and boosters/limiters
-            side by side. Nothing is recomputed: curves and odds are exactly the ones shown on the board and the
-            player pages — one engine, one axis. Curves are height-normalized, so position and spread carry the
+            The Draft Room (NBA Draft lens → ⚔ Draft Room, entered via the ⚔ buttons on any board view — Table,
+            Curves or Tier Board) overlays the selected prospects' outcome curves on one shared peak-Wins-Added
+            axis and puts their calibrated tier odds, upside/downside markers (▲ All-Star-or-better, ▼ out of the
+            league) and boosters/limiters side by side. Nothing is recomputed: curves and odds are exactly the
+            ones shown on the board and the player pages — one engine, one axis. The page address encodes the
+            current selection, so a comparison can be shared with a colleague or reopened later. Curves are height-normalized, so position and spread carry the
             information, not height.
           </p>
           <p style={{color:"#94a3b8"}}>
@@ -12471,7 +12472,7 @@ const TIER_STACK = [
 // large curve per page to one small curve per row + a global tier-
 // anchor scale at the top.
 // ═══════════════════════════════════════════════════════════
-function OutcomeCurveBoard({ players, onSelect, gmRisk, setGmRisk }) {
+function OutcomeCurveBoard({ players, onSelect, gmRisk, setGmRisk, roomPicks = null, onTogglePick = null }) {
   // Layout dimensions for the per-row mini-curve SVG. Sprint-5.11 widened
   // the curve area (820 → 960) on the shared Peak-WA axis so the lateral
   // shift between prospects — which IS the quality gap — reads at a glance:
@@ -12713,6 +12714,17 @@ function OutcomeCurveBoard({ players, onSelect, gmRisk, setGmRisk }) {
               <div style={{width:36, textAlign:"right"}} className="text-sm font-bold" >
                 <span style={{color:"#9ca3af"}}>{rank}</span>
               </div>
+              {/* Draft-Room compare toggle */}
+              {onTogglePick && (
+                <button onClick={(e)=>{e.stopPropagation();onTogglePick(p.name);}}
+                  title={(roomPicks||[]).includes(p.name)?"Remove from Draft Room":"Add to Draft Room comparison"}
+                  className="w-5 h-5 rounded text-[10px] font-bold shrink-0"
+                  style={{background:(roomPicks||[]).includes(p.name)?"#6d28d9":"#111827",
+                          color:(roomPicks||[]).includes(p.name)?"#e9d5ff":"#4b5563",
+                          border:`1px solid ${(roomPicks||[]).includes(p.name)?"#a78bfa":"#1f2937"}`}}>
+                  {(roomPicks||[]).includes(p.name)?"✓":"⚔"}
+                </button>
+              )}
               {/* Tier letter + Player identity */}
               <div className="flex items-center gap-2" style={{width: NAME_COL_W}}>
                 <span style={{
@@ -13079,42 +13091,61 @@ function nbaFlightPct(p) {
   return (Number(t.Superstar) || 0) + (Number(t["All-Star"]) || 0)
        + (Number(t.Starter) || 0) + (Number(t["Role Player"]) || 0);
 }
-function IntlBoardView({ players, onSelect }) {
+function IntlBoardView({ players, onSelect, watchlist = null, onToggleWatch = null, watchOnly = false }) {
   // Sprint-5.13: Recruiting-Board — Einkaufshilfe für internationale Front Offices,
   // KEINE Draft-Logik. Fragen eines Sportdirektors: Auf welchem Level spielt er
   // nachhaltig (3yr-Peak, kalibriert auf ~19k historische Karrieren)? Spielt er
   // aktuell UNTER seinem projizierten Level (Value/Buy-Low)? Verliere ich ihn an
   // die NBA (Flight Risk)? Und welche historischen Profile ähneln ihm (Comps)?
+  // watchOnly: Watchlist-Ansicht — Locks BLEIBEN sichtbar (Monitoring-Signal),
+  // kein 100er-Cap, sonst identische Spalten.
   const posColors = { Playmaker: "#3b82f6", Wing: "#f97316", Big: "#8b5cf6" };
   const nbaPct = nbaFlightPct;
   // NBA-Locks (≥85%) raus — nicht verpflichtbar. Alles darunter ist realer Markt.
   const NBA_LOCK = 85;
   const evOf = (p) => Number(p.intlLevelEv ?? 0);
-  const rows = players
-    .filter(p => (p.predIntlTier || p.intlLevelEv != null) && nbaPct(p) < NBA_LOCK)
-    .sort((a, b) => evOf(b) - evOf(a))          // Einkaufs-Reihenfolge: erwartetes Level
-    .slice(0, 100);
+  const rows = watchOnly
+    ? players.filter(p => (watchlist || []).includes(p.name)).sort((a, b) => evOf(b) - evOf(a))
+    : players
+        .filter(p => (p.predIntlTier || p.intlLevelEv != null) && nbaPct(p) < NBA_LOCK)
+        .sort((a, b) => evOf(b) - evOf(a))      // Einkaufs-Reihenfolge: erwartetes Level
+        .slice(0, 100);
+  // Watchlist-Einträge, die im aktuellen Pool fehlen (z.B. anderer Jahrgangsfilter)
+  const missing = watchOnly ? (watchlist || []).filter(n => !players.some(p => p.name === n)) : [];
   const tierColor = (t) => (INTL_TIERS.find(x => x.key === t)?.color) || "#9ca3af";
   const flight = (pct) => pct >= 60 ? { l: "high", c: "#ef4444" } : pct >= 30 ? { l: "med", c: "#f97316" } : { l: "low", c: "#22c55e" };
-  if (!rows.length) return (
+  if (!rows.length && !missing.length) return (
     <div style={{ padding: 24, color: "#9ca3af", background: "#111827", borderRadius: 12, border: "1px solid #1f2937" }}>
-      No prospects match the current selection.
+      {watchOnly
+        ? <>Your watchlist is empty. Track players with the <b style={{color:"#10b981"}}>☆ buttons</b> on the Recruiting Board — they stay here even once they become NBA near-locks, so a rising flight risk on a tracked target never slips by. Saved in this browser.</>
+        : <>No prospects match the current selection.</>}
     </div>
   );
   return (
     <div className="rounded-xl overflow-hidden" style={{ background: "#111827", border: "1px solid #1f2937" }}>
       <div style={{ padding: "10px 14px", fontSize: 12, color: "#9ca3af", borderBottom: "1px solid #1f2937", lineHeight: 1.6 }}>
-        <b style={{ color: "#e5e7eb" }}>International Recruiting Board</b> — a scouting aid for international front offices.
-        For every young prospect (NCAA + international) the model projects the <b>sustainable league level of his next 3-year
-        peak</b>, calibrated on ~19,000 historical careers. <b style={{ color: "#22c55e" }}>Value ▲</b> flags players projected
-        clearly <i>above</i> their current environment (buy-low candidates). <b>NBA risk</b> = chance you lose him to the NBA;
-        near-locks (≥{NBA_LOCK}%) are excluded — they are not signable. Comps show historical players with the most similar
-        pre-career profile and where they actually ended up.
+        {watchOnly ? (
+          <>
+            <b style={{ color: "#e5e7eb" }}>Watchlist</b> — your tracked recruiting targets, same columns as the Recruiting
+            Board. One deliberate difference: <b>NBA near-locks stay visible here</b> — a rising flight risk on a player you
+            track is exactly the signal to catch, not something to hide. Sorted by projected level. Saved in this browser only.
+          </>
+        ) : (
+          <>
+            <b style={{ color: "#e5e7eb" }}>International Recruiting Board</b> — a scouting aid for international front offices.
+            For every young prospect (NCAA + international) the model projects the <b>sustainable league level of his next 3-year
+            peak</b>, calibrated on ~19,000 historical careers. <b style={{ color: "#22c55e" }}>Value ▲</b> flags players projected
+            clearly <i>above</i> their current environment (buy-low candidates). <b>NBA risk</b> = chance you lose him to the NBA;
+            near-locks (≥{NBA_LOCK}%) are excluded — they are not signable. Comps show historical players with the most similar
+            pre-career profile and where they actually ended up.{onToggleWatch && <> Use <b style={{color:"#10b981"}}>☆</b> to
+            add a player to your watchlist.</>}
+          </>
+        )}
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr style={{ background: "#0a0e17" }}>
-            {["#", "Player & career comps", "Pos", "Age", "Current level", "Projected level", "P(pro)", "Value", "NBA risk"].map((h, i) => (
+            {[...(onToggleWatch ? ["★"] : []), "#", "Player & career comps", "Pos", "Age", "Current level", "Projected level", "P(pro)", "Value", "NBA risk"].map((h, i) => (
               <th key={i} className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold"
                   style={{ color: "#6b7280", borderBottom: "1px solid #1f2937" }}>{h}</th>))}
           </tr></thead>
@@ -13126,6 +13157,18 @@ function IntlBoardView({ players, onSelect }) {
               return (
                 <tr key={p.name} className="cursor-pointer hover:bg-white hover:bg-opacity-5 transition-colors"
                     onClick={() => onSelect(p.name)} style={{ borderBottom: "1px solid #1f293744" }}>
+                  {onToggleWatch && (
+                    <td className="px-2 py-2.5">
+                      <button onClick={(e) => { e.stopPropagation(); onToggleWatch(p.name); }}
+                        title={(watchlist || []).includes(p.name) ? "Remove from watchlist" : "Add to watchlist (saved in this browser)"}
+                        className="w-6 h-6 rounded text-xs font-bold"
+                        style={{ background: (watchlist || []).includes(p.name) ? "#10b981" : "#1f2937",
+                                 color: (watchlist || []).includes(p.name) ? "#000" : "#6b7280",
+                                 border: `1px solid ${(watchlist || []).includes(p.name) ? "#34d399" : "#374151"}` }}>
+                        {(watchlist || []).includes(p.name) ? "★" : "☆"}
+                      </button>
+                    </td>
+                  )}
                   <td className="px-3 py-2.5 font-bold text-xs" style={{ color: "#475569" }}>{i + 1}</td>
                   <td className="px-3 py-2.5">
                     <div className="font-semibold" style={{ color: "#e5e7eb" }}>{p.name}
@@ -13167,11 +13210,22 @@ function IntlBoardView({ players, onSelect }) {
           </tbody>
         </table>
       </div>
+      {watchOnly && missing.length > 0 && (
+        <div style={{ padding: "10px 14px", fontSize: 11, color: "#6b7280", borderTop: "1px solid #1f2937", lineHeight: 1.6 }}>
+          Not in the current board selection ({missing.length}): {missing.map((n, j) => (
+            <span key={n}>{j > 0 && " · "}
+              <span style={{ color: "#9ca3af" }}>{n}</span>
+              <button onClick={() => onToggleWatch && onToggleWatch(n)} title="Remove from watchlist"
+                style={{ color: "#4b5563", marginLeft: 3 }}>✕</button>
+            </span>
+          ))} <span style={{ color: "#4b5563" }}>— try a different year filter to see them.</span>
+        </div>
+      )}
     </div>
   );
 }
 
-function TierBoardView({ players, onSelect }) {
+function TierBoardView({ players, onSelect, roomPicks = null, onTogglePick = null }) {
   // Top 100 nach war (= NBA-roster-relevanter Pool)
   const visible = players.slice(0, 100);
 
@@ -13252,6 +13306,14 @@ function TierBoardView({ players, onSelect }) {
                              title={`#${p._rank} · Added Wins ${p.war?.toFixed?.(1) ?? "—"} · ${p.archetype || ""}`}>
                           <span style={{ color: tier.color, fontSize: 12, fontWeight: 500 }}>{p.name}</span>
                           <span style={{ color: "#6b7280", fontSize: 9, marginLeft: 4 }}>#{p._rank}</span>
+                          {onTogglePick && (
+                            <button onClick={(e) => { e.stopPropagation(); onTogglePick(p.name); }}
+                              title={(roomPicks || []).includes(p.name) ? "Remove from Draft Room" : "Add to Draft Room comparison"}
+                              style={{ marginLeft: 4, fontSize: 9, fontWeight: 700,
+                                       color: (roomPicks || []).includes(p.name) ? "#a78bfa" : "#4b5563" }}>
+                              {(roomPicks || []).includes(p.name) ? "✓" : "⚔"}
+                            </button>
+                          )}
                         </div>
                       ))}
                     </td>
@@ -14440,8 +14502,8 @@ function DraftRoomView({ picks, pool, onToggle, onSelect }) {
       <div className="rounded-2xl p-8" style={{background:"#0a0e16",border:"1px solid #1f2937"}}>
         <div className="text-lg font-bold mb-2" style={{color:"#f1f5f9",fontFamily:"'Oswald',sans-serif",letterSpacing:"0.05em"}}>DRAFT ROOM</div>
         <p className="text-sm" style={{color:"#9ca3af",lineHeight:1.6}}>
-          Select 2–3 prospects with the <b style={{color:"#a78bfa"}}>⚔ compare buttons</b> on the Table view
-          (or add them below) to see their outcome curves overlaid on one Peak-Wins-Added axis,
+          Select 2–3 prospects with the <b style={{color:"#a78bfa"}}>⚔ compare buttons</b> on any board view — Table,
+          Curves or Tier Board — (or add them below) to see their outcome curves overlaid on one Peak-Wins-Added axis,
           their tier odds side by side, and a recommendation for your team situation.
         </p>
         {players.length===1 && (
@@ -14614,6 +14676,9 @@ function DraftRoomView({ picks, pool, onToggle, onSelect }) {
   );
 }
 
+// Watchlist-Persistenz (Browser-lokal, nicht geräteübergreifend — wie Stats-Lab-Presets)
+const WATCHLIST_KEY = "prospecttheory_recruiting_watchlist_v1";
+
 // ═══════════════════════════════════════════════════════════
 // BIG BOARD (No class overview — single view)
 // ═══════════════════════════════════════════════════════════
@@ -14626,6 +14691,25 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
   const [roomPicks,setRoomPicks]=useState([]);
   const togglePick=(name)=>setRoomPicks(prev=>
     prev.includes(name) ? prev.filter(n=>n!==name) : (prev.length>=3 ? prev : [...prev,name]));
+
+  // Watchlist (Recruiting-Lens): Browser-lokal via localStorage (gleiches Muster
+  // wie die Stats-Lab-Presets). Bewusst KEIN NBA-Lock-Filter in der Watchlist-
+  // Ansicht — steigende Flight Risk eines beobachteten Spielers ist genau das
+  // Signal, das ein Sportdirektor sehen will.
+  const [watchlist,setWatchlist]=useState(()=>{
+    try { return JSON.parse(window.localStorage.getItem(WATCHLIST_KEY)) || []; } catch { return []; }
+  });
+  const [intlView,setIntlView]=useState("board"); // "board" | "watch"
+  const toggleWatch=(name)=>setWatchlist(prev=>{
+    const next = prev.includes(name) ? prev.filter(n=>n!==name) : [...prev, name];
+    try { window.localStorage.setItem(WATCHLIST_KEY, JSON.stringify(next)); } catch {}
+    return next;
+  });
+
+  // Draft-Room-Deep-Link: room=<slug,slug,slug> im URL-Hash. Einmalig aus dem
+  // Hash restaurieren (sobald der Pool geladen ist), danach Auswahl in den Hash
+  // spiegeln — macht den Vergleich teilbar UND überlebt Player-Page-Abstecher.
+  const _roomHashApplied = useRef(false);
 
   const fetchBoard = (year) => {
     setLoading(true);
@@ -14653,6 +14737,34 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
   const allPlayers = useMemo(()=>{
     return PLAYER_LIST.map(n=>({name:n,...PLAYERS[n]}));
   },[boardData]);
+
+  // Deep-Link lesen: room=<ids> → Picks restaurieren + Draft Room öffnen (einmalig).
+  useEffect(()=>{
+    if (typeof window==="undefined" || _roomHashApplied.current || !allPlayers.length) return;
+    _roomHashApplied.current = true;
+    if (lens==="intl") return;
+    const h = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const r = h.get("room");
+    if (!r) return;
+    const found = r.split(",").filter(Boolean)
+      .map(id => allPlayers.find(p => p.slug===id || p.name===decodeURIComponent(id))?.name)
+      .filter(Boolean).slice(0,3);
+    if (found.length) { setRoomPicks(found); setBoardView("room"); }
+  },[allPlayers, lens]);
+
+  // Deep-Link schreiben: Picks → room=-Param (nur diesen Key anfassen, lens= bleibt).
+  useEffect(()=>{
+    if (typeof window==="undefined" || !_roomHashApplied.current) return;
+    const h = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const want = roomPicks.length
+      ? roomPicks.map(n => allPlayers.find(p=>p.name===n)?.slug || encodeURIComponent(n)).join(",")
+      : null;
+    if ((h.get("room") || null) !== want) {
+      if (want) h.set("room", want); else h.delete("room");
+      const hs = h.toString();
+      window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search + (hs ? `#${hs}` : ""));
+    }
+  },[roomPicks, allPlayers]);
 
   const filtered = useMemo(()=>{
     let list = allPlayers;
@@ -14792,14 +14904,16 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
       {lens!=="intl" && boardView === "curves" && (
         <div>
           <OutcomeCurveBoard players={filtered} onSelect={onSelect}
-                             gmRisk={gmRisk} setGmRisk={setGmRisk}/>
+                             gmRisk={gmRisk} setGmRisk={setGmRisk}
+                             roomPicks={roomPicks} onTogglePick={togglePick}/>
         </div>
       )}
 
       {/* Tier Board View — Ben-Style Tier-Splits + Archetype-Spalten */}
       {lens!=="intl" && boardView === "tier" && (
         <div>
-          <TierBoardView players={filtered} onSelect={onSelect} />
+          <TierBoardView players={filtered} onSelect={onSelect}
+                         roomPicks={roomPicks} onTogglePick={togglePick}/>
         </div>
       )}
 
@@ -14808,10 +14922,21 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
         <DraftRoomView picks={roomPicks} pool={filtered} onToggle={togglePick} onSelect={onSelect}/>
       )}
 
-      {/* Recruiting-Lens: eigenes Board (früher 4. boardView-Toggle "intl") */}
+      {/* Recruiting-Lens: eigenes Board (früher 4. boardView-Toggle "intl")
+          + Watchlist als zweite Ansicht (★-Buttons auf den Board-Zeilen) */}
       {lens === "intl" && (
         <div>
-          <IntlBoardView players={filtered} onSelect={onSelect} />
+          <div className="flex gap-1 mb-3">
+            {[["board","☰ Recruiting Board"],["watch",`★ Watchlist${watchlist.length?` (${watchlist.length})`:""}`]].map(([v,l])=>(
+              <button key={v} onClick={()=>setIntlView(v)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+                style={{background:intlView===v?"#10b981":"#1f2937",color:intlView===v?"#000":"#9ca3af"}}>
+                {l}
+              </button>
+            ))}
+          </div>
+          <IntlBoardView players={filtered} onSelect={onSelect}
+                         watchlist={watchlist} onToggleWatch={toggleWatch}
+                         watchOnly={intlView==="watch"}/>
         </div>
       )}
 
@@ -15173,9 +15298,14 @@ export default function App() {
   // pathname-URLs OHNE Hash pushen — hier wird der Lens-Hash danach wieder angehängt.
   useEffect(()=>{
     if (typeof window==="undefined") return;
-    const want = lens==="intl" ? "#lens=recruiting" : "";
-    if (window.location.hash !== want) {
-      window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search + want);
+    // Parametrisierter Hash: dieser Effect verwaltet NUR den lens-Key und lässt
+    // andere Hash-Parameter (z.B. room= für den Draft-Room-Deep-Link) unberührt.
+    const h = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const want = lens==="intl" ? "recruiting" : null;
+    if ((h.get("lens") || null) !== want) {
+      if (want) h.set("lens", want); else h.delete("lens");
+      const hs = h.toString();
+      window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search + (hs ? `#${hs}` : ""));
     }
   },[lens,sel]);
   useEffect(()=>{
@@ -15346,7 +15476,7 @@ export default function App() {
       return;
     }
     if (sel === null && window.location.pathname !== '/') {
-      window.history.pushState({}, '', '/');
+      window.history.pushState({}, '', '/' + (window.location.hash || ""));
     }
   }, [sel]);
 
@@ -15420,7 +15550,8 @@ export default function App() {
     const _bp = PLAYERS[name];
     const _slug = _bp?.slug || _bp?.player_id || name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     if (_slug && typeof window !== "undefined" && window.location.pathname !== `/player/${_slug}`) {
-      window.history.pushState({slug: _slug}, '', `/player/${_slug}`);
+      // Hash mitnehmen: Lens + Draft-Room-Auswahl überleben den Player-Page-Abstecher.
+      window.history.pushState({slug: _slug}, '', `/player/${_slug}${window.location.hash || ""}`);
     }
     if (profileCache[name]) return;
 
