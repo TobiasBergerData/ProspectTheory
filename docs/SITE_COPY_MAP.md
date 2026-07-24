@@ -27,6 +27,9 @@ wegdriften (wie beim α-Blend-Narrativ, das das Modell um Monate überlebt hat).
 | **International Recruiting Board** | Header in `IntlBoardView` (Buying-Guide-Framing, Value ▲, NBA risk, Comps, ★-Hinweis) | Deep: „International Adjustments" + Pipeline-Box „Intl Career Projection" |
 | **Watchlist** (Recruiting-Lens; ★-Buttons, localStorage, Locks bleiben sichtbar) | Header-Text in `IntlBoardView` (`watchOnly`-Variante) + Empty-State | Deep: „International Adjustments" (Watchlist-Satz) |
 | **Youth Radar** (Recruiting-Lens; ANGT + Jugend-Klubligen + FIBA-U16–U20-Natio-Turniere, modellfrei, `/api/youth`) | Header-Text in `YouthRadarView` + Empty-States | Deep: „Youth Radar (clubs + national teams, U16-U20)" |
+| **College Targets** (Recruiting-Lens; Internationals ≤21 für NCAA-Programme, NIL-Framing, Eligibility-Disclaimer) | Header-Text in `CollegeTargetsView` | Deep: „Cross-Market Views" |
+| **Level-Up Portal** (Recruiting-Lens; Climb-Sortierung = projiziert − aktuell, Liga-Dominatoren) | Header-Text in `LevelUpView` | Deep: „Cross-Market Views" |
+| **Source-Filter** (Recruiting Board: All / College / International) | Chip-Tooltips im Board-Header | Deep: „Cross-Market Views" |
 | Player **Projection**-Tab (Hero, Tier Forecast, Outcome Curve) — Hero ist **lens-abhängig**: NBA-Lens = ppWA + Tier-Odds, Recruiting-Lens = `RecruitingHeroCard` (Projected Level + Value + Comps, NBA nur als Flight Risk) | Hero-Tooltips (beide Varianten) + `Sec sub=` der beiden Kurven-Sektionen | Deep: „Methodology & Model Documentation" (NBA) · Deep: „International Adjustments" (Recruiting) |
 | **Comps**-Tab (v5) | `Sec sub=` in `CompsV5Tab` | Deep: `sections`-Eintrag „Comps Tab" |
 | **Mind**-Tab | Sec-Subs im Tab | Quick: „Mind Tab" + Caveat-Box |
@@ -39,6 +42,10 @@ wegdriften (wie beim α-Blend-Narrativ, das das Modell um Monate überlebt hat).
 - **Recruiting-Lens** spricht in: Projected Level · Value ▲/▼ · Flight Risk.
 - **Youth Radar** spricht nur in Roh-Produktion (PTS/REB/AST/…, TS%) — NIE in
   Modell-Skalen (keine Tiers, Levels, Added Wins; U18 ist nicht kalibriert).
+- **College Targets** ist die dokumentierte AUSNAHME: spricht in Added Wins +
+  NBA-Track, obwohl in der Recruiting-Lens — Publikum sind College-Programme,
+  für die NBA-Upside Kaufargument ist. Level-Up spricht in Level/Climb
+  (Recruiting-Skala). Eligibility-Disclaimer bei College Targets nie entfernen.
 - Skalen **nie mischen** — je Lens führt genau eine Skala. Auf der Player-Page
   entscheidet die aktive Lens, welcher Hero führt; die jeweils andere Welt
   erscheint nur als Ein-Zeilen-Verweis (z. B. „NBA Flight Risk: x%").

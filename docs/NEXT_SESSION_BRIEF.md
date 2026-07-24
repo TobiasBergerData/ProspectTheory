@@ -54,7 +54,13 @@ Kontext zuerst lesen: `data-pipeline/docs/SPRINT_5_12_13_SUMMARY.md` ·
    Watchlist-Anbindung (Youth-Spieler sind nicht im Board-Pool — braucht
    eigenes Resolving) · per-Event-Filter im Radar, falls die Mischliste
    (U16 bis U20) unübersichtlich wird.
-4. Kleinvieh: G-League-Historie (URL-Discovery, 404-Problem von April) ·
+4. **Cross-Market-Views (2026-07-24, gleiche Session):** Recruiting-Lens hat
+   jetzt 5 Ansichten — Board (+ Source-Filter All/College/International) ·
+   Watchlist · Level-Up (Climb-Sortierung: projiziert − aktuell, Liga-
+   Dominatoren) · College Targets (Internationals ≤21 für NCAA-Programme,
+   NIL-Framing, Added-Wins-Skala als dokumentierte Ausnahme, Eligibility-
+   Disclaimer) · Youth Radar. Alles client-seitig aus dem Board-Payload.
+5. Kleinvieh: G-League-Historie (URL-Discovery, 404-Problem von April) ·
    R2 aktivieren (braucht Cloudflare-Account, Code liegt bereit).
 
 ## Geparkt (bewusst, nicht vergessen)
