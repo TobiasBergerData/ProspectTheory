@@ -28,6 +28,7 @@ wegdriften (wie beim α-Blend-Narrativ, das das Modell um Monate überlebt hat).
 | Player **Projection**-Tab (Hero, Tier Forecast, Outcome Curve) — Hero ist **lens-abhängig**: NBA-Lens = ppWA + Tier-Odds, Recruiting-Lens = `RecruitingHeroCard` (Projected Level + Value + Comps, NBA nur als Flight Risk) | Hero-Tooltips (beide Varianten) + `Sec sub=` der beiden Kurven-Sektionen | Deep: „Methodology & Model Documentation" (NBA) · Deep: „International Adjustments" (Recruiting) |
 | **Comps**-Tab (v5) | `Sec sub=` in `CompsV5Tab` | Deep: `sections`-Eintrag „Comps Tab" |
 | **Mind**-Tab | Sec-Subs im Tab | Quick: „Mind Tab" + Caveat-Box |
+| **Possession Impact (Six Factors)** (Scouting-Tab, 2×3 Offense/Defense) | `Sec sub=` + Tooltip (`METHODS.sixFactors`) in `ScoutingTab` | Deep: „Possession Impact (Six Factors)" + „Six-Factor Weights (validated)" |
 | **Live Validation** (Methods, oben) | — (ist selbst der Explainer) | speist sich aus `/api/model-card` — nie von Hand editieren |
 | Pipeline-Diagramm (Methods Deep) | — | `PipelineDiagram` in `MethodologyTab` — bei Modell-Umbau IMMER mitziehen |
 
@@ -53,3 +54,9 @@ wegdriften (wie beim α-Blend-Narrativ, das das Modell um Monate überlebt hat).
   für internationale Front Offices (keine Draft-Logik).
 - Liga-Gewichte: **empirisch aus Bridge-Spielern, NCAA=1.0, shrunk bei dünner
   Evidenz, jede Woche neu berechnet** — nie konkrete Gewichtswerte in Copy.
+- Possession Impact: **Six Factors — 3 Mechanismen (Shooting/Turnovers/Rebounding)
+  × 2 Seiten, Box-Proxys, positions-perzentiliert**. NICHT mehr: Four Factors /
+  CFFR-Usage-Buckets / FTr als eigene Achse. Gewichte kommen aus
+  `scripts/validate_six_factors.py` (OOS-validiert, Bayesian-shrunk) — bei
+  Refresh-bedingten Änderungen `SIXF_WEIGHTS` + Methods-Text im selben Commit
+  nachziehen.
