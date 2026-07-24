@@ -84,22 +84,30 @@ jobs:
           fi
           echo "✓ All ${#critical[@]} critical frontend files present"
 
-      - name: Verify Sprint-3.0 data artifacts
+      - name: Verify data artifacts (gz splits)
         run: |
           set -e
-          for part in part1 part2 part3; do
-            f="backend/data/processed/api_profiles_${part}.json"
-            if [[ ! -f "$f" ]]; then
-              echo "FATAL: $f missing — Pipeline-Output nicht synced"
-              exit 1
-            fi
+          # Sprint-5.12/13: Artefakte sind gzip-Splits (api_profiles_part*.json.gz).
+          # Anzahl kann mit Datenwachstum variieren → mindestens 3 Parts, jeder
+          # plausibel groß (>3 MB komprimiert). Search-Index muss ebenfalls da sein.
+          shopt -s nullglob
+          parts=(backend/data/processed/api_profiles_part*.json.gz)
+          if [[ ${#parts[@]} -lt 3 ]]; then
+            echo "FATAL: nur ${#parts[@]} api_profiles_part*.json.gz gefunden — Pipeline-Output nicht synced"
+            exit 1
+          fi
+          for f in "${parts[@]}"; do
             size=$(stat -c%s "$f" 2>/dev/null || stat -f%z "$f" 2>/dev/null)
-            if [[ $size -lt 10000000 ]]; then
+            if [[ $size -lt 3000000 ]]; then
               echo "FATAL: $f is suspiciously small ($size bytes) — truncated?"
               exit 1
             fi
           done
-          echo "✓ All 3 api_profiles_part*.json present and reasonably sized"
+          if [[ ! -f backend/data/processed/api_search_index.json.gz ]]; then
+            echo "FATAL: api_search_index.json.gz missing"
+            exit 1
+          fi
+          echo "✓ ${#parts[@]} api_profiles_part*.json.gz + search index present and reasonably sized"
 
       - name: Verify documentation completeness
         run: |
