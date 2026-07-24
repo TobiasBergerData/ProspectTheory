@@ -1,4 +1,35 @@
-# NEXT_SESSION_BRIEF — Lens-Struktur + Draft-Room (ready to execute)
+# NEXT_SESSION_BRIEF — Lens-Struktur + Draft-Room
+
+**Status 2026-07-24: BEIDE AUFTRÄGE UMGESETZT** (App.jsx + SITE_COPY_MAP.md,
+esbuild-verifiziert, 0 NUL-Bytes). Details unten im Abschnitt „Umsetzungsnotizen".
+Git-Commit/-Push macht der User am Host.
+
+## Umsetzungsnotizen (für die nächste Session)
+
+- **Lens-State:** `lens` ("nba" | "intl") in `App()`, URL-Hash `#lens=recruiting`
+  (replaceState-Sync auch nach Player-Navigation, hashchange-Listener). Switcher
+  über der Meta-Nav; erste Meta-Nav-Kachel heißt lens-abhängig Big Board /
+  Recruiting Board. `BigBoardView` bekommt `lens`-Prop: intl → `IntlBoardView`
+  (voller Pool), View-Toggle/Sorts nur in NBA-Lens; 4. Toggle „intl" entfernt.
+- **Player-Hero:** `ProjectionTab` bekommt `lens`-Prop; Recruiting-Lens rendert
+  `RecruitingHeroCard` (Projected Level + Value + P(pro) + Flight Risk + Comps,
+  ~L7159) statt ppWA-Hero. Helper `nbaFlightPct()` = eine Quelle für Board + Hero.
+- **Draft Room:** `DraftRoomView` (~L14394) + `pwaBoardMixture()` (Mischung +
+  p20/p80 auf PWA_TIER_ANCHORS — gleiche Engine, nicht neu). Einstieg: ⚔-Buttons
+  in der Table-View (max 3) + Sticky-Quick-Bar + „⚔ Draft Room"-Toggle.
+  Win-Now = max p20 · Balanced = max EV (computeGMUtility neutral) ·
+  Rebuild = max P(AS+). Empfehlung + 1-Satz-Begründung.
+- **Erklärstellen (Regel 1 erfüllt):** Methods Quick „What This Is" (Zwei-Lens-
+  Absatz) · Methods Deep „Draft Room" (nach „GM Risk Profile") · Inline-Explainer
+  in DraftRoomView/RecruitingHeroCard · SITE_COPY_MAP um 3 Zeilen + Lens-Sprachregel
+  ergänzt.
+- **Offen/Nice-to-have:** Watchlist in der Recruiting-Lens · Compare-Einstieg auch
+  auf Curves/Tier-Board · Draft-Room-Deep-Link (z. B. Hash-Param für Picks) ·
+  Sicht-Check live nach Deploy.
+
+---
+
+Ursprünglicher Auftrag (erledigt):
 
 Kontext zuerst lesen: `data-pipeline/docs/SPRINT_5_12_13_SUMMARY.md` + `docs/SITE_COPY_MAP.md`.
 Alles Frontend: `frontend/src/App.jsx` (eine Datei, ~15.3k Zeilen). Kein Backend nötig.

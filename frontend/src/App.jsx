@@ -7153,7 +7153,91 @@ function RfTierForecast({p}) {
 //  RfPwaCurve, Curves-Tab nutzt OutcomeCurveBoard — beide auf der Peak-WA-Achse.)
 
 
-function ProjectionTab({p: _pOrig}) {
+// Recruiting-Lens-Hero — die Einkaufs-Sicht eines Intl-Sportdirektors. Führt mit
+// Projected Level + Value + Career-Comps (Intl-Skala); die NBA-Projektion erscheint
+// bewusst nur als Flight Risk. Sprachregel je Lens (SITE_COPY_MAP): Skalen nie mischen.
+function RecruitingHeroCard({ p }) {
+  const tierColor = (t) => (INTL_TIERS.find(x => x.key === t)?.color) || "#9ca3af";
+  const cs = p.confStrength;
+  const ev = p.intlLevelEv;
+  const delta = (ev != null && cs != null) ? ev - cs : null;
+  const fr = nbaFlightPct(p);
+  const frCol = fr >= 60 ? "#ef4444" : fr >= 30 ? "#f97316" : "#22c55e";
+  const col = tierColor(p.predIntlTier);
+  return (
+    <div className="rounded-2xl p-6 text-center relative overflow-hidden"
+         style={{background:"linear-gradient(135deg,#0d1117 0%,#111827 100%)",border:`1px solid ${col}33`}}>
+      <div className="absolute top-0 right-0 w-48 h-48 opacity-5 blur-3xl rounded-full" style={{background:`radial-gradient(circle,${col},transparent)`}}/>
+      <div className="relative">
+        <Tip wide content={<div>
+          <div className="font-bold mb-2" style={{color:"#10b981"}}>Projected Level — Recruiting View</div>
+          <div className="mb-2" style={{color:"#cbd5e1"}}>
+            The sustainable league level of this player's next 3-year peak, classified into five tiers whose
+            boundaries are anchored to what actual regulars of each league class sustain — a buying guide,
+            not draft logic.
+          </div>
+          <div style={{color:"#6b7280",fontSize:"0.8em"}}>
+            Value ▲ compares projected level to his current environment (buy-low signal). Comps are historical
+            players with the most similar pre-career profile and where they actually ended up. Recomputed on
+            every data refresh — see Methods → International Adjustments.
+          </div>
+        </div>}>
+          <div className="cursor-help">
+            <div className="text-xs uppercase tracking-widest mb-2" style={{color:"#6b7280"}}>Projected Level (3-Year Peak) <span style={{color:"#475569"}}>ⓘ</span></div>
+            <div className="text-5xl font-bold mb-1" style={{color:col,fontFamily:"'Oswald',sans-serif"}}>
+              {p.predIntlTier || "—"}
+            </div>
+            {ev != null && (
+              <div className="text-sm" style={{color:"#9ca3af"}}>Level EV {ev.toFixed(2)}{cs != null ? <> · currently at {cs.toFixed(2)}</> : null}</div>
+            )}
+          </div>
+        </Tip>
+        <div className="flex justify-center gap-6 mt-4 flex-wrap">
+          <div className="text-center">
+            <div className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>Value</div>
+            <div className="text-lg font-bold mt-0.5" style={{color: delta == null ? "#374151" : delta >= 0.08 ? "#22c55e" : delta <= -0.08 ? "#6b7280" : "#9ca3af"}}>
+              {delta == null ? "—" : delta >= 0.08 ? `▲ +${delta.toFixed(2)}` : delta <= -0.08 ? `▼ ${delta.toFixed(2)}` : "="}
+            </div>
+            <div className="text-[10px]" style={{color:"#6b7280"}}>{delta != null && delta >= 0.08 ? "buy-low candidate" : "vs current level"}</div>
+          </div>
+          {p.pIntlCareer != null && (
+            <div className="text-center">
+              <div className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>P(pro)</div>
+              <div className="text-lg font-bold mt-0.5" style={{color: p.pIntlCareer >= 0.7 ? "#22c55e" : p.pIntlCareer >= 0.4 ? "#86efac" : "#9ca3af"}}>
+                {(p.pIntlCareer * 100).toFixed(0)}%
+              </div>
+              <div className="text-[10px]" style={{color:"#6b7280"}}>pro career at all</div>
+            </div>
+          )}
+          <div className="text-center">
+            <div className="text-xs uppercase tracking-wider" style={{color:"#6b7280"}}>NBA Flight Risk</div>
+            <div className="text-lg font-bold mt-0.5" style={{color:frCol}}>{fr.toFixed(0)}%</div>
+            <div className="text-[10px]" style={{color:"#6b7280"}}>chance you lose him to the NBA</div>
+          </div>
+        </div>
+        {p.intlComps && (
+          <div className="mt-4 text-xs" style={{color:"#6b7280"}}>
+            <span className="uppercase tracking-wider" style={{fontSize:10}}>Career comps: </span>
+            {p.intlComps.split(" | ").slice(0, 3).map((c, j) => {
+              const [nm, tr] = c.split(" → ");
+              return (
+                <span key={j}>{j > 0 && <span style={{color:"#374151"}}> · </span>}
+                  <span style={{color:"#9ca3af"}}>{nm}</span>
+                  <span style={{color:tierColor(tr)}}> ({tr})</span>
+                </span>
+              );
+            })}
+          </div>
+        )}
+        <div className="mt-3 text-[10px]" style={{color:"#475569"}}>
+          Switch to the NBA Draft lens for the full draft projection (Added Wins, tier odds, outcome curve).
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProjectionTab({p: _pOrig, lens}) {
   if (!_pOrig) return null;
   // Sprint-5.5.J: when RF Proximity (riskProfile.tierProbs) is available, use
   // it as the single source-of-truth for all Hero-Card values. Eliminates the
@@ -7241,7 +7325,12 @@ function ProjectionTab({p: _pOrig}) {
 
   return (
     <div className="space-y-5">
-      {/* ═══ ppWA PROJECTION — Hero Card ═══ */}
+      {/* ═══ HERO — lens-abhängig. NBA-Lens: ppWA + Tier-Odds führen (Draft-Frage).
+          Recruiting-Lens: Projected Level + Value + Comps führen, NBA nur als
+          Flight Risk (Einkaufs-Frage). Je Lens führt genau EINE Skala. ═══ */}
+      {lens === "intl" && (p.predIntlTier || p.intlLevelEv != null) ? (
+        <RecruitingHeroCard p={p}/>
+      ) : (
       <div className="rounded-2xl p-6 text-center relative overflow-hidden" style={{background:"linear-gradient(135deg,#0d1117 0%,#111827 100%)",border:`1px solid ${warColor}33`}}>
         <div className="absolute top-0 right-0 w-48 h-48 opacity-5 blur-3xl rounded-full" style={{background:`radial-gradient(circle,${warColor},transparent)`}}/>
         <div className="relative">
@@ -7447,6 +7536,7 @@ function ProjectionTab({p: _pOrig}) {
           )}
         </div>
       </div>
+      )}
 
       {/* ═══ OUTCOME TIER FORECAST — kalibrierte Ordinal-Tier-Probs (Backend) ═══ */}
       <Sec icon="▲" title="Outcome Tier Forecast"
@@ -11970,7 +12060,7 @@ function MethodologyTab() {
         <>
         <Sec icon="🎯" title="What This Is" sub="ProspectTheory in 60 seconds.">
           <div style={{fontSize:13,color:"#d1d5db",lineHeight:"1.8"}}>
-            <p style={{marginBottom:12}}>ProspectTheory is an NBA-Draft analytics tool that answers one question for every prospect: <strong style={{color:"#f97316"}}>What kind of NBA player will this become?</strong></p>
+            <p style={{marginBottom:12}}>ProspectTheory is a basketball analytics tool organised around two jobs. The <strong style={{color:"#f97316"}}>NBA Draft lens</strong> answers a scout's question — <em>what kind of NBA player will this become?</em> — in Added Wins and calibrated tier odds. The <strong style={{color:"#10b981"}}>International Recruiting lens</strong> answers a sporting director's question — <em>what league level will he sustain, and can I sign him?</em> — in projected level, value and NBA flight risk. Each lens keeps its own scale; the two are never mixed. Search, player pages, Stats Lab, Research and this Methods page are shared.</p>
             <p style={{marginBottom:12}}>We blend three layers of information:</p>
             <ul style={{marginBottom:12,paddingLeft:20,listStyle:"disc"}}>
               <li style={{marginBottom:6}}><strong style={{color:"#fbbf24"}}>Production stats</strong> — what we measure in box scores and advanced metrics: BPM, Usage, eFG%, AST%, BLK%, etc.</li>
@@ -12146,6 +12236,28 @@ function MethodologyTab() {
               </div>
             ))}
           </div>
+        </div>
+      </Sec>
+
+      {/* ── Draft Room ── */}
+      <Sec icon="⚔" title="Draft Room"
+        sub="On-the-clock comparison of 2-3 prospects — same engine as the board, framed for a single decision.">
+        <div className="space-y-3 text-sm" style={{color:"#cbd5e1"}}>
+          <p style={{color:"#94a3b8"}}>
+            The Draft Room (NBA Draft lens → ⚔ Draft Room, entered via the ⚔ buttons on the Table view) overlays
+            the selected prospects' outcome curves on one shared peak-Wins-Added axis and puts their calibrated
+            tier odds, upside/downside markers (▲ All-Star-or-better, ▼ out of the league) and boosters/limiters
+            side by side. Nothing is recomputed: curves and odds are exactly the ones shown on the board and the
+            player pages — one engine, one axis. Curves are height-normalized, so position and spread carry the
+            information, not height.
+          </p>
+          <p style={{color:"#94a3b8"}}>
+            The recommendation follows the selected team situation, mirroring the GM Risk Profile philosophies
+            above: <b style={{color:"#06b6d4"}}>Win-Now</b> recommends the highest realistic floor (the p20 of the
+            outcome mixture), <b style={{color:"#9ca3af"}}>Balanced</b> the highest expected value across all
+            outcomes, and <b style={{color:"#f59e0b"}}>Rebuild</b> the best chance of an All-Star-or-better career.
+            The one-line rationale states the deciding number — the choice itself stays with the room.
+          </p>
         </div>
       </Sec>
 
@@ -12960,6 +13072,13 @@ const INTL_TIERS = [
   { key: "Solid Pro", color: "#06b6d4" },
   { key: "Second Division", color: "#6b7280" },
 ];
+// NBA-Flight-Risk = Summe der vier NBA-Karriere-Tiers (kalibriertes Ordinal, %-Skala).
+// Eine Quelle für Recruiting-Board UND Recruiting-Lens-Player-Hero — nie doppelt rechnen.
+function nbaFlightPct(p) {
+  const t = p?.tiers || p?.v2TierProbs || {};
+  return (Number(t.Superstar) || 0) + (Number(t["All-Star"]) || 0)
+       + (Number(t.Starter) || 0) + (Number(t["Role Player"]) || 0);
+}
 function IntlBoardView({ players, onSelect }) {
   // Sprint-5.13: Recruiting-Board — Einkaufshilfe für internationale Front Offices,
   // KEINE Draft-Logik. Fragen eines Sportdirektors: Auf welchem Level spielt er
@@ -12967,8 +13086,7 @@ function IntlBoardView({ players, onSelect }) {
   // aktuell UNTER seinem projizierten Level (Value/Buy-Low)? Verliere ich ihn an
   // die NBA (Flight Risk)? Und welche historischen Profile ähneln ihm (Comps)?
   const posColors = { Playmaker: "#3b82f6", Wing: "#f97316", Big: "#8b5cf6" };
-  const nbaPct = (p) => (Number(p.tiers?.Superstar) || 0) + (Number(p.tiers?.["All-Star"]) || 0)
-                      + (Number(p.tiers?.Starter) || 0) + (Number(p.tiers?.["Role Player"]) || 0);
+  const nbaPct = nbaFlightPct;
   // NBA-Locks (≥85%) raus — nicht verpflichtbar. Alles darunter ist realer Markt.
   const NBA_LOCK = 85;
   const evOf = (p) => Number(p.intlLevelEv ?? 0);
@@ -14217,13 +14335,297 @@ function CompareModal({slugs, rows, meta, colsByKey, fmtCell, onClose, onRemove,
 
 
 // ═══════════════════════════════════════════════════════════
+// DRAFT ROOM — On-the-clock-Vergleich (NBA-Lens)
+// 2-3 Spieler nebeneinander: Kurven-Overlay auf EINER Peak-WA-Achse (dieselbe
+// Engine wie OutcomeCurveBoard/RfPwaCurve: PWA_TIER_ANCHORS-Gauss-Mischung aus dem
+// kalibrierten Ordinal — wiederverwendet, nicht neu), Tier-Odds, Boosters/Limiters,
+// Win-Now/Balanced/Rebuild-Empfehlung (computeGMUtility-Philosophie).
+// Alle Daten kommen aus dem Board-Payload — keine neuen Fetches.
+// ═══════════════════════════════════════════════════════════
+
+// Mischungs-Dichte + Quantile auf der geteilten Peak-WA-Achse, aus den Board-
+// Tier-Probs (%-Skala, kapitalisierte Keys — gleiches Mapping wie renderMiniCurve).
+function pwaBoardMixture(p, N = 160) {
+  const cap = p?.tiers || p?.v2TierProbs || {};
+  const TPS = {
+    superstar:   cap["Superstar"]   || 0, all_star:    cap["All-Star"]    || 0,
+    starter:     cap["Starter"]     || 0, roleplayer:  cap["Role Player"] || 0,
+    replacement: cap["Replacement"] || 0, intl_career: cap["Negative"]    || 0,
+  };
+  const total = PWA_TIER_ANCHORS.reduce((s, t) => s + (TPS[t.key] || 0), 0);
+  if (total <= 0) return null;
+  const samples = new Array(N + 1);
+  let maxY = 0, mode = PWA_X_MIN;
+  for (let i = 0; i <= N; i++) {
+    const wa = PWA_X_MIN + (i / N) * (PWA_X_MAX - PWA_X_MIN);
+    let d = 0;
+    PWA_TIER_ANCHORS.forEach(t => {
+      const pr = (TPS[t.key] || 0) / total;
+      if (pr) { const z = (wa - t.center) / t.sigma; d += pr * Math.exp(-0.5 * z * z) / (t.sigma * Math.sqrt(2 * Math.PI)); }
+    });
+    samples[i] = { wa, y: d };
+    if (d > maxY) { maxY = d; mode = wa; }
+  }
+  const dwa = (PWA_X_MAX - PWA_X_MIN) / N;
+  const area = samples.reduce((s, sm) => s + sm.y, 0) * dwa || 1;
+  let cum = 0, p20 = null, p80 = null;
+  for (const sm of samples) {
+    cum += sm.y * dwa / area;
+    if (p20 == null && cum >= 0.20) p20 = sm.wa;
+    if (p80 == null && cum >= 0.80) { p80 = sm.wa; break; }
+  }
+  return { samples, maxY, mode, p20, p80 };
+}
+
+// Kleiner Add-Picker für den Draft Room (Top 60 des aktuellen NBA-Pools).
+function RoomAddSelect({ pool, picks, onToggle }) {
+  return (
+    <select className="mt-3 px-3 py-2 rounded-lg text-sm" value=""
+      style={{background:"#111827",border:"1px solid #374151",color:"#e5e7eb"}}
+      onChange={e=>{ if (e.target.value) onToggle(e.target.value); }}>
+      <option value="">+ Add player…</option>
+      {pool.slice(0,60).filter(p=>!picks.includes(p.name)).map(p=>(
+        <option key={p.name} value={p.name}>{p.name} · {p.war!=null?p.war.toFixed(1):"—"} AW</option>
+      ))}
+    </select>
+  );
+}
+
+function DraftRoomView({ picks, pool, onToggle, onSelect }) {
+  const [gmMode, setGmMode] = useState("balanced"); // "winnow" | "balanced" | "rebuild"
+  const players = useMemo(
+    () => picks.map(n => pool.find(p => p.name === n)).filter(Boolean),
+    [picks, pool]);
+  const mixes = useMemo(
+    () => players.map(p => ({ p, mix: pwaBoardMixture(p) })),
+    [players]);
+
+  const COLORS = ["#f97316", "#a78bfa", "#22c55e"];
+  const asPlus = (p) => (Number(p.tiers?.Superstar) || 0) + (Number(p.tiers?.["All-Star"]) || 0);
+  const outPct = (p) => Number(p.tiers?.Negative) || 0;
+
+  // Empfehlung je Team-Situation — spiegelt die GM-Risk-Profile-Philosophie:
+  //   winnow  → höchster realistischer Floor (p20 der Mischung)
+  //   balanced→ höchster Expected Value (Tier-Midpoint-EV, computeGMUtility neutral)
+  //   rebuild → beste P(All-Star oder besser)
+  const rec = useMemo(() => {
+    if (mixes.length < 2) return null;
+    const scored = mixes.map(({ p, mix }) => ({
+      p,
+      floor: mix?.p20 ?? -99,
+      ev: computeGMUtility(p, "neutral"),
+      up: asPlus(p),
+    }));
+    const by = (k) => scored.slice().sort((a, b) => b[k] - a[k])[0];
+    if (gmMode === "winnow") {
+      const w = by("floor");
+      return { p: w.p, why: `Highest realistic floor — his p20 outcome (${w.floor.toFixed(1)} Wins Added) beats every alternative on the table, the safest pick when you need contribution now.` };
+    }
+    if (gmMode === "rebuild") {
+      const w = by("up");
+      return { p: w.p, why: `Best shot at a difference-maker — ${w.up.toFixed(0)}% All-Star-or-better odds, the highest ceiling bet in this comparison.` };
+    }
+    const w = by("ev");
+    return { p: w.p, why: `Highest expected value across all outcomes (${w.ev.toFixed(1)} Wins Added in expectation) — the best pick when neither floor nor ceiling is privileged.` };
+  }, [mixes, gmMode]);
+
+  // Overlay-Chart-Geometrie (identische Achse wie OutcomeCurveBoard / Player-Page-Kurve)
+  const W = 960, H = 260;
+  const M = { left: 10, right: 10, top: 30, bottom: 26 };
+  const xW = (wa) => M.left + ((wa - PWA_X_MIN) / (PWA_X_MAX - PWA_X_MIN)) * (W - M.left - M.right);
+  const baseY = H - M.bottom;
+
+  if (players.length < 2) {
+    return (
+      <div className="rounded-2xl p-8" style={{background:"#0a0e16",border:"1px solid #1f2937"}}>
+        <div className="text-lg font-bold mb-2" style={{color:"#f1f5f9",fontFamily:"'Oswald',sans-serif",letterSpacing:"0.05em"}}>DRAFT ROOM</div>
+        <p className="text-sm" style={{color:"#9ca3af",lineHeight:1.6}}>
+          Select 2–3 prospects with the <b style={{color:"#a78bfa"}}>⚔ compare buttons</b> on the Table view
+          (or add them below) to see their outcome curves overlaid on one Peak-Wins-Added axis,
+          their tier odds side by side, and a recommendation for your team situation.
+        </p>
+        {players.length===1 && (
+          <div className="mt-3 text-xs" style={{color:"#6b7280"}}>Selected: {players[0].name} — pick at least one more.</div>
+        )}
+        <RoomAddSelect pool={pool} picks={picks} onToggle={onToggle}/>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{background:"#0a0e16",border:"1px solid #1f2937"}}>
+      {/* Header + Inline-Explainer */}
+      <div className="px-5 py-4" style={{borderBottom:"1px solid #1f2937"}}>
+        <div className="flex items-baseline gap-3 flex-wrap">
+          <h2 className="text-lg font-bold" style={{color:"#f1f5f9",fontFamily:"'Oswald',sans-serif",letterSpacing:"0.05em"}}>DRAFT ROOM</h2>
+          <span className="text-xs uppercase tracking-widest" style={{color:"#9ca3af"}}>on-the-clock comparison · {players.length} players</span>
+        </div>
+        <p className="text-xs mt-2" style={{color:"#9ca3af",lineHeight:1.5}}>
+          The same calibrated tier odds and outcome curves as the board and the player pages — one engine, one
+          Peak-Wins-Added axis — overlaid for a head-to-head read. Curves are height-normalized: compare
+          <b style={{color:"#cbd5e1"}}> position and spread</b>, not height. Pick the team situation below and the
+          room recommends accordingly: <b style={{color:"#06b6d4"}}>Win-Now</b> rewards the highest realistic floor,
+          <b style={{color:"#f59e0b"}}> Rebuild</b> the best All-Star-or-better odds,
+          <b style={{color:"#9ca3af"}}> Balanced</b> the highest expected value.
+        </p>
+        {players.length<3 && <RoomAddSelect pool={pool} picks={picks} onToggle={onToggle}/>}
+      </div>
+
+      {/* Team-Situation-Schalter */}
+      <div className="px-5 py-3 flex items-center gap-2 flex-wrap" style={{borderBottom:"1px solid #1f2937",background:"#0d1117"}}>
+        <span className="text-[10px] font-semibold uppercase tracking-widest" style={{color:"#4b5563"}}>Team situation</span>
+        {[
+          ["winnow","🛡️ Win-Now","Highest realistic floor (p20)","#06b6d4","#0c4a6e"],
+          ["balanced","⚖️ Balanced","Highest expected value","#9ca3af","#1f2937"],
+          ["rebuild","🎰 Rebuild","Best P(All-Star or better)","#f59e0b","#78350f"],
+        ].map(([v,l,desc,c,bg])=>(
+          <button key={v} onClick={()=>setGmMode(v)} title={desc}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold flex flex-col items-start"
+            style={{background:gmMode===v?bg:"#111827",color:gmMode===v?c:"#6b7280",
+                    border:`1px solid ${gmMode===v?c:"#1f2937"}`}}>
+            {l}<span style={{fontSize:9,opacity:0.7,fontWeight:400}}>{desc}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Empfehlung + 1-Satz-Begründung */}
+      {rec && (
+        <div className="px-5 py-3 flex items-center gap-3 flex-wrap" style={{background:"#111827",borderBottom:"1px solid #1f2937"}}>
+          <span className="text-xs font-bold uppercase tracking-widest" style={{color:"#a78bfa"}}>Recommendation</span>
+          <button onClick={()=>onSelect && onSelect(rec.p.name)} className="text-base font-bold hover:underline"
+            style={{color:COLORS[players.indexOf(rec.p)] ?? "#f97316",fontFamily:"'Oswald',sans-serif"}}>
+            {rec.p.name}
+          </button>
+          <span className="text-xs" style={{color:"#cbd5e1"}}>{rec.why}</span>
+        </div>
+      )}
+
+      {/* Kurven-Overlay auf EINER Peak-WA-Achse */}
+      <div className="px-5 py-4" style={{borderBottom:"1px solid #1f2937"}}>
+        <div className="flex items-center gap-4 mb-2 flex-wrap">
+          {mixes.map(({p,mix},i)=>(
+            <span key={p.name} className="inline-flex items-center gap-1.5 text-xs font-semibold" style={{color:COLORS[i]}}>
+              <span style={{background:COLORS[i],width:10,height:10,borderRadius:2,display:"inline-block"}}/>
+              {p.name}
+              <span style={{color:"#6b7280",fontWeight:400}}>
+                {mix ? `p20 ${mix.p20.toFixed(1)} · mode ${mix.mode.toFixed(1)} · p80 ${mix.p80.toFixed(1)}` : "insufficient signal"}
+              </span>
+              <button onClick={()=>onToggle(p.name)} style={{color:"#6b7280"}}>✕</button>
+            </span>
+          ))}
+        </div>
+        <svg width="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
+          {/* Tier-Zonen auf der geteilten Peak-WA-Achse */}
+          {PWA_TIER_ANCHORS.map(t=>{
+            const lo=Math.max(t.lo,PWA_X_MIN), hi=Math.min(t.hi,PWA_X_MAX);
+            return <rect key={t.key} x={xW(lo)} y={M.top} width={Math.max(1,xW(hi)-xW(lo))} height={baseY-M.top} fill={t.color} opacity={0.06}/>;
+          })}
+          <text x={xW(PWA_X_MIN)+2} y={12} fontSize={9} fill="#4b5563" fontWeight={600}>← weaker future</text>
+          <text x={xW(PWA_X_MAX)-2} y={12} fontSize={9} fill="#6b7280" fontWeight={600} textAnchor="end">stronger future →</text>
+          {[["Role",0.5,5,"#06b6d4"],["Starter",5,14,"#3b82f6"],["All-Star",14,20,"#f97316"],["Superstar",20,PWA_X_MAX,"#fbbf24"]].map(([l,lo,hi,c])=>(
+            <text key={l} x={(xW(lo)+xW(hi))/2} y={24} fontSize={9} fill={c} fontWeight={700} textAnchor="middle" opacity={0.85}>{l}</text>
+          ))}
+          {[0,5,10,15,20,25,30,35,40].map(w=>(
+            <text key={w} x={xW(w)} y={H-8} fontSize={8} fill="#4b5563" fontWeight={600} textAnchor="middle">{w}</text>
+          ))}
+          {mixes.map(({mix},i)=>{
+            if (!mix) return null;
+            let outline="";
+            mix.samples.forEach((sm,j)=>{
+              const yN = mix.maxY>0 ? sm.y/mix.maxY : 0;
+              outline += (j===0?"M ":" L ") + xW(sm.wa).toFixed(2) + "," + (baseY - yN*(baseY-M.top)).toFixed(2);
+            });
+            const path = `M ${xW(PWA_X_MIN).toFixed(2)},${baseY} ` + outline.slice(1) + ` L ${xW(PWA_X_MAX).toFixed(2)},${baseY} Z`;
+            return (
+              <g key={i}>
+                <path d={path} fill={COLORS[i]} opacity={0.16}/>
+                <path d={outline} fill="none" stroke={COLORS[i]} strokeWidth={2} opacity={0.95}/>
+                <line x1={xW(mix.mode)} x2={xW(mix.mode)} y1={M.top} y2={baseY} stroke={COLORS[i]} strokeWidth={1.5} strokeDasharray="3,3" opacity={0.8}/>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+
+      {/* Side-by-side: Tier-Odds, ▲AS+/▼out, Boosters/Limiters */}
+      <div className="px-5 py-4 grid gap-4" style={{gridTemplateColumns:`repeat(${players.length},minmax(0,1fr))`}}>
+        {mixes.map(({p,mix},i)=>{
+          const tierOrder=["Superstar","All-Star","Starter","Role Player","Replacement","Negative"];
+          const t=p.tiers||p.v2TierProbs||{};
+          const maxPct=Math.max(...tierOrder.map(k=>t[k]||0),1);
+          return (
+            <div key={p.name} className="rounded-xl p-4" style={{background:"#0d1117",border:`1px solid ${COLORS[i]}44`}}>
+              <button onClick={()=>onSelect && onSelect(p.name)} className="text-left font-bold hover:underline"
+                style={{color:COLORS[i],fontFamily:"'Oswald',sans-serif",fontSize:16}}>{p.name}</button>
+              <div className="text-[10px] mb-2" style={{color:"#6b7280"}}>
+                {p.pos} · {p.team||p.conf||"—"} · age {p.age!=null?ageOnDraftDay(p.age).toFixed(1):"—"}
+              </div>
+              <div className="flex items-baseline gap-2 mb-1">
+                <span className="text-2xl font-bold" style={{color:TC[p.predTier]||"#9ca3af",fontFamily:"'Oswald',sans-serif"}}>
+                  {p.war!=null?fmt(p.war,1):"—"}
+                </span>
+                <span className="text-[10px] uppercase tracking-wider" style={{color:"#6b7280"}}>Added Wins</span>
+                <span className="text-xs font-bold ml-auto" style={{color:TC[p.predTier]||"#6b7280"}}>{p.predTier||"—"}</span>
+              </div>
+              <div className="text-[11px] mb-2" style={{whiteSpace:"nowrap"}}>
+                <span style={{color:asPlus(p)>=25?"#22c55e":asPlus(p)>=10?"#86efac":"#6b7280"}}>▲{asPlus(p).toFixed(0)}% AS+</span>
+                <span style={{color:"#374151"}}> · </span>
+                <span style={{color:outPct(p)>=30?"#ef4444":outPct(p)>=15?"#f97316":"#6b7280"}}>▼{outPct(p).toFixed(0)}% out</span>
+                {mix && <span style={{color:"#6b7280"}}> · p20–p80: {mix.p20.toFixed(1)}–{mix.p80.toFixed(1)}</span>}
+              </div>
+              <div className="space-y-1 mb-3">
+                {tierOrder.map(k=>{
+                  const v=t[k]||0;
+                  return (
+                    <div key={k} className="flex items-center gap-2">
+                      <span className="text-[9px] w-16 shrink-0" style={{color:"#6b7280"}}>{k.replace("Role Player","Role")}</span>
+                      <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{background:"#1f2937"}}>
+                        <div style={{width:`${Math.min(100,(v/maxPct)*100)}%`,height:"100%",background:TC[k]||"#6b7280"}}/>
+                      </div>
+                      <span className="text-[9px] w-8 text-right shrink-0" style={{color:"#9ca3af"}}>{v?v.toFixed(0):0}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+              {(p.badges||[]).length>0 && (
+                <div className="mb-1">
+                  <span className="text-[9px] uppercase tracking-wider" style={{color:"#22c55e"}}>Boosters</span>
+                  <div className="flex flex-wrap gap-1 mt-0.5">
+                    {(p.badges||[]).slice(0,4).map((b,j)=><span key={j} className="px-1.5 py-0.5 rounded text-[9px]" style={{background:"#22c55e22",color:"#22c55e"}}>{b}</span>)}
+                  </div>
+                </div>
+              )}
+              {(p.redFlags||[]).length>0 && (
+                <div>
+                  <span className="text-[9px] uppercase tracking-wider" style={{color:"#ef4444"}}>Limiters</span>
+                  <div className="flex flex-wrap gap-1 mt-0.5">
+                    {(p.redFlags||[]).slice(0,4).map((f,j)=><span key={j} className="px-1.5 py-0.5 rounded text-[9px]" style={{background:"#ef444422",color:"#ef4444"}}>{f}</span>)}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div className="px-5 py-3 text-[11px]" style={{color:"#6b7280",borderTop:"1px solid #1f2937",background:"#0d1117"}}>
+        Same tier odds as the Big Board table — ▼% out is the chance of no NBA career. Recommendation logic: see Methods → Draft Room.
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
 // BIG BOARD (No class overview — single view)
 // ═══════════════════════════════════════════════════════════
-function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, availableYears, yearFilter, setYearFilter}) {
+function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, availableYears, yearFilter, setYearFilter, lens="nba"}) {
   const [sortBy,setSortBy]=useState("war");
   const [posFilter,setPosFilter]=useState("All");
-  const [boardView,setBoardView]=useState("table"); // "table" | "range" | "tier"
+  const [boardView,setBoardView]=useState("table"); // NBA-Lens-Views: "table" | "curves" | "tier" | "room"
   const [gmRisk,setGmRisk]=useState("neutral");    // "ceiling" | "neutral" | "floor"
+  // Draft-Room-Auswahl: 2-3 Spieler für den On-the-clock-Vergleich (NBA-Lens).
+  const [roomPicks,setRoomPicks]=useState([]);
+  const togglePick=(name)=>setRoomPicks(prev=>
+    prev.includes(name) ? prev.filter(n=>n!==name) : (prev.length>=3 ? prev : [...prev,name]));
 
   const fetchBoard = (year) => {
     setLoading(true);
@@ -14300,8 +14702,8 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
     // ihre Roster-Entscheidungen Talent ueber den NBA-Cut hinaus einschaetzen.
     // International-Board braucht den vollen Pool (Spieler mit NBA% < 20 % liegen
     // gerade UNTER dem WAR-Top-100); IntlBoardView filtert + capped selbst.
-    return boardView === "intl" ? withRanges : withRanges.slice(0, 100);
-  }, [allPlayers, sortBy, posFilter, gmRisk, boardView]);
+    return lens === "intl" ? withRanges : withRanges.slice(0, 100);
+  }, [allPlayers, sortBy, posFilter, gmRisk, lens]);
 
   const posColors = {Playmaker:"#3b82f6", Wing:"#f97316", Big:"#8b5cf6"};
 
@@ -14323,12 +14725,16 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
       <div className="rounded-2xl p-6 relative overflow-hidden" style={{background:"linear-gradient(135deg,#0d1117 0%,#1a1040 100%)",border:"1px solid #1f2937"}}>
         <div className="absolute top-0 right-0 w-64 h-64 opacity-5 blur-3xl rounded-full" style={{background:"radial-gradient(circle,#f97316,transparent)"}}/>
         <div className="relative">
-          <div className="text-xs uppercase tracking-widest mb-2" style={{color:"#f97316"}}>ProspectTheory · Draft Intelligence</div>
+          <div className="text-xs uppercase tracking-widest mb-2" style={{color:lens==="intl"?"#10b981":"#f97316"}}>
+            ProspectTheory · {lens==="intl" ? "Recruiting Intelligence" : "Draft Intelligence"}
+          </div>
           <h2 className="text-3xl font-bold" style={{color:"#e5e7eb",fontFamily:"'Oswald',sans-serif"}}>
-            {yearFilter && yearFilter !== "All" ? yearFilter : "All Years"} Big Board
+            {yearFilter && yearFilter !== "All" ? yearFilter : "All Years"} {lens==="intl" ? "Recruiting Board" : "Big Board"}
           </h2>
           <p className="text-sm mt-1" style={{color:"#6b7280"}}>
-            Probabilistic ranking · {filtered.length} prospects · Sort: {sortLabels[sortBy] || "Added Wins"}
+            {lens==="intl"
+              ? <>Buy-side view · projected sustainable league level · Value ▲ = buy-low</>
+              : <>Probabilistic ranking · {filtered.length} prospects · Sort: {sortLabels[sortBy] || "Added Wins"}</>}
           </p>
         </div>
       </div>
@@ -14359,30 +14765,31 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
             </button>
           ))}
         </div>
-        {/* Sort buttons */}
-        <div className="flex gap-1">
+        {/* Sort buttons — NBA-Lens only (Recruiting Board sortiert selbst nach Level-EV) */}
+        {lens!=="intl" && <div className="flex gap-1">
           {[["war","Added Wins"],["age","Age"],["bpm","BPM"]].map(([k,l])=>(
             <button key={k} onClick={()=>setSortBy(k)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
               style={{background:sortBy===k?"#f97316":"#1f2937",color:sortBy===k?"#000":"#9ca3af"}}>
               {l}
             </button>
           ))}
-        </div>
-        {/* View toggle (Sprint-5.2: Range view consolidated into Curves) */}
-        <div className="flex gap-1 ml-auto">
-          {[["table","☰ Table"],["curves","◉ Curves"],["tier","▥ Tier Board"],["intl","🌍 International"]].map(([v,l])=>(
+        </div>}
+        {/* View toggle — NBA-Lens-Views. (International: früher 4. Toggle hier,
+            jetzt gleichrangige Top-Level-Lens; Draft Room neu dazu.) */}
+        {lens!=="intl" && <div className="flex gap-1 ml-auto">
+          {[["table","☰ Table"],["curves","◉ Curves"],["tier","▥ Tier Board"],["room",`⚔ Draft Room${roomPicks.length?` (${roomPicks.length})`:""}`]].map(([v,l])=>(
             <button key={v} onClick={()=>setBoardView(v)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
               style={{background:boardView===v?"#6d28d9":"#1f2937",color:boardView===v?"#e9d5ff":"#9ca3af"}}>
               {l}
             </button>
           ))}
-        </div>
+        </div>}
       </div>
 
       {/* Outcome-Curves View — Sprint-5.1, Coleman-style mini density curves.
           Sprint-5.2: GM Risk Profile sort is rendered inside OutcomeCurveBoard
           (Range view was removed and the GM-risk control migrated). */}
-      {boardView === "curves" && (
+      {lens!=="intl" && boardView === "curves" && (
         <div>
           <OutcomeCurveBoard players={filtered} onSelect={onSelect}
                              gmRisk={gmRisk} setGmRisk={setGmRisk}/>
@@ -14390,21 +14797,26 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
       )}
 
       {/* Tier Board View — Ben-Style Tier-Splits + Archetype-Spalten */}
-      {boardView === "tier" && (
+      {lens!=="intl" && boardView === "tier" && (
         <div>
           <TierBoardView players={filtered} onSelect={onSelect} />
         </div>
       )}
 
-      {/* Sprint-5.11: International Board — eigenes Board, "wenn nicht NBA" */}
-      {boardView === "intl" && (
+      {/* Draft Room — On-the-clock-Vergleich von 2-3 ausgewählten Prospects (NBA-Lens) */}
+      {lens!=="intl" && boardView === "room" && (
+        <DraftRoomView picks={roomPicks} pool={filtered} onToggle={togglePick} onSelect={onSelect}/>
+      )}
+
+      {/* Recruiting-Lens: eigenes Board (früher 4. boardView-Toggle "intl") */}
+      {lens === "intl" && (
         <div>
           <IntlBoardView players={filtered} onSelect={onSelect} />
         </div>
       )}
 
       {/* Board table */}
-      {boardView === "table" && (
+      {lens!=="intl" && boardView === "table" && (
       <div className="rounded-xl overflow-hidden" style={{background:"#111827",border:"1px solid #1f2937"}}>
         {/* Sprint-5.13: kompakter Explainer — Table-View war die einzige Ansicht ohne. */}
         <div style={{padding:"10px 14px", fontSize:12, color:"#9ca3af", borderBottom:"1px solid #1f2937", lineHeight:1.6}}>
@@ -14412,13 +14824,15 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
           <b style={{color:"#e5e7eb"}}> NBA Tier</b> = the most likely career outcome — with its honest context underneath:
           <span style={{color:"#22c55e"}}> ▲% AS+</span> = chance of an All-Star-or-better career,
           <span style={{color:"#ef4444"}}> ▼% out</span> = chance of no NBA career. Two "Starters" with different ▲/▼ are different bets.
-          Click any player for the full profile.
+          Click any player for the full profile — or use the <b style={{color:"#a78bfa"}}>⚔ buttons</b> to send 2–3 players
+          into the Draft Room for a side-by-side decision.
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr style={{background:"#0a0e17"}}>
                 <th className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>#</th>
+                <th className="px-2 py-2.5 text-left text-xs font-semibold" title="Select 2-3 players to compare in the Draft Room" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>⚔</th>
                 <th className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>Player</th>
                 <th className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>Pos</th>
                 <th className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold" style={{color:"#6b7280",borderBottom:"1px solid #1f2937"}}>Team</th>
@@ -14436,6 +14850,16 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
                   <tr key={p.name} className="cursor-pointer hover:bg-white hover:bg-opacity-5 transition-colors" onClick={()=>onSelect(p.name)}
                     style={{borderBottom:"1px solid #1f293744"}}>
                     <td className="px-3 py-2.5 font-bold text-xs" style={{color:"#475569"}}>{i+1}</td>
+                    <td className="px-2 py-2.5">
+                      <button onClick={(e)=>{e.stopPropagation();togglePick(p.name);}}
+                        title={roomPicks.includes(p.name)?"Remove from Draft Room":"Add to Draft Room comparison"}
+                        className="w-6 h-6 rounded text-xs font-bold"
+                        style={{background:roomPicks.includes(p.name)?"#6d28d9":"#1f2937",
+                                color:roomPicks.includes(p.name)?"#e9d5ff":"#6b7280",
+                                border:`1px solid ${roomPicks.includes(p.name)?"#a78bfa":"#374151"}`}}>
+                        {roomPicks.includes(p.name)?"✓":"+"}
+                      </button>
+                    </td>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-1">
                         <span className="font-semibold" style={{color:"#e5e7eb"}}>{p.name}</span>
@@ -14491,6 +14915,27 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
           </table>
         </div>
       </div>
+      )}
+
+      {/* Draft-Room-Quick-Bar — erscheint sobald Spieler für den Vergleich markiert sind */}
+      {lens!=="intl" && roomPicks.length>0 && boardView!=="room" && (
+        <div className="sticky bottom-4 z-40 flex items-center gap-2 flex-wrap rounded-xl px-4 py-3"
+             style={{background:"#111827ee",border:"1px solid #6d28d9",backdropFilter:"blur(8px)"}}>
+          <span className="text-xs font-semibold uppercase tracking-wider" style={{color:"#a78bfa"}}>Draft Room</span>
+          {roomPicks.map(n=>(
+            <span key={n} className="px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5"
+                  style={{background:"#1f2937",color:"#e5e7eb"}}>
+              {n}
+              <button onClick={()=>togglePick(n)} style={{color:"#6b7280"}}>✕</button>
+            </span>
+          ))}
+          <button onClick={()=>setBoardView("room")} disabled={roomPicks.length<2}
+            className="ml-auto px-4 py-2 rounded-lg text-xs font-bold"
+            style={{background:roomPicks.length>=2?"#6d28d9":"#1f2937",color:roomPicks.length>=2?"#e9d5ff":"#6b7280",
+                    cursor:roomPicks.length>=2?"pointer":"not-allowed"}}>
+            {roomPicks.length>=2 ? "Open Draft Room →" : "Pick 1 more to compare"}
+          </button>
+        </div>
       )}
     </div>
   );
@@ -14717,6 +15162,28 @@ export default function App() {
   const [sel,setSel]=useState(null);
   const [tab,setTab]=useState("overview");
   const [boardView,setBoardView]=useState("bigboard");  // Startseite: bigboard | research | methods
+  // Lens = Top-Level-IA: zwei Berufe, zwei Fragen. NBA-Scout ("wen draften?") vs.
+  // Intl-Sportdirektor ("wen verpflichten?"). Kein Router vorhanden — Hash reicht
+  // (#lens=recruiting); Player-/Board-Routing über pathname bleibt unberührt.
+  const [lens,setLens]=useState(()=>(
+    typeof window!=="undefined" && window.location.hash.includes("lens=recruiting") ? "intl" : "nba"
+  ));
+  // Lens → URL-Hash sync (replaceState: keine History-Einträge; Back/Forward gehört
+  // weiter dem Player-Routing). Hängt der Effect auch an sel, weil selectPlayer/Back
+  // pathname-URLs OHNE Hash pushen — hier wird der Lens-Hash danach wieder angehängt.
+  useEffect(()=>{
+    if (typeof window==="undefined") return;
+    const want = lens==="intl" ? "#lens=recruiting" : "";
+    if (window.location.hash !== want) {
+      window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search + want);
+    }
+  },[lens,sel]);
+  useEffect(()=>{
+    if (typeof window==="undefined") return;
+    const onHash=()=>setLens(window.location.hash.includes("lens=recruiting") ? "intl" : "nba");
+    window.addEventListener("hashchange",onHash);
+    return ()=>window.removeEventListener("hashchange",onHash);
+  },[]);
   const [search,setSearch]=useState("");
   const [showS,setShowS]=useState(false);
   // Default comparison tier: "Starter" is the most informative baseline for first-round prospects
@@ -15074,8 +15541,8 @@ export default function App() {
             <div>
               <div className="font-bold text-sm tracking-wider" style={{fontFamily:"'Oswald',sans-serif",color:"#f97316"}}>PROSPECT THEORY</div>
               <div className="flex items-center gap-2">
-                <div className="text-xs" style={{color:"#6b7280"}}>NBA Draft Intelligence</div>
-                {apiVersion && <span className="text-xs px-1.5 py-0.5 rounded" style={{background:"#1f2937",color:"#4b5563",fontSize:9}}>API v{apiVersion}</span>}
+                <div className="text-xs" style={{color:"#6b7280"}}>{lens==="intl" ? "International Recruiting Intelligence" : "NBA Draft Intelligence"}</div>
+                {apiVersion &&<span className="text-xs px-1.5 py-0.5 rounded" style={{background:"#1f2937",color:"#4b5563",fontSize:9}}>API v{apiVersion}</span>}
               </div>
             </div>
           </div>
@@ -15107,9 +15574,25 @@ export default function App() {
       <main className="max-w-7xl mx-auto px-4 md:px-8 py-6">
         {!sel ? (
           <>
-            {/* Meta-level navigation: Big Board (default) · Stats Lab · Research · Methods */}
+            {/* Top-Level lens switch — zwei Berufe, zwei Fragen (IA-Umbau): Boards,
+                Player-Hero und Vokabular folgen der Lens; Suche, Player-Pages,
+                Stats Lab, Research und Methods sind shared. */}
+            <div className="flex gap-2 mb-4 flex-wrap items-center">
+              {[["nba","🏀 NBA Draft","Who should we draft?","#f97316"],
+                ["intl","🌍 International Recruiting","Who should we sign?","#10b981"]].map(([id,label,q,color])=>(
+                <button key={id} onClick={()=>{setLens(id);setBoardView("bigboard");}}
+                  className="px-5 py-2.5 rounded-xl text-sm font-bold transition-colors flex flex-col items-start"
+                  style={{background: lens===id?color:"transparent",
+                          color: lens===id?"#000":"#9ca3af",
+                          border:`1px solid ${lens===id?color:"#374151"}`}}>
+                  <span>{label}</span>
+                  <span style={{fontSize:10,fontWeight:500,opacity:lens===id?0.75:0.6}}>{q}</span>
+                </button>
+              ))}
+            </div>
+            {/* Meta-level navigation: lens board · Stats Lab · Research · Methods (shared) */}
             <div className="flex gap-2 mb-6 flex-wrap">
-              {[["bigboard","Big Board","▦"],["lab","Stats Lab","🧪"],["research","Research","🔬"],["methods","Methods","📖"]].map(([id,label,icon])=>(
+              {[["bigboard",lens==="intl"?"Recruiting Board":"Big Board","▦"],["lab","Stats Lab","🧪"],["research","Research","🔬"],["methods","Methods","📖"]].map(([id,label,icon])=>(
                 <button key={id} onClick={()=>setBoardView(id)}
                   className="px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
                   style={{background: boardView===id?"#f97316":"transparent",
@@ -15126,7 +15609,7 @@ export default function App() {
                   <p className="text-sm" style={{color:"#6b7280"}}>Loading prospects...</p>
                 </div>
               ) : (
-                <BigBoardView onSelect={selectPlayer} boardData={boardData} setBoardData={setBoardData} loading={loading} setLoading={setLoading} availableYears={availableYears} yearFilter={yearFilter} setYearFilter={setYearFilter}/>
+                <BigBoardView onSelect={selectPlayer} boardData={boardData} setBoardData={setBoardData} loading={loading} setLoading={setLoading} availableYears={availableYears} yearFilter={yearFilter} setYearFilter={setYearFilter} lens={lens}/>
               )
             ) : boardView==="lab" ? (
               <StatsLabView onSelect={selectPlayer}/>
@@ -15157,7 +15640,7 @@ export default function App() {
           <>
             <button onClick={()=>setSel(null)} className="mb-4 flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:bg-white hover:bg-opacity-5"
               style={{color:"#9ca3af",border:"1px solid #374151"}}>
-              <span>←</span> Back to Big  Board
+              <span>←</span> {lens==="intl" ? "Back to Recruiting Board" : "Back to Big Board"}
             </button>
             {tab!=="methodology" && <>
               <div className="mb-5 rounded-2xl p-5 relative overflow-hidden" style={{background:"linear-gradient(135deg,#111827 0%,#0f172a 50%,#1e1b4b 100%)",border:"1px solid #1f2937"}}>
@@ -15249,7 +15732,7 @@ export default function App() {
                 legacy CompsTab source fully removed (was dead since 3.10). */}
             {tab==="comps"&&<CompsV5Tab p={p}/>}
             {tab==="devtrajectory"&&<DevTrajectoryTab p={p}/>}
-            {tab==="projection"&&<ProjectionTab p={p}/>}
+            {tab==="projection"&&<ProjectionTab p={p} lens={lens}/>}
             {/* Tobias 2026-06-04 (Sprint-2): Risk Profile Tab re-enabled — siehe TABS-Eintrag */}
             {tab==="riskprofile"&&<RiskProfileTab p={p}/>}
           </>

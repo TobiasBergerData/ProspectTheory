@@ -19,15 +19,25 @@ wegdriften (wie beim α-Blend-Narrativ, das das Modell um Monate überlebt hat).
 
 | Site-Element | Inline-Explainer | Methods-Tab-Abschnitt |
 |---|---|---|
-| Big Board **Table** (Added Wins, NBA Tier, ▲AS+/▼out) | Header-Box direkt über der Tabelle (`boardView === "table"`) | Quick: „What This Is" |
+| **Lens-Switch** (Top-Level: NBA Draft \| International Recruiting) | Kurz-Caption unter den Lens-Buttons („Who should we draft?" / „Who should we sign?") | Quick: „What This Is" (Zwei-Lens-Absatz, erster Absatz) |
+| Big Board **Table** (Added Wins, NBA Tier, ▲AS+/▼out — NBA-Lens) | Header-Box direkt über der Tabelle (`boardView === "table"`) | Quick: „What This Is" |
+| **Draft Room** (NBA-Lens: Kurven-Overlay, Tier-Odds, Win-Now/Balanced/Rebuild) | Header-Text in `DraftRoomView` (+ Footer-Zeile: height-normalized, ▼out-Definition) | Deep: „Draft Room" (nach „GM Risk Profile") |
 | Big Board **Curves** (Outcome Distributions) | Header in `OutcomeCurveBoard` (Peak-WA-Lineal, Richtungs-Cue) | Quick: „GM Risk Profile" |
 | Big Board **Tier Board** | Kurzzeile in `TierBoardView` | Deep: Archetype-Abschnitte |
 | **International Recruiting Board** | Header in `IntlBoardView` (Buying-Guide-Framing, Value ▲, NBA risk, Comps) | Deep: „International Adjustments" + Pipeline-Box „Intl Career Projection" |
-| Player **Projection**-Tab (Hero, Tier Forecast, Outcome Curve) | Hero-Tooltip + `Sec sub=` der beiden Kurven-Sektionen | Deep: „Methodology & Model Documentation" |
+| Player **Projection**-Tab (Hero, Tier Forecast, Outcome Curve) — Hero ist **lens-abhängig**: NBA-Lens = ppWA + Tier-Odds, Recruiting-Lens = `RecruitingHeroCard` (Projected Level + Value + Comps, NBA nur als Flight Risk) | Hero-Tooltips (beide Varianten) + `Sec sub=` der beiden Kurven-Sektionen | Deep: „Methodology & Model Documentation" (NBA) · Deep: „International Adjustments" (Recruiting) |
 | **Comps**-Tab (v5) | `Sec sub=` in `CompsV5Tab` | Deep: `sections`-Eintrag „Comps Tab" |
 | **Mind**-Tab | Sec-Subs im Tab | Quick: „Mind Tab" + Caveat-Box |
 | **Live Validation** (Methods, oben) | — (ist selbst der Explainer) | speist sich aus `/api/model-card` — nie von Hand editieren |
 | Pipeline-Diagramm (Methods Deep) | — | `PipelineDiagram` in `MethodologyTab` — bei Modell-Umbau IMMER mitziehen |
+
+## Lens-Sprachregel (IA: zwei gleichrangige Top-Level-Lenses)
+
+- **NBA-Lens** spricht in: Added Wins · Tier-Odds · Bust-Risk (▼out).
+- **Recruiting-Lens** spricht in: Projected Level · Value ▲/▼ · Flight Risk.
+- Skalen **nie mischen** — je Lens führt genau eine Skala. Auf der Player-Page
+  entscheidet die aktive Lens, welcher Hero führt; die jeweils andere Welt
+  erscheint nur als Ein-Zeilen-Verweis (z. B. „NBA Flight Risk: x%").
 
 ## Aktueller Modell-Sprachgebrauch (Single Source of Truth für Copy)
 
