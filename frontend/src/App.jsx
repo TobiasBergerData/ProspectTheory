@@ -11299,7 +11299,7 @@ function _conf(n) {
   return { label: "Low", color: "#9ca3af" };
 }
 
-function ResearchTab({p}) {
+function ArchetypeBandsView({p}) {
   const [sortKey, setSortKey] = useState("ceiling");
   const [transPre, setTransPre] = useState("Scoring Wing");
   const playerArch = p?.riskProfile?.ceilingArchetype || p?.archetype || null;
@@ -11986,6 +11986,846 @@ function ResearchTab({p}) {
 }
 
 // ═══════════════════════════════════════════════════════════
+// FRONT OFFICE LAB (Research-Bereich) — Draft-Historie je REGIME
+// ─────────────────────────────────────────────────────────────
+// ANALYSE-EINHEIT ist das REGIME (Person in Charge × Team × Zeitraum),
+// NIE die Franchise über Regime-Wechsel hinweg. Ein Pick zählt für den
+// Executive, der ihn zu verantworten hatte — plus Draft-Night-Trade-
+// Attribution (gewählt FÜR wen, nicht gewählt VON wem).
+//
+// COPY WIRD VOM GATE GESTEUERT (validate_fo_signal.py, Konzept §3A):
+// `gate.verdict === "descriptive"` heißt: die Ergebnis-Qualität (PVA) ist
+// NICHT wiederholbar: die Split-half-Korrelation liegt nahe null bzw. leicht
+// negativ, und der Permutationstest findet die beobachtete Streuung zwischen
+// Regimen UNTER dem Zufallsniveau (p weit über 0.5). Deshalb heißt diese
+// Seite "what happened" und niemals "Track Record": keine GM-Rangliste,
+// keine Prognose aus PVA. Was dagegen Struktur hat, ist das VERHALTEN
+// (Omnibus-Permutation über die unbedingten Anteile) → Blind Spots, Risiko
+// und Reach sind der prognostisch nützliche Teil des Labs.
+// ABER: seit dem Zwei-Baselines-Umbau (Konzept §11.1) gilt diese Struktur
+// nur unbedingt. Konditioniert man auf Jahr × Draft-Band, überlebt keine
+// einzelne Zelle die FDR — die Auffälligkeiten gegen den Verfügbarkeits-Pool
+// sind überwiegend Draft-POSITIONS-Effekte. Die Karten zeigen deshalb beide
+// Baselines nebeneinander (● Peer, ◐ nur Pool, ○ nichts) und die Copy darf
+// die schwächere Baseline nicht als Beleg verkaufen.
+// KEINE harten Zahlen in diesem Kommentar: sie ändern sich mit jedem
+// Refresh. Die aktuellen Werte stehen im Payload (`gate`) und werden im
+// UI daraus gerendert (FoMethod) — genau eine Quelle der Wahrheit.
+// Quelle: /api/front-office (statisch, export_front_office.py).
+// ═══════════════════════════════════════════════════════════
+let _foCache = null;
+function useFrontOffice() {
+  const [d, setD] = useState(_foCache);
+  const [err, setErr] = useState(false);
+  useEffect(() => {
+    if (_foCache) { setD(_foCache); return; }
+    let alive = true;
+    fetch(`${API_BASE}/front-office`)
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(j => { _foCache = j; if (alive) setD(j); })
+      .catch(() => { if (alive) setErr(true); });
+    return () => { alive = false; };
+  }, []);
+  return { data: d, err };
+}
+
+// ─── FO_BLOCK_START ────────────────────────────────────────────────────────
+// Diese Marke ist FUNKTIONAL, kein Schmuck: `frontend/tests/fo_render_test.mjs`
+// schneidet den Block zwischen FO_BLOCK_START und FO_BLOCK_END heraus und
+// rendert ihn serverseitig gegen einen echten Payload. Vorher liefen die
+// Schnittgrenzen über Zeilennummern — die sind zweimal weggedriftet, und der
+// Test hat still das alte Bundle geprüft. Marken nicht entfernen, nicht
+// duplizieren, und neue FO-Komponenten INNERHALB der Marken anlegen.
+const FO_PANEL = { background: "#0d1117", border: "1px solid #1f2937" };
+const foNum = (v, nd = 1, plus = false) =>
+  v === null || v === undefined ? "—"
+    : `${plus && v > 0 ? "+" : ""}${Number(v).toFixed(nd)}`;
+const foPct = (v) => v === null || v === undefined ? "—" : `${(v * 100).toFixed(0)}%`;
+// PVA-Farbe: bewusst gedämpft. Kein Grün/Rot-Ranking-Signal, weil der Gate
+// deskriptiv ist — nur Leserichtung "über/unter Slot-Erwartung".
+const foPvaColor = (v) => v === null || v === undefined ? "#9ca3af"
+  : v > 0 ? "#4ade80" : v < 0 ? "#f87171" : "#9ca3af";
+
+// ─── Gate-Banner: die eine Stelle, die den Wahrheitsanspruch der Seite setzt
+function FoGateBanner({ gate, window: w }) {
+  const desc = gate?.verdict !== "track_record";
+  return (
+    <div className="rounded-xl p-4 text-sm text-gray-300 leading-relaxed" style={FO_PANEL}>
+      <div className="font-semibold text-gray-100 mb-1">
+        {desc ? "Draft history — what happened." : "Draft track record."}
+      </div>
+      {desc ? (
+        <>
+          Every pick since {w?.pva_from} is credited to the <span className="text-gray-100">regime</span> that
+          made it — the person in charge, their team, their years — and scored against what that
+          draft slot historically returned (<span className="text-gray-100">Pick Value Added</span>).
+          Before shipping this we tested whether pick quality <em>repeats</em> within a regime.
+          It does not: split-half reliability is {foNum(gate?.outcome_split_half, 2, true)} and a
+          permutation test puts the observed spread between regimes <em>below</em> chance
+          (p = {foNum(gate?.outcome_perm_p, 2)}, {gate?.n_regimes_tested} regimes with 8+ graded picks).
+          <div className="mt-2 text-[13px] text-gray-400">
+            So read PVA as <span className="text-gray-200">a record of outcomes, not a skill rating</span>.
+            No GM ranking, no forecast from PVA — draft outcomes at this sample size are dominated by
+            variance. {gate?.behaviour_structure && (
+              <>What <span className="text-gray-200">does</span> hold up is <span className="text-gray-200">behaviour</span>:
+              regimes differ in <em>who they pick</em> far more than random assignment allows
+              (best permutation p = {foNum(gate?.behaviour_best_p, 3)}). That makes the Blind Spots
+              and Risk sections the predictive part of this page — preferences are measurable and
+              useful even where skill is not.</>
+            )}
+          </div>
+        </>
+      ) : (
+        <>Regime pick quality passed the repeatability gate — PVA is reported with shrinkage and CI.</>
+      )}
+      <div className="mt-2 text-[11px] text-gray-500">
+        {w?.n_picks?.toLocaleString()} picks · {w?.n_evaluable?.toLocaleString()} graded
+        (drafts ≤ {w?.evaluable_to}; newer classes need 5 seasons before they can be judged) ·
+        {" "}{w?.n_regimes} regimes · player-type data from {w?.types_from}
+      </div>
+    </div>
+  );
+}
+
+// ─── Tilt-Zeile: gewählt vs. VERFÜGBAR (Pool) vs. ZEITGENOSSEN (Peers).
+// Beide Baselines stehen nebeneinander, weil ihre DIFFERENZ die Aussage ist:
+// wer nur gegen den Pool auffällt, zeigt einen Draft-Positions-Effekt (Lottery-
+// Picks sind ligaweit jünger), keinen Regime-Effekt. Verdikt und Farbe folgen
+// deshalb der Peer-Baseline; die Pool-Spalte bleibt sichtbar, nicht bewertend.
+function FoTilt({ t }) {
+  const diff = (t.chosen ?? 0) - (t.avail ?? 0);
+  const dir = diff >= 0 ? "leans toward" : "avoids";
+  const mark = t.sig_peer ? "●" : (t.sig ? "◐" : "○");
+  const col = t.sig_peer ? (diff >= 0 ? "#60a5fa" : "#fb923c")
+                         : (t.sig ? "#9ca3af" : "#6b7280");
+  return (
+    <div className="text-[11px] flex flex-wrap items-center gap-x-2 py-0.5">
+      <span style={{ color: col, minWidth: 128 }} className="shrink-0">
+        {mark} {t.label}
+      </span>
+      <span className="text-gray-300">{foPct(t.chosen)}</span>
+      <span className="text-gray-600">vs</span>
+      <span className="text-gray-400" title="Share of this type among all players still on the board when this regime picked">
+        {foPct(t.avail)} available
+      </span>
+      {t.peer !== null && t.peer !== undefined && (
+        <>
+          <span className="text-gray-600">vs</span>
+          <span className="text-gray-400" title="Share among all other regimes picking in the same draft year and the same pick band — the contemporaries test">
+            {foPct(t.peer)} contemporaries
+          </span>
+        </>
+      )}
+      <span style={{ color: col }}>
+        {t.sig_peer
+          ? `— ${dir} vs. contemporaries (FDR ${Number(t.fdr_peer).toFixed(3)})`
+          : t.sig
+            ? `— vs. the pool only (FDR ${Number(t.fdr).toFixed(3)}); in line with contemporaries at the same slot`
+            : "— tendency, not significant"}
+      </span>
+    </div>
+  );
+}
+
+// ─── Range-Zeile: ein Draft-Band eines Regimes. Rein deskriptiv, kein p-Wert —
+// Bänder zerlegen die Stichprobe zu weit, um zu testen. Der Nenner der Anteile
+// (n_sh) steht NEBEN der Pick-Zahl, weil er kleiner ist: für sehr späte
+// Zweitrunden-Picks existiert kein vergleichbarer Rest-Pool.
+function FoBandRow({ b }) {
+  const triple = (v, label) => (
+    <span className="text-gray-400">
+      <span className="text-gray-300">{foPct(v?.[0])}</span>
+      <span className="text-gray-600"> / {foPct(v?.[1])} avail / {foPct(v?.[2])} peers</span>
+      <span className="text-gray-600"> {label}</span>
+    </span>
+  );
+  const pos = b.pos || {};
+  return (
+    <div className="text-[11px] py-1" style={{ borderTop: "1px solid #111827" }}>
+      <div className="flex items-baseline gap-2">
+        <span className="text-gray-300" style={{ minWidth: 104 }}>{b.label}</span>
+        <span className="text-gray-500">{b.n} pick{b.n === 1 ? "" : "s"}</span>
+        {b.n_ev > 0 && (
+          <span style={{ color: foPvaColor(b.pva) }}>{foNum(b.pva, 2, true)} PVA
+            <span className="text-gray-600"> ({b.n_ev} graded)</span></span>
+        )}
+        {b.n_ev === 0 && <span className="text-gray-600">not gradeable yet</span>}
+        {b.cons !== null && b.cons !== undefined && (
+          <span className="text-gray-500 ml-auto" title="Share of the still-available board that consensus ranked higher and this regime passed over. 0 = took the consensus best player available.">
+            {foPct(b.cons)} passed over
+          </span>
+        )}
+      </div>
+      {b.n_sh > 0 && (
+        <div className="pl-1 mt-0.5 flex flex-wrap gap-x-3">
+          {triple(b.young, "age ≤19")}
+          {triple(b.intl, "intl")}
+          <span className="text-gray-600">n = {b.n_sh}{b.n_sh < b.n ? ` of ${b.n}` : ""}</span>
+        </div>
+      )}
+      {b.pos_n > 0 && (
+        <div className="pl-1 mt-0.5 flex flex-wrap gap-x-3 text-gray-400">
+          {["Bigs", "Wings", "Playmakers"].map(k => (
+            <span key={k}>
+              <span className="text-gray-300">{foPct(pos[k]?.[0])}</span>
+              <span className="text-gray-600"> / {foPct(pos[k]?.[1])} peers {k}</span>
+            </span>
+          ))}
+          <span className="text-gray-600" title="Positions are only counted on picks whose position is on record — 26.5% are not, and an unknown position is not evidence of a wing.">
+            n = {b.pos_n} with position on record
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Eine Regime-Karte
+function FoRegimeCard({ r, open, onToggle, consMean }) {
+  // Nach oben kommt, was unter EINER der beiden Baselines auffällt — sonst
+  // verschwände ein Peer-Treffer, der den Pool-Test nicht besteht, in der
+  // eingeklappten Sektion, obwohl er die schärfere Aussage ist.
+  const sigTilts = (r.tilts || []).filter(t => t.sig || t.sig_peer);
+  const otherTilts = (r.tilts || []).filter(t => !t.sig && !t.sig_peer);
+  // Regime ohne EINEN bewertbaren Pick: alle Auswahlen liegen noch im
+  // Zensur-Fenster (5 volle Saisons). Verhalten ist messbar, Ergebnis nicht.
+  // Dann darf die Karte keine PVA-Zahl und kein CI zeigen — ein "0.00" oder
+  // "[—, —] includes zero" behauptet ein Ergebnis, das es nicht gibt.
+  const ungraded = !r.n && (r.n_all || 0) > 0;
+  // Risiko-Gauge: z(jung-Anteil) + z(intl-Anteil), Skala ca. −3…+4, 0 = Liga-Mittel
+  const riskPos = Math.max(0, Math.min(100, ((r.risk ?? 0) + 3) / 7 * 100));
+  return (
+    <div className="rounded-xl p-3" style={FO_PANEL}>
+      <div className="flex items-baseline justify-between gap-2 cursor-pointer" onClick={onToggle}>
+        <div>
+          {/* Kein Em-Dash bei fehlendem Executive: die Quelle hat für ein paar
+              Team-Saisons kein Executive-Feld. Der Span wird gezeigt, aber
+              ausdrücklich NICHT einer Person zugeschrieben. */}
+          <span className="text-sm font-semibold"
+                style={{ color: r.exec ? "#f3f4f6" : "#9ca3af" }}
+                title={r.exec ? undefined : "No executive of record for these seasons — the source has a gap, so this span is shown but not attributed to a person."}>
+            {r.exec || "Executive not on record"}</span>
+          <span className="text-xs text-gray-400 ml-2">{r.team} · {r.from}–{r.to}</span>
+        </div>
+        <div className="text-right shrink-0">
+          {ungraded ? (
+            <>
+              <div className="text-sm font-semibold text-gray-600">n/a</div>
+              <div className="text-[10px] text-gray-500">not gradeable yet</div>
+            </>
+          ) : (
+            <>
+              <div className="text-sm font-semibold" style={{ color: foPvaColor(r.pva) }}>
+                {foNum(r.pva, 2, true)}
+              </div>
+              <div className="text-[10px] text-gray-500">PVA / pick</div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {ungraded ? (
+        <div className="mt-2 text-[11px] text-gray-500">
+          {r.n_all} pick{r.n_all === 1 ? "" : "s"}, none gradeable yet — every selection is
+          still inside the 5-season censoring window. Behaviour below is measured; outcome is not.
+        </div>
+      ) : (
+      <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+        <div className="text-gray-400">Graded picks
+          <span className="text-gray-200 ml-1">{r.n}</span>
+          {(r.n_all || 0) > r.n && (
+            <span className="text-gray-600 ml-1">of {r.n_all}</span>
+          )}</div>
+        <div className="text-gray-400">Total peak WA
+          <span className="text-gray-200 ml-1">{foNum(r.wa_total, 1)}</span></div>
+        <div className="text-gray-400 col-span-2">
+          95% CI
+          <span className="ml-1" style={{ color: (r.ci?.[0] ?? 0) > 0 || (r.ci?.[1] ?? 0) < 0 ? "#e5e7eb" : "#6b7280" }}>
+            [{foNum(r.ci?.[0], 2, true)}, {foNum(r.ci?.[1], 2, true)}]
+          </span>
+          {(r.ci?.[0] ?? 0) <= 0 && (r.ci?.[1] ?? 0) >= 0 && (
+            <span className="text-gray-600 ml-1">— includes zero</span>
+          )}
+        </div>
+      </div>
+      )}
+
+      {/* Risiko + Reach: der Teil, der laut Gate trägt */}
+      {r.risk !== null && r.risk !== undefined && (
+        <div className="mt-2 pt-2" style={{ borderTop: "1px solid #1f2937" }}>
+          <div className="flex items-center justify-between text-[10px] text-gray-500 mb-1">
+            <span>Safe</span>
+            <span className="text-gray-400">Risk appetite {foNum(r.risk, 2, true)}</span>
+            <span>Upside bets</span>
+          </div>
+          <div style={{ height: 4, background: "#1f2937", borderRadius: 2, position: "relative" }}>
+            <div style={{ position: "absolute", left: "42.9%", top: -2, width: 1, height: 8, background: "#374151" }} />
+            <div style={{ position: "absolute", left: `${riskPos}%`, top: -3, width: 6, height: 10, marginLeft: -3, borderRadius: 2, background: "#a78bfa" }} />
+          </div>
+          <div className="mt-1 text-[10px] text-gray-500">
+            {foPct(r.sh_young)} age-19-or-younger · {foPct(r.sh_intl)} international ·
+            {" "}board reach {foNum(r.reach, 1, true)} slots
+            <span className="text-gray-600"> (vs league mean; + = picks earlier than consensus)</span>
+          </div>
+          {(r.n_cons || 0) > 0 && (
+            <div className="mt-1 text-[10px] text-gray-500">
+              <span title="Share of the board that consensus ranked above the player taken, and that was still available. 0 = always took the consensus best player available.">
+                {foPct(r.cons_pass)} of the available board passed over
+              </span>
+              {consMean !== null && consMean !== undefined && (
+                <span className="text-gray-600"> vs {foPct(consMean)} league mean
+                  {" "}— <span title="Between-regime variance in this measure does not exceed a stratified permutation null. Read it as description, not as a trait.">not a distinguishing trait</span></span>
+              )}
+              <span className="text-gray-600"> ({r.n_cons} picks with a consensus board)</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {sigTilts.length > 0 && (
+        <div className="mt-2 pt-2" style={{ borderTop: "1px solid #1f2937" }}>
+          <div className="text-[10px] font-semibold text-gray-300 mb-0.5">
+            Signature — against the board, and against contemporaries
+          </div>
+          {sigTilts.map(t => <FoTilt key={t.dim} t={t} />)}
+        </div>
+      )}
+
+      {open && (
+        <div className="mt-2 pt-2 space-y-2" style={{ borderTop: "1px solid #1f2937" }}>
+          {(r.bands || []).length > 0 && (
+            <div>
+              <div className="text-[10px] font-semibold text-gray-300 mb-0.5">
+                Where in the draft — by pick range
+              </div>
+              {/* Deskriptiv und ohne Test: drei Bänder × ein Regime lassen von
+                  einer ohnehin kleinen Stichprobe zu wenig je Zelle übrig, um
+                  Signifikanz zu behaupten. Die Zeilen sagen "so sah es aus",
+                  nicht "so ist dieses Regime". */}
+              {(r.bands || []).map(b => <FoBandRow key={b.band} b={b} />)}
+              <div className="text-[10px] text-gray-600 mt-1">
+                Descriptive only — no significance test at band level, the samples are too thin.
+              </div>
+            </div>
+          )}
+          {otherTilts.length > 0 && (
+            <div>
+              <div className="text-[10px] font-semibold text-gray-500 mb-0.5">Other tendencies (not significant)</div>
+              {otherTilts.map(t => <FoTilt key={t.dim} t={t} />)}
+            </div>
+          )}
+          <div>
+            <div className="text-[10px] font-semibold text-gray-300 mb-0.5">Best outcomes vs. slot</div>
+            {(r.hits || []).map((h, i) => (
+              <div key={i} className="text-[11px] flex gap-2">
+                <span className="text-gray-500 shrink-0" style={{ minWidth: 62 }}>{h.y} #{h.p}</span>
+                <span className="text-gray-200 flex-1">{h.name}</span>
+                <span className="text-gray-400">{foNum(h.wa, 1)} WA</span>
+                <span style={{ color: foPvaColor(h.pva), minWidth: 46, textAlign: "right" }}>{foNum(h.pva, 1, true)}</span>
+              </div>
+            ))}
+          </div>
+          <div>
+            <div className="text-[10px] font-semibold text-gray-300 mb-0.5">
+              Worst outcomes vs. slot — and who went in the next 30 picks
+            </div>
+            {(r.misses || []).map((m, i) => (
+              <div key={i} className="text-[11px]">
+                <div className="flex gap-2">
+                  <span className="text-gray-500 shrink-0" style={{ minWidth: 62 }}>{m.y} #{m.p}</span>
+                  <span className="text-gray-200 flex-1">{m.name}</span>
+                  <span className="text-gray-400">{foNum(m.wa, 1)} WA</span>
+                  <span style={{ color: foPvaColor(m.pva), minWidth: 46, textAlign: "right" }}>{foNum(m.pva, 1, true)}</span>
+                </div>
+                {m.best && (
+                  <div className="text-[10px] text-gray-500 pl-[70px]">
+                    best available within 30: {m.best} ({foNum(m.best_wa, 1)} WA)
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="mt-1.5 text-[10px] text-gray-600 cursor-pointer hover:text-gray-400" onClick={onToggle}>
+        {open ? "▲ less" : "▼ pick ranges, hits, misses and full tendencies"}
+      </div>
+    </div>
+  );
+}
+
+// ─── Konsens-Modul, bewusst als NICHT-BEFUND gerahmt.
+// Gemessen wird `cons_pass`: der Anteil des noch verfügbaren Boards, den der
+// Konsens höher hatte und der übergangen wurde. Absolute Größe mit echtem
+// Nullpunkt (0 = Konsens-BPA genommen) — anders als `reach`, das nur relativ
+// lesbar ist. Getestet wird NICHT, ob ein Regime gegen den Konsens draftet,
+// sondern ob sich Regime darin ÜBERHAUPT unterscheiden. Sie tun es nicht,
+// also darf hier keine Rangliste entstehen — dieselbe Regel wie beim PVA-Gate.
+function FoConsensusNote({ c }) {
+  if (!c) return null;
+  return (
+    <div className="rounded-xl p-3 text-[11px] leading-relaxed" style={FO_PANEL}>
+      <div className="text-xs font-semibold text-gray-200 mb-1">
+        Do some front offices draft against consensus? — tested, and no
+      </div>
+      <div className="text-gray-400">
+        Across {c.n_picks} picks with a consensus board, a front office passed over
+        {" "}{foPct(c.league_mean)} of the players the consensus ranked above its own choice and who
+        were still available. The {c.n_regimes} regimes with enough picks spread around that mean by
+        only {foNum(c.sd_regime_means, 3)} — and a permutation test that reshuffles regime labels
+        within draft year × pick range produces <em>more</em> spread than we observe
+        ({foNum(c.var_obs, 5)} observed vs {foNum(c.var_null, 5)} expected under the null,
+        p = {foNum(c.p, 3)}, {Number(c.n_perm).toLocaleString("en-US")} permutations).
+      </div>
+      <div className="text-gray-500 mt-1">
+        Reading: "drafts against the board" is not a stable property that separates front offices in
+        this sample. Individual regimes still differ on any given night — but not more than random
+        reassignment of the same picks would produce, so the per-regime numbers on the cards are
+        description, not character. A ranking built on them would rank noise.
+        {c.stable && <span className="text-amber-400"> (The test now says otherwise — this copy needs revisiting.)</span>}
+      </div>
+    </div>
+  );
+}
+
+// ─── View 1: Regime-Karten
+function FoRegimesView({ data }) {
+  const [sortKey, setSortKey] = useState("n");
+  const [minN, setMinN] = useState(8);
+  const [q, setQ] = useState("");
+  const [openId, setOpenId] = useState(null);
+  const rows = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    let list = (data.regimes || []).filter(r => r.n >= minN);
+    if (s) list = list.filter(r => `${r.exec} ${r.team}`.toLowerCase().includes(s));
+    const key = {
+      n: (a, b) => b.n - a.n,
+      pva: (a, b) => (b.pva ?? -99) - (a.pva ?? -99),
+      pva_lo: (a, b) => (a.pva ?? 99) - (b.pva ?? 99),
+      risk: (a, b) => (b.risk ?? -99) - (a.risk ?? -99),
+      wa: (a, b) => (b.wa_total ?? -99) - (a.wa_total ?? -99),
+      team: (a, b) => String(a.team).localeCompare(String(b.team)),
+    }[sortKey];
+    return [...list].sort(key);
+  }, [data, sortKey, minN, q]);
+
+  const SORTS = [["n", "Most picks"], ["pva", "Highest PVA"], ["pva_lo", "Lowest PVA"],
+                 ["wa", "Most WA"], ["risk", "Most risk"], ["team", "Team"]];
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="Filter by GM or team…"
+               className="text-xs px-2 py-1 rounded-lg text-gray-200 outline-none"
+               style={{ background: "#111827", border: "1px solid #1f2937", minWidth: 180 }} />
+        {SORTS.map(([k, lbl]) => (
+          <button key={k} onClick={() => setSortKey(k)}
+                  className="text-[11px] px-2 py-1 rounded-lg"
+                  style={{ background: sortKey === k ? "#1e293b" : "#111827",
+                           border: "1px solid #1f2937",
+                           color: sortKey === k ? "#e5e7eb" : "#9ca3af" }}>{lbl}</button>
+        ))}
+        <span className="text-[11px] text-gray-500 ml-auto">
+          min graded picks
+          <select value={minN} onChange={e => setMinN(Number(e.target.value))}
+                  className="ml-1 text-[11px] px-1 py-0.5 rounded text-gray-200"
+                  style={{ background: "#111827", border: "1px solid #1f2937" }}>
+            {/* 0 ist kein Kosmetik-Eintrag: Regime, deren Picks alle noch im
+                Zensur-Fenster liegen, haben n = 0 graded und wären sonst
+                unerreichbar — obwohl ihr VERHALTEN gemessen ist und genau der
+                Teil des Labs, der laut Gate trägt. */}
+            {[0, 1, 5, 8, 15, 25].map(v => (
+              <option key={v} value={v}>{v === 0 ? "0 (incl. ungraded)" : v}</option>
+            ))}
+          </select>
+        </span>
+      </div>
+      <FoConsensusNote c={data.consensus} />
+      {/* Zwei Marker, zwei Baselines — die Legende muss den Unterschied
+          benennen, sonst liest ◐ wie ein schwächeres ● statt wie eine andere
+          Frage. */}
+      <div className="text-[11px] text-gray-500">
+        {rows.length} regimes shown. ● = holds up against contemporaries picking in the same year and
+        the same pick range (Benjamini-Hochberg FDR q ≤ 0.10);
+        {" "}◐ = differs from the players still on the board, but not from contemporaries at the same
+        slot — a draft-position effect, not a front-office one;
+        {" "}○ = direction only, sample too small to separate from noise.
+      </div>
+      <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))" }}>
+        {rows.map(r => (
+          <FoRegimeCard key={r.id} r={r} open={openId === r.id}
+                        consMean={data.consensus?.league_mean}
+                        onToggle={() => setOpenId(openId === r.id ? null : r.id)} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── View 2: Draft Replay — was war noch da, als gewählt wurde?
+function FoReplayView({ data }) {
+  const years = useMemo(
+    () => [...new Set((data.picks || []).map(p => p.y))].sort((a, b) => b - a), [data]);
+  const [yr, setYr] = useState(data.window?.evaluable_to ?? years[0]);
+  const rows = useMemo(
+    () => (data.picks || []).filter(p => p.y === yr).sort((a, b) => a.p - b.p), [data, yr]);
+  const graded = rows.filter(r => r.ev);
+  return (
+    <div className="space-y-3">
+      <div className="rounded-xl p-3 text-[12px] text-gray-400 leading-relaxed" style={FO_PANEL}>
+        <span className="text-gray-200 font-semibold">Draft replay.</span> One row per pick:
+        what that slot was worth historically (<span className="text-gray-300">slot</span>), what the
+        player actually returned (<span className="text-gray-300">WA</span>), the difference
+        (<span className="text-gray-300">PVA</span>), and the best player still on the board within
+        the next 30 picks. The last column is the honest version of "they missed him" — it only counts
+        players who were <em>actually available</em>, not the whole class.
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {years.map(y => (
+          <button key={y} onClick={() => setYr(y)}
+                  className="text-[11px] px-2 py-1 rounded-lg"
+                  style={{ background: yr === y ? "#1e293b" : "#111827",
+                           border: "1px solid #1f2937",
+                           color: yr === y ? "#e5e7eb" : (y > (data.window?.evaluable_to ?? 9999) ? "#4b5563" : "#9ca3af") }}>
+            {y}</button>
+        ))}
+      </div>
+      {!graded.length && (
+        <div className="text-[12px] text-amber-400/80 rounded-lg p-2" style={FO_PANEL}>
+          {yr} is not gradeable yet — a class needs 5 completed NBA seasons before peak Wins Added
+          means anything. Picks are listed, outcomes are not.
+        </div>
+      )}
+      <div className="overflow-x-auto rounded-xl" style={FO_PANEL}>
+        <table className="w-full text-[11px]">
+          <thead>
+            <tr className="text-gray-500" style={{ borderBottom: "1px solid #1f2937" }}>
+              <th className="text-left py-1.5 px-2">#</th>
+              <th className="text-left py-1.5 px-2">Player</th>
+              <th className="text-left py-1.5 px-2">Picked for</th>
+              <th className="text-left py-1.5 px-2">In charge</th>
+              <th className="text-right py-1.5 px-2">Slot</th>
+              <th className="text-right py-1.5 px-2">WA</th>
+              <th className="text-right py-1.5 px-2">PVA</th>
+              <th className="text-left py-1.5 px-2">Best available ≤ +30</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i} style={{ borderBottom: "1px solid #111827" }}>
+                <td className="py-1 px-2 text-gray-500">{r.p}</td>
+                <td className="py-1 px-2 text-gray-200">
+                  {r.name}
+                  {r.yg && <span className="text-[9px] text-purple-400 ml-1" title="Age 19 or younger">19−</span>}
+                  {r.it && <span className="text-[9px] text-blue-400 ml-1" title="International prospect">INT</span>}
+                </td>
+                <td className="py-1 px-2 text-gray-400">{r.t}</td>
+                <td className="py-1 px-2 text-gray-500">{r.ex || "—"}</td>
+                <td className="py-1 px-2 text-right text-gray-500">{foNum(r.sl, 1)}</td>
+                <td className="py-1 px-2 text-right text-gray-300">{r.ev ? foNum(r.wa, 1) : "—"}</td>
+                <td className="py-1 px-2 text-right" style={{ color: r.ev ? foPvaColor(r.pva) : "#4b5563" }}>
+                  {r.ev ? foNum(r.pva, 1, true) : "too early"}
+                </td>
+                <td className="py-1 px-2 text-gray-500">
+                  {r.ev && r.b30 ? (
+                    (r.b30wa ?? 0) > (r.wa ?? 0) + 3
+                      ? <span className="text-amber-400/90">{r.b30} ({foNum(r.b30wa, 1)})</span>
+                      : <span>{r.b30} ({foNum(r.b30wa, 1)})</span>
+                  ) : "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── View 3: League Board — Risiko × Ergebnis, Punktgröße = Stichprobe
+function FoBoardView({ data }) {
+  const pts = useMemo(() => (data.regimes || [])
+    .filter(r => r.risk !== null && r.risk !== undefined && r.pva !== null && r.n >= 8), [data]);
+  const [hov, setHov] = useState(null);
+  const W = 720, H = 380, M = { t: 14, r: 14, b: 34, l: 44 };
+  const xs = pts.map(p => p.risk), ys = pts.map(p => p.pva);
+  const xlo = Math.min(-3, ...xs), xhi = Math.max(4, ...xs);
+  const ylo = Math.min(-6, ...ys), yhi = Math.max(6, ...ys);
+  const X = v => M.l + (v - xlo) / (xhi - xlo) * (W - M.l - M.r);
+  const Y = v => M.t + (yhi - v) / (yhi - ylo) * (H - M.t - M.b);
+  const R = n => 3 + Math.sqrt(n) * 0.9;
+  return (
+    <div className="space-y-3">
+      <div className="rounded-xl p-3 text-[12px] text-gray-400 leading-relaxed" style={FO_PANEL}>
+        <span className="text-gray-200 font-semibold">League board.</span> Horizontal =
+        risk appetite (how far a regime leaned into young and international prospects, z-scored
+        against the league). Vertical = realized PVA per pick. Dot size = graded picks.
+        <div className="mt-1.5 text-[11px] text-gray-500">
+          The point of this chart is the shape, and the shape is a cloud: risk appetite does not
+          buy outcomes, and the vertical spread is what the permutation test already told us is
+          indistinguishable from chance (p = {foNum(data.gate?.outcome_perm_p, 2)}). The
+          horizontal axis is the axis that carries real information — regimes genuinely differ in
+          how they bet. Use it to know <span className="text-gray-300">what a front office will
+          probably do</span>, not how well it will do.
+        </div>
+      </div>
+      <div className="rounded-xl p-2 overflow-x-auto" style={FO_PANEL}>
+        <svg width={W} height={H} style={{ minWidth: W }}>
+          <line x1={M.l} y1={Y(0)} x2={W - M.r} y2={Y(0)} stroke="#374151" strokeDasharray="3 3" />
+          <line x1={X(0)} y1={M.t} x2={X(0)} y2={H - M.b} stroke="#374151" strokeDasharray="3 3" />
+          {[ylo, ylo / 2, 0, yhi / 2, yhi].map((v, i) => (
+            <text key={i} x={M.l - 6} y={Y(v) + 3} fill="#6b7280" fontSize={9} textAnchor="end">
+              {v.toFixed(1)}</text>
+          ))}
+          {[-2, -1, 0, 1, 2, 3].filter(v => v >= xlo && v <= xhi).map(v => (
+            <text key={v} x={X(v)} y={H - M.b + 12} fill="#6b7280" fontSize={9} textAnchor="middle">
+              {v > 0 ? `+${v}` : v}</text>
+          ))}
+          <text x={(W + M.l) / 2} y={H - 4} fill="#9ca3af" fontSize={10} textAnchor="middle">
+            Risk appetite (young + international share, z)</text>
+          <text x={12} y={H / 2} fill="#9ca3af" fontSize={10} textAnchor="middle"
+                transform={`rotate(-90 12 ${H / 2})`}>PVA per pick</text>
+          {pts.map(p => (
+            <circle key={p.id} cx={X(p.risk)} cy={Y(p.pva)} r={R(p.n)}
+                    fill={hov?.id === p.id ? "#a78bfa" : "rgba(167,139,250,0.35)"}
+                    stroke={hov?.id === p.id ? "#ddd6fe" : "rgba(167,139,250,0.6)"}
+                    style={{ cursor: "pointer" }}
+                    onMouseEnter={() => setHov(p)} onMouseLeave={() => setHov(null)} />
+          ))}
+        </svg>
+      </div>
+      <div className="rounded-xl p-2 text-[11px]" style={FO_PANEL}>
+        {hov ? (
+          <span>
+            <span className="text-gray-100 font-semibold">{hov.exec}</span>
+            <span className="text-gray-400"> · {hov.team} {hov.from}–{hov.to} · {hov.n} graded picks · </span>
+            <span style={{ color: foPvaColor(hov.pva) }}>PVA {foNum(hov.pva, 2, true)}</span>
+            <span className="text-gray-400"> [{foNum(hov.ci?.[0], 2, true)}, {foNum(hov.ci?.[1], 2, true)}]
+              {" "}· risk {foNum(hov.risk, 2, true)} · {foPct(hov.sh_young)} young / {foPct(hov.sh_intl)} intl</span>
+          </span>
+        ) : <span className="text-gray-600">Hover a dot for the regime behind it.</span>}
+      </div>
+    </div>
+  );
+}
+
+// ─── Methodik-Block: ohne das ist die Seite nicht nachvollziehbar
+function FoMethod({ data }) {
+  const g = data.gate || {}, w = data.window || {};
+  const bp = (data.gate?.behaviour_best_p);
+  // Aus dem Payload abgeleitet statt hart geschrieben: diese Zahlen ändern sich
+  // mit jedem Refresh (SITE_COPY_MAP-Regel 2 — keine driftenden Konstanten in
+  // der Copy). nExp = wie viele Treffer α=0.05 aus reinem Rauschen erzeugen
+  // würde; genau das rechtfertigt die FDR-Korrektur.
+  const tilt = useMemo(() => {
+    const all = (data.regimes || []).flatMap(r => r.tilts || []);
+    const sig = all.filter(t => t.sig);
+    const dims = [...new Set(sig.map(t => t.label))];
+    // NENNER: bevorzugt der vom Export mitgelieferte echte Wert. Aus den
+    // sichtbaren Karten gezählt wäre er zu KLEIN, sobald ein Regime keine
+    // Karte bekommt — und eine zu kleine Zahl stellt die Multiple-Testing-Last
+    // genau in dem Absatz zu gering dar, der sie erklärt. Fallback auf die
+    // gezählte Zahl nur, falls das Feld fehlt (älterer Payload).
+    const n = (data.window?.n_tilt_cells ?? all.length);
+    const nSig = (data.window?.n_tilt_sig ?? sig.length);
+    // Zweite Baseline: ebenfalls aus dem Payload, nie gezählt und nie als
+    // Literal. `nPerm` steuert die AUFLÖSUNG des Permutationstests — das
+    // kleinstmögliche p ist 1/(N+1), und die Copy nennt es, weil ein
+    // Null-Ergebnis sonst nicht überprüfbar wäre.
+    const nSigPeer = (data.window?.n_tilt_sig_peer ?? all.filter(t => t.sig_peer).length);
+    const nPerm = data.window?.n_perm_peer;
+    // Omnibus-p GENAU der Dimension, auf der die Pool-Treffer liegen — nicht
+    // das beste p über alle Dimensionen. Beides zu vermischen würde eine
+    // Bestätigung behaupten, die es auf dieser Dimension nicht gibt.
+    const dimKey = dims.length === 1 ? sig[0]?.dim : null;
+    const omniP = (data.gate?.behaviour_dims || []).find(x => x.dim === dimKey)?.p;
+    return { n, nSig, nSigPeer, nPerm, nExp: Math.round(n * 0.05),
+             dim: dims.length === 1 ? dims[0] : null, omniP };
+  }, [data]);
+  // Slot-Erwartung Pick 1 je Ära — belegt den Era-Split mit den echten Werten.
+  const p1 = useMemo(() => (data.slot_curve || []).filter(x => x.p === 1)
+    .sort((a, b) => String(a.era).localeCompare(String(b.era))), [data]);
+  return (
+    <div className="rounded-xl p-4 text-[12px] text-gray-400 leading-relaxed space-y-3" style={FO_PANEL}>
+      <div>
+        <div className="text-xs font-semibold text-gray-200 mb-1">How a pick gets credited</div>
+        The analysis unit is the <span className="text-gray-200">regime</span>: person in charge ×
+        team × period. A franchise is never scored across a change of decision-maker. Draft-night
+        trades are resolved along the trade chain, so a pick counts for the team it was
+        <em> selected for</em>, not the team that walked to the podium. Where the executive of record
+        is genuinely unclear (transition years), the span carries no regime credit rather than a guess.
+      </div>
+      <div>
+        <div className="text-xs font-semibold text-gray-200 mb-1">Pick Value Added (PVA)</div>
+        Realized peak Wins Added minus the historical expectation for that draft slot. The slot curve
+        is a monotone (isotonic) fit, split into two eras because they differ materially
+        {p1.length === 2
+          ? <> — pick 1 was worth {foNum(p1[0].ev, 1)} peak WA in {p1[0].era} and {foNum(p1[1].ev, 1)} in {p1[1].era}</>
+          : <> in what an early pick returns</>}. PVA is deliberately
+        <span className="text-gray-200"> ex-post and model-free</span>: it uses only realized
+        outcomes, never our own projections, because our models are trained on those same outcomes
+        and scoring GMs with them would be circular. Players who never reached the NBA count as 0,
+        not as missing — that is the whole point of grading a draft slot.
+      </div>
+      <div>
+        <div className="text-xs font-semibold text-gray-200 mb-1">Why there is no ranking</div>
+        Pre-registered gate: split-half reliability of regime PVA (alternating picks chronologically)
+        plus a permutation test on between-regime variance, with the consequence fixed
+        <em> before</em> we looked. Result: Spearman {foNum(g.outcome_split_half, 3, true)},
+        permutation p = {foNum(g.outcome_perm_p, 3)} over {g.n_regimes_tested} regimes — observed
+        spread sits <em>below</em> the null mean. Under that result the page is labelled descriptive
+        draft history, and PVA is shown raw with its CI. Empirical-Bayes shrinkage was computed and
+        returns τ² ≈ 0, i.e. every shrunken value collapses to 0. That is the finding, not a bug:
+        there is no stable regime-level draft skill in this sample to shrink toward.
+      </div>
+      <div>
+        <div className="text-xs font-semibold text-gray-200 mb-1">Blind spots — two baselines, and why they disagree</div>
+        A share is meaningless without a baseline, so every regime × type cell is tested twice.
+        <span className="text-gray-200"> Against the board:</span> the chosen share versus the pool
+        actually still available — all players drafted after that slot in that class — as an exact
+        binomial test. <span className="text-gray-200">Against contemporaries:</span> a permutation
+        test that reshuffles regime labels within draft year × pick range (lottery 1–14, late first
+        15–30, second round 31+){tilt.nPerm ? <>, {tilt.nPerm.toLocaleString("en-US")} permutations</> : null}.
+        Stratifying keeps every regime's mix of picks exactly as it was and asks the narrower
+        question: did this front office behave differently from everyone else picking at the same
+        place in the same year? Each baseline carries its own Benjamini-Hochberg FDR at q ≤ 0.10
+        across all {tilt.n} cells — necessary because testing {tilt.n} cells at α = 0.05 would
+        manufacture roughly {tilt.nExp} findings from noise alone.
+        {" "}<span className="text-gray-200">{tilt.nSig} cells survive against the board,
+        {" "}{tilt.nSigPeer} against contemporaries.</span>
+        {" "}That gap is the finding, not a defect in either test. Young players are overwhelmingly
+        concentrated at the top of the board, so any regime that picked in the lottery a lot looks
+        young-leaning against availability without having done anything unusual — the board baseline
+        confounds taste with where a front office happened to pick.
+        {g.behaviour_structure && (
+          <> An omnibus permutation test does find that behaviour separates regimes on at least one
+          dimension (best p = {foNum(bp, 3)}) — but
+          {tilt.dim && tilt.omniP !== null && tilt.omniP !== undefined
+            ? <> not on the one carrying every board-baseline hit ({tilt.dim}, p = {foNum(tilt.omniP, 3)})</>
+            : <> not necessarily on the dimensions where individual cells look striking</>}.
+          It said so before the contemporaries baseline existed, and the two now agree. Where the
+          baselines disagree we report the contemporaries verdict, and the card marks the cell ◐
+          rather than ●.</>
+        )}
+      </div>
+      <div>
+        <div className="text-xs font-semibold text-gray-200 mb-1">Where in the draft — pick ranges</div>
+        Each regime is broken out by lottery, late first and second round: picks, PVA where the class
+        is old enough to grade, and the same shares against both baselines. This part carries
+        <span className="text-gray-200"> no significance test at all</span>. Splitting an already
+        small regime into three bands leaves too few picks per cell for a test to mean anything, and
+        running one anyway would hand the page 450-plus comparisons to correct for. Read the ranges
+        as description — where a front office spent its picks and what it took there. The share
+        denominators are printed alongside, because they are smaller than the pick counts: very late
+        second-round picks have almost no board left behind them, and positions are counted only on
+        picks whose position is on record.
+      </div>
+      {data.consensus && (
+        <div>
+          <div className="text-xs font-semibold text-gray-200 mb-1">Drafting against consensus</div>
+          The measure is <span className="text-gray-200">what a front office passed over</span>: the
+          share of the still-available board that the consensus ranked above the player actually
+          taken. Zero means it took the consensus best player available. This is deliberately not
+          "reach", which is a centred rank difference and only readable relative to the league mean —
+          passed-over share has a real zero, so a single regime's number means something on its own.
+          The test then asks whether regimes differ in it beyond chance, using the same stratified
+          permutation null. They do not (p = {foNum(data.consensus.p, 3)}; observed spread
+          {" "}{foNum(data.consensus.var_obs, 5)} versus {foNum(data.consensus.var_null, 5)} expected).
+          So the per-regime numbers are shown, and no ranking is built on them — the same rule the
+          PVA gate imposes, applied before we saw which regimes would come out on top.
+        </div>
+      )}
+      <div>
+        <div className="text-xs font-semibold text-gray-200 mb-1">Limits, stated plainly</div>
+        <ul className="list-disc pl-4 space-y-1 text-[11px] text-gray-500">
+          <li>A permutation test cannot report a p-value below 1/(N+1)
+            {tilt.nPerm ? <>, here {(1 / (tilt.nPerm + 1)).toFixed(4)}</> : null}. That floor must sit
+            below the FDR threshold for the best-ranked of {tilt.n} cells, or "nothing significant"
+            would only mean "the test could not resolve it". The pipeline checks this on every run
+            and fails loudly rather than reporting a null result it cannot back.</li>
+          <li>Position is on record for roughly three quarters of picks since 2008. Bigs, wings and
+            playmakers are therefore tested and shown only on picks with a known position — on both
+            sides of the comparison. An unknown position is not evidence of a wing.</li>
+          <li>Passed-over share exists only for picks covered by a consensus board
+            ({data.consensus ? data.consensus.n_picks : "a subset"} of them), which skews to recent
+            classes and the first round.</li>
+          <li>Right-censoring: only drafts through {w.evaluable_to} are graded (5 completed seasons).
+            Newer classes appear in the replay with outcomes withheld.</li>
+          <li>Peak WA rewards the top of a career. A regime that drafted for fit or timeline
+            rather than peak is scored on a yardstick it was not aiming at.</li>
+          <li>PVA is attributed to the decision-maker of record. Real draft rooms are collective and
+            ownership constraints, cap situations and trade obligations are not observed here.</li>
+          <li>"Best available within 30 picks" is hindsight by construction. It measures what the
+            board contained, not what was knowable at the time.</li>
+          <li>Risk appetite is a two-component z-score (young + international share). It is a
+            behavioural descriptor, not a validated construct — read the two shares directly if
+            the composite feels lossy.</li>
+          <li>Reach is only interpretable relatively: consensus rank comes from a board longer than
+            60 picks, so the level is centred on the league mean and only differences carry meaning.</li>
+        </ul>
+      </div>
+      <div className="text-[10px] text-gray-600">
+        Sources: RealGM draft history (picks, draft-night trade chains) and Basketball-Reference
+        team pages (executive of record). Built {String(data.generated_at || "").slice(0, 10)}.
+      </div>
+    </div>
+  );
+}
+
+function FrontOfficeLab() {
+  const { data, err } = useFrontOffice();
+  const [view, setView] = useState("regimes");
+  const empty = (msg) => (
+    <div className="rounded-xl p-6 text-sm text-gray-400 leading-relaxed" style={FO_PANEL}>{msg}</div>
+  );
+  if (err) return empty("The Front Office Lab is not available in this build yet — it ships once the draft-history and executive scrapes have run.");
+  if (!data) return empty("Loading front office draft history…");
+  if (!(data.regimes || []).length) return empty("No regimes in this build yet.");
+
+  const VIEWS = [["regimes", "Regimes", "🏛"], ["replay", "Draft Replay", "⏮"],
+                 ["board", "League Board", "◎"], ["method", "Method", "📖"]];
+  return (
+    <div className="space-y-4">
+      <FoGateBanner gate={data.gate} window={data.window} />
+      <div className="flex flex-wrap gap-1">
+        {VIEWS.map(([k, lbl, ic]) => (
+          <button key={k} onClick={() => setView(k)}
+                  className="text-xs px-3 py-1.5 rounded-lg"
+                  style={{ background: view === k ? "#1e293b" : "#111827",
+                           border: "1px solid #1f2937",
+                           color: view === k ? "#e5e7eb" : "#9ca3af" }}>
+            <span className="mr-1">{ic}</span>{lbl}</button>
+        ))}
+      </div>
+      {view === "regimes" && <FoRegimesView data={data} />}
+      {view === "replay" && <FoReplayView data={data} />}
+      {view === "board" && <FoBoardView data={data} />}
+      {view === "method" && <FoMethod data={data} />}
+    </div>
+  );
+}
+// ─── FO_BLOCK_END ──────────────────────────────────────────────────────────
+
+// ─── Research-Tab: Archetyp-Bänder + Front Office Lab
+function ResearchTab({p}) {
+  const [area, setArea] = useState("archetypes");
+  const AREAS = [["archetypes", "Archetype Value Bands"], ["frontoffice", "Front Office Lab"]];
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-1">
+        {AREAS.map(([k, lbl]) => (
+          <button key={k} onClick={() => setArea(k)}
+                  className="text-xs px-3 py-1.5 rounded-lg font-medium"
+                  style={{ background: area === k ? "#312e81" : "#111827",
+                           border: `1px solid ${area === k ? "#4338ca" : "#1f2937"}`,
+                           color: area === k ? "#e0e7ff" : "#9ca3af" }}>{lbl}</button>
+        ))}
+      </div>
+      {area === "archetypes" ? <ArchetypeBandsView p={p} /> : <FrontOfficeLab />}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
 // TAB: METHODOLOGY
 // ═══════════════════════════════════════════════════════════
 function MethodologyTab() {
@@ -12052,6 +12892,7 @@ function MethodologyTab() {
     {cat:"Cross-Market Views: College Targets · Level-Up · Source Filter",items:[],desc:"The recruiting lens covers three player markets beyond the main board. COLLEGE TARGETS (audience: college programs in the NIL era) lists international prospects inside the college-age window (draft-day age ≤ 21), ranked by projected peak Added Wins — deliberately the talent scale rather than the league-level scale, because for a college program NBA upside is a selling point (draft-pipeline visibility, NIL value), not a flight risk. Eligibility is explicitly out of scope: amateur status, professional contracts and seasons-of-competition rules are case-by-case decisions, so the view is a talent radar, not an eligibility determination. LEVEL-UP (audience: front offices one or two league levels up) lists international players projected clearly above their current environment, sorted by the size of the climb (projected sustainable level minus current level — the same calibrated quantity as Value ▲ on the board, but ranked by the gap instead of the absolute level, so second-division and mid-league dominators surface before the market prices them in); league-adjusted BPM is shown as the production evidence. SOURCE FILTER on the Recruiting Board splits the market into college players (NCAA players an international club could sign away) and international players (already abroad). PORTAL RADAR (audience: college programs) applies the same undervaluation idea inside the NCAA: players below the high-major stage whose projected peak talent (Added Wins) exceeds their platform — the transfer-portal/NIL shortlist; we do not track actual portal status, the view ranks who is worth the call if available. FIND ME ANOTHER (replacement search) takes a reference player and returns the statistically closest signable profiles in the market pool — similarity over position-stratified percentiles measures profile shape, not equal quality, which is why level, age and value columns sit next to the fit score. LURKERS (🕵 badge + filter) flag a third undervaluation source beyond level mispricing: role headroom — top-30% efficiency on a bottom-40% usage role while staying productive. Backtested on ~3,800 historical role expansions: players with this profile carried a materially larger role (+4pp usage) with above-league-average efficiency and rising production, yet received that larger role barely more often than anyone else — a market inefficiency, flagged honestly as a low-risk expansion candidate rather than a breakout guarantee. All views reuse the same calibrated models — nothing is recomputed per view. VALIDATION (out-of-time backtest, reproducible via validate_level_up.py): the underlying premise holds model-free — top-decile producers of a league historically moved up a level about five times as often as below-median producers (over ten times in weak leagues) — and the model's climb signal adds real precision: among international prospects in the holdout window, flagged players (projected ≥0.08 above their current level) climbed about eight times as often as unflagged ones, projected level correlated strongly with realized level (rank correlation ~0.7), and the calibration is monotone in both directions — strongly negative projections identified actual decliners. The signal is strongest for players under 23 and weakens with age; the flag threshold sits at a validated break point (hit rates roughly quadruple just above it). Honest limits: promotion is market-endogenous (clubs decide, not only ability), the observation window censors late climbers, and near-miss cases show the direction is often right when the magnitude falls just short. LEAGUE AWARDS (🏆 badge, recruiting views + player hero) surface season honors scraped from official league records — MVP, Best Young Player, All-League, Best Defender; weekly and monthly honors are excluded. They are descriptive facts, deliberately not a model input: in a controlled backtest, young-award winners went on to climb league levels at several times the rate of comparable early-career peers (stable across time periods), but award winners are so rare in the pool that a model feature would move almost no predictions — so the signal is shown, not modeled. Award coverage is recent-leaning and varies by league; a missing badge outside a league's coverage window means no data, not no honors. Awards are jury-voted, so they carry reputation and team-success effects alongside ability — a visibility flag, never a causal claim."},
     {cat:"Usage Load Curve (Roles tab)",items:[],desc:"A per-game view of offensive load: every dot is one game (usage share vs. adjusted offensive rating from play-by-play), with the player's own smoothed curve against a peer-expectation reference at the same usage. The display classifies the usage range in three honest zones: PROVEN (at least three games in a 4-point usage bucket with average efficiency no worse than 8 points below peer expectation), FALL-OFF (a tested bucket where efficiency breaks below that reference) and UNTESTED (load he was simply never asked to carry) — the distinction matters because 'never asked' is evidence-absence, not failure. Scope: players with play-by-play game logs (NCAA 2017-18 onward). WHY THIS IS DESCRIPTIVE, NOT PREDICTIVE: we tested whether the proven-usage ceiling predicts NBA offensive roles (peak-3-season PIE as the role proxy) on the NBA-careered pool of recent classes — it added no incremental signal over plain season usage (partial rank correlation ≈ 0), and archetype-specific cutoffs were not estimable at that sample size; the attempt is reproducible in validate_usage_ceiling.py. So the section is presented as scouting evidence about this player's demonstrated load tolerance — a conversation-starter for film work and role planning, not an outcome model. The cutoff parameters shown (−8 vs. peer, 3-game minimum) are the most stable cells of a small sensitivity grid, not empirically optimal constants."},
     {cat:"Tier Feasibility (vs NBA)",items:[],desc:"How does this prospect stack up against the actual pre-draft college numbers of players who reached each NBA tier? Built from the mature draft cohort 2008-2018 (n=353 NBA players with realized peak Wins Added). We grouped them by their realized NBA outcome - Replacement, Role Player, Starter, All-Star - using peak-WA percentile cuts (10/30/60/85). For each (tier x position) we then took the MEDIAN of every pre-draft college stat (BPM, USG%, TS%, AST%, TO%, STL%, BLK%, ORB%, DRB%, AdjOE) and used that as the in-range center. Frontend automatically derives p25 = median x 0.75 and p75 = median x 1.30 around it: above median is green (In-Range), below median is orange (Below Median), below p25 is red (Critical Gap) - or yellow (Compensated) if a position-core metric is elite enough to offset (Wings core = TS% + 3P%; Playmakers core = AST% + TO%; Bigs core = BLK% + ORB%). Thresholds are MONOTONIZED along the tier axis (a higher tier's threshold never sits below a lower tier's; TO% inverse), at the cost of small distortion - pre-draft college stats only weakly separate Starter from All-Star, because the real talent spike happens AFTER the draft via role + minutes + team context. So a player can clear all Starter thresholds and still NOT clear All-Star simply because the Starter and All-Star pre-draft stats overlap. Read this view as a diagnostic - how many tier markers does he hit - not as a forecast."},
+    {cat:"Front Office Lab (Research area)",items:[],desc:"The Research area's first study: how NBA front offices actually drafted. ANALYSIS UNIT IS THE REGIME, never the franchise — a regime is one person in charge of one team over one continuous span, so a team's picks are split across the executives who owned them, and draft-night trades are attributed to the team a pick was selected FOR rather than the team that called the name. PICK VALUE ADDED (PVA) is realized peak Wins Added minus what that draft slot historically returned, on an isotonic slot curve fitted in two eras (the pre-2011 and post-2011 value of an early pick differ enough that one curve would flatter the modern regimes and punish the old ones). PVA is deliberately ex-post and model-free: scoring front offices with our own projections would grade them against the same outcomes those projections were trained on. WHY THERE IS NO GM RANKING — this was pre-registered before the numbers were seen (validate_fo_signal.py): a split-half reliability test on alternating picks plus a permutation test of between-regime variance decide the page's own truth claim, and the verdict ships inside the payload so the copy cannot outrun the evidence. Outcome quality has not cleared that bar, so the PVA views are labelled descriptive draft history — what happened, not who is good at it — and the empirical-Bayes shrinkage confirms it from the other side: with essentially no between-regime variance left after sampling noise, every shrunk estimate collapses to zero, which is the finding rather than a bug. WHAT DOES HOLD UP IS BEHAVIOUR. Type preferences are tested against an availability counterfactual: for each pick we form the pool of players still on the board (everyone drafted later that year), so a regime's expected share of young or international picks is the share its own slots actually offered, not a league average. Each regime × type cell gets an exact binomial test with Benjamini-Hochberg FDR control across all cells, because roughly two hundred cells at α=0.05 would manufacture about ten findings from pure noise. Non-significant tendencies stay visible, marked as such — hiding them would turn the page into a highlight reel of whatever survived. Note the asymmetry the page states openly: a few strong individual cells can survive FDR while the league-wide omnibus permutation on the same dimension does not, because the cell test conditions on each pick's own board while the omnibus dilutes a handful of distinctive regimes across forty. RISK APPETITE is a two-component z-score (young share plus international share) — a descriptive composite, not a validated construct; reach (pick minus consensus-implied slot) is reported separately and is only interpretable relative to the league mean. LIMITS, all stated on the page: recent drafts are right-censored and excluded until careers mature, peak Wins Added is one yardstick among several, draft decisions are collective and cap-constrained in ways we cannot observe, and the whole exercise is hindsight by construction. Live gate values, window and sample sizes are shown in the view itself (Research → Front Office Lab → Method), which is the authoritative method text and updates with every refresh."},
     {cat:"Data Sources & Coverage",items:[],desc:"NCAA Box Stats: BartTorvik (34k+ player-seasons 2008–2026, per-game + advanced + shooting zones — barttorvik.com). NCAA Play-by-Play: ESPN Play-by-Play (event-level data 2017-18 through 2025-26, ~700k player-game-events tracked). International Box Stats: RealGM (~20k player-seasons across 70+ leagues worldwide — every senior national league plus continental competitions — realgm.com). NBA Outcomes: NBA Stats API Advanced stats (27 seasons, used for peak Wins-Added computation). Anthropometrics: NBA Draft Combine measurements (NBA.com) + Databallr wingspan dataset. National Team / FIBA: FIBA event statistics for international youth and senior tournaments. All data is processed through our own pipeline — no external services are queried at runtime."},
   ];
   /* ── Pipeline Flow Diagram ── */

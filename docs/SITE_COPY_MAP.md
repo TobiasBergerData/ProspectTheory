@@ -38,8 +38,27 @@ wegdriften (wie beim α-Blend-Narrativ, das das Modell um Monate überlebt hat).
 | Player **Projection**-Tab (Hero, Tier Forecast, Outcome Curve) — Hero ist **lens-abhängig**: NBA-Lens = ppWA + Tier-Odds, Recruiting-Lens = `RecruitingHeroCard` (Projected Level + Value + Comps, NBA nur als Flight Risk) | Hero-Tooltips (beide Varianten) + `Sec sub=` der beiden Kurven-Sektionen | Deep: „Methodology & Model Documentation" (NBA) · Deep: „International Adjustments" (Recruiting) |
 | **Comps**-Tab (v5) | `Sec sub=` in `CompsV5Tab` | Deep: `sections`-Eintrag „Comps Tab" |
 | **Mind**-Tab | Sec-Subs im Tab | Quick: „Mind Tab" + Caveat-Box |
+| **Research-Bereich** (Top-Level, Toggle: Archetype Value Bands \| Front Office Lab) | Toggle-Buttons in `ResearchTab` (kein Erklärtext nötig, die beiden Views tragen ihren eigenen) | Deep: „Front Office Lab (Research area)" |
+| **FO-Lab: Gate-Banner** (setzt den Wahrheitsanspruch der GANZEN Seite; Text hängt an `gate.verdict` aus dem Payload) | `FoGateBanner` — **einzige Stelle**, die „what happened" vs. „Track Record" entscheidet. NIE hart auf einen der beiden Texte umstellen: der Gate liefert das Urteil, die Copy folgt. | Deep: „Front Office Lab (Research area)" (Absatz „WHY THERE IS NO GM RANKING") |
+| **FO-Lab: Regimes** (Regime-Karten: PVA + CI, Risk-Gauge, Passed-over-Zeile, Tilts mit **drei** Markern ● / ◐ / ○, Pick-Range-Profil, Hits/Misses mit „best available") | Header-Text in `FoRegimesView` + Legende unter dem Karten-Grid (erklärt alle drei Marker) + `FoTilt`-Zeilen | Deep: „Front Office Lab (Research area)" (Absätze PVA + WHAT DOES HOLD UP IS BEHAVIOUR) |
+| **FO-Lab: Tilt-Marker ● / ◐ / ○** (zwei Baselines je Zelle, Konzept §11.1: ● = überlebt FDR gegen **Zeitgenossen** am selben Draft-Platz, ◐ = nur gegen den Verfügbarkeits-Pool → Draft-POSITIONS-Effekt, ○ = Richtung ohne Test) | `FoTilt` — das Urteil folgt `sig_peer`, nicht `sig`. **Nie auf einen Marker zurückbauen**: der Pool-Baseline-Treffer ist mit der Draft-Position konfundiert, und ein einzelnes ● an einer ◐-Zelle wäre die Behauptung, die genau dieser Umbau widerlegt hat. Legende in `FoRegimesView` ist die einzige Erklärstelle der Marker-Semantik. | FO-Lab Method, Abschnitt „Blind spots — two baselines, and why they disagree" |
+| **FO-Lab: Pick-Range-Profil** (aufgeklappte Karte, „Where in the draft — by pick range": je Band L/M/S die Tripel gewählt / verfügbar / Zeitgenossen für Alter + International, Positionszeile, Band-PVA mit `n_ev` graded, Passed-over-Anteil) | `FoBandRow` + Schlusszeile „Descriptive only — no significance test at band level, the samples are too thin." — **diesen Satz nie entfernen**: die Bänder sind bewusst ungetestet, und ohne ihn liest sich das Profil wie ein Befund. Nenner-Naht `n = n_sh of n` (Picks mit bekannter Position von allen) bleibt sichtbar. | FO-Lab Method, Abschnitt „Where in the draft — pick ranges" |
+| **FO-Lab: Konsens-Nicht-Befund** (Block über dem Karten-Grid, „Do some front offices draft against consensus? — tested, and no") | `FoConsensusNote` — Ergebnis eines Permutationstests auf Regime-Varianz der Passed-over-Anteile; alle Zahlen aus `data.consensus`. Enthält eine **Selbstwarnung**: wird `c.stable` je `true`, blendet die Komponente einen Amber-Hinweis ein, dass diese Copy überholt ist. Nie zu „drafting against consensus is a trait" umschreiben, ohne dass der Test das trägt. | FO-Lab Method, Abschnitt „Drafting against consensus" |
+| **FO-Lab: Karte ohne bewertbaren Pick** (`n = 0`, `n_all > 0`: alle Auswahlen noch im Zensur-Fenster — aktuell Connelly MIN, Ainge UTA, Winger WAS) | `FoRegimeCard`, Zweig `ungraded`: statt PVA-Zahl steht **„n/a / not gradeable yet"**, statt CI ein Satz, der die Zensur benennt. Risk-Gauge und Tilts bleiben — sie sind gemessen. **Nie auf `0.00` zurückbauen**: eine Null wäre hier eine Behauptung, keine Messung. Erreichbar nur über Filter „min graded picks = 0". | Konzept §8.1b |
+| **FO-Lab: Draft Replay** (Draft × Pick: gewählt vs. bester Verfügbarer ≤ +30, „Picked for"/„In charge" getrennt) | Header-Text in `FoReplayView` + Amber-Hinweis bei nicht bewertbaren Klassen (Right-Censoring) | Deep: „Front Office Lab (Research area)" (Absätze ANALYSIS UNIT + LIMITS) |
+| **FO-Lab: League Board** (Streudiagramm Risiko × PVA, Punktgröße = n; handgebautes SVG, weil `recharts.ScatterChart` nicht importiert ist) | Header-Text in `FoBoardView` — sagt ausdrücklich, dass die Form eine Wolke ist und die y-Achse die vom Permutationstest als Zufall ausgewiesene ist | Deep: „Front Office Lab (Research area)" |
+| **FO-Lab: Method** (sieben Abschnitte: Attribution, PVA, kein Ranking, Blind Spots/zwei Baselines, Pick-Ranges, Konsens, neun Limits) | — (**ist selbst der maßgebliche Methodentext**; die Methods-Deep-Zeile bleibt bewusst die Kurzfassung, damit die Zahlen nur an EINER Stelle stehen und nicht driften). **Alle Zahlen darin sind aus dem Payload abgeleitet, keine einzige hart geschrieben** — Slot-Erwartung Pick 1 je Ära aus `slot_curve`, Gate-Werte aus `gate`, FDR-Nenner aus `window.n_tilt_cells`, Permutationszahl aus `window.n_perm_peer` (reist als Spalte in `fo_regime_tilts.csv` mit, damit sie nicht an zwei Stellen gepflegt wird), Omnibus-p **je Dimension** aus `gate.behaviour_dims`. Neue Zahl in diesem Text? Dann zuerst ein Feld im Export, nicht ein Literal im JSX. | Deep: „Front Office Lab (Research area)" verweist hierauf |
 | **Live Validation** (Methods, oben) | — (ist selbst der Explainer) | speist sich aus `/api/model-card` — nie von Hand editieren |
 | Pipeline-Diagramm (Methods Deep) | — | `PipelineDiagram` in `MethodologyTab` — bei Modell-Umbau IMMER mitziehen |
+
+**Automatisch geprüft (FO-Lab):** `frontend/tests/fo_render_test.mjs` rendert den
+Block zwischen `// ─── FO_BLOCK_START` und `// ─── FO_BLOCK_END` aus `App.jsx`
+serverseitig gegen den echten Payload und prüft zwölf Aussagen dieser Map —
+u. a. Marker-Semantik ● / ◐, den einschränkenden Halbsatz an jeder ◐-Zelle, den
+FDR-Nenner, die Permutationszahl und die Zensur-Sprache. Regel 2 („keine
+hardcodierten Zahlen") ist für diese Seite damit nicht nur eine Bitte, sondern
+ein roter Test. **Die Schnittmarken in `App.jsx` nicht entfernen**, und neue
+FO-Copy innerhalb der Marken anlegen — sonst prüft der Test sie nicht.
 
 ## Lens-Sprachregel (IA: zwei gleichrangige Top-Level-Lenses)
 
@@ -69,3 +88,32 @@ wegdriften (wie beim α-Blend-Narrativ, das das Modell um Monate überlebt hat).
   für internationale Front Offices (keine Draft-Logik).
 - Liga-Gewichte: **empirisch aus Bridge-Spielern, NCAA=1.0, shrunk bei dünner
   Evidenz, jede Woche neu berechnet** — nie konkrete Gewichtswerte in Copy.
+- Research / Front Office Lab: **deskriptive Draft-Historie je Regime** —
+  „Pick Value Added" (realisierter peak-WA minus Slot-Erwartung, ex post),
+  „availability pool", „contemporaries" (Zeitgenossen im selben Jahr × Draft-Band),
+  „leans toward / avoids", „risk appetite", „reach", „passed over".
+  NICHT: Track Record, GM-Ranking, „best drafter", Prognose aus PVA.
+  Die Sprachwahl ist **datenabhängig**: sie folgt `gate.verdict`, nicht
+  unserem Geschmack (siehe Zeile „FO-Lab: Gate-Banner").
+- Zwei-Baselines-Sprache (Konzept §11.1): gegen den **Pool** heißt „vs. the pool
+  only … in line with contemporaries at the same slot" — nie „significant" ohne
+  Zusatz, weil der Pool mit der Draft-Position konfundiert ist. Nur gegen
+  **contemporaries** darf „leans toward / avoids" ohne Einschränkung stehen.
+- Konsens-Sprache: **„passed over"** (Anteil des noch verfügbaren Boards, den der
+  Konsens höher rankte) — hat eine natürliche Null (0 = Konsens-BPA genommen).
+  Der Liga-Befund ist ein **Nicht-Befund**: „not a distinguishing trait". NICHT:
+  „drafts against consensus", „contrarian GM", und daraus **kein** Ranking.
+- Zensur-Sprache im FO-Lab: **„not gradeable yet"** (Regime ohne bewertbaren
+  Pick) und **„n of n_all"** (bewertbar von gesamt). NICHT: „no data",
+  „keine Picks", „0.00" — die Picks existieren, nur ihr Ergebnis noch nicht.
+
+## Bekannte Copy-Altlast (2026-07-25 gefunden, noch offen)
+
+Der Methods-Deep-`sections`-Array in `App.jsx` enthält **sechs doppelte
+`cat`-Labels** — drei davon byte-identisch, drei mit unterschiedlichem Text
+unter demselben Titel: „International Adjustments", „Youth Radar", „Cross-Market
+Views", „Usage Load Curve", „Possession Impact (CFFR)", „Tier Feasibility".
+Der Leser sieht diese Abschnitte doppelt, bei den drei abweichenden Paaren mit
+zwei verschiedenen Erklärungen. Genau der Drift, gegen den diese Map gebaut
+wurde. **Nicht blind bereinigt**, weil bei den abweichenden Paaren eine
+inhaltliche Entscheidung nötig ist, welche Fassung gilt.
