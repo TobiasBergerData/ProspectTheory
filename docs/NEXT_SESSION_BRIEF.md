@@ -1,4 +1,4 @@
-# NEXT_SESSION_BRIEF — Stand nach 2026-07-24
+# NEXT_SESSION_BRIEF — Stand nach 2026-07-25
 
 Kontext zuerst lesen: `data-pipeline/docs/SPRINT_5_12_13_SUMMARY.md` ·
 `data-pipeline/docs/EL_HISTORY_BACKFILL_RUNBOOK.md` (inkl. Ergebnis-Block) ·
@@ -104,6 +104,76 @@ Kontext zuerst lesen: `data-pipeline/docs/SPRINT_5_12_13_SUMMARY.md` ·
    eigenem OOT-Nachweis des Intl-Level-Modells. Test B: zwei Join-Bugs
    nacheinander (rg:-Präfix; \D-Strip zerstörte Float-IDs) — gefixt,
    **Lauf 3 ausstehend** → Ergebnis in docs/AWARDS_RUNBOOK.md nachtragen.
+4e. **Front Office Lab (Research-Bereich) — PHASE 0+1+2 FERTIG
+   (2026-07-25).** Konzept + Ergebnisdoku: docs/FRONT_OFFICE_CONCEPT.md
+   (Regime-basiert, NIE Franchise; PVA vs. era-adjustierte Slot-Kurve ab
+   Draft 2000; Blind Spots/Risiko ab 2008 mit BH-FDR; Reliabilitäts-GATE
+   vor jeder Skill-Aussage; Undrafted voll in Metriken mit dokumentiertem
+   Survivorship-Bias; eigener Top-Level-Bereich "Research").
+   Kette: scrape_realgm_frontoffice.py (draft: 30 Teams, 2.145 Picks,
+   1.091 Draft-Trades → selected_for_abbrev löst die Draft-Night-
+   Attribution strukturell) + scrape_bbref_executives.py (773 Team-
+   Saisons, Auto-Resume nach Hänger) → build_regime_profiles.py →
+   validate_fo_signal.py → export_front_office.py → /api/front-office →
+   Research-Tab (Regime-Karten · Draft-Replay · League-Board · Method).
+
+   **GATE-AUSGANG = `descriptive` — das ist ein ERGEBNIS, kein Defekt.**
+   F1 Split-half über 67 Regime: Pearson −0.073 / Spearman −0.072 /
+   Spearman-Brown −0.158. F2 Permutation: beobachtete Streuung 3.5905 vs.
+   Null 4.3253, p = 0.814 (UNTER Zufallsniveau). F3 Verhalten: f_intl
+   p = 0.002, f_young p = 0.235, f_big p = 0.977. Konsequenz war
+   VORREGISTRIERT (Konzept §3A) und ist umgesetzt: die Seite heißt
+   „what happened", NIE „Track Record", keine GM-Rangliste, keine
+   Prognose aus PVA. Der prognostisch nutzbare Teil ist das VERHALTEN
+   (Blind Spots · Risiko · Reach). **Diese Seite nie zur Rangliste
+   umbauen, solange F1 ≈ 0 bleibt.**
+   Produktionszahlen: 1.602 Picks ab 2000, 1.309 bewertbar (CENSOR_LAG=5),
+   966 Peak-WA gematcht, Slot-EV Pick 1 = 20.03 (2000–2010) vs. 15.13
+   (2011+), **136 Regime im Payload** (133 mit bewertbaren Picks + 3 reine
+   Verhaltens-Regime), **188 Tilt-Zellen, 6 FDR-signifikant — alle
+   f_young** (Connelly DEN, Presti OKC, Buford SAS, Marks BKN, Hammond
+   MIL, Wright SAS). τ² = 0 ⇒ alle geshrinkten PVA = 0 (steht als
+   `pva_shrunk` im Payload, ist selbst der Befund).
+
+   **WICHTIGSTE LEKTION (Konzept §8.1b) — an den NÄHTEN prüfen, nicht an
+   den Bausteinen.** `fo_regime_profiles.csv` braucht Outcomes,
+   `fo_regime_tilts.csv` NICHT (Verhalten läuft gegen den Verfügbarkeits-
+   Pool). main() hat die beiden faktisch inner-gejoint und damit alle
+   Regime verloren, deren Picks noch komplett im Zensur-Fenster liegen —
+   ausgerechnet die AMTIERENDEN Front Offices (Connelly MIN 2022+, Ainge
+   UTA 2022+, Winger WAS 2023+), also genau die Hälfte, die laut Gate
+   trägt. Gefunden nicht durch einen Test, sondern weil die Methodik-Copy
+   ihren eigenen FDR-Nenner nennt (180 gerendert vs. 188 korrigiert).
+   Fix dreiteilig: Grundgesamtheit zuerst aus `meta`, dann PVA/Risiko
+   darauf joinen (risk_index MUSS nach dem Join laufen); Inhalts-Filter
+   `(n > 0) | risk_idx.notna()` gegen 40 Karteileichen (laufender
+   Jahrgang ohne bbref-Executive → „XXX:? 2026+"); echter Nenner als
+   `window.n_tilt_cells` im Payload statt aus Karten gezählt.
+   Regel daraus: **jede Zahl, die die Seite über ihre eigene Methodik
+   sagt, kommt aus dem Payload — kein Literal im JSX.**
+
+   OFFEN / NÄCHSTE SCHRITTE:
+   a) **regime_map_draft.csv reviewen** (User): Spalte `konfidenz` auf
+      ok / korrigiert / transition setzen. Priorität: ORL Draft 2000
+      (einziges Regime ohne Executive) · die zwei interpolierten Jahre
+      PHI 2004 + PHX 2022 (`_fill_exec_gaps`, MAX_GAP_FILL=1, nur
+      zweiseitig bestätigt) · alle Regime mit n < 5 · die drei
+      Verhaltens-only-Regime (jüngste Grenzen, wachsen zuerst in die
+      Bewertbarkeit hinein).
+   b) GM-Rolle ≠ immer finale Draft-Autorität (POBO) — Rollen-Links im
+      RealGM-Staff-Dump prüfen, falls ein Regime offensichtlich falsch
+      zugeschnitten ist.
+   c) Repo-Hygiene: `data/processed/_to_delete/` in beiden Repos manuell
+      löschen (Cloud-Session kann am Host nicht löschen, nur verschieben).
+      Achtung: `fo_unified_v2.csv` darin ist 104 MB — nicht committen.
+      `bbref_executives_raw.csv` ist geprüft in Ordnung (773 Zeilen,
+      byte-identisch zur v2-Kopie).
+   d) **Methods-Tab hat 6 doppelte `cat`-Labels** (International
+      Adjustments · Youth Radar · Cross-Market Views · Usage Load Curve ·
+      Possession Impact (CFFR) · Tier Feasibility). Drei Paare sind
+      byte-identisch, drei Paare haben UNTERSCHIEDLICHEN Text unter
+      gleichem Titel — deshalb bewusst NICHT still dedupliziert.
+      Braucht eine Inhalts-Entscheidung des Users, welche Fassung gilt.
 5. **Stats Lab → Cross-Market-Datenbank ausbauen** (nächster größerer Block):
    Intl-Spalten (pred_intl_tier, intl_level_ev, p_intl_career, Flight Risk,
    Value-Delta) in export_stats_lab.py + Column-Picker + eigenes Preset
@@ -133,3 +203,14 @@ Kontext zuerst lesen: `data-pipeline/docs/SPRINT_5_12_13_SUMMARY.md` ·
 - Cloud-Session: Staging-Kopien gleicher Pfade können auf alte Snapshots
   zurückfallen — bei Zweifel Datei am Host unter neuem Namen kopieren und
   diese stagen (Byte-Größe gegen Host prüfen).
+- **Prüfliste an den NÄHTEN ansetzen, nicht an den Bausteinen.** Die zwei
+  teuersten Fehler des Front-Office-Blocks (bares `NaN` im JSON;
+  Populations-Verlust beim Join zweier bewusst verschieden großer Tabellen)
+  waren beide KONSISTENZ-, keine Korrektheitsfehler: jede Komponente für
+  sich war richtig. Konkret vor jedem Merge fragen: haben beide Tabellen
+  dieselbe Grundgesamtheit? Wenn nein — welche ist die Grundgesamtheit,
+  und läuft der Join in diese Richtung? Und: stimmt der Nenner, den die
+  Seite selbst nennt, mit dem tatsächlich verwendeten überein?
+- React: `{expr}` und angrenzender Literaltext rendern als getrennte Knoten
+  mit `<!-- -->` dazwischen. Substring-Assertions auf interpolierte Zahlen
+  im Rohmarkup schlagen deshalb fehl — erst Kommentare/Tags strippen.

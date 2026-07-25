@@ -12192,6 +12192,13 @@ function FoRegimeCard({ r, open, onToggle, consMean }) {
   // Dann darf die Karte keine PVA-Zahl und kein CI zeigen — ein "0.00" oder
   // "[—, —] includes zero" behauptet ein Ergebnis, das es nicht gibt.
   const ungraded = !r.n && (r.n_all || 0) > 0;
+  // gradeable=false (Export: n < MIN_N_CARD = 5). Anders als beim Zensur-Fall
+  // EXISTIERT hier eine Zahl — sie trägt nur kaum Information: bei vier Picks
+  // verschiebt ein einziger Spieler den Schnitt um mehrere Wins. Sie wird
+  // gezeigt (Verschweigen wäre auch eine Behauptung), aber farblich neutral
+  // statt grün/rot und ausdrücklich als Einzelfall-Rauschen benannt. Greift
+  // erst, wenn der Nutzer den Karten-Filter unter 8 stellt.
+  const thin = !ungraded && r.gradeable === false;
   // Risiko-Gauge: z(jung-Anteil) + z(intl-Anteil), Skala ca. −3…+4, 0 = Liga-Mittel
   const riskPos = Math.max(0, Math.min(100, ((r.risk ?? 0) + 3) / 7 * 100));
   return (
@@ -12215,10 +12222,14 @@ function FoRegimeCard({ r, open, onToggle, consMean }) {
             </>
           ) : (
             <>
-              <div className="text-sm font-semibold" style={{ color: foPvaColor(r.pva) }}>
+              <div className="text-sm font-semibold"
+                   style={{ color: thin ? "#9ca3af" : foPvaColor(r.pva) }}
+                   title={thin ? "Fewer than 5 gradeable picks — a single player moves this average by several wins. Shown for completeness, not as a rating." : undefined}>
                 {foNum(r.pva, 2, true)}
               </div>
-              <div className="text-[10px] text-gray-500">PVA / pick</div>
+              <div className="text-[10px]" style={{ color: thin ? "#9ca3af" : undefined }}>
+                <span className={thin ? "" : "text-gray-500"}>
+                  {thin ? "n < 5 — single-player noise" : "PVA / pick"}</span></div>
             </>
           )}
         </div>

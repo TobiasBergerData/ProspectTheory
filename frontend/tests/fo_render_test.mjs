@@ -86,7 +86,14 @@ const ungradedCase = {
   ...(regimes[0] || {}), exec: "ZZ Ungraded", team: "ZZY",
   n: 0, n_all: 4, pva: null, pva_shrunk: null, wa_total: null,
 };
-const cases = regimes.concat([degenerate, ungradedCase]);
+// Dünner Fall (gradeable=false, n < 5): ebenfalls synthetisch, aus demselben
+// Grund. Er ist NICHT dasselbe wie der Zensur-Fall — hier gibt es eine Zahl,
+// sie ist nur von einem einzelnen Spieler dominiert.
+const thinCase = {
+  ...(regimes[0] || {}), exec: "ZZ Thin", team: "ZZX",
+  n: 3, n_all: 3, gradeable: false, pva: 4.2,
+};
+const cases = regimes.concat([degenerate, ungradedCase, thinCase]);
 
 /* ── 4. Entry-Datei + Bundle ─────────────────────────────────────────────────
    Der Block referenziert App-globale Namen (API_BASE), die hier nicht
@@ -258,6 +265,18 @@ ok(ungradedCards.every(c => !c.includes("Graded picks") && !c.includes("includes
 // Eine 0.00 wäre hier eine Behauptung, keine Messung.
 ok(ungradedCards.every(c => !/\B[+−-]?0\.00\b/.test(c)),
   "Regime ohne bewertbaren Pick zeigt eine Null statt 'n/a'");
+
+// (k2) gradeable=false: die Karte zeigt die Zahl, benennt sie aber als
+// Einzelfall-Rauschen. Bedingung wieder bewusst dupliziert (siehe k).
+const thinCards = T.cards.filter((c, i) =>
+  cases[i].gradeable === false && cases[i].n > 0);
+ok(thinCards.length > 0, "Kein dünner Fall gerendert (Testaufbau kaputt)");
+ok(thinCards.every(c => c.includes("single-player noise")),
+  "Karte mit n < 5 zeigt PVA/Pick ohne Rauschhinweis");
+const fatCards = T.cards.filter((c, i) =>
+  cases[i].gradeable !== false && cases[i].n > 0);
+ok(fatCards.every(c => !c.includes("single-player noise")),
+  "Rauschhinweis erscheint auch bei Karten mit n >= 5");
 
 // (l) Der degenerierte Fall rendert überhaupt und bleibt stumm statt zu raten.
 ok(T.cards.some(c => c.includes("ZZ Degenerate")),

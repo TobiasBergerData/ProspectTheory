@@ -20,6 +20,7 @@ Endpoints:
   GET /api/players/top?n=50              → Top N by ppWA
   GET /api/youth                         → ANGT Youth Radar (U18 tournament production)
   GET /api/awards                        → League-Award-Badges (deskriptiv, Namens-Key)
+  GET /api/front-office                  → Front Office Lab (Regime-Draft-Historie)
   GET /api/players/draft/{year}          → All players from a draft year
 
 All `{slug}` path parameters also accept a player_id (bt:…, rg:…) or a
@@ -1136,6 +1137,24 @@ async def get_awards(response: Response):
     p = Path(os.environ.get("DATA_DIR", "data/processed")) / "api_awards.json"
     if not p.exists():
         raise HTTPException(status_code=503, detail="awards not yet built")
+    response.headers["Cache-Control"] = "public, max-age=3600"
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
+@app.get("/api/front-office")
+async def get_front_office(response: Response):
+    """Front Office Lab (Research-Bereich): Draft-Historie je REGIME
+    (Person in Charge × Team × Zeitraum), nicht je Franchise. Enthält
+    Pick Value Added gegen die Era-Slot-Kurve, Typ-Tilts gegen den
+    Availability-Pool (BH-FDR) und Risiko/Reach-Profile.
+
+    WICHTIG: das mitgelieferte Feld `gate.verdict` (aus validate_fo_signal.py)
+    steuert die Copy im Frontend. Bei "descriptive" ist PVA ausdrücklich
+    KEIN Track Record — die Reliabilität ist ≈ 0 und die Seite darf nur
+    beschreiben, was geschah. Gebaut von export_front_office.py."""
+    p = Path(os.environ.get("DATA_DIR", "data/processed")) / "api_front_office.json"
+    if not p.exists():
+        raise HTTPException(status_code=503, detail="front office lab not yet built")
     response.headers["Cache-Control"] = "public, max-age=3600"
     return json.loads(p.read_text(encoding="utf-8"))
 
