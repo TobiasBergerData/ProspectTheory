@@ -345,6 +345,19 @@ ok(realCards.filter(c => c.includes("Signature vs contemporaries:")).length === 
 ok(!ALL.includes("Risk appetite"),
   "Der alte Ein-Zahlen-Risiko-Gauge ('Risk appetite') ist noch im Markup");
 
+// (m2) UX v2 (2026-07-28): Glance-Strip auf jeder Karte mit Tilts (▲/▼ als
+//      Sekundärkodierung der Richtung), Outcome-nach-Typ NUR mit Disclaimer.
+const cardsWithTilts = T.cards.filter((c, i) => (cases[i].tilts || []).length > 0);
+ok(cardsWithTilts.every(c => c.includes("▲") || c.includes("▼")),
+  "Karte mit Tilts trägt keinen Glance-Strip (kein ▲/▼ im Markup)");
+const edgeCards = T.cards.filter((c, i) => (cases[i].type_edge || []).length > 0);
+ok(edgeCards.every(c => c.includes("Outcome by player type")
+     && c.includes("Descriptive only")),
+  "Outcome-nach-Typ ohne Titel oder ohne Descriptive-Disclaimer");
+const noEdgeCards = T.cards.filter((c, i) => !(cases[i].type_edge || []).length);
+ok(noEdgeCards.every(c => !c.includes("Outcome by player type")),
+  "Outcome-nach-Typ erscheint auf Karten ohne type_edge-Daten");
+
 /* ── 7. Ergebnis ───────────────────────────────────────────────────────────── */
 if (fails.length) {
   console.error(`FAIL  ${fails.length} Assertion(s):`);

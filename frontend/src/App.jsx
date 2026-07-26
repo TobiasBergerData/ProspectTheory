@@ -12181,6 +12181,81 @@ function FoBandRow({ b }) {
 }
 
 // ─── Eine Regime-Karte
+// ─── Glance-Kacheln: ALLE Dimensionen als eine Farbreihe. Diverging-Paar
+// Blau (neigt zu) / Orange (meidet) — CVD-geprüft (ΔE 25.8, Validator) —,
+// Deckkraft = Größe der Abweichung von den Zeitgenossen, GEDECKELT bei
+// 15 pp. Farbe kodiert RICHTUNG+GRÖSSE, nie Signifikanz: dafür stehen
+// allein die ●/◐-Marker in den Signature-Zeilen. Pfeil ▲/▼ doppelt die
+// Richtung für den Farbfehlsicht-/Druck-Fall (Sekundärkodierung).
+const FO_GLANCE = [
+  ["f_young", "Yng"], ["f_intl", "Intl"], ["f_big", "Big"], ["f_wing", "Wing"],
+  ["f_playmaker", "PM"], ["f_guard", "Grd"], ["f_tall", "Tall"],
+  ["f_bdg_shooting", "Shoot"], ["f_defense_first", "DefC"],
+  ["f_upside_bet", "Upsd"], ["f_red_flag", "RedF"],
+];
+function FoGlanceStrip({ r }) {
+  const byDim = {};
+  (r.tilts || []).forEach(t => { byDim[t.dim] = t; });
+  if (!(r.tilts || []).length) return null;
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-1">
+      {FO_GLANCE.map(([dim, code]) => {
+        const t = byDim[dim];
+        if (!t || t.chosen === null || t.chosen === undefined) {
+          return (
+            <span key={dim} className="px-1.5 py-0.5 rounded text-[10px] text-gray-600"
+                  style={{ background: "#0b0f14", border: "1px solid #1f2937" }}
+                  title={`${code}: no data for this regime (coverage guard)`}>{code} ·</span>
+          );
+        }
+        const base = (t.peer ?? t.avail) ?? 0;
+        const diff = (t.chosen ?? 0) - base;
+        const lean = diff >= 0;
+        const a = Math.min(Math.abs(diff) / 0.15, 1) * 0.45 + 0.08;
+        return (
+          <span key={dim} className="px-1.5 py-0.5 rounded text-[10px] text-gray-100"
+                style={{ background: lean ? `rgba(96,165,250,${a.toFixed(2)})`
+                                          : `rgba(251,146,60,${a.toFixed(2)})`,
+                         border: "1px solid #1f2937" }}
+                title={`${t.label}: ${foPct(t.chosen)} chosen vs ${foPct(base)} contemporaries — ${lean ? "leans toward" : "leans away"}. Shading = size of the gap, NOT significance.`}>
+            {code} {lean ? "▲" : "▼"}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Outcome nach Spielertyp — DESKRIPTIV (Export: _type_edge).
+// "Mit welchem Typ lagen sie besser als andere?" ist auf Regime-x-Typ-Ebene
+// (n = 4-15) keine Skill-Schätzung — das PVA-Gate gilt hier doppelt. Die
+// Kacheln zeigen die Bilanz, der Disclaimer bleibt Teil der Komponente.
+function FoTypeEdge({ edges }) {
+  if (!(edges || []).length) return null;
+  return (
+    <div>
+      <div className="text-[10px] font-semibold text-gray-300 mb-0.5">
+        Outcome by player type — own picks vs contemporaries on the same type and slots
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {edges.map(e => (
+          <span key={e.type} className="px-2 py-1 rounded text-[10px]"
+                style={{ background: "#111827", border: "1px solid #1f2937" }}
+                title={`${e.n} graded ${e.type} picks: own PVA/pick ${foNum(e.own, 2, true)} vs ${foNum(e.peer, 2, true)} for contemporaries drafting the same type at the same slots`}>
+            <span className="text-gray-300">{e.type}</span>{" "}
+            <span style={{ color: foPvaColor(e.d) }}>{foNum(e.d, 2, true)}</span>
+            <span className="text-gray-600"> · n={e.n}</span>
+          </span>
+        ))}
+      </div>
+      <div className="text-[10px] text-gray-600 mt-1">
+        Descriptive only — a handful of picks per type is a record, not a skill estimate;
+        the repeatability gate applies here twice over.
+      </div>
+    </div>
+  );
+}
+
 // ─── Typ-Zeile: NUR aus peer-signifikanten Zellen abgeleitet. Ohne
 // Peer-Treffer bleibt sie weg — eine Typisierung aus Tendenzen wäre genau
 // das Noise-Ranking, das der Gate verbietet. Bewusst OHNE Marker-Zeichen:
@@ -12363,6 +12438,7 @@ function FoRegimeCard({ r, open, onToggle, consMean }) {
         </div>
       </div>
       <FoTypeLine r={r} />
+      <FoGlanceStrip r={r} />
 
       {ungraded ? (
         <div className="mt-2 text-[11px] text-gray-500">
@@ -12390,10 +12466,7 @@ function FoRegimeCard({ r, open, onToggle, consMean }) {
       </div>
       )}
 
-      {/* Risikoprofil: vier getrennte Achsen — der Teil, der laut Gate trägt.
-          Der frühere Ein-Zahlen-Gauge (z(jung)+z(intl)) vermischte
-          Verhaltensweisen, die unabhängig variieren (Entscheid 26.07.2026). */}
-      <FoRiskProfile r={r} consMean={consMean} />
+
 
       {sigTilts.length > 0 && (
         <div className="mt-2 pt-2" style={{ borderTop: "1px solid #1f2937" }}>
@@ -12406,6 +12479,11 @@ function FoRegimeCard({ r, open, onToggle, consMean }) {
 
       {open && (
         <div className="mt-2 pt-2 space-y-2" style={{ borderTop: "1px solid #1f2937" }}>
+          {/* Risikoprofil: vier getrennte Achsen (Entscheid 26.07.2026). Seit
+              dem Glance-Strip in der Tiefe-Ebene: die Kacheln geben die
+              Richtung, die Balken hier die vollen Zahlen. */}
+          <FoRiskProfile r={r} consMean={consMean} />
+          <FoTypeEdge edges={r.type_edge} />
           {(r.bands || []).length > 0 && (
             <div>
               <div className="text-[10px] font-semibold text-gray-300 mb-0.5">
@@ -12599,8 +12677,13 @@ function FoRegimesView({ data }) {
         {" "}◐ = differs from the players still on the board, but not from contemporaries at the same
         slot — a draft-position effect, not a front-office one;
         {" "}○ = direction only, sample too small to separate from noise.
+        {" "}Tile strip on each card: blue = leans toward, orange = leans away (▲/▼ mirror it);
+        shading is the size of the gap vs contemporaries — never significance.
       </div>
-      <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))" }}>
+      {/* Einspaltig (Entscheid 28.07.2026): eine Karte pro Zeile, volle
+          Breite, klappt nach unten — der Glance-Strip braucht die Breite,
+          und drei schmale Spalten machten die Karten zur Textwand. */}
+      <div className="space-y-3">
         {rows.map(r => (
           <FoRegimeCard key={r.id} r={r} open={openId === r.id}
                         consMean={data.consensus?.league_mean}

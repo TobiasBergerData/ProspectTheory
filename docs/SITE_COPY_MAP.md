@@ -109,6 +109,14 @@ FO-Copy innerhalb der Marken anlegen — sonst prüft der Test sie nicht.
   Pick) und **„n of n_all"** (bewertbar von gesamt). NICHT: „no data",
   „keine Picks", „0.00" — die Picks existieren, nur ihr Ergebnis noch nicht.
 
+## FO-Lab: UX v2 — Glance-Strip + Outcome nach Typ (2026-07-28)
+
+| Element | Regel |
+|---|---|
+| **Glance-Strip** (`FoGlanceStrip`) | Blau = leans toward, Orange = leans away, Deckkraft = Größe der Peer-Abweichung. Farbe/Schattierung NIE als Signifikanz verkaufen — der Tooltip sagt es explizit („NOT significance"). ▲/▼ nicht entfernen (CVD-Sekundärkodierung). |
+| **Outcome by player type** (`FoTypeEdge`) | Immer mit „Descriptive only"-Disclaimer (Render-Test m2 erzwingt ihn). Sprache: „record", nie „skill" / „good at drafting X" — das Gate verbietet die Skill-Lesart doppelt. |
+| **Layout** | Einspaltig; Karten klappen nach unten. Kein Grid-Revert ohne neuen Entscheid. |
+
 ## FO-Lab: Need-vs-BPA-Nicht-Befund (2026-07-28)
 
 `FoNeedNote` neben `FoConsensusNote`: „Do some front offices draft for
