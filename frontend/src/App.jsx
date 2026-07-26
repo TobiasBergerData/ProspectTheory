@@ -12181,6 +12181,136 @@ function FoBandRow({ b }) {
 }
 
 // ─── Eine Regime-Karte
+// ─── Typ-Zeile: NUR aus peer-signifikanten Zellen abgeleitet. Ohne
+// Peer-Treffer bleibt sie weg — eine Typisierung aus Tendenzen wäre genau
+// das Noise-Ranking, das der Gate verbietet. Bewusst OHNE Marker-Zeichen:
+// der Render-Test zählt ●/◐ gegen die Payload, die Zeile darf nicht doppeln.
+function FoTypeLine({ r }) {
+  const sig = (r.tilts || []).filter(t => t.sig_peer);
+  if (!sig.length) return null;
+  return (
+    <div className="mt-1 text-[11px]" style={{ color: "#a5b4fc" }}>
+      Signature vs contemporaries:{" "}
+      {sig.map((t, i) => {
+        const diff = (t.chosen ?? 0) - ((t.peer ?? t.avail) ?? 0);
+        return (
+          <span key={t.dim}>{i > 0 ? " · " : ""}{diff >= 0 ? "leans " : "avoids "}{t.label}</span>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Risikoprofil: VIER getrennte Achsen statt einer Aggregatzahl.
+// Upside-Bets, Jugend, Red-Flag-Toleranz und Konsens sind verschiedene
+// Verhaltensweisen, die ein Front Office unabhängig kombiniert — eine
+// Summe würde sie vermischen (Entscheid 26.07.2026). Balken = gewählt,
+// Strich = Zeitgenossen-Baseline. Keine ●/◐-Zeichen (siehe FoTypeLine).
+const FO_RISK_AXES = [
+  ["f_upside_bet", "Upside bets", "Picked above what college production justified (top quartile of production-rank minus pick-rank)."],
+  ["f_young", "Youth (19 or younger)", "Development bets with the longest runway."],
+  ["f_red_flag", "Red-flag tolerance", "Drafted although the pre-draft profile carried at least one bust signal (red badge)."],
+];
+function FoRiskRow({ label, tip, t }) {
+  const base = (t.peer ?? t.avail) ?? 0;
+  const chosen = t.chosen ?? 0;
+  const w = (v) => `${Math.max(0, Math.min(100, v * 100))}%`;
+  return (
+    <div className="flex items-center gap-2 text-[10px] py-0.5" title={tip}>
+      <span className="text-gray-400 shrink-0" style={{ minWidth: 118 }}>{label}</span>
+      <div style={{ flex: 1, height: 4, background: "#1f2937", borderRadius: 2,
+                    position: "relative", maxWidth: 140 }}>
+        <div style={{ position: "absolute", left: 0, top: 0, height: 4, width: w(chosen),
+                      background: chosen > base ? "#a78bfa" : "#4b5563", borderRadius: 2 }} />
+        <div style={{ position: "absolute", left: w(base), top: -2, width: 1, height: 8,
+                      background: "#9ca3af" }} />
+      </div>
+      <span className="text-gray-300" style={{ minWidth: 34, textAlign: "right" }}>{foPct(chosen)}</span>
+      <span className="text-gray-600">vs {foPct(base)} peers</span>
+    </div>
+  );
+}
+function FoRiskProfile({ r, consMean }) {
+  const byDim = {};
+  (r.tilts || []).forEach(t => { byDim[t.dim] = t; });
+  const rows = FO_RISK_AXES
+    .map(([dim, label, tip]) => ({ dim, label, tip, t: byDim[dim] }))
+    .filter(x => x.t && x.t.chosen !== null && x.t.chosen !== undefined);
+  const hasCons = (r.n_cons || 0) > 0;
+  const hasReach = r.reach !== null && r.reach !== undefined;
+  if (!rows.length && !hasCons && !hasReach) return null;
+  return (
+    <div className="mt-2 pt-2" style={{ borderTop: "1px solid #1f2937" }}>
+      <div className="text-[10px] font-semibold text-gray-300 mb-0.5">
+        Risk profile — four separate axes, not one number
+      </div>
+      {rows.map(x => <FoRiskRow key={x.dim} label={x.label} tip={x.tip} t={x.t} />)}
+      {(hasCons || hasReach) && (
+        <div className="mt-1 text-[10px] text-gray-500">
+          {hasReach && (
+            <>board reach {foNum(r.reach, 1, true)} slots
+            <span className="text-gray-600"> (vs league mean; + = picks earlier than consensus)</span></>
+          )}
+          {hasCons && (
+            <div>
+              <span title="Share of the board that consensus ranked above the player taken, and that was still available. 0 = always took the consensus best player available.">
+                {foPct(r.cons_pass)} of the available board passed over
+              </span>
+              {consMean !== null && consMean !== undefined && (
+                <span className="text-gray-600"> vs {foPct(consMean)} league mean
+                  {" "}— <span title="Between-regime variance in this measure does not exceed a stratified permutation null. Read it as description, not as a trait.">not a distinguishing trait</span></span>
+              )}
+              <span className="text-gray-600"> ({r.n_cons} picks with a consensus board)</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Gruppierte Tendenz-Chips (nicht-signifikante Zellen, aufgeklappt).
+// Drei Fragen strukturieren die Dimensionen: wen nimmt er, was bringen die
+// Spieler mit, wie entscheidet er. Volle Zahlen im Tooltip; sichtbar nur
+// gewählt/Zeitgenossen, sonst wird die Karte wieder die Textwand, die sie
+// bis Juli 2026 war.
+const FO_TILT_GROUPS = [
+  ["Who they pick", ["f_young", "f_intl", "f_big", "f_wing", "f_playmaker", "f_guard", "f_tall"]],
+  ["What the players bring", ["f_bdg_shooting", "f_defense_first"]],
+  ["How they decide", ["f_upside_bet", "f_red_flag"]],
+];
+function FoTiltChips({ tilts }) {
+  if (!tilts.length) return null;
+  const used = new Set();
+  const groups = FO_TILT_GROUPS.map(([g, dims]) => {
+    const ts = tilts.filter(t => dims.includes(t.dim));
+    ts.forEach(t => used.add(t.dim));
+    return [g, ts];
+  }).filter(([, ts]) => ts.length);
+  const rest = tilts.filter(t => !used.has(t.dim));
+  if (rest.length) groups.push(["Other", rest]);
+  return (
+    <div>
+      <div className="text-[10px] font-semibold text-gray-500 mb-0.5">Other tendencies (not significant)</div>
+      {groups.map(([g, ts]) => (
+        <div key={g} className="flex flex-wrap items-baseline gap-x-1 mb-0.5">
+          <span className="text-[9px] uppercase tracking-wide text-gray-600 mr-1 shrink-0">{g}</span>
+          {ts.map(t => (
+            <span key={t.dim}
+                  className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] mb-0.5"
+                  style={{ background: "#111827", border: "1px solid #1f2937", color: "#9ca3af" }}
+                  title={`${foPct(t.chosen)} chosen vs ${foPct(t.avail)} available on the board vs ${foPct(t.peer)} contemporaries at the same slots — tendency, not significant`}>
+              ○ {t.label} {foPct(t.chosen)}
+              <span className="text-gray-600">&thinsp;/&thinsp;{foPct(t.peer ?? t.avail)}</span>
+            </span>
+          ))}
+        </div>
+      ))}
+      <div className="text-[9px] text-gray-600">chip: share chosen / contemporaries at the same slots · hover for the full comparison</div>
+    </div>
+  );
+}
+
 function FoRegimeCard({ r, open, onToggle, consMean }) {
   // Nach oben kommt, was unter EINER der beiden Baselines auffällt — sonst
   // verschwände ein Peer-Treffer, der den Pool-Test nicht besteht, in der
@@ -12199,8 +12329,6 @@ function FoRegimeCard({ r, open, onToggle, consMean }) {
   // statt grün/rot und ausdrücklich als Einzelfall-Rauschen benannt. Greift
   // erst, wenn der Nutzer den Karten-Filter unter 8 stellt.
   const thin = !ungraded && r.gradeable === false;
-  // Risiko-Gauge: z(jung-Anteil) + z(intl-Anteil), Skala ca. −3…+4, 0 = Liga-Mittel
-  const riskPos = Math.max(0, Math.min(100, ((r.risk ?? 0) + 3) / 7 * 100));
   return (
     <div className="rounded-xl p-3" style={FO_PANEL}>
       <div className="flex items-baseline justify-between gap-2 cursor-pointer" onClick={onToggle}>
@@ -12234,6 +12362,7 @@ function FoRegimeCard({ r, open, onToggle, consMean }) {
           )}
         </div>
       </div>
+      <FoTypeLine r={r} />
 
       {ungraded ? (
         <div className="mt-2 text-[11px] text-gray-500">
@@ -12261,37 +12390,10 @@ function FoRegimeCard({ r, open, onToggle, consMean }) {
       </div>
       )}
 
-      {/* Risiko + Reach: der Teil, der laut Gate trägt */}
-      {r.risk !== null && r.risk !== undefined && (
-        <div className="mt-2 pt-2" style={{ borderTop: "1px solid #1f2937" }}>
-          <div className="flex items-center justify-between text-[10px] text-gray-500 mb-1">
-            <span>Safe</span>
-            <span className="text-gray-400">Risk appetite {foNum(r.risk, 2, true)}</span>
-            <span>Upside bets</span>
-          </div>
-          <div style={{ height: 4, background: "#1f2937", borderRadius: 2, position: "relative" }}>
-            <div style={{ position: "absolute", left: "42.9%", top: -2, width: 1, height: 8, background: "#374151" }} />
-            <div style={{ position: "absolute", left: `${riskPos}%`, top: -3, width: 6, height: 10, marginLeft: -3, borderRadius: 2, background: "#a78bfa" }} />
-          </div>
-          <div className="mt-1 text-[10px] text-gray-500">
-            {foPct(r.sh_young)} age-19-or-younger · {foPct(r.sh_intl)} international ·
-            {" "}board reach {foNum(r.reach, 1, true)} slots
-            <span className="text-gray-600"> (vs league mean; + = picks earlier than consensus)</span>
-          </div>
-          {(r.n_cons || 0) > 0 && (
-            <div className="mt-1 text-[10px] text-gray-500">
-              <span title="Share of the board that consensus ranked above the player taken, and that was still available. 0 = always took the consensus best player available.">
-                {foPct(r.cons_pass)} of the available board passed over
-              </span>
-              {consMean !== null && consMean !== undefined && (
-                <span className="text-gray-600"> vs {foPct(consMean)} league mean
-                  {" "}— <span title="Between-regime variance in this measure does not exceed a stratified permutation null. Read it as description, not as a trait.">not a distinguishing trait</span></span>
-              )}
-              <span className="text-gray-600"> ({r.n_cons} picks with a consensus board)</span>
-            </div>
-          )}
-        </div>
-      )}
+      {/* Risikoprofil: vier getrennte Achsen — der Teil, der laut Gate trägt.
+          Der frühere Ein-Zahlen-Gauge (z(jung)+z(intl)) vermischte
+          Verhaltensweisen, die unabhängig variieren (Entscheid 26.07.2026). */}
+      <FoRiskProfile r={r} consMean={consMean} />
 
       {sigTilts.length > 0 && (
         <div className="mt-2 pt-2" style={{ borderTop: "1px solid #1f2937" }}>
@@ -12319,12 +12421,7 @@ function FoRegimeCard({ r, open, onToggle, consMean }) {
               </div>
             </div>
           )}
-          {otherTilts.length > 0 && (
-            <div>
-              <div className="text-[10px] font-semibold text-gray-500 mb-0.5">Other tendencies (not significant)</div>
-              {otherTilts.map(t => <FoTilt key={t.dim} t={t} />)}
-            </div>
-          )}
+          <FoTiltChips tilts={otherTilts} />
           <div>
             <div className="text-[10px] font-semibold text-gray-300 mb-0.5">Best outcomes vs. slot</div>
             {(r.hits || []).map((h, i) => (
@@ -12592,7 +12689,7 @@ function FoBoardView({ data }) {
               {v > 0 ? `+${v}` : v}</text>
           ))}
           <text x={(W + M.l) / 2} y={H - 4} fill="#9ca3af" fontSize={10} textAnchor="middle">
-            Risk appetite (young + international share, z)</text>
+            Youth + international share (z-composite — plotting axis only)</text>
           <text x={12} y={H / 2} fill="#9ca3af" fontSize={10} textAnchor="middle"
                 transform={`rotate(-90 12 ${H / 2})`}>PVA per pick</text>
           {pts.map(p => (
@@ -12778,9 +12875,10 @@ function FoMethod({ data }) {
             ownership constraints, cap situations and trade obligations are not observed here.</li>
           <li>"Best available within 30 picks" is hindsight by construction. It measures what the
             board contained, not what was knowable at the time.</li>
-          <li>Risk appetite is a two-component z-score (young + international share). It is a
-            behavioural descriptor, not a validated construct — read the two shares directly if
-            the composite feels lossy.</li>
+          <li>The League Board x-axis is a two-component z-score (young + international share).
+            It survives only as a plotting axis; the cards themselves show four separate risk
+            axes (upside bets, youth, red-flag tolerance, consensus) because the components
+            vary independently — a composite would blend behaviours that are not one trait.</li>
           <li>Reach is only interpretable relatively: consensus rank comes from a board longer than
             60 picks, so the level is centred on the league mean and only differences carry meaning.</li>
         </ul>

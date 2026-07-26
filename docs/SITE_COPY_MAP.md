@@ -109,6 +109,19 @@ FO-Copy innerhalb der Marken anlegen — sonst prüft der Test sie nicht.
   Pick) und **„n of n_all"** (bewertbar von gesamt). NICHT: „no data",
   „keine Picks", „0.00" — die Picks existieren, nur ihr Ergebnis noch nicht.
 
+## FO-Lab: Karten-Redesign + Badge-Dims (2026-07-27)
+
+| Aussage | Stelle | Regel |
+|---|---|---|
+| **Typ-Zeile** („Signature vs contemporaries: leans …") | `FoTypeLine` | NUR aus `sig_peer`-Zellen ableiten; ohne Peer-Treffer KEINE Zeile. Keine ●/◐-Zeichen (Render-Test zählt Marker gegen die Payload). |
+| **Risikoprofil** („four separate axes, not one number") | `FoRiskProfile` | Vier Achsen getrennt: Upside-Bets, Youth, Red-flag tolerance, Konsens. NIE zu einer Zahl aggregieren; „Risk appetite" als Wort ist verboten (Test bricht). Konsens-Zeile behält „not a distinguishing trait". |
+| **Tendenz-Chips** | `FoTiltChips` | Gruppen: Who they pick / What the players bring / How they decide. Sichtbar nur gewählt/Peers; volle Zahlen im Tooltip. |
+| Neue Tilt-Labels | `DIM_LABEL`: „Elite shooters (badge)", „Drafted despite red flags" | „badge" im Label = Schwellen-Definition. „Drafted despite red flags" beschreibt die Wette, NICHT ein Urteil über den Spieler. |
+
+Nicht gebaute Badge-Familien (Defense/Creation/Feel): Liga-Selektionseffekt
+existiert (3–8×), Regime-Unterschied nicht — falls Copy dazu entsteht, als
+Liga-Befund formulieren, nie als GM-Eigenschaft (Konzept §13.1).
+
 ## FO-Lab: drei neue Tilt-Zeilen (2026-07-26)
 
 `Tall for position`, `Upside bets (over college production)`,

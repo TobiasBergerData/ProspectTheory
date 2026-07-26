@@ -93,7 +93,27 @@ const thinCase = {
   ...(regimes[0] || {}), exec: "ZZ Thin", team: "ZZX",
   n: 3, n_all: 3, gradeable: false, pva: 4.2,
 };
-const cases = regimes.concat([degenerate, ungradedCase, thinCase]);
+// Signatur-Härtefall SYNTHETISCH: der echte Payload hat aktuell null
+// peer-signifikante Zellen (das ist der Befund, kein Fehler) — ohne diesen
+// Fall wären Typ-Zeile und Risikoprofil-Zeilen ungetestet, bis irgendwann
+// eine echte Zelle anschlägt und ein Renderfehler LIVE aufschlüge.
+const signatureCase = {
+  ...(regimes[0] || {}), exec: "ZZ Signature", team: "ZZS",
+  n: 12, n_all: 14, gradeable: true, pva: 1.1, reach: 2.3, n_cons: 9, cons_pass: 0.31,
+  tilts: [
+    { dim: "f_intl", label: "International", chosen: 0.42, avail: 0.2, peer: 0.15,
+      sig: true, sig_peer: true, fdr: 0.03, fdr_peer: 0.04 },
+    { dim: "f_red_flag", label: "Drafted despite red flags", chosen: 0.55, avail: 0.7,
+      peer: 0.4, sig: false, sig_peer: false },
+    { dim: "f_upside_bet", label: "Upside bets (over college production)", chosen: 0.3,
+      avail: 0.1, peer: 0.22, sig: false, sig_peer: false },
+    { dim: "f_young", label: "Age 19 or younger", chosen: 0.5, avail: 0.3, peer: 0.44,
+      sig: false, sig_peer: false },
+    { dim: "f_bdg_shooting", label: "Elite shooters (badge)", chosen: 0.2, avail: 0.05,
+      peer: 0.18, sig: false, sig_peer: false },
+  ],
+};
+const cases = regimes.concat([degenerate, ungradedCase, thinCase, signatureCase]);
 
 /* ── 4. Entry-Datei + Bundle ─────────────────────────────────────────────────
    Der Block referenziert App-globale Namen (API_BASE), die hier nicht
@@ -281,6 +301,30 @@ ok(fatCards.every(c => !c.includes("single-player noise")),
 // (l) Der degenerierte Fall rendert überhaupt und bleibt stumm statt zu raten.
 ok(T.cards.some(c => c.includes("ZZ Degenerate")),
   "Degeneriertes Regime (keine Tilts/Bänder/Konsens) rendert nicht");
+
+// (m) Karten-Redesign (2026-07-26): Typ-Zeile NUR aus peer-signifikanten
+//     Zellen; Risikoprofil als vier getrennte Achsen; alter Ein-Zahlen-Gauge
+//     entfernt. Der synthetische Signatur-Fall prüft die neuen Bausteine.
+const sigCard = T.cards.find(c => c.includes("ZZ Signature"));
+ok(!!sigCard, "Signatur-Härtefall rendert nicht (Testaufbau kaputt)");
+if (sigCard) {
+  ok(sigCard.includes("Signature vs contemporaries:") && sigCard.includes("leans International"),
+    "Typ-Zeile fehlt oder leitet nicht aus der peer-signifikanten Zelle ab");
+  ok(sigCard.includes("Risk profile") && sigCard.includes("Red-flag tolerance")
+     && sigCard.includes("Upside bets"),
+    "Risikoprofil zeigt nicht alle verfügbaren Achsen");
+  ok(sigCard.includes("not a distinguishing trait"),
+    "Konsens-Zeile im Risikoprofil verliert den Nicht-Befund-Zusatz");
+}
+// Karten OHNE peer-signifikante Zelle dürfen KEINE Typ-Zeile tragen — sonst
+// wäre sie ein Noise-Ranking. Und der alte Gauge darf nirgends überleben.
+const realCards = T.cards.slice(0, regimes.length);
+const nSigPeerRegimes = (payload.regimes || [])
+  .filter(r => (r.tilts || []).some(t => t.sig_peer)).length;
+ok(realCards.filter(c => c.includes("Signature vs contemporaries:")).length === nSigPeerRegimes,
+  "Typ-Zeilen-Anzahl weicht von den Regimes mit peer-signifikanter Zelle ab");
+ok(!ALL.includes("Risk appetite"),
+  "Der alte Ein-Zahlen-Risiko-Gauge ('Risk appetite') ist noch im Markup");
 
 /* ── 7. Ergebnis ───────────────────────────────────────────────────────────── */
 if (fails.length) {
