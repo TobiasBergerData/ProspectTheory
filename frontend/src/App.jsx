@@ -12644,13 +12644,20 @@ function FoMethod({ data }) {
     // Null-Ergebnis sonst nicht überprüfbar wäre.
     const nSigPeer = (data.window?.n_tilt_sig_peer ?? all.filter(t => t.sig_peer).length);
     const nPerm = data.window?.n_perm_peer;
-    // Omnibus-p GENAU der Dimension, auf der die Pool-Treffer liegen — nicht
-    // das beste p über alle Dimensionen. Beides zu vermischen würde eine
-    // Bestätigung behaupten, die es auf dieser Dimension nicht gibt.
-    const dimKey = dims.length === 1 ? sig[0]?.dim : null;
-    const omniP = (data.gate?.behaviour_dims || []).find(x => x.dim === dimKey)?.p;
+    // Omnibus-Batterie VOLLSTÄNDIG nennen, nicht nur das beste p — nur das
+    // beste zu nennen läse sich wie eine Bestätigung auf jeder Dimension.
+    // Seit den erweiterten Tilt-Dimensionen (Konzept §13) tragen mehrere
+    // Dimensionen Pool-Treffer; der frühere Ein-Dimensions-Zweig griff dann
+    // nie mehr und die Method nannte gar kein Dimensions-p (Render-Test-Fund
+    // 26.07.2026). Kerndimensionen = Einträge in gate.behaviour_dims (F3-
+    // getestet, je der schlechtere von zwei Nullen); alle weiteren Karten-
+    // Dimensionen sind deskriptiv und tragen keinen Liga-Anspruch.
+    const omni = data.gate?.behaviour_dims || [];
+    const omniSig = omni.filter(x => x.p !== null && x.p !== undefined && x.p <= 0.05);
+    const nExtra = [...new Set(all.map(t => t.dim))]
+      .filter(k => k && !omni.some(x => x.dim === k)).length;
     return { n, nSig, nSigPeer, nPerm, nExp: Math.round(n * 0.05),
-             dim: dims.length === 1 ? dims[0] : null, omniP };
+             omni, omniSig, nExtra };
   }, [data]);
   // Slot-Erwartung Pick 1 je Ära — belegt den Era-Split mit den echten Werten.
   const p1 = useMemo(() => (data.slot_curve || []).filter(x => x.p === 1)
@@ -12709,13 +12716,17 @@ function FoMethod({ data }) {
         confounds taste with where a front office happened to pick.
         {g.behaviour_structure && (
           <> An omnibus permutation test does find that behaviour separates regimes on at least one
-          dimension (best p = {foNum(bp, 3)}) — but
-          {tilt.dim && tilt.omniP !== null && tilt.omniP !== undefined
-            ? <> not on the one carrying every board-baseline hit ({tilt.dim}, p = {foNum(tilt.omniP, 3)})</>
-            : <> not necessarily on the dimensions where individual cells look striking</>}.
-          It said so before the contemporaries baseline existed, and the two now agree. Where the
-          baselines disagree we report the contemporaries verdict, and the card marks the cell ◐
-          rather than ●.</>
+          dimension (best p = {foNum(bp, 3)}). Dimension by dimension — each read against the
+          <em> worse</em> of two nulls (all picks exchangeable, and picks exchangeable within a
+          draft year): {tilt.omni.map((d, i) => (
+            <span key={d.dim}>{i > 0 ? ", " : ""}{String(d.dim).replace("f_", "")} p = {foNum(d.p, 3)}</span>
+          ))}. {tilt.omniSig.length} of {tilt.omni.length} core dimensions clear{tilt.omniSig.length === 1 ? "s" : ""} p ≤ 0.05
+          {tilt.nExtra > 0 && (
+            <>; the other {tilt.nExtra} behavioural dimensions on the cards are descriptive
+            only — they carry no league-level claim and live or die on the contemporaries
+            baseline alone</>
+          )}. Where the baselines disagree we report the contemporaries verdict, and the card
+          marks the cell ◐ rather than ●.</>
         )}
       </div>
       <div>
