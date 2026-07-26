@@ -55,6 +55,7 @@ const block = src.slice(startMarks[0].index, endMarks[0].index);
 ok(/function ShMatrixView/.test(block), "ShMatrixView liegt nicht im Block");
 ok(/function ShMethod/.test(block), "ShMethod liegt nicht im Block");
 ok(/function ShBanner/.test(block), "ShBanner liegt nicht im Block");
+ok(/function ShHeadToHead/.test(block), "ShHeadToHead liegt nicht im Block");
 
 /* ── 3. Härtefälle: leere Zelle + Payload ohne fill-Variante ───────────────── */
 const degenerate = JSON.parse(JSON.stringify(payload));
@@ -76,6 +77,7 @@ ${block}
 const P = ${JSON.stringify(payload)};
 const D = ${JSON.stringify(degenerate)};
 const out = {
+  h2h: P.head_to_head ? renderToStaticMarkup(<ShHeadToHead h={P.head_to_head} />) : "",
   banner: renderToStaticMarkup(<ShBanner data={P} />),
   matrix_base: renderToStaticMarkup(<ShMatrixView data={P} variant="pos_base" />),
   matrix_fill: renderToStaticMarkup(<ShMatrixView data={P} variant="pos_fill" />),
@@ -120,6 +122,29 @@ for (const variant of ["pos_base", "pos_fill"]) {
   const withEx = payload.variants[variant].cells.filter(c => (c.elite_examples || []).length);
   ok(withEx.every(c => html.includes(c.elite_examples[0].player)),
      `${variant}: mindestens ein Elite-Beispielspieler fehlt (title-Attribut)`);
+}
+
+// Head-to-Head: getestete Semantik, wenn der Payload die Sektion trägt
+if (payload.head_to_head) {
+  const h2h = strip(views.h2h);
+  const H = payload.head_to_head;
+  for (const p of H.pairs) ok(h2h.includes(p.label), `H2H: Paar "${p.label}" fehlt`);
+  for (const p of H.pairs.filter(x => x.outcome)) {
+    ok(h2h.includes(Math.abs(p.outcome.asym).toFixed(1)),
+      `H2H: Asymmetrie ${p.outcome.asym} von "${p.label}" fehlt im Markup`);
+  }
+  ok(/decision point/i.test(h2h), "H2H erklärt den Entscheidungspunkt nicht");
+  ok(/harsh/i.test(h2h) && /asymmetry/i.test(h2h),
+    "H2H erklärt den Max-Bias des Rückblicks-Maßstabs nicht");
+  ok(/is not a claim draft samples can support/.test(h2h),
+    "H2H fehlt der Regime-Vorbehalt (keine GM-Behauptung)");
+  if (H.n_pref_sig === 0) {
+    ok(/no quantity bias/i.test(h2h),
+      "H2H: Präferenz-Nicht-Befund wird nicht als solcher gerahmt");
+  }
+  const sigN = H.pairs.filter(x => x.outcome && x.outcome.bh_sig).length;
+  ok((h2h.match(/survives FDR/g) || []).length === sigN,
+    "H2H: Anzahl 'survives FDR'-Badges weicht von den BH-signifikanten Paaren ab");
 }
 
 const banner = strip(views.banner);

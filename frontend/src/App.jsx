@@ -13261,6 +13261,112 @@ function ShMethod({ data }) {
   );
 }
 
+// ─── Head-to-Head: "When the board said equal". Zwei GETRENNTE Fragen mit
+// getrennten Tests (validate_choice_pairs.py): (1) Präferenz gegen die
+// KOMPOSITIONS-Null — nicht 50/50, sondern was das Fenster anbot; (2)
+// Outcome-Asymmetrie gegen den bewusst harten Rückblicks-Maßstab "beste
+// übergangene Alternative". Alle Zahlen aus payload.head_to_head.
+function ShH2HOutcomeRow({ p }) {
+  const o = p.outcome;
+  const sig = o?.bh_sig;
+  const col = (v) => v > 0 ? "#4ade80" : v < 0 ? "#f87171" : "#9ca3af";
+  const [a, b] = p.label.split(" vs. ");
+  return (
+    <div className="rounded-lg p-2 mb-1"
+         style={{ background: "#111827",
+                  border: `1px solid ${sig ? "#4338ca" : "#1f2937"}` }}>
+      <div className="text-[11px] text-gray-200">
+        {p.label}
+        {sig && <span className="ml-2 text-[9px] px-1 py-0.5 rounded"
+                      style={{ background: "#312e81", color: "#c7d2fe" }}>
+          survives FDR</span>}
+      </div>
+      {o ? (
+        <div className="text-[10px] text-gray-400 mt-0.5">
+          Took the {a} over a comparable {b}: chosen player finished{" "}
+          <span style={{ color: col(o.d_a) }}>{shNum(o.d_a, 1, true)} wins</span>{" "}
+          vs the best {b} passed over ({o.n_a} decisions). Took the {b} instead:{" "}
+          <span style={{ color: col(o.d_b) }}>{shNum(o.d_b, 1, true)} wins</span>{" "}
+          ({o.n_b} decisions). Asymmetry {shNum(o.asym, 1, true)},
+          {" "}p = {shNum(o.p, 3)}.
+        </div>
+      ) : (
+        <div className="text-[10px] text-gray-500 mt-0.5">
+          Too few graded decisions for the outcome test ({p.n_decisions} total).
+        </div>
+      )}
+    </div>
+  );
+}
+function ShHeadToHead({ h }) {
+  if (!h) return null;
+  const withPref = (h.pairs || []).filter(p => p.preference);
+  const withOut = (h.pairs || []).filter(p => p.outcome);
+  return (
+    <div className="space-y-3">
+      <div className="rounded-xl p-4 text-[13px] text-gray-300 leading-relaxed" style={SH_PANEL}>
+        <div className="text-gray-100 font-semibold mb-1">
+          When the board said equal — head-to-head decisions
+        </div>
+        A <span className="text-gray-200">decision point</span> is a real draft moment: at this
+        pick, the players still on the board within ±{h.k_slots} consensus slots of the one
+        taken included <em>both</em> types of a pair — say a wing and a big the market valued
+        the same — and the front office took one of them. That framing removes the usual
+        excuse ("no comparable big was left"): both options were there, at the same price.
+        Two separate questions, two separate tests.
+      </div>
+      <div className="rounded-xl p-4" style={SH_PANEL}>
+        <div className="text-xs font-semibold text-gray-200 mb-1">
+          1 · Who gets taken? {h.n_pref_sig === 0
+            ? "— in proportion to what the board offered (no quantity bias)"
+            : `— ${h.n_pref_sig} pair(s) deviate from availability`}
+        </div>
+        <div className="text-[11px] text-gray-400 mb-2">
+          The null here is <em>composition</em>, not 50/50: young players simply outnumber
+          older ones in lottery windows, so "73% take the young player" can be pure supply.
+          Each pick is tested against the actual mix of its own window
+          ({Number(h.n_sim).toLocaleString("en-US")} simulations, BH-FDR across the battery).
+        </div>
+        {withPref.map(p => (
+          <div key={p.key} className="text-[10px] text-gray-400 py-0.5 flex flex-wrap gap-x-2">
+            <span className="text-gray-300" style={{ minWidth: 190 }}>{p.label}</span>
+            <span>took {shPct(p.preference.took_a)}</span>
+            <span className="text-gray-600">vs window {shPct(p.preference.expected_a)}</span>
+            <span className="text-gray-600">p = {shNum(p.preference.p, 3)}</span>
+            <span className="text-gray-500">
+              {p.preference.bh_sig ? "— deviates" : "— in line with availability"}</span>
+          </div>
+        ))}
+      </div>
+      <div className="rounded-xl p-4" style={SH_PANEL}>
+        <div className="text-xs font-semibold text-gray-200 mb-1">
+          2 · Who was right? — the valuation bias
+        </div>
+        <div className="text-[11px] text-gray-400 mb-2">
+          For every decision we compare the chosen player's realized peak Wins Added with the
+          {" "}<span className="text-gray-200">best</span> passed-over player of the other type
+          — a deliberately harsh hindsight benchmark (the best of several candidates beats a
+          typical single pick almost by definition). That harshness hits <em>both</em>
+          directions equally, so the number that means something is the{" "}
+          <span className="text-gray-200">asymmetry</span> between the two directions, not
+          either level on its own. A positive asymmetry says: taking the first-named type
+          worked out better than taking the second-named one, at equal board value.
+        </div>
+        {withOut.map(p => <ShH2HOutcomeRow key={p.key} p={p} />)}
+        <div className="text-[10px] text-gray-500 mt-2">
+          Reading: the league shows no quantity bias (part 1) but a clear valuation bias —
+          at equal consensus value, the big was the trap and the red flag was real. This is
+          the same signal the hit-rate matrix shows from an independent angle. Limits: pure
+          hindsight by construction; the same passed-over player can appear in several
+          windows (clustering flatters the p-values slightly); and no single front office
+          reaches enough decision points to test — "GM X always does this" is not a claim
+          draft samples can support.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Wrapper
 function DraftSharpeLab() {
   const { data, err } = useDraftSharpe();
@@ -13271,7 +13377,9 @@ function DraftSharpeLab() {
   );
   if (err) return empty("Risk-adjusted draft outcomes are not available in this build yet — they ship once the draft-sharpe validation has run and passed.");
   if (!data) return empty("Loading draft outcome data…");
-  const VIEWS = [["matrix", "Hit-Rate Matrix", "▦"], ["method", "Method", "📖"]];
+  const VIEWS = data.head_to_head
+    ? [["matrix", "Hit-Rate Matrix", "▦"], ["h2h", "Board Said Equal", "⚖"], ["method", "Method", "📖"]]
+    : [["matrix", "Hit-Rate Matrix", "▦"], ["method", "Method", "📖"]];
   const VARIANTS = [["pos_base", "Consensus labels"], ["pos_fill", "+ RealGM fill"]];
   return (
     <div className="space-y-4">
@@ -13295,7 +13403,8 @@ function DraftSharpeLab() {
         ))}
       </div>
       {view === "matrix" ? <ShMatrixView data={data} variant={variant} />
-                         : <ShMethod data={data} />}
+        : view === "h2h" ? <ShHeadToHead h={data.head_to_head} />
+        : <ShMethod data={data} />}
     </div>
   );
 }

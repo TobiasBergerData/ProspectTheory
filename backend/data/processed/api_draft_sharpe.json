@@ -1,5 +1,132 @@
 {
  "verdict": "publish",
+ "head_to_head": {
+  "k_slots": 5,
+  "age_young": 19.5,
+  "age_old": 21.5,
+  "n_sim": 20000,
+  "n_perm": 10000,
+  "pairs": [
+   {
+    "key": "young_oldprod",
+    "label": "Young vs. older-productive",
+    "n_decisions": 160,
+    "preference": {
+     "took_a": 0.5687,
+     "expected_a": 0.5097,
+     "p": 0.1182,
+     "bh_sig": false
+    },
+    "outcome": {
+     "n": 98,
+     "n_a": 54,
+     "n_b": 44,
+     "d_a": 0.42,
+     "d_b": -0.94,
+     "asym": 1.36,
+     "p": 0.5593,
+     "bh_sig": false
+    }
+   },
+   {
+    "key": "wing_big",
+    "label": "Wing vs. Big",
+    "n_decisions": 443,
+    "preference": {
+     "took_a": 0.623,
+     "expected_a": 0.6605,
+     "p": 0.0869,
+     "bh_sig": false
+    },
+    "outcome": {
+     "n": 327,
+     "n_a": 200,
+     "n_b": 127,
+     "d_a": 0.6,
+     "d_b": -3.4,
+     "asym": 4.0,
+     "p": 0.0003,
+     "bh_sig": true
+    }
+   },
+   {
+    "key": "wing_pm",
+    "label": "Wing vs. Playmaker",
+    "n_decisions": 388,
+    "preference": {
+     "took_a": 0.6675,
+     "expected_a": 0.6687,
+     "p": 0.9875,
+     "bh_sig": false
+    },
+    "outcome": {
+     "n": 323,
+     "n_a": 217,
+     "n_b": 106,
+     "d_a": -2.4,
+     "d_b": -0.71,
+     "asym": -1.69,
+     "p": 0.187,
+     "bh_sig": false
+    }
+   },
+   {
+    "key": "pm_big",
+    "label": "Playmaker vs. Big",
+    "n_decisions": 193,
+    "preference": {
+     "took_a": 0.4663,
+     "expected_a": 0.4859,
+     "p": 0.6168,
+     "bh_sig": false
+    },
+    "outcome": {
+     "n": 156,
+     "n_a": 73,
+     "n_b": 83,
+     "d_a": 2.74,
+     "d_b": -4.24,
+     "asym": 6.98,
+     "p": 0.0005,
+     "bh_sig": true
+    }
+   },
+   {
+    "key": "intl_dom",
+    "label": "International vs. domestic",
+    "n_decisions": 42,
+    "preference": {
+     "took_a": 0.1429,
+     "expected_a": 0.1737,
+     "p": 0.7602,
+     "bh_sig": false
+    }
+   },
+   {
+    "key": "redflag_clean",
+    "label": "Red-flag vs. clean profile",
+    "n_decisions": 619,
+    "preference": {
+     "took_a": 0.399,
+     "expected_a": 0.409,
+     "p": 0.6069,
+     "bh_sig": false
+    },
+    "outcome": {
+     "n": 455,
+     "n_a": 184,
+     "n_b": 271,
+     "d_a": -4.27,
+     "d_b": -0.6,
+     "asym": -3.67,
+     "p": 0.0015,
+     "bh_sig": true
+    }
+   }
+  ],
+  "n_pref_sig": 0,
+  "n_outcome_sig": 3
+ },
  "elite_threshold_wa": 14.132,
  "elite_definition": "peak Wins Added >= p90 of all evaluable picks",
  "bands": {

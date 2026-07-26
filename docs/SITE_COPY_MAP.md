@@ -109,6 +109,17 @@ FO-Copy innerhalb der Marken anlegen — sonst prüft der Test sie nicht.
   Pick) und **„n of n_all"** (bewertbar von gesamt). NICHT: „no data",
   „keine Picks", „0.00" — die Picks existieren, nur ihr Ergebnis noch nicht.
 
+## Draft Sharpe: Head-to-Head "Board Said Equal" (2026-07-28)
+
+`ShHeadToHead` (dritter View im Sharpe-Tab). Sprachregeln: Teil 1 ist ein
+NICHT-Befund („no quantity bias — in proportion to what the board
+offered"), Teil 2 der Befund („valuation bias"). Asymmetrie ist die
+einzige zitierbare Outcome-Zahl — NIE ein einzelnes Niveau gegen die
+„beste Alternative" zitieren (Max-Bias, im View erklärt). „survives
+FDR"-Badge nur payload-getrieben (`outcome.bh_sig`; Render-Test zählt
+sie). Der Regime-Vorbehalt („is not a claim draft samples can support")
+ist Pflicht-Copy.
+
 ## FO-Lab: UX v2 — Glance-Strip + Outcome nach Typ (2026-07-28)
 
 | Element | Regel |
