@@ -12496,6 +12496,47 @@ function FoConsensusNote({ c }) {
   );
 }
 
+// ─── Need vs. BPA, ebenfalls als NICHT-BEFUND gerahmt (Konzept §13.2).
+// Gemessen wird f_need_pick: fällt ein Pick in die schwächste
+// Positionsgruppe (G/F/C) des eigenen Vorsaison-Kaders? Der Vorlauf fand
+// weder ein Regime-Merkmal noch Need-gerichtete Konsens-Abweichungen —
+// beides steht hier als Ergebnis, nicht versteckt. Zahlen ausschließlich
+// aus dem Payload (SITE_COPY_MAP-Regel: keine driftenden Konstanten).
+function FoNeedNote({ nd }) {
+  if (!nd) return null;
+  return (
+    <div className="rounded-xl p-3 text-[11px] leading-relaxed" style={FO_PANEL}>
+      <div className="text-xs font-semibold text-gray-200 mb-1">
+        Do some front offices draft for need over best available? — tested, and no
+      </div>
+      <div className="text-gray-400">
+        For {nd.n_picks} picks with roster context, we asked whether the pick fell into the
+        weakest position group (guards / forwards / bigs) of the team's previous-season
+        roster, measured against the league's positional minute distribution. Teams hit their
+        weakest group {foPct(nd.league_need_rate)} of the time — barely above what a random
+        positional mix would produce. The {nd.n_regimes} regimes with enough context picks do
+        not separate: observed variance {foNum(nd.var_obs, 5)} vs {foNum(nd.var_null, 5)}
+        expected under a within-year-and-band permutation null
+        (p = {foNum(nd.p, 3)}, {Number(nd.n_perm).toLocaleString("en-US")} permutations).
+        {nd.rate_passing !== null && nd.rate_passing !== undefined && (
+          <> And when a front office passes over the consensus board, the deviation is
+          <em> not</em> need-directed: {foPct(nd.rate_passing)} need-hits when passing someone
+          over ({nd.n_passing} picks) vs {foPct(nd.rate_bpa)} when taking the consensus best
+          available ({nd.n_bpa} picks).</>
+        )}
+      </div>
+      <div className="text-gray-500 mt-1">
+        Reading: "drafts for need" is not a stable front-office trait in this sample — so
+        there is no need-vs-BPA badge on the cards, by the same rule that keeps PVA from
+        becoming a GM ranking. Caveats: roster context is the season-end roster (trades
+        between April and draft night are invisible), and positional need is a proxy —
+        real need is skill-shaped.
+        {nd.stable && <span className="text-amber-400"> (The test now says otherwise — this copy needs revisiting.)</span>}
+      </div>
+    </div>
+  );
+}
+
 // ─── View 1: Regime-Karten
 function FoRegimesView({ data }) {
   const [sortKey, setSortKey] = useState("n");
@@ -12548,6 +12589,7 @@ function FoRegimesView({ data }) {
         </span>
       </div>
       <FoConsensusNote c={data.consensus} />
+      <FoNeedNote nd={data.need} />
       {/* Zwei Marker, zwei Baselines — die Legende muss den Unterschied
           benennen, sonst liest ◐ wie ein schwächeres ● statt wie eine andere
           Frage. */}

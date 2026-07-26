@@ -252,7 +252,13 @@ if (nPerm != null) {
 // (h) Omnibus: das beste p UND das p der Dimension, die alle Pool-Treffer
 //     trägt. Nur das beste zu nennen liest sich wie eine Bestätigung.
 const dims = payload.gate?.behaviour_dims || [];
-ok(dims.length === 0 || dims.some(d => T.method.includes(String(d.p))),
+// DATENVERTRAG zuerst: jedes p muss eine endliche Zahl sein. Der alte
+// String-Vergleich ließ p:null durch, weil String(null)="null" zufällig im
+// Text "permutation null" vorkommt — genau so am 27.07. live gegangen.
+ok(dims.every(d => Number.isFinite(d.p)),
+  "gate.behaviour_dims enthält nicht-numerische p-Werte (Export-Helper?)");
+ok(dims.length === 0 || dims.some(d => Number.isFinite(d.p)
+     && T.method.includes(d.p.toFixed(3))),
   "Method nennt kein dimensionsweises Omnibus-p aus gate.behaviour_dims");
 
 // (i) Konsens-Nicht-Befund. Kippt der Test je auf "stable", muss die Seite das
@@ -263,6 +269,19 @@ if (cons) {
     "Konsens-Block fehlt oder behauptet einen Befund");
   ok(cons.stable === T.regimes.includes("this copy needs revisiting"),
     "Selbstwarnung des Konsens-Blocks passt nicht zu consensus.stable");
+}
+
+// (i2) Need-vs-BPA-Nicht-Befund: wenn der Payload den Block trägt, muss die
+//      Seite ihn als getesteten NICHT-Befund rahmen — und die Selbstwarnung
+//      muss an payload.need.stable hängen (gleiche Mechanik wie Konsens).
+const nd = payload.need;
+if (nd) {
+  ok(T.regimes.includes("need over best available") && T.regimes.includes("tested, and no"),
+    "Need-Block fehlt oder behauptet einen Befund");
+  ok(nd.stable === T.regimes.includes("this copy needs revisiting"),
+    "Selbstwarnung des Need-Blocks passt nicht zu need.stable");
+  ok(T.regimes.includes("not a stable front-office trait"),
+    "Need-Block zieht keine Karten-Konsequenz ('no need-vs-BPA badge')");
 }
 
 // (j) Bänder sind bewusst ungetestet — ohne den Disclaimer liest sich das

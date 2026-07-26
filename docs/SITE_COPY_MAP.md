@@ -109,6 +109,16 @@ FO-Copy innerhalb der Marken anlegen — sonst prüft der Test sie nicht.
   Pick) und **„n of n_all"** (bewertbar von gesamt). NICHT: „no data",
   „keine Picks", „0.00" — die Picks existieren, nur ihr Ergebnis noch nicht.
 
+## FO-Lab: Need-vs-BPA-Nicht-Befund (2026-07-28)
+
+`FoNeedNote` neben `FoConsensusNote`: „Do some front offices draft for
+need over best available? — tested, and no". Regeln: gleicher Rahmen wie
+das Konsens-Modul (Nicht-Befund ist das Ergebnis, keine Rangliste, keine
+Karten-Zeile); Zahlen NUR aus `payload.need`; Selbstwarnung an
+`need.stable` gekoppelt; die Caveats (Saisonende-Kader, Positions-Proxy)
+bleiben Teil der Copy. NIE als „GMs ignorieren Need" verkaufen — gemessen
+ist: Need trennt Regimes nicht.
+
 ## FO-Lab: Karten-Redesign + Badge-Dims (2026-07-27)
 
 | Aussage | Stelle | Regel |
