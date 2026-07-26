@@ -109,6 +109,19 @@ FO-Copy innerhalb der Marken anlegen — sonst prüft der Test sie nicht.
   Pick) und **„n of n_all"** (bewertbar von gesamt). NICHT: „no data",
   „keine Picks", „0.00" — die Picks existieren, nur ihr Ergebnis noch nicht.
 
+## FO-Lab: drei neue Tilt-Zeilen (2026-07-26)
+
+`Tall for position`, `Upside bets (over college production)`,
+`Defense-first (college D over O)` — Labels kommen aus `DIM_LABEL` in
+`export_front_office.py`, das Frontend rendert sie payload-getrieben
+(keine App.jsx-Änderung). Sprachregeln: die Flags messen **PRE-NBA-Signale**
+(College-Produktion, gelistete Größe), nie NBA-Outcomes — deshalb steht
+„college" in zwei der drei Labels und bleibt dort. `f_defense_first` ist der
+einzige mit Liga-Signal (Konzept §13); für die anderen beiden gilt: nur
+Peer-Marker (● / ◐ / ○) zitieren, nie den Liga-Trend. `Upside bets` nicht
+als „drafts on feel" verkaufen — Feel ist nicht gemessen, nur „über der
+College-Produktion gezogen".
+
 ## Draft Sharpe (Research-Bereich, 2026-07-26)
 
 | Aussage auf der Seite | Stelle im Code | Quelle der Wahrheit |
