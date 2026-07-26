@@ -21,6 +21,7 @@ Endpoints:
   GET /api/youth                         → ANGT Youth Radar (U18 tournament production)
   GET /api/awards                        → League-Award-Badges (deskriptiv, Namens-Key)
   GET /api/front-office                  → Front Office Lab (Regime-Draft-Historie)
+  GET /api/draft-sharpe                  → Risk-adjusted Draft Outcomes (Archetyp x Band)
   GET /api/players/draft/{year}          → All players from a draft year
 
 All `{slug}` path parameters also accept a player_id (bt:…, rg:…) or a
@@ -1155,6 +1156,23 @@ async def get_front_office(response: Response):
     p = Path(os.environ.get("DATA_DIR", "data/processed")) / "api_front_office.json"
     if not p.exists():
         raise HTTPException(status_code=503, detail="front office lab not yet built")
+    response.headers["Cache-Control"] = "public, max-age=3600"
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
+@app.get("/api/draft-sharpe")
+async def get_draft_sharpe(response: Response):
+    """Risk-adjusted Draft Outcomes (Research-Bereich): Hit-Rates und
+    Sharpe/Sortino je Archetyp x Pick-Band, NFL-Quasi-Sharpe-Idee in
+    NBA-Übersetzung (Return = PVA statt Cap-Dollar).
+
+    WICHTIG: die Payload existiert nur, wenn validate_draft_sharpe.py
+    (data-pipeline) "publish" geurteilt hat — export_draft_sharpe.py
+    exportiert sonst nichts. Die Seite führt mit Hit-Rates; Sharpe nur
+    mit Bootstrap-CI (Begründung im Payload/Method-View)."""
+    p = Path(os.environ.get("DATA_DIR", "data/processed")) / "api_draft_sharpe.json"
+    if not p.exists():
+        raise HTTPException(status_code=503, detail="draft sharpe not yet built")
     response.headers["Cache-Control"] = "public, max-age=3600"
     return json.loads(p.read_text(encoding="utf-8"))
 

@@ -12816,10 +12816,261 @@ function FrontOfficeLab() {
 }
 // ─── FO_BLOCK_END ──────────────────────────────────────────────────────────
 
+// ═══════════════════════════════════════════════════════════
+// RESEARCH: RISK-ADJUSTED DRAFT OUTCOMES ("Draft Sharpe")
+// NBA-Übersetzung der NFL-Quasi-Sharpe-Idee (stranger9977): Archetyp x
+// Pick-Band statt Position x Slot-Tier, Return = PVA (Peak-WA minus
+// isotone Slot-Erwartung). WAS DIE SEITE FÜHRT, hat der Gate entschieden
+// (validate_draft_sharpe.py, 26.07.2026): Hit-Rates zuerst (Split-half
+// rho ~ 0.8), Sharpe/Sortino nur sekundär und NIE ohne CI (rho ~ 0.35,
+// CIs schließen fast überall die Null ein). Intl-Scope-Hinweis ist
+// Pflicht-Copy: die Consensus-Labels decken Intl-Picks kaum.
+// KEINE harten Zahlen in diesem Kommentar — alles kommt aus dem Payload.
+// Quelle: /api/draft-sharpe (statisch, export_draft_sharpe.py).
+// ═══════════════════════════════════════════════════════════
+let _shCache = null;
+function useDraftSharpe() {
+  const [d, setD] = useState(_shCache);
+  const [err, setErr] = useState(false);
+  useEffect(() => {
+    if (_shCache) { setD(_shCache); return; }
+    let alive = true;
+    fetch(`${API_BASE}/draft-sharpe`)
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(j => { _shCache = j; if (alive) setD(j); })
+      .catch(() => { if (alive) setErr(true); });
+    return () => { alive = false; };
+  }, []);
+  return { data: d, err };
+}
+
+// ─── SHARPE_BLOCK_START ────────────────────────────────────────────────────
+// Marke ist FUNKTIONAL: frontend/tests/sharpe_render_test.mjs schneidet den
+// Block zwischen SHARPE_BLOCK_START und SHARPE_BLOCK_END heraus und rendert
+// ihn serverseitig gegen den echten Payload (gleiches Muster wie FO_BLOCK).
+// Marken nicht entfernen/duplizieren; neue Komponenten INNERHALB anlegen.
+// Der Block ist bewusst SELBSTVERSORGEND (eigene Panel-/Format-Helfer statt
+// FO_PANEL/foPct): der Test bundelt nur diesen Ausschnitt.
+const SH_PANEL = { background: "#0d1117", border: "1px solid #1f2937" };
+const shPct = (v, nd = 0) => v === null || v === undefined ? "—"
+  : `${(v * 100).toFixed(nd)}%`;
+const shNum = (v, nd = 2, plus = false) => v === null || v === undefined ? "—"
+  : `${plus && v > 0 ? "+" : ""}${Number(v).toFixed(nd)}`;
+// Hit-Rate-Färbung: EINE Blau-Intensität, kein Grün/Rot. Die Rangfolge der
+// Zellen ist belastbar (F1), aber "gut/schlecht" wäre eine Slot-Aussage —
+// 28 % in der Lottery und 3 % im Second Round sind beide erwartbar.
+const shHitBg = (hit, bandMax) => {
+  if (hit === null || hit === undefined || !bandMax) return "transparent";
+  const a = Math.min(hit / bandMax, 1) * 0.38;
+  return `rgba(96, 165, 250, ${a.toFixed(3)})`;
+};
+
+const SH_BAND_ORDER = ["L", "M", "S"];
+const SH_ARCH_ORDER = ["Playmaker", "Wing", "Big"];
+
+// ─── Banner: setzt den Wahrheitsanspruch, wie FoGateBanner beim FO Lab
+function ShBanner({ data }) {
+  const f2 = data?.variants?.pos_base?.f2_permutation;
+  const f1 = data?.variants?.pos_base?.f1_split_half;
+  return (
+    <div className="rounded-xl p-4 text-sm text-gray-300 leading-relaxed" style={SH_PANEL}>
+      <div className="font-semibold text-gray-100 mb-1">
+        Risk-adjusted draft outcomes — by player type and pick range.
+      </div>
+      Borrowing an idea from NFL draft analytics (the “quasi-Sharpe ratio”:
+      return per unit of risk, by position and slot tier), translated to the
+      NBA: player <span className="text-gray-100">archetype</span> × pick band, return =
+      {" "}<span className="text-gray-100">Pick Value Added</span> (realized peak Wins Added minus
+      what the slot historically returns). Before shipping we tested what this
+      table can actually claim. The <span className="text-gray-200">hit-rate ordering is
+      stable</span> (split-half ρ = {shNum(f1?.hit_elite?.rho, 2)}) and the spread across
+      archetypes exceeds chance (permutation p = {shNum(f2?.sharpe?.p_value, 3)});
+      the <span className="text-gray-200">Sharpe numbers themselves are noisy</span> — most
+      confidence intervals include zero, so they are shown as secondary
+      context, never as a ranking.
+      <div className="mt-2 text-[13px] text-gray-400">
+        Scope: archetype labels come from consensus boards and barely cover
+        international picks — this table is (near-)NCAA-only. Cells with too
+        few picks are not shown at all.
+      </div>
+    </div>
+  );
+}
+
+// ─── Zellkachel: Hit-Rate führt, Sharpe ist Fußnote
+function ShCell({ c, bandMax }) {
+  if (!c) return <td className="p-2 text-center text-gray-600 text-xs">—</td>;
+  const ex = (c.elite_examples || [])
+    .map(x => `${x.player} (#${x.pick}, ${x.year}, ${x.wa} WA)`).join(" · ");
+  return (
+    <td className="p-2 align-top" style={{ background: shHitBg(c.hit_elite, bandMax) }}
+        title={ex ? `Elite hits: ${ex}` : "No elite hits in this cell"}>
+      <div className="text-gray-100 text-sm font-semibold">
+        {shPct(c.hit_elite)}
+        <span className="text-[10px] text-gray-400 font-normal ml-1">
+          [{shPct(c.hit_ci?.[0])}–{shPct(c.hit_ci?.[1])}]
+        </span>
+      </div>
+      <div className="text-[10px] text-gray-400">
+        n={c.n} · Sharpe {shNum(c.sharpe, 2, true)}
+        {" "}<span className="text-gray-500">
+          [{shNum(c.sharpe_ci?.[0], 2, true)},{shNum(c.sharpe_ci?.[1], 2, true)}]
+        </span>
+      </div>
+    </td>
+  );
+}
+
+// ─── Matrix: Archetyp x Band
+function ShMatrixView({ data, variant }) {
+  const v = data?.variants?.[variant];
+  const byKey = useMemo(() => {
+    const m = {};
+    (v?.cells || []).forEach(c => { m[`${c.archetype}/${c.band}`] = c; });
+    return m;
+  }, [v]);
+  // Färbung wird JE BAND normiert (Spalten-Maximum), damit die Intensität
+  // "Archetyp-Unterschied im Band" zeigt und nicht den trivialen
+  // Lottery-Effekt (frühe Picks hitten immer öfter).
+  const bandMax = useMemo(() => {
+    const m = {};
+    SH_BAND_ORDER.forEach(b => {
+      m[b] = Math.max(...SH_ARCH_ORDER.map(a => byKey[`${a}/${b}`]?.hit_elite || 0), 0);
+    });
+    return m;
+  }, [byKey]);
+  if (!v) return null;
+  return (
+    <div className="rounded-xl p-4" style={SH_PANEL}>
+      <div className="text-xs text-gray-400 mb-2">
+        Share of picks that became an <span className="text-gray-200">elite outcome</span>
+        {" "}(peak Wins Added ≥ p90 of all graded picks, ≥ {shNum(data.elite_threshold_wa, 1)} WA) —
+        {" "}with 95% bootstrap CI. Shading compares archetypes <em>within</em> a band.
+      </div>
+      <table className="w-full text-left border-separate" style={{ borderSpacing: 2 }}>
+        <thead>
+          <tr className="text-[11px] text-gray-400">
+            <th className="p-2 font-normal">Archetype</th>
+            {SH_BAND_ORDER.map(b => (
+              <th key={b} className="p-2 font-normal">{data.bands?.[b] || b}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {SH_ARCH_ORDER.map(a => (
+            <tr key={a}>
+              <td className="p-2 text-sm text-gray-200">{a}</td>
+              {SH_BAND_ORDER.map(b => (
+                <ShCell key={b} c={byKey[`${a}/${b}`]} bandMax={bandMax[b]} />
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="mt-2 text-[11px] text-gray-500">
+        {v.n?.toLocaleString()} graded picks, drafts {v.years?.[0]}–{v.years?.[1]} ·
+        hover a cell for its elite hits · Sortino and full method under “Method”.
+      </div>
+    </div>
+  );
+}
+
+// ─── Methodik: alles Zahlenmaterial aus dem Payload, nichts hart kodiert
+function ShMethod({ data }) {
+  const b = data?.variants?.pos_base, f = data?.variants?.pos_fill;
+  const rf = data?.realgm_fill;
+  return (
+    <div className="rounded-xl p-4 text-[13px] text-gray-300 leading-relaxed space-y-3" style={SH_PANEL}>
+      <div>
+        <span className="text-gray-100 font-semibold">Return & risk.</span>{" "}
+        Return per pick is Pick Value Added — realized peak Wins Added minus an
+        isotonic estimate of what the slot returns on average (ex-post,
+        model-free; same measure as the Front Office Lab). “Elite” means peak
+        Wins Added ≥ {shNum(data?.elite_threshold_wa, 1)} (p90 of all graded picks).
+        Sharpe = mean(PVA)/SD(PVA) per cell; Sortino uses downside deviation
+        only, because upside variance in a draft pick is option value, not risk.
+      </div>
+      <div>
+        <span className="text-gray-100 font-semibold">What survived validation.</span>{" "}
+        Pre-registered rule, checked before this page was built: cell ordering
+        must be stable across split halves of the draft years AND the spread
+        across archetypes must beat a within-band permutation null. Hit-rate
+        ordering: split-half ρ = {shNum(b?.f1_split_half?.hit_elite?.rho, 2)}; permutation
+        p = {shNum(b?.f2_permutation?.sharpe?.p_value, 3)} (Sharpe spread)
+        / {shNum(b?.f2_permutation?.hit_elite?.p_value, 3)} (hit-rate spread).
+        Sharpe point estimates have split-half ρ = {shNum(b?.f1_split_half?.sharpe?.rho, 2)} —
+        too noisy to lead; that is why every Sharpe carries its CI and the
+        table leads with hit-rates.
+      </div>
+      <div>
+        <span className="text-gray-100 font-semibold">Two label variants.</span>{" "}
+        Base: consensus-board archetypes ({b?.years?.[0]}–{b?.years?.[1]},
+        n = {b?.n?.toLocaleString()}) — barely covers international picks.
+        Extended: adds RealGM listed positions, but ONLY classes that agree
+        with the consensus label ≥ {shPct(rf?.purity_min)} of the time
+        ({(rf?.classes_used || []).join(", ")}); ambiguous classes (G, PF)
+        stay unlabeled, because label noise would blur real differences
+        (attenuation). The two variants produce the same cell ordering
+        (ρ = {shNum(data?.f4_label_robustness_rho, 2)}), n = {f?.n?.toLocaleString()},
+        {" "}{f?.years?.[0]}–{f?.years?.[1]}.
+      </div>
+      <div>
+        <span className="text-gray-100 font-semibold">How to read it.</span>{" "}
+        Compare archetypes within a band, not across bands — early picks hit
+        more everywhere. This is a record of what drafted player types
+        returned, not a claim that any front office can select into these
+        rates. Idea credit: the NFL “quasi-Sharpe” draft analysis
+        (stranger9977); differences here: wins instead of cap dollars, and a
+        validation gate deciding what the page may claim.
+      </div>
+    </div>
+  );
+}
+
+// ─── Wrapper
+function DraftSharpeLab() {
+  const { data, err } = useDraftSharpe();
+  const [view, setView] = useState("matrix");
+  const [variant, setVariant] = useState("pos_base");
+  const empty = (msg) => (
+    <div className="rounded-xl p-6 text-sm text-gray-400 leading-relaxed" style={SH_PANEL}>{msg}</div>
+  );
+  if (err) return empty("Risk-adjusted draft outcomes are not available in this build yet — they ship once the draft-sharpe validation has run and passed.");
+  if (!data) return empty("Loading draft outcome data…");
+  const VIEWS = [["matrix", "Hit-Rate Matrix", "▦"], ["method", "Method", "📖"]];
+  const VARIANTS = [["pos_base", "Consensus labels"], ["pos_fill", "+ RealGM fill"]];
+  return (
+    <div className="space-y-4">
+      <ShBanner data={data} />
+      <div className="flex flex-wrap items-center gap-1">
+        {VIEWS.map(([k, lbl, ic]) => (
+          <button key={k} onClick={() => setView(k)}
+                  className="text-xs px-3 py-1.5 rounded-lg"
+                  style={{ background: view === k ? "#1e293b" : "#111827",
+                           border: "1px solid #1f2937",
+                           color: view === k ? "#e5e7eb" : "#9ca3af" }}>
+            <span className="mr-1">{ic}</span>{lbl}</button>
+        ))}
+        {view === "matrix" && <span className="mx-2 text-gray-600 text-xs">·</span>}
+        {view === "matrix" && VARIANTS.map(([k, lbl]) => (
+          <button key={k} onClick={() => setVariant(k)}
+                  className="text-[11px] px-2 py-1 rounded-lg"
+                  style={{ background: variant === k ? "#312e81" : "#111827",
+                           border: `1px solid ${variant === k ? "#4338ca" : "#1f2937"}`,
+                           color: variant === k ? "#e0e7ff" : "#9ca3af" }}>{lbl}</button>
+        ))}
+      </div>
+      {view === "matrix" ? <ShMatrixView data={data} variant={variant} />
+                         : <ShMethod data={data} />}
+    </div>
+  );
+}
+// ─── SHARPE_BLOCK_END ──────────────────────────────────────────────────────
+
 // ─── Research-Tab: Archetyp-Bänder + Front Office Lab
 function ResearchTab({p}) {
   const [area, setArea] = useState("archetypes");
-  const AREAS = [["archetypes", "Archetype Value Bands"], ["frontoffice", "Front Office Lab"]];
+  const AREAS = [["archetypes", "Archetype Value Bands"], ["frontoffice", "Front Office Lab"], ["sharpe", "Draft Sharpe"]];
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-1">
@@ -12831,7 +13082,9 @@ function ResearchTab({p}) {
                            color: area === k ? "#e0e7ff" : "#9ca3af" }}>{lbl}</button>
         ))}
       </div>
-      {area === "archetypes" ? <ArchetypeBandsView p={p} /> : <FrontOfficeLab />}
+      {area === "archetypes" ? <ArchetypeBandsView p={p} />
+        : area === "sharpe" ? <DraftSharpeLab />
+        : <FrontOfficeLab />}
     </div>
   );
 }

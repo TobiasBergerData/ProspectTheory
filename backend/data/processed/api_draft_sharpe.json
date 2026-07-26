@@ -1,0 +1,752 @@
+{
+ "verdict": "publish",
+ "elite_threshold_wa": 14.132,
+ "elite_definition": "peak Wins Added >= p90 of all evaluable picks",
+ "bands": {
+  "L": "Picks 1-14",
+  "M": "Picks 15-30",
+  "S": "Picks 31-60"
+ },
+ "min_cell": 25,
+ "rule": {
+  "f2_p": 0.05,
+  "f1_rho_hit": 0.5,
+  "f4_rho": 0.7
+ },
+ "f4_label_robustness_rho": 1.0,
+ "realgm_fill": {
+  "purity_min": 0.85,
+  "mapping_accuracy": 0.752,
+  "classes_used": [
+   "C",
+   "GF",
+   "SF"
+  ]
+ },
+ "variants": {
+  "pos_base": {
+   "n": 625,
+   "years": [
+    2008,
+    2021
+   ],
+   "cells": [
+    {
+     "archetype": "Big",
+     "band": "L",
+     "n": 43,
+     "mean_pva": 0.287,
+     "sd_pva": 8.965,
+     "sharpe": 0.032,
+     "sortino": 0.04,
+     "hit_elite": 0.279,
+     "sharpe_ci": [
+      -0.289,
+      0.328
+     ],
+     "hit_ci": [
+      0.163,
+      0.419
+     ],
+     "elite_examples": [
+      {
+       "player": "Joel Embiid",
+       "year": 2014,
+       "pick": 3,
+       "wa": 32.2
+      },
+      {
+       "player": "Anthony Davis",
+       "year": 2012,
+       "pick": 1,
+       "wa": 31.5
+      },
+      {
+       "player": "Domantas Sabonis",
+       "year": 2016,
+       "pick": 11,
+       "wa": 27.0
+      }
+     ]
+    },
+    {
+     "archetype": "Big",
+     "band": "M",
+     "n": 43,
+     "mean_pva": -1.712,
+     "sd_pva": 5.773,
+     "sharpe": -0.297,
+     "sortino": -0.373,
+     "hit_elite": 0.047,
+     "sharpe_ci": [
+      -0.959,
+      0.024
+     ],
+     "hit_ci": [
+      0.0,
+      0.116
+     ],
+     "elite_examples": [
+      {
+       "player": "Jarrett Allen",
+       "year": 2017,
+       "pick": 22,
+       "wa": 25.3
+      },
+      {
+       "player": "Nikola Vucevic",
+       "year": 2011,
+       "pick": 16,
+       "wa": 19.7
+      }
+     ]
+    },
+    {
+     "archetype": "Big",
+     "band": "S",
+     "n": 58,
+     "mean_pva": -0.465,
+     "sd_pva": 3.744,
+     "sharpe": -0.124,
+     "sortino": -0.209,
+     "hit_elite": 0.034,
+     "sharpe_ci": [
+      -0.633,
+      0.109
+     ],
+     "hit_ci": [
+      0.0,
+      0.086
+     ],
+     "elite_examples": [
+      {
+       "player": "DeAndre Jordan",
+       "year": 2008,
+       "pick": 35,
+       "wa": 19.5
+      },
+      {
+       "player": "Chandler Parsons",
+       "year": 2011,
+       "pick": 38,
+       "wa": 15.2
+      }
+     ]
+    },
+    {
+     "archetype": "Playmaker",
+     "band": "L",
+     "n": 32,
+     "mean_pva": 3.369,
+     "sd_pva": 14.759,
+     "sharpe": 0.228,
+     "sortino": 0.409,
+     "hit_elite": 0.406,
+     "sharpe_ci": [
+      -0.125,
+      0.513
+     ],
+     "hit_ci": [
+      0.25,
+      0.594
+     ],
+     "elite_examples": [
+      {
+       "player": "Shai Gilgeous-Alexander",
+       "year": 2018,
+       "pick": 11,
+       "wa": 48.4
+      },
+      {
+       "player": "Stephen Curry",
+       "year": 2009,
+       "pick": 7,
+       "wa": 44.5
+      },
+      {
+       "player": "James Harden",
+       "year": 2009,
+       "pick": 3,
+       "wa": 41.4
+      }
+     ]
+    },
+    {
+     "archetype": "Playmaker",
+     "band": "M",
+     "n": 31,
+     "mean_pva": 3.886,
+     "sd_pva": 8.175,
+     "sharpe": 0.475,
+     "sortino": 0.935,
+     "hit_elite": 0.194,
+     "sharpe_ci": [
+      0.176,
+      0.817
+     ],
+     "hit_ci": [
+      0.065,
+      0.355
+     ],
+     "elite_examples": [
+      {
+       "player": "Derrick White",
+       "year": 2017,
+       "pick": 29,
+       "wa": 29.0
+      },
+      {
+       "player": "George Hill",
+       "year": 2008,
+       "pick": 26,
+       "wa": 23.6
+      },
+      {
+       "player": "Dejounte Murray",
+       "year": 2016,
+       "pick": 29,
+       "wa": 19.4
+      }
+     ]
+    },
+    {
+     "archetype": "Playmaker",
+     "band": "S",
+     "n": 64,
+     "mean_pva": 0.209,
+     "sd_pva": 4.674,
+     "sharpe": 0.045,
+     "sortino": 0.104,
+     "hit_elite": 0.031,
+     "sharpe_ci": [
+      -0.291,
+      0.244
+     ],
+     "hit_ci": [
+      0.0,
+      0.078
+     ],
+     "elite_examples": [
+      {
+       "player": "Jalen Brunson",
+       "year": 2018,
+       "pick": 33,
+       "wa": 24.6
+      },
+      {
+       "player": "Isaiah Thomas",
+       "year": 2011,
+       "pick": 60,
+       "wa": 15.1
+      }
+     ]
+    },
+    {
+     "archetype": "Wing",
+     "band": "L",
+     "n": 87,
+     "mean_pva": -0.322,
+     "sd_pva": 9.212,
+     "sharpe": -0.035,
+     "sortino": -0.045,
+     "hit_elite": 0.207,
+     "sharpe_ci": [
+      -0.278,
+      0.167
+     ],
+     "hit_ci": [
+      0.126,
+      0.287
+     ],
+     "elite_examples": [
+      {
+       "player": "Jayson Tatum",
+       "year": 2017,
+       "pick": 3,
+       "wa": 39.1
+      },
+      {
+       "player": "Paul George",
+       "year": 2010,
+       "pick": 10,
+       "wa": 36.6
+      },
+      {
+       "player": "Anthony Edwards",
+       "year": 2020,
+       "pick": 1,
+       "wa": 29.3
+      }
+     ]
+    },
+    {
+     "archetype": "Wing",
+     "band": "M",
+     "n": 93,
+     "mean_pva": 0.024,
+     "sd_pva": 6.699,
+     "sharpe": 0.004,
+     "sortino": 0.005,
+     "hit_elite": 0.075,
+     "sharpe_ci": [
+      -0.232,
+      0.197
+     ],
+     "hit_ci": [
+      0.032,
+      0.129
+     ],
+     "elite_examples": [
+      {
+       "player": "Kawhi Leonard",
+       "year": 2011,
+       "pick": 15,
+       "wa": 27.7
+      },
+      {
+       "player": "Pascal Siakam",
+       "year": 2016,
+       "pick": 27,
+       "wa": 23.3
+      },
+      {
+       "player": "Jrue Holiday",
+       "year": 2009,
+       "pick": 17,
+       "wa": 23.1
+      }
+     ]
+    },
+    {
+     "archetype": "Wing",
+     "band": "S",
+     "n": 174,
+     "mean_pva": -0.03,
+     "sd_pva": 4.592,
+     "sharpe": -0.006,
+     "sortino": -0.013,
+     "hit_elite": 0.017,
+     "sharpe_ci": [
+      -0.201,
+      0.121
+     ],
+     "hit_ci": [
+      0.0,
+      0.04
+     ],
+     "elite_examples": [
+      {
+       "player": "Draymond Green",
+       "year": 2012,
+       "pick": 35,
+       "wa": 33.0
+      },
+      {
+       "player": "Khris Middleton",
+       "year": 2012,
+       "pick": 39,
+       "wa": 23.8
+      },
+      {
+       "player": "Danny Green",
+       "year": 2009,
+       "pick": 46,
+       "wa": 16.9
+      }
+     ]
+    }
+   ],
+   "f1_split_half": {
+    "hit_elite": {
+     "rho": 0.817,
+     "n_cells": 9
+    },
+    "sharpe": {
+     "rho": 0.35,
+     "n_cells": 9
+    }
+   },
+   "f2_permutation": {
+    "hit_elite": {
+     "observed_range": 0.389,
+     "null_median": 0.302,
+     "p_value": 0.051
+    },
+    "sharpe": {
+     "observed_range": 0.772,
+     "null_median": 0.387,
+     "p_value": 0.0232
+    }
+   }
+  },
+  "pos_fill": {
+   "n": 849,
+   "years": [
+    2000,
+    2021
+   ],
+   "cells": [
+    {
+     "archetype": "Big",
+     "band": "L",
+     "n": 69,
+     "mean_pva": -1.419,
+     "sd_pva": 9.177,
+     "sharpe": -0.155,
+     "sortino": -0.169,
+     "hit_elite": 0.246,
+     "sharpe_ci": [
+      -0.415,
+      0.077
+     ],
+     "hit_ci": [
+      0.145,
+      0.348
+     ],
+     "elite_examples": [
+      {
+       "player": "Dwight Howard",
+       "year": 2004,
+       "pick": 1,
+       "wa": 37.1
+      },
+      {
+       "player": "Joel Embiid",
+       "year": 2014,
+       "pick": 3,
+       "wa": 32.2
+      },
+      {
+       "player": "Anthony Davis",
+       "year": 2012,
+       "pick": 1,
+       "wa": 31.5
+      }
+     ]
+    },
+    {
+     "archetype": "Big",
+     "band": "M",
+     "n": 76,
+     "mean_pva": -1.169,
+     "sd_pva": 6.683,
+     "sharpe": -0.175,
+     "sortino": -0.249,
+     "hit_elite": 0.079,
+     "sharpe_ci": [
+      -0.515,
+      0.051
+     ],
+     "hit_ci": [
+      0.026,
+      0.145
+     ],
+     "elite_examples": [
+      {
+       "player": "Rudy Gobert",
+       "year": 2013,
+       "pick": 27,
+       "wa": 30.7
+      },
+      {
+       "player": "Jarrett Allen",
+       "year": 2017,
+       "pick": 22,
+       "wa": 25.3
+      },
+      {
+       "player": "Nikola Vucevic",
+       "year": 2011,
+       "pick": 16,
+       "wa": 19.7
+      }
+     ]
+    },
+    {
+     "archetype": "Big",
+     "band": "S",
+     "n": 117,
+     "mean_pva": 0.038,
+     "sd_pva": 5.971,
+     "sharpe": 0.006,
+     "sortino": 0.019,
+     "hit_elite": 0.043,
+     "sharpe_ci": [
+      -0.293,
+      0.147
+     ],
+     "hit_ci": [
+      0.009,
+      0.085
+     ],
+     "elite_examples": [
+      {
+       "player": "Nikola Jokic",
+       "year": 2014,
+       "pick": 41,
+       "wa": 50.2
+      },
+      {
+       "player": "Marc Gasol",
+       "year": 2007,
+       "pick": 48,
+       "wa": 23.3
+      },
+      {
+       "player": "DeAndre Jordan",
+       "year": 2008,
+       "pick": 35,
+       "wa": 19.5
+      }
+     ]
+    },
+    {
+     "archetype": "Playmaker",
+     "band": "L",
+     "n": 32,
+     "mean_pva": 3.369,
+     "sd_pva": 14.759,
+     "sharpe": 0.228,
+     "sortino": 0.409,
+     "hit_elite": 0.406,
+     "sharpe_ci": [
+      -0.093,
+      0.521
+     ],
+     "hit_ci": [
+      0.25,
+      0.594
+     ],
+     "elite_examples": [
+      {
+       "player": "Shai Gilgeous-Alexander",
+       "year": 2018,
+       "pick": 11,
+       "wa": 48.4
+      },
+      {
+       "player": "Stephen Curry",
+       "year": 2009,
+       "pick": 7,
+       "wa": 44.5
+      },
+      {
+       "player": "James Harden",
+       "year": 2009,
+       "pick": 3,
+       "wa": 41.4
+      }
+     ]
+    },
+    {
+     "archetype": "Playmaker",
+     "band": "M",
+     "n": 31,
+     "mean_pva": 3.886,
+     "sd_pva": 8.175,
+     "sharpe": 0.475,
+     "sortino": 0.935,
+     "hit_elite": 0.194,
+     "sharpe_ci": [
+      0.179,
+      0.81
+     ],
+     "hit_ci": [
+      0.065,
+      0.323
+     ],
+     "elite_examples": [
+      {
+       "player": "Derrick White",
+       "year": 2017,
+       "pick": 29,
+       "wa": 29.0
+      },
+      {
+       "player": "George Hill",
+       "year": 2008,
+       "pick": 26,
+       "wa": 23.6
+      },
+      {
+       "player": "Dejounte Murray",
+       "year": 2016,
+       "pick": 29,
+       "wa": 19.4
+      }
+     ]
+    },
+    {
+     "archetype": "Playmaker",
+     "band": "S",
+     "n": 64,
+     "mean_pva": 0.209,
+     "sd_pva": 4.674,
+     "sharpe": 0.045,
+     "sortino": 0.104,
+     "hit_elite": 0.031,
+     "sharpe_ci": [
+      -0.266,
+      0.238
+     ],
+     "hit_ci": [
+      0.0,
+      0.078
+     ],
+     "elite_examples": [
+      {
+       "player": "Jalen Brunson",
+       "year": 2018,
+       "pick": 33,
+       "wa": 24.6
+      },
+      {
+       "player": "Isaiah Thomas",
+       "year": 2011,
+       "pick": 60,
+       "wa": 15.1
+      }
+     ]
+    },
+    {
+     "archetype": "Wing",
+     "band": "L",
+     "n": 113,
+     "mean_pva": 0.193,
+     "sd_pva": 9.928,
+     "sharpe": 0.019,
+     "sortino": 0.026,
+     "hit_elite": 0.23,
+     "sharpe_ci": [
+      -0.176,
+      0.196
+     ],
+     "hit_ci": [
+      0.159,
+      0.31
+     ],
+     "elite_examples": [
+      {
+       "player": "Kevin Durant",
+       "year": 2007,
+       "pick": 2,
+       "wa": 46.1
+      },
+      {
+       "player": "Jayson Tatum",
+       "year": 2017,
+       "pick": 3,
+       "wa": 39.1
+      },
+      {
+       "player": "Paul George",
+       "year": 2010,
+       "pick": 10,
+       "wa": 36.6
+      }
+     ]
+    },
+    {
+     "archetype": "Wing",
+     "band": "M",
+     "n": 116,
+     "mean_pva": 0.14,
+     "sd_pva": 7.136,
+     "sharpe": 0.02,
+     "sortino": 0.032,
+     "hit_elite": 0.086,
+     "sharpe_ci": [
+      -0.177,
+      0.178
+     ],
+     "hit_ci": [
+      0.043,
+      0.138
+     ],
+     "elite_examples": [
+      {
+       "player": "Jimmy Butler III",
+       "year": 2011,
+       "pick": 30,
+       "wa": 29.2
+      },
+      {
+       "player": "Kawhi Leonard",
+       "year": 2011,
+       "pick": 15,
+       "wa": 27.7
+      },
+      {
+       "player": "Pascal Siakam",
+       "year": 2016,
+       "pick": 27,
+       "wa": 23.3
+      }
+     ]
+    },
+    {
+     "archetype": "Wing",
+     "band": "S",
+     "n": 231,
+     "mean_pva": 0.012,
+     "sd_pva": 4.407,
+     "sharpe": 0.003,
+     "sortino": 0.005,
+     "hit_elite": 0.017,
+     "sharpe_ci": [
+      -0.152,
+      0.115
+     ],
+     "hit_ci": [
+      0.004,
+      0.039
+     ],
+     "elite_examples": [
+      {
+       "player": "Draymond Green",
+       "year": 2012,
+       "pick": 35,
+       "wa": 33.0
+      },
+      {
+       "player": "Khris Middleton",
+       "year": 2012,
+       "pick": 39,
+       "wa": 23.8
+      },
+      {
+       "player": "Danny Green",
+       "year": 2009,
+       "pick": 46,
+       "wa": 16.9
+      }
+     ]
+    }
+   ],
+   "f1_split_half": {
+    "hit_elite": {
+     "rho": 0.767,
+     "n_cells": 9
+    },
+    "sharpe": {
+     "rho": 0.35,
+     "n_cells": 9
+    }
+   },
+   "f2_permutation": {
+    "hit_elite": {
+     "observed_range": 0.389,
+     "null_median": 0.291,
+     "p_value": 0.0348
+    },
+    "sharpe": {
+     "observed_range": 0.65,
+     "null_median": 0.334,
+     "p_value": 0.0366
+    }
+   }
+  }
+ },
+ "n_boot": 2000,
+ "n_perm": 5000
+}

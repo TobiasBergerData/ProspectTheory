@@ -109,6 +109,20 @@ FO-Copy innerhalb der Marken anlegen — sonst prüft der Test sie nicht.
   Pick) und **„n of n_all"** (bewertbar von gesamt). NICHT: „no data",
   „keine Picks", „0.00" — die Picks existieren, nur ihr Ergebnis noch nicht.
 
+## Draft Sharpe (Research-Bereich, 2026-07-26)
+
+| Aussage auf der Seite | Stelle im Code | Quelle der Wahrheit |
+|---|---|---|
+| **Banner** („hit-rate ordering is stable … Sharpe numbers themselves are noisy") | `ShBanner` — alle Zahlen (ρ, p) aus dem Payload, nichts hart kodiert | `api_draft_sharpe.json` ← `validate_draft_sharpe.py` (Gate) |
+| **Hit-Rate-Matrix** (Hit % + CI führt, Sharpe + CI als Fußnote; Färbung = Blau-Intensität, JE BAND normiert) | `ShMatrixView` / `ShCell` — Färbung bewusst kein Grün/Rot: Vergleich gilt nur innerhalb des Bands | dito, `variants.*.cells` |
+| **Scope-Hinweis** („barely covers international picks — (near-)NCAA-only") | `ShBanner`, Pflicht-Copy — der Render-Test schlägt fehl, wenn er fehlt | Selektionsbefund im Gate (ungelabelte Picks ~75 % intl) |
+| **Method** (PVA-Return, Elite-Schwelle, zwei Labelvarianten, Attenuation-Begründung, NFL-Credit) | `ShMethod` — Zahlen aus Payload | `DRAFT_SHARPE_CONCEPT.md` (data-pipeline) |
+
+Sprachregeln: **„record of outcomes"**, NICHT „draft strategy edge" — die
+Zellen beschreiben, was gedraftete Typen zurückgaben; keine Selektions-
+Kausalität behaupten. Sharpe NIE ohne CI zitieren. Vergleiche NIE über
+Bänder hinweg formulieren („Playmaker M schlägt Big L" ist verboten).
+
 ## Bekannte Copy-Altlast (2026-07-25 gefunden, noch offen)
 
 Der Methods-Deep-`sections`-Array in `App.jsx` enthält **sechs doppelte
