@@ -1142,6 +1142,20 @@ async def get_awards(response: Response):
     return json.loads(p.read_text(encoding="utf-8"))
 
 
+@app.get("/api/future-classes")
+async def get_future_classes(response: Response):
+    """Future Classes (Recruiting-Lens): Jugendspieler der NÄCHSTEN
+    Draft-Klassen (2027+). Kohorte je Spieler ehrlich getrennt nach
+    Evidenz: exakt aus dem Profi-Alter (unified-Brücke über realgm_id)
+    oder Untergrenze aus FIBA-Turnier-Altersbändern (class_exact=false =
+    "frühestens"). Gebaut von export_future_classes.py."""
+    p = Path(os.environ.get("DATA_DIR", "data/processed")) / "api_future_classes.json"
+    if not p.exists():
+        raise HTTPException(status_code=503, detail="future classes not yet built")
+    response.headers["Cache-Control"] = "public, max-age=3600"
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
 @app.get("/api/front-office")
 async def get_front_office(response: Response):
     """Front Office Lab (Research-Bereich): Draft-Historie je REGIME

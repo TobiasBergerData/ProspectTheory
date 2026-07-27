@@ -14936,6 +14936,133 @@ function YouthRadarView() {
 }
 
 // ═══════════════════════════════════════════════════════════
+// FUTURE CLASSES — Recruiting-Lens: die NÄCHSTEN Draft-Klassen (2027+).
+// Zielgruppe Beziehungsaufbau: College-Programme (NIL-Ära) und Front
+// Offices, die Prospects Jahre vor der Eligibility kennen wollen.
+// Kohorte je Spieler ehrlich getrennt nach Evidenz (class_exact):
+// exakt aus dem Profi-Alter (unified-Brücke) oder "frühestens" aus den
+// FIBA-Turnier-Altersbändern. Spieler, deren Kohorte nicht bestimmbar
+// ist (nur ältere Turniere, kein Profi-Alter), erscheinen bewusst NICHT
+// — sie bleiben im Youth Radar. Quelle: /api/future-classes (statisch,
+// gebaut von export_future_classes.py — alle Zahlen aus dem Payload).
+// ═══════════════════════════════════════════════════════════
+function FutureClassesView() {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(false);
+  const [cls, setCls] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    fetch(`${API_BASE}/future-classes`)
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(d => { if (alive) { setData(d); setCls(d.first_future_class ?? d.classes?.[0]?.year ?? null); } })
+      .catch(() => { if (alive) setErr(true); });
+    return () => { alive = false; };
+  }, []);
+
+  const posColors = { G: "#3b82f6", F: "#f97316", C: "#8b5cf6" };
+  const empty = (msg) => (
+    <div style={{ padding: 24, color: "#9ca3af", background: "#111827", borderRadius: 12, border: "1px solid #1f2937", lineHeight: 1.6 }}>{msg}</div>
+  );
+  if (err) return empty("Future classes are not available in this build yet.");
+  if (!data) return empty("Loading future draft classes…");
+  const classes = data.classes || [];
+  if (!classes.length) return empty("No future-class prospects in this build yet.");
+  const rows = (data.players || []).filter(p => p.class_min === cls);
+  const nPro = classes.find(c => c.year === cls)?.n_pro ?? 0;
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ background: "#111827", border: "1px solid #1f2937" }}>
+      <div style={{ padding: "10px 14px", fontSize: 12, color: "#9ca3af", borderBottom: "1px solid #1f2937", lineHeight: 1.6 }}>
+        <b style={{ color: "#e5e7eb" }}>Future Classes</b> — youth-tournament prospects grouped by their <b>earliest
+        possible NBA draft class</b> (eligible the year they turn {Math.round(data.eligible_age ?? 19)}). Built for
+        relationship scouting: college programs in the NIL era and pro front offices want to know these names years
+        before they are draftable. The cohort is estimated honestly, from two kinds of evidence:
+        a <span style={{ color: "#22c55e" }}>solid year tag</span> means the class is <b>exact</b>, computed from the
+        player's real age in a professional season (he already plays pro minutes — the strongest signal on this page);
+        a <span style={{ color: "#eab308" }}>≥ tag</span> means a <b>lower bound</b> from FIBA tournament age bands
+        (a U16 player can be younger than the band, never older — so he may land in a <i>later</i> class, not an
+        earlier one). Players whose cohort cannot be pinned down (older-bracket tournaments only, no pro season) are
+        deliberately excluded here — they remain on the Youth Radar. Like the radar, this is a
+        <b> scouting universe, not a projection</b>: no tiers, no projected levels, small youth samples.
+      </div>
+      <div className="flex gap-1 flex-wrap" style={{ padding: "10px 14px", borderBottom: "1px solid #1f2937" }}>
+        {classes.map(c => (
+          <button key={c.year} onClick={() => setCls(c.year)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+            style={{ background: cls === c.year ? "#10b981" : "#1f2937", color: cls === c.year ? "#000" : "#9ca3af" }}>
+            Class of {c.year} ({c.n})
+          </button>
+        ))}
+        <span style={{ alignSelf: "center", marginLeft: 8, fontSize: 10, color: "#6b7280" }}>
+          {nPro} of {rows.length} already play pro minutes
+        </span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead><tr style={{ background: "#0a0e17" }}>
+            {["#", "Player", "Class", "Pos", "Ht", "Pro season", "GP", "MPG", "PTS", "REB", "AST", "TS%", ""].map((h, i) => (
+              <th key={i} className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold"
+                  style={{ color: "#6b7280", borderBottom: "1px solid #1f2937" }}>{h}</th>))}
+          </tr></thead>
+          <tbody>
+            {rows.map((p, i) => (
+              <tr key={p.slug || p.name} style={{ borderBottom: "1px solid #1f293744", background: p.pro ? "#10b98108" : "transparent" }}>
+                <td className="px-3 py-2.5 font-bold text-xs" style={{ color: "#475569" }}>{i + 1}</td>
+                <td className="px-3 py-2.5">
+                  <div className="font-semibold" style={{ color: "#e5e7eb" }}>{p.name}</div>
+                  <div style={{ fontSize: 10, color: "#6b7280" }}>
+                    {[p.club, p.country].filter(Boolean).join(" · ")}
+                    {p.tournaments?.length > 0 && <span style={{ color: "#4b5563" }} title={p.tournaments.join(", ")}> · {p.tournaments.length} event{p.tournaments.length > 1 ? "s" : ""}</span>}
+                  </div>
+                </td>
+                <td className="px-3 py-2.5 text-xs">
+                  <span className="px-2 py-0.5 rounded font-semibold"
+                    title={p.class_exact
+                      ? "Exact: computed from the player's real age in a professional season."
+                      : "Lower bound from FIBA tournament age bands — the player may be younger than the band, so his class can be later (never earlier)."}
+                    style={{ background: (p.class_exact ? "#22c55e" : "#eab308") + "22", color: p.class_exact ? "#22c55e" : "#eab308", cursor: "help" }}>
+                    {p.class_exact ? p.class_min : `≥ ${p.class_min}`}
+                  </span>
+                </td>
+                <td className="px-3 py-2.5 text-xs"><span className="px-2 py-0.5 rounded font-semibold"
+                    style={{ background: (posColors[(p.pos || "")[0]] || "#6b7280") + "22", color: posColors[(p.pos || "")[0]] || "#6b7280" }}>{p.pos || "—"}</span></td>
+                <td className="px-3 py-2.5 text-xs" style={{ color: "#9ca3af" }}>{p.height || "—"}</td>
+                <td className="px-3 py-2.5 text-xs">
+                  {p.pro ? (
+                    <div title={`Professional season ${p.pro.season}${p.pro.aap != null ? ` · age-adjusted production ${p.pro.aap} (sort key within the class)` : ""}`} style={{ cursor: "help" }}>
+                      <div style={{ color: "#22c55e", fontWeight: 600 }}>{p.pro.league || p.pro.team || "pro"}</div>
+                      <div style={{ fontSize: 10, color: "#6b7280" }}>
+                        {[p.pro.mpg != null ? `${p.pro.mpg} mpg` : null, p.pro.gp != null ? `${p.pro.gp} gp` : null,
+                          p.pro.age_draft_day != null ? `age ${p.pro.age_draft_day}` : null].filter(Boolean).join(" · ")}
+                      </div>
+                    </div>
+                  ) : <span style={{ color: "#374151" }}>—</span>}
+                </td>
+                <td className="px-3 py-2.5 text-xs" style={{ color: "#6b7280" }}>{p.gp ?? "—"}</td>
+                <td className="px-3 py-2.5 text-xs" style={{ color: "#9ca3af" }}>{p.mpg ?? "—"}</td>
+                <td className="px-3 py-2.5 font-bold text-xs" style={{ color: "#e5e7eb", fontFamily: "'Oswald',sans-serif" }}>{p.ppg ?? "—"}</td>
+                <td className="px-3 py-2.5 text-xs" style={{ color: "#9ca3af" }}>{p.rpg ?? "—"}</td>
+                <td className="px-3 py-2.5 text-xs" style={{ color: "#9ca3af" }}>{p.apg ?? "—"}</td>
+                <td className="px-3 py-2.5 text-xs" style={{ color: p.ts_pct >= 58 ? "#22c55e" : p.ts_pct >= 52 ? "#86efac" : "#9ca3af" }}>{p.ts_pct ?? "—"}</td>
+                <td className="px-3 py-2.5 text-xs">
+                  {p.slug && p.realgm_id && (
+                    <a href={`https://basketball.realgm.com/player/${p.slug}/Summary/${p.realgm_id}`}
+                       target="_blank" rel="noopener noreferrer" title="Open RealGM profile"
+                       style={{ color: "#6b7280" }}>↗</a>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ padding: "10px 16px", color: "#6b7280", fontSize: 10, borderTop: "1px solid #1f2937" }}>
+        Within a class: pro-minute players first (by age-adjusted production), then youth-only players by scoring ·
+        stats are youth-tournament production · green row tint = already under a pro roster · ↗ opens the RealGM profile
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
 // COLLEGE TARGETS — Recruiting-Lens, vierte Ansicht (NIL-Ära).
 // Zielgruppe: College-Programme. Internationals im College-Alters-Fenster
 // (Draft-Day-Alter ≤ 21), gerankt nach projiziertem Talent (Added Wins) —
@@ -16982,7 +17109,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
   const [watchlist,setWatchlist]=useState(()=>{
     try { return JSON.parse(window.localStorage.getItem(WATCHLIST_KEY)) || []; } catch { return []; }
   });
-  const [intlView,setIntlView]=useState("board"); // "board" | "watch" | "levelup" | "college" | "youth"
+  const [intlView,setIntlView]=useState("board"); // "board" | "watch" | "levelup" | "college" | "youth" | "future"
   // Recruiting-Suchfilter: Projected Level + Alters-Fenster — wirken auf alle
   // spielerbasierten Recruiting-Ansichten (nicht auf das modellfreie Youth Radar).
   const [intlLevelFilter,setIntlLevelFilter]=useState("All");
@@ -17214,15 +17341,16 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
           <div className="flex gap-1 mb-3 flex-wrap">
             {[["board","☰ Recruiting Board"],["watch",`★ Watchlist${watchlist.length?` (${watchlist.length})`:""}`],
               ["levelup","📈 Level-Up"],["portal","🌀 Portal Radar"],["college","🎓 College Targets"],
-              ["similar","⇄ Similar"],["youth","🔭 Youth Radar"]].map(([v,l])=>(
+              ["similar","⇄ Similar"],["youth","🔭 Youth Radar"],["future","🌱 Future Classes"]].map(([v,l])=>(
               <button key={v} onClick={()=>setIntlView(v)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
                 style={{background:intlView===v?"#10b981":"#1f2937",color:intlView===v?"#000":"#9ca3af"}}>
                 {l}
               </button>
             ))}
           </div>
-          {/* Suchfilter: Projected Level + Alter (gelten für Board/Watchlist/Level-Up/College) */}
-          {intlView!=="youth" && (
+          {/* Suchfilter: Projected Level + Alter (gelten für Board/Watchlist/Level-Up/College —
+              nicht für die modellfreien Ansichten Youth Radar und Future Classes) */}
+          {intlView!=="youth" && intlView!=="future" && (
             <div className="flex items-center gap-3 mb-3 flex-wrap">
               <div className="flex gap-1 items-center">
                 <span className="text-[10px] uppercase tracking-wider" style={{color:"#4b5563"}}>Level</span>
@@ -17262,12 +17390,14 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
             </div>
           )}
           {(()=>{
-            const intlFiltered = intlView==="youth" ? filtered : filtered.filter(p =>
+            const intlFiltered = (intlView==="youth" || intlView==="future") ? filtered : filtered.filter(p =>
               (intlLevelFilter==="All" || p.predIntlTier===intlLevelFilter) &&
               (intlAgeMax>=99 || (p.age!=null && ageOnDraftDay(p.age)<=intlAgeMax)) &&
               (intlRoleFilter==="All" || (p.archetypesAll || p.archetype || "").split("|").includes(intlRoleFilter)) &&
               (!intlLurkOnly || isLurker(p)));
-            return intlView==="youth" ? (
+            return intlView==="future" ? (
+              <FutureClassesView/>
+            ) : intlView==="youth" ? (
               <YouthRadarView/>
             ) : intlView==="college" ? (
               <CollegeTargetsView players={intlFiltered} onSelect={onSelect}

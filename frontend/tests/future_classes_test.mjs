@@ -1,0 +1,116 @@
+#!/usr/bin/env node
+/**
+ * Payload+Semantik-Test für die Recruiting-Ansicht "Future Classes".
+ *
+ *   node tests/future_classes_test.mjs [pfad/zum/api_future_classes.json]
+ *
+ * Leichter als fo_render_test.mjs — bewusst: die Ansicht lädt ihre Daten
+ * selbst per fetch (kein purer Props-Block wie FO/Sharpe), ein echter
+ * Server-Render bräuchte einen fetch-Mock und bewiese wenig zusätzlich,
+ * weil die Ansicht deskriptiv ist (keine statistischen Aussagen in der
+ * Copy). Was hier stattdessen geprüft wird:
+ *
+ * 1. Payload strikt mit JSON.parse (Riegel gegen bares NaN — derselbe
+ *    Fehler, der das FO Lab einmal stumm gelegt hätte).
+ * 2. Payload-Invarianten: Klassen nur >= first_future_class, classes[]-
+ *    Zähler konsistent mit players[], Sortier-Regel (Profi zuerst, darin
+ *    aap absteigend) tatsächlich eingehalten, Brücken-Blöcke vollständig.
+ * 3. App.jsx-Semantik: die View ist verdrahtet (fetch-Route, Button,
+ *    Render-Zweig, Filter-Ausnahme) und die Copy behauptet genau die
+ *    Semantik, die der Payload trägt (Untergrenzen-Tag "≥", Ausschluss
+ *    unbestimmbarer Kohorten, "not a projection").
+ *
+ * Exit 0 = grün; Exit 1 = Liste der Verstöße. Regel: bei FAIL nicht committen.
+ */
+import { readFileSync } from "node:fs";
+import { join, dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const FRONTEND = resolve(HERE, "..");
+const APP = join(FRONTEND, "src", "App.jsx");
+const PAYLOAD = process.argv[2]
+  ? resolve(process.argv[2])
+  : resolve(FRONTEND, "..", "backend", "data", "processed", "api_future_classes.json");
+
+const fails = [];
+const ok = (cond, msg) => { if (!cond) fails.push(msg); };
+
+/* ── 1. Payload strikt parsen ── */
+let d;
+try {
+  d = JSON.parse(readFileSync(PAYLOAD, "utf8"));
+} catch (e) {
+  console.error(`FAIL  Payload ist kein gültiges JSON für JSON.parse: ${e.message}`);
+  console.error(`      ${PAYLOAD} — export_future_classes.py nutzt _s() + allow_nan=False.`);
+  process.exit(1);
+}
+
+/* ── 2. Payload-Invarianten ── */
+const pl = d.players || [];
+ok(pl.length > 0, "players[] ist leer");
+ok(Number.isInteger(d.first_future_class), "first_future_class fehlt");
+ok(pl.every(p => Number.isInteger(p.class_min) && p.class_min >= d.first_future_class),
+   "Spieler mit class_min unter der ersten Zukunftsklasse im Payload");
+ok(pl.every(p => typeof p.class_exact === "boolean"),
+   "class_exact fehlt oder ist kein Boolean");
+ok(pl.every(p => typeof p.name === "string" && p.name.length > 0), "Spieler ohne Namen");
+for (const c of d.classes || []) {
+  const sub = pl.filter(p => p.class_min === c.year);
+  ok(sub.length === c.n, `classes[${c.year}].n=${c.n} ≠ players-Zählung ${sub.length}`);
+  ok(sub.filter(p => p.pro).length === c.n_pro,
+     `classes[${c.year}].n_pro=${c.n_pro} ≠ players-Zählung`);
+}
+ok((d.classes || []).reduce((s, c) => s + c.n, 0) === pl.length,
+   "Summe der Klassen-Zähler ≠ players.length");
+// Brücken-Blöcke: exakt-Klasse nur mit pro; pro-Block trägt endliche Kernfelder
+ok(pl.every(p => !p.class_exact || p.pro),
+   "class_exact=true ohne pro-Block (exakt geht nur über das Profi-Alter)");
+ok(pl.every(p => !p.pro || (typeof p.pro.season === "string"
+     && (p.pro.mpg === null || Number.isFinite(p.pro.mpg))
+     && (p.pro.aap === null || Number.isFinite(p.pro.aap)))),
+   "pro-Block mit fehlendem season oder nicht-finiten mpg/aap");
+// Sortier-Regel je Klasse: erst Profi (aap absteigend), dann Jugend-only
+for (const c of d.classes || []) {
+  const sub = pl.filter(p => p.class_min === c.year);
+  let seenYouth = false, lastAap = Infinity;
+  for (const p of sub) {
+    if (!p.pro) { seenYouth = true; continue; }
+    ok(!seenYouth, `Klasse ${c.year}: Profi-Spieler nach Jugend-only einsortiert`);
+    const a = p.pro.aap ?? -99;
+    ok(a <= lastAap + 1e-9, `Klasse ${c.year}: aap-Sortierung verletzt (${p.name})`);
+    lastAap = a;
+  }
+}
+// Meta ehrlich: Ausschlüsse müssen beziffert sein (keine stille Kappung)
+ok(d.meta && Number.isInteger(d.meta.n_past_or_current_band),
+   "meta.n_past_or_current_band fehlt — Ausschlüsse wären unbeziffert");
+
+/* ── 3. App.jsx-Verdrahtung + Copy-Semantik ── */
+const src = readFileSync(APP, "utf8");
+ok(src.includes("function FutureClassesView"), "FutureClassesView fehlt in App.jsx");
+ok(src.includes("/future-classes"), "fetch-Route /future-classes fehlt");
+ok(src.includes('"future","🌱 Future Classes"'), "View-Button 'future' nicht registriert");
+ok(src.includes('intlView==="future"'), "Render-Zweig für intlView 'future' fehlt");
+ok(src.includes('intlView!=="youth" && intlView!=="future"'),
+   "Filter-Leiste nicht von der Future-Ansicht ausgenommen");
+// Copy muss die Untergrenzen-Semantik und den ehrlichen Ausschluss tragen
+const view = src.slice(src.indexOf("function FutureClassesView"),
+                       src.indexOf("// COLLEGE TARGETS"));
+ok(/lower bound/i.test(view), "Copy: 'lower bound' (Band-Untergrenze) fehlt");
+ok(view.includes("≥"), "Copy: ≥-Tag für unexakte Kohorten fehlt");
+ok(/deliberately excluded|remain on the Youth Radar/.test(view),
+   "Copy: Ausschluss unbestimmbarer Kohorten nicht benannt");
+ok(/not a projection/i.test(view), "Copy: 'not a projection'-Vorbehalt fehlt");
+ok(/class_exact \? p\.class_min : `≥ \$\{p\.class_min\}`/.test(view),
+   "Render: exakte vs. ≥-Kohorten-Anzeige fehlt");
+
+/* ── Ergebnis ── */
+if (fails.length) {
+  console.error(`FAIL  ${fails.length} Verstöße:`);
+  for (const f of fails) console.error(`  - ${f}`);
+  process.exit(1);
+}
+console.log(`OK  future-classes: ${pl.length} Spieler, Klassen ` +
+  `${(d.classes || []).map(c => `${c.year}(${c.n},pro:${c.n_pro})`).join(" ")} — ` +
+  `Payload-Invarianten, Sortierung, Verdrahtung und Copy-Semantik grün.`);
