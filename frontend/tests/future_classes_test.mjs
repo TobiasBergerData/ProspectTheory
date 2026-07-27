@@ -162,6 +162,19 @@ ok((src.match(/\["All", "Playmaker", "Wing", "Big"\]\.map/g) || []).length >= 2,
    "Pos-Chips fehlen in College-to-Pro / College Targets");
 ok(src.includes('["All", "G", "F", "C"].map'), "Pos-Chips fehlen in Future Classes");
 
+/* ── 7. Watchlist-Diff (deskriptiv, localStorage-Baseline) ── */
+ok(src.includes('WATCH_BASE_KEY = "prospecttheory_watch_baseline_v1"'),
+   "Watchlist-Diff: Baseline-Key fehlt");
+ok(src.includes("Mark as seen"), "Watchlist-Diff: Mark-as-seen-Button fehlt");
+ok(/bewusst KEIN Auto-Update/.test(src),
+   "Watchlist-Diff: Auto-Update-Entscheidung nicht dokumentiert");
+ok(/payload numbers only, no model/.test(src),
+   "Watchlist-Diff-Copy: Deskriptiv-Vorbehalt fehlt");
+ok(src.includes(">new on list<"), "Watchlist-Diff: Kennzeichnung neuer Einträge fehlt");
+// Schwellen der Diff-Chips müssen in der Copy stehen (keine stillen Schwellen)
+ok(/level ≥0\.02, tier, NBA risk ≥5pp, WA ≥0\.3/.test(src),
+   "Watchlist-Diff: Chip-Schwellen nicht in der Copy benannt");
+
 /* ── Ergebnis ── */
 if (fails.length) {
   console.error(`FAIL  ${fails.length} Verstöße:`);

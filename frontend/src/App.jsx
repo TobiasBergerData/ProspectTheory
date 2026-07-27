@@ -15778,6 +15778,46 @@ function IntlBoardView({ players, onSelect, watchlist = null, onToggleWatch = nu
         .slice(0, 100);
   // Watchlist-Einträge, die im aktuellen Pool fehlen (z.B. anderer Jahrgangsfilter)
   const missing = watchOnly ? (watchlist || []).filter(n => !players.some(p => p.name === n)) : [];
+  // ── Watchlist-Diff: "was hat sich bei meinen Namen geändert?" ─────────────
+  // Baseline = Schnappschuss der Kernwerte (Level-EV, Tier, Flight Risk, WAR)
+  // im localStorage. Deltas werden gegen die Baseline gezeigt, bis der Nutzer
+  // "Mark as seen" klickt — bewusst KEIN Auto-Update, sonst verschwindet der
+  // Diff beim ersten Reload. Deskriptiv: nur Zahlen aus dem Payload, kein Modell.
+  const WATCH_BASE_KEY = "prospecttheory_watch_baseline_v1";
+  const _snap = (p) => ({ ev: p.intlLevelEv ?? null, tier: p.predIntlTier ?? null,
+                          fp: Math.round(nbaFlightPct(p)), war: p.war ?? null });
+  const [watchBase, setWatchBase] = useState(() => {
+    try { return JSON.parse(window.localStorage.getItem(WATCH_BASE_KEY)) || null; } catch { return null; }
+  });
+  // Erstbesuch: Baseline stumm anlegen (Diff beginnt ab jetzt zu zählen).
+  useEffect(() => {
+    if (!watchOnly || watchBase || !rows.length) return;
+    const b = { _date: new Date().toISOString().slice(0, 10) };
+    rows.forEach(p => { b[p.name] = _snap(p); });
+    try { window.localStorage.setItem(WATCH_BASE_KEY, JSON.stringify(b)); } catch {}
+    setWatchBase(b);
+  }, [watchOnly, watchBase, rows.length]);
+  const markSeen = () => {
+    const b = { _date: new Date().toISOString().slice(0, 10) };
+    rows.forEach(p => { b[p.name] = _snap(p); });
+    try { window.localStorage.setItem(WATCH_BASE_KEY, JSON.stringify(b)); } catch {}
+    setWatchBase(b);
+  };
+  const diffOf = (p) => {
+    const b = watchBase?.[p.name];
+    if (!b) return null;                       // neu auf der Liste seit Baseline
+    const n = _snap(p), out = [];
+    if (b.ev != null && n.ev != null && Math.abs(n.ev - b.ev) >= 0.02)
+      out.push({ t: `Level ${n.ev > b.ev ? "▲" : "▼"} ${(n.ev - b.ev).toFixed(2)}`, c: n.ev > b.ev ? "#22c55e" : "#ef4444" });
+    if (b.tier && n.tier && b.tier !== n.tier)
+      out.push({ t: `${b.tier} → ${n.tier}`, c: "#fbbf24" });
+    if (b.fp != null && n.fp != null && Math.abs(n.fp - b.fp) >= 5)
+      out.push({ t: `NBA risk ${n.fp > b.fp ? "▲" : "▼"} ${n.fp - b.fp}pp`, c: n.fp > b.fp ? "#f97316" : "#6b7280" });
+    if (b.war != null && n.war != null && Math.abs(n.war - b.war) >= 0.3)
+      out.push({ t: `WA ${n.war > b.war ? "▲" : "▼"} ${(n.war - b.war).toFixed(1)}`, c: n.war > b.war ? "#22c55e" : "#ef4444" });
+    return out;
+  };
+  const nChanged = watchOnly && watchBase ? rows.filter(p => (diffOf(p) || []).length || !watchBase[p.name]).length : 0;
   const tierColor = (t) => (INTL_TIERS.find(x => x.key === t)?.color) || "#9ca3af";
   const flight = (pct) => pct >= 60 ? { l: "high", c: "#ef4444" } : pct >= 30 ? { l: "med", c: "#f97316" } : { l: "low", c: "#22c55e" };
   if (!rows.length && !missing.length) return (
@@ -15795,6 +15835,18 @@ function IntlBoardView({ players, onSelect, watchlist = null, onToggleWatch = nu
             <b style={{ color: "#e5e7eb" }}>Watchlist</b> — your tracked recruiting targets, same columns as the Recruiting
             Board. One deliberate difference: <b>NBA near-locks stay visible here</b> — a rising flight risk on a player you
             track is exactly the signal to catch, not something to hide. Sorted by projected level. Saved in this browser only.
+            {watchBase && (
+              <span> Since your baseline of <b style={{ color: "#cbd5e1" }}>{watchBase._date}</b>:{" "}
+                {nChanged > 0
+                  ? <b style={{ color: "#fbbf24" }}>{nChanged} of {rows.length} tracked players changed</b>
+                  : <span style={{ color: "#6b7280" }}>no material changes on your list</span>}
+                {" "}(level ≥0.02, tier, NBA risk ≥5pp, WA ≥0.3 — payload numbers only, no model).{" "}
+                <button onClick={markSeen} className="px-2 py-0.5 rounded text-xs font-semibold"
+                  style={{ background: "#1f2937", color: "#9ca3af", border: "1px solid #374151" }}>
+                  ✓ Mark as seen
+                </button>
+              </span>
+            )}
           </>
         ) : (
           <>
@@ -15853,6 +15905,22 @@ function IntlBoardView({ players, onSelect, watchlist = null, onToggleWatch = nu
                       <AwardBadge name={p.name} awards={_awards} />
                       <span className="text-xs" style={{ color: "#6b7280", fontWeight: 400 }}>  {p.team || p.conf}</span>
                     </div>
+                    {watchOnly && watchBase && (() => {
+                      const d = diffOf(p);
+                      if (d === null) return (
+                        <div style={{ fontSize: 10, marginTop: 1 }}>
+                          <span className="px-1.5 py-0.5 rounded" style={{ background: "#3b82f622", color: "#3b82f6" }}>new on list</span>
+                        </div>
+                      );
+                      if (!d.length) return null;
+                      return (
+                        <div style={{ fontSize: 10, marginTop: 1, display: "flex", gap: 4, flexWrap: "wrap" }}>
+                          {d.map((c, j) => (
+                            <span key={j} className="px-1.5 py-0.5 rounded" style={{ background: c.c + "22", color: c.c }}>{c.t}</span>
+                          ))}
+                        </div>
+                      );
+                    })()}
                     {p.intlComps && (
                       <div style={{ fontSize: 10, color: "#6b7280", marginTop: 1 }}>
                         ≈ {p.intlComps.split(" | ").slice(0, 3).map((c, j) => {
