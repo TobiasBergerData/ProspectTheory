@@ -13508,6 +13508,19 @@ const ptInitSeg = (idx, allowed, fallback) => {
   const s = ptHashParts()[idx];
   return allowed.includes(s) ? s : fallback;
 };
+// CSV-Export für die Markt-Views: exportiert die GEFILTERTE Liste (nicht nur
+// die angezeigte Top-N-Scheibe) — fürs Scouting-Meeting / die Team-Runde.
+// BOM vorangestellt, damit Excel UTF-8-Namen (Dončić, Küçük) korrekt öffnet.
+function ptExportCsv(filename, header, rows) {
+  const esc = v => v == null ? "" : /[",\n;]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
+  const csv = [header, ...rows].map(r => r.map(esc).join(",")).join("\n");
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
 // Guard-Write: nur schreiben, wenn das eigene Segment nicht schon stimmt.
 const ptSyncHash = (idx, parts) => {
   if ((ptHashParts()[idx] || "") !== (parts[idx] || "")) ptSetHash(parts);
@@ -14950,6 +14963,7 @@ function FutureClassesView({ watchlist = null, onToggleWatch = null }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(false);
   const [cls, setCls] = useState(null);
+  const [posBand, setPosBand] = useState("All"); // Youth-Positionen: G/F/C (erste Stelle)
   useEffect(() => {
     let alive = true;
     fetch(`${API_BASE}/future-classes`)
@@ -14967,8 +14981,9 @@ function FutureClassesView({ watchlist = null, onToggleWatch = null }) {
   if (!data) return empty("Loading future draft classes…");
   const classes = data.classes || [];
   if (!classes.length) return empty("No future-class prospects in this build yet.");
-  const rows = (data.players || []).filter(p => p.class_min === cls);
-  const nPro = classes.find(c => c.year === cls)?.n_pro ?? 0;
+  const rows = (data.players || []).filter(p => p.class_min === cls)
+    .filter(p => posBand === "All" || (p.pos || "")[0] === posBand);
+  const nPro = rows.filter(p => p.pro).length;
   return (
     <div className="rounded-xl overflow-hidden" style={{ background: "#111827", border: "1px solid #1f2937" }}>
       <div style={{ padding: "10px 14px", fontSize: 12, color: "#9ca3af", borderBottom: "1px solid #1f2937", lineHeight: 1.6 }}>
@@ -14989,6 +15004,13 @@ function FutureClassesView({ watchlist = null, onToggleWatch = null }) {
           <button key={c.year} onClick={() => setCls(c.year)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
             style={{ background: cls === c.year ? "#10b981" : "#1f2937", color: cls === c.year ? "#000" : "#9ca3af" }}>
             Class of {c.year} ({c.n})
+          </button>
+        ))}
+        <span style={{ color: "#374151" }}>|</span>
+        {["All", "G", "F", "C"].map(v => (
+          <button key={v} onClick={() => setPosBand(v)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+            style={{ background: posBand === v ? "#10b981" : "#1f2937", color: posBand === v ? "#000" : "#9ca3af" }}>
+            {v}
           </button>
         ))}
         <span style={{ alignSelf: "center", marginLeft: 8, fontSize: 10, color: "#6b7280" }}>
@@ -15082,6 +15104,7 @@ function CollegeToProView({ onSelect, watchlist = null, onToggleWatch = null }) 
   const [data, setData] = useState(null);
   const [err, setErr] = useState(false);
   const [ageBand, setAgeBand] = useState("all"); // "all" | "u21" | "senior"
+  const [posBand, setPosBand] = useState("All"); // "All" | "Playmaker" | "Wing" | "Big"
   const [q, setQ] = useState("");
   const NBA_LOCK = 85;
   const SHOW_N = 150;
@@ -15116,6 +15139,7 @@ function CollegeToProView({ onSelect, watchlist = null, onToggleWatch = null }) 
   const ql = q.trim().toLowerCase();
   const pool = data
     .filter(p => p.intlLevelEv != null && nbaFlightPct(p) < NBA_LOCK)
+    .filter(p => posBand === "All" || p.pos === posBand)
     .filter(p => {
       const a = ageOnDraftDay(p.age);
       if (ageBand === "u21") return a != null && a <= 21;
@@ -15144,8 +15168,22 @@ function CollegeToProView({ onSelect, watchlist = null, onToggleWatch = null }) 
             {l}
           </button>
         ))}
+        <span style={{ color: "#374151" }}>|</span>
+        {["All", "Playmaker", "Wing", "Big"].map(v => (
+          <button key={v} onClick={() => setPosBand(v)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+            style={{ background: posBand === v ? "#10b981" : "#1f2937", color: posBand === v ? "#000" : "#9ca3af" }}>
+            {v}
+          </button>
+        ))}
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name / college…"
           className="px-3 py-1.5 rounded-lg text-xs" style={{ background: "#1f2937", color: "#e5e7eb", border: "1px solid #374151", minWidth: 180 }}/>
+        <button onClick={() => ptExportCsv("college_to_pro.csv",
+            ["player", "pos", "archetype", "age_draft_day", "college", "conference", "projected_tier", "projected_level_ev", "climb_vs_env", "nba_flight_pct"],
+            pool.map(p => [p.name, p.pos, p.archetype, p.age != null ? ageOnDraftDay(p.age).toFixed(1) : "",
+              p.team, p.conf, p.predIntlTier, p.intlLevelEv?.toFixed(2),
+              p.confStrength != null ? (p.intlLevelEv - p.confStrength).toFixed(2) : "", nbaFlightPct(p).toFixed(0)]))}
+          className="px-3 py-1.5 rounded-lg text-xs font-semibold" title="Export the full filtered list (not just the shown top) as CSV"
+          style={{ background: "#1f2937", color: "#9ca3af", border: "1px solid #374151" }}>⬇ CSV</button>
         <span style={{ fontSize: 10, color: "#6b7280" }}>{pool.length.toLocaleString()} signable · showing top {Math.min(SHOW_N, pool.length)}</span>
       </div>
       {!rows.length && <div style={{ padding: 24, color: "#9ca3af" }}>No players match the current filters.</div>}
@@ -15227,13 +15265,15 @@ function CollegeTargetsView({ players, onSelect, watchlist = null, onToggleWatch
   // Für College-Programme ist die NÄCHSTE Klasse der eigentliche Recruiting-
   // Horizont; die bisherige Ansicht mischte alle Jahrgänge in eine WAR-Liste.
   const [cohort, setCohort] = useState(0);
+  const [posBand, setPosBand] = useState("All"); // Bedarfs-Filter: "wir brauchen 2027 einen Playmaker"
   const eligIn = (p) => {
     const a = ageOnDraftDay(p.age);
     return a == null ? null : a >= COLLEGE_ELIG_AGE ? 0 : Math.ceil(COLLEGE_ELIG_AGE - a);
   };
   const pool = players
     .filter(p => p.source && p.source !== "ncaa")
-    .filter(p => p.age != null && ageOnDraftDay(p.age) <= COLLEGE_MAX_AGE);
+    .filter(p => p.age != null && ageOnDraftDay(p.age) <= COLLEGE_MAX_AGE)
+    .filter(p => posBand === "All" || p.pos === posBand);
   const inCohort = (p, k) => (k < 2 ? eligIn(p) === k : eligIn(p) >= 2);
   const baseYear = pool.find(p => p.yr != null)?.yr ?? 2026;
   const tabs = [0, 1, 2].map(k => ({
@@ -15265,13 +15305,27 @@ function CollegeTargetsView({ players, onSelect, watchlist = null, onToggleWatch
         determination. For U16–U20 prospects before their senior debut, see the Youth Radar and Future Classes.
         {onToggleWatch && <> Use <b style={{color:"#10b981"}}>☆</b> to track a target.</>}
       </div>
-      <div className="flex gap-1 flex-wrap" style={{ padding: "10px 14px", borderBottom: "1px solid #1f2937" }}>
+      <div className="flex gap-1 flex-wrap items-center" style={{ padding: "10px 14px", borderBottom: "1px solid #1f2937" }}>
         {tabs.map(t => (
           <button key={t.k} onClick={() => setCohort(t.k)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
             style={{ background: cohort === t.k ? "#10b981" : "#1f2937", color: cohort === t.k ? "#000" : "#9ca3af" }}>
             {t.label} ({t.n})
           </button>
         ))}
+        <span style={{ color: "#374151" }}>|</span>
+        {["All", "Playmaker", "Wing", "Big"].map(v => (
+          <button key={v} onClick={() => setPosBand(v)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+            style={{ background: posBand === v ? "#10b981" : "#1f2937", color: posBand === v ? "#000" : "#9ca3af" }}>
+            {v}
+          </button>
+        ))}
+        <button onClick={() => ptExportCsv("college_targets.csv",
+            ["player", "pos", "age_draft_day", "team", "conference", "projected_war", "nba_flight_pct", "earliest_class"],
+            rows.map(p => [p.name, p.pos, p.age != null ? ageOnDraftDay(p.age).toFixed(1) : "",
+              p.team, p.conf, p.war?.toFixed(1), nbaFlightPct(p).toFixed(0),
+              eligIn(p) != null ? baseYear + Math.min(eligIn(p), 2) : ""]))}
+          className="px-3 py-1.5 rounded-lg text-xs font-semibold" title="Export the current cohort as CSV"
+          style={{ background: "#1f2937", color: "#9ca3af", border: "1px solid #374151" }}>⬇ CSV</button>
       </div>
       {!rows.length && (
         <div style={{ padding: 24, color: "#9ca3af" }}>
@@ -15410,6 +15464,14 @@ function LevelUpView({ players, onSelect, watchlist = null, onToggleWatch = null
             {l}
           </button>
         ))}
+        <button onClick={() => ptExportCsv(`level_up_${mode}.csv`,
+            ["player", "pos", "age_draft_day", "team", "current_level", "projected_level", "climb", "adj_bpm", "nba_flight_pct"],
+            rows.map(p => [p.name, p.pos, p.age != null ? ageOnDraftDay(p.age).toFixed(1) : "",
+              p.team, p.confStrength?.toFixed(2), p.intlLevelEv?.toFixed(2),
+              p._climb != null ? p._climb.toFixed(2) : "", p.bpm != null ? p.bpm.toFixed(1) : "",
+              nbaFlightPct(p).toFixed(0)]))}
+          className="px-3 py-1.5 rounded-lg text-xs font-semibold" title="Export the current list as CSV"
+          style={{ background: "#1f2937", color: "#9ca3af", border: "1px solid #374151" }}>⬇ CSV</button>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
@@ -17316,7 +17378,22 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
   const [watchlist,setWatchlist]=useState(()=>{
     try { return JSON.parse(window.localStorage.getItem(WATCHLIST_KEY)) || []; } catch { return []; }
   });
-  const [intlView,setIntlView]=useState("board"); // "board" | "watch" | "levelup" | "college" | "youth" | "future"
+  // Deep-Link: view=<name> im Hash-Query macht jede Recruiting-Ansicht teilbar
+  // ("#/…?lens=recruiting&view=c2p"). Einmalig aus dem Hash lesen, danach
+  // spiegeln (nur den view-Key anfassen — lens/room bleiben unberührt).
+  const PT_INTL_VIEWS = ["board","watch","levelup","portal","college","similar","c2p","youth","future"];
+  const [intlView,setIntlView]=useState(()=>{
+    if (typeof window==="undefined") return "board";
+    const v = ptHashQuery().get("view");
+    return PT_INTL_VIEWS.includes(v) ? v : "board";
+  });
+  useEffect(()=>{
+    if (typeof window==="undefined") return;
+    const want = (lens==="intl" && intlView!=="board") ? intlView : null;
+    if ((ptHashQuery().get("view") || null) !== want) {
+      ptSetHashQuery(q => { if (want) q.set("view", want); else q.delete("view"); });
+    }
+  },[intlView, lens]);
   // Recruiting-Fundament: der VOLLE Intl-Markt (~160 current-class Spieler,
   // /api/market/intl) zusätzlich zum WAR-Top-200-Board, das nur eine Handvoll
   // Internationals enthält. null = noch nicht geladen, [] = Fetch-Fehler

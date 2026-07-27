@@ -146,6 +146,22 @@ ok(/FutureClassesView watchlist=\{watchlist\} onToggleWatch=\{toggleWatch\}/.tes
 ok(/pipeline notes until they enter the market pool/.test(src),
    "Watch-View: Pipeline-Hinweis für Future-Classes-Einträge fehlt");
 
+/* ── 6. Block "Filter + Teilen + Export" (deterministische UI, kein Gate) ── */
+ok(src.includes("function ptExportCsv"), "CSV-Export-Helper fehlt");
+ok(src.includes('new Blob(["\\uFEFF" + csv]'),
+   "CSV ohne UTF-8-BOM — Excel zerlegt Namen mit Diakritika");
+ok((src.match(/ptExportCsv\(/g) || []).length >= 4,
+   "CSV-Buttons fehlen (erwartet: Helper + C2P + College Targets + Level-Up)");
+ok(src.includes('q.set("view", want)'), "Recruiting-Deep-Link (view=) wird nicht geschrieben");
+ok(/const v = ptHashQuery\(\)\.get\("view"\)/.test(src),
+   "Recruiting-Deep-Link (view=) wird nicht gelesen");
+ok(/PT_INTL_VIEWS = \["board","watch","levelup","portal","college","similar","c2p","youth","future"\]/.test(src),
+   "Deep-Link-Whitelist deckt nicht alle Recruiting-Views");
+// Positions-Filter in den drei neuen/erweiterten Views
+ok((src.match(/\["All", "Playmaker", "Wing", "Big"\]\.map/g) || []).length >= 2,
+   "Pos-Chips fehlen in College-to-Pro / College Targets");
+ok(src.includes('["All", "G", "F", "C"].map'), "Pos-Chips fehlen in Future Classes");
+
 /* ── Ergebnis ── */
 if (fails.length) {
   console.error(`FAIL  ${fails.length} Verstöße:`);
