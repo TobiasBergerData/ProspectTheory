@@ -193,6 +193,16 @@ ok(/18,486 league-seasons/.test(rep) && /−0\.7pp, p=0\.84/.test(rep),
 ok(/an honest empty list beats a lowered bar/i.test(rep),
    "Report: Empty-State der Undervalued-Sektion fehlt");
 
+/* ── 9. Experience-Block: Static-First, Rollen-Einstieg, Export/Import ── */
+ok(src.includes("function ptFetch"), "Static-First-Helper ptFetch fehlt");
+ok(src.includes('"/market/intl": "/data/market_intl.json"'), "Static-Map unvollständig");
+ok(/content-type.*includes\("json"\)/.test(src) || src.includes('.includes("json")'),
+   "ptFetch ohne Content-Type-Check — SPA-Fallback-HTML würde als JSON durchgehen");
+ok((src.match(/ptFetch\(/g) || []).length >= 11, "zu wenige Call-Sites auf ptFetch umgestellt");
+ok(src.includes("pt_role_intro_v1"), "Rollen-Einstieg fehlt");
+ok(src.includes("Report data issue"), "Data-Issue-Link fehlt");
+ok(src.includes("⇪ Export") && src.includes("⇩ Import"), "Watchlist Export/Import fehlt");
+
 /* ── Ergebnis ── */
 if (fails.length) {
   console.error(`FAIL  ${fails.length} Verstöße:`);

@@ -12020,7 +12020,7 @@ function useFrontOffice() {
   useEffect(() => {
     if (_foCache) { setD(_foCache); return; }
     let alive = true;
-    fetch(`${API_BASE}/front-office`)
+    ptFetch("/front-office")
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(j => { _foCache = j; if (alive) setD(j); })
       .catch(() => { if (alive) setErr(true); });
@@ -13111,7 +13111,7 @@ function useDraftSharpe() {
   useEffect(() => {
     if (_shCache) { setD(_shCache); return; }
     let alive = true;
-    fetch(`${API_BASE}/draft-sharpe`)
+    ptFetch("/draft-sharpe")
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(j => { _shCache = j; if (alive) setD(j); })
       .catch(() => { if (alive) setErr(true); });
@@ -13521,6 +13521,34 @@ function ptExportCsv(filename, header, rows) {
   a.click();
   URL.revokeObjectURL(a.href);
 }
+
+// Static-First-Fetch: Render Free Tier schläft nach Idle ein (30-60s Kalt-
+// start beim ersten Besucher). Die statischen Payloads liegen deshalb
+// zusätzlich als Dateien im Vercel-CDN (frontend/public/data/, gesynct via
+// scripts/sync_static.mjs). Erst CDN versuchen (Millisekunden, kaltstart-
+// frei), bei 404/Nicht-JSON auf die API zurückfallen — Verhalten identisch,
+// nur schneller. Content-Type-Check, weil SPA-Fallbacks 200+HTML liefern.
+const PT_STATIC_MAP = {
+  "/years": "/data/years.json",
+  "/market/intl": "/data/market_intl.json",
+  "/market/ncaa": "/data/market_ncaa.json",
+  "/future-classes": "/data/api_future_classes.json",
+  "/youth": "/data/api_youth_radar.json",
+  "/awards": "/data/api_awards.json",
+  "/front-office": "/data/api_front_office.json",
+  "/draft-sharpe": "/data/api_draft_sharpe.json",
+};
+function ptFetch(apiPath) {
+  let sp = PT_STATIC_MAP[apiPath];
+  const m = apiPath.match(/^\/board\?n=200(?:&year=(\d+))?$/);
+  if (m) sp = m[1] ? `/data/board_${m[1]}.json` : "/data/board_current.json";
+  const api = () => fetch(`${API_BASE}${apiPath}`);
+  if (!sp || typeof window === "undefined") return api();
+  return fetch(sp)
+    .then(r => (r.ok && (r.headers.get("content-type") || "").includes("json")) ? r : api())
+    .catch(api);
+}
+
 // Guard-Write: nur schreiben, wenn das eigene Segment nicht schon stimmt.
 const ptSyncHash = (idx, parts) => {
   if ((ptHashParts()[idx] || "") !== (parts[idx] || "")) ptSetHash(parts);
@@ -14833,7 +14861,7 @@ function useAwards() {
   useEffect(() => {
     if (_awardsCache) { setM(_awardsCache); return; }
     let alive = true;
-    fetch(`${API_BASE}/awards`)
+    ptFetch("/awards")
       .then(r => r.ok ? r.json() : null)
       .then(j => { _awardsCache = j || { byName: {} }; if (alive) setM(_awardsCache); })
       .catch(() => { _awardsCache = { byName: {} }; if (alive) setM(_awardsCache); });
@@ -14868,7 +14896,7 @@ function YouthRadarView() {
   const [err, setErr] = useState(false);
   useEffect(() => {
     let alive = true;
-    fetch(`${API_BASE}/youth`)
+    ptFetch("/youth")
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(d => { if (alive) setData(d); })
       .catch(() => { if (alive) setErr(true); });
@@ -14966,7 +14994,7 @@ function FutureClassesView({ watchlist = null, onToggleWatch = null }) {
   const [posBand, setPosBand] = useState("All"); // Youth-Positionen: G/F/C (erste Stelle)
   useEffect(() => {
     let alive = true;
-    fetch(`${API_BASE}/future-classes`)
+    ptFetch("/future-classes")
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(d => { if (alive) { setData(d); setCls(d.first_future_class ?? d.classes?.[0]?.year ?? null); } })
       .catch(() => { if (alive) setErr(true); });
@@ -15110,7 +15138,7 @@ function MarketReportView({ onSelect }) {
   const NBA_LOCK = 85, TOP_N = 8, CLIMB_MIN = 0.08;
   useEffect(() => {
     let alive = true;
-    const get = (path, set) => fetch(`${API_BASE}${path}`)
+    const get = (path, set) => ptFetch(path)
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(d => { if (alive) set(d); })
       .catch(() => { if (alive) setErr(true); });
@@ -15209,7 +15237,7 @@ function CollegeToProView({ onSelect, watchlist = null, onToggleWatch = null }) 
   const SHOW_N = 150;
   useEffect(() => {
     let alive = true;
-    fetch(`${API_BASE}/market/ncaa`)
+    ptFetch("/market/ncaa")
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(d => {
         if (!alive) return;
@@ -15943,6 +15971,27 @@ function IntlBoardView({ players, onSelect, watchlist = null, onToggleWatch = nu
                 <button onClick={markSeen} className="px-2 py-0.5 rounded text-xs font-semibold"
                   style={{ background: "#1f2937", color: "#9ca3af", border: "1px solid #374151" }}>
                   ✓ Mark as seen
+                </button>{" "}
+                <button onClick={()=>{
+                    // Watchlist mitnehmen: localStorage ist Browser-gebunden —
+                    // Export/Import als kompakter Code (ohne Accounts, Free-Tier).
+                    const code=btoa(unescape(encodeURIComponent(JSON.stringify(watchlist||[]))));
+                    navigator.clipboard?.writeText(code);
+                    window.alert("Watchlist code copied — paste it via Import on any other device/browser.");
+                  }} className="px-2 py-0.5 rounded text-xs font-semibold"
+                  style={{ background: "#1f2937", color: "#9ca3af", border: "1px solid #374151" }}>
+                  ⇪ Export
+                </button>{" "}
+                <button onClick={()=>{
+                    const code=window.prompt("Paste a watchlist code (replaces nothing — names are merged):");
+                    if(!code) return;
+                    try {
+                      const names=JSON.parse(decodeURIComponent(escape(atob(code.trim()))));
+                      if(Array.isArray(names)) names.filter(n=>typeof n==="string" && !(watchlist||[]).includes(n)).forEach(n=>onToggleWatch && onToggleWatch(n));
+                    } catch { window.alert("That code could not be read."); }
+                  }} className="px-2 py-0.5 rounded text-xs font-semibold"
+                  style={{ background: "#1f2937", color: "#9ca3af", border: "1px solid #374151" }}>
+                  ⇩ Import
                 </button>
               </span>
             )}
@@ -17566,6 +17615,17 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
   // Internationals enthält. null = noch nicht geladen, [] = Fetch-Fehler
   // (Board-only-Fallback, Views funktionieren wie bisher).
   const [marketIntl,setMarketIntl]=useState(null);
+  // Rollen-Einstieg: neun Views sind für Erstbesucher eine Werkzeugkiste ohne
+  // Wegweiser. Einmaliges Panel (localStorage), das die 2-3 passenden Views
+  // je Rolle vorschlägt — danach nie wieder.
+  const [roleIntro,setRoleIntro]=useState(()=>{
+    try { return !window.localStorage.getItem("pt_role_intro_v1"); } catch { return false; }
+  });
+  const dismissRoleIntro=(view)=>{
+    try { window.localStorage.setItem("pt_role_intro_v1","1"); } catch {}
+    setRoleIntro(false);
+    if (view) setIntlView(view);
+  };
   // Recruiting-Suchfilter: Projected Level + Alters-Fenster — wirken auf alle
   // spielerbasierten Recruiting-Ansichten (nicht auf das modellfreie Youth Radar).
   const [intlLevelFilter,setIntlLevelFilter]=useState("All");
@@ -17587,9 +17647,9 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
     setLoading(true);
     // Tobias 2026-05-09: n=500 ensures classRank computation has full per-year cohort
     const url = year && year!=="All"
-      ? `${API_BASE}/board?n=200&year=${year}`
-      : `${API_BASE}/board?n=200`;
-    fetch(url)
+      ? `/board?n=200&year=${year}`
+      : `/board?n=200`;
+    ptFetch(url)
       .then(r=>r.json())
       .then(d=>{
         const players = d.players||[];
@@ -17642,7 +17702,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
   useEffect(()=>{
     if (lens!=="intl" || marketIntl!==null) return;
     let alive=true;
-    fetch(`${API_BASE}/market/intl`)
+    ptFetch("/market/intl")
       .then(r=>r.ok?r.json():Promise.reject(r.status))
       .then(d=>{
         if(!alive) return;
@@ -17826,6 +17886,21 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
           + Watchlist als zweite Ansicht (★-Buttons auf den Board-Zeilen) */}
       {lens === "intl" && (
         <div>
+          {roleIntro && (
+            <div className="rounded-xl mb-3" style={{background:"#111827",border:"1px solid #1f2937",padding:"12px 16px",lineHeight:1.6}}>
+              <b style={{color:"#e5e7eb",fontSize:13}}>Where should you start?</b>
+              <div style={{color:"#9ca3af",fontSize:12,marginBottom:8}}>Nine views, three jobs — pick yours and we open the right one. This note appears once.</div>
+              <div className="flex gap-2 flex-wrap">
+                <button onClick={()=>dismissRoleIntro("college")} className="px-3 py-1.5 rounded-lg text-xs font-semibold" style={{background:"#1f2937",color:"#10b981",border:"1px solid #374151"}}>
+                  🎓 College recruiter → Targets by class, Future Classes, Report</button>
+                <button onClick={()=>dismissRoleIntro("levelup")} className="px-3 py-1.5 rounded-lg text-xs font-semibold" style={{background:"#1f2937",color:"#10b981",border:"1px solid #374151"}}>
+                  🏟 International front office → Pro-Ready, College-to-Pro, Undervalued</button>
+                <button onClick={()=>dismissRoleIntro("report")} className="px-3 py-1.5 rounded-lg text-xs font-semibold" style={{background:"#1f2937",color:"#10b981",border:"1px solid #374151"}}>
+                  📰 Just looking → the one-page Market Report</button>
+                <button onClick={()=>dismissRoleIntro(null)} className="px-2 py-1.5 rounded-lg text-xs" style={{background:"transparent",color:"#6b7280"}}>skip</button>
+              </div>
+            </div>
+          )}
           <div className="flex gap-1 mb-3 flex-wrap">
             {[["board","☰ Recruiting Board"],["watch",`★ Watchlist${watchlist.length?` (${watchlist.length})`:""}`],
               ["levelup","📈 Level-Up"],["portal","🌀 Portal Radar"],["college","🎓 College Targets"],
@@ -17836,6 +17911,11 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
                 {l}
               </button>
             ))}
+            <a href={`mailto:tobias.berger@gmx.net?subject=${encodeURIComponent("ProspectTheory data issue")}&body=${encodeURIComponent("Player / view / what is wrong:")}`}
+               title="Spotted a wrong club, league or stale transfer? Data quality reports make the tool better for everyone."
+               className="px-3 py-1.5 rounded-lg text-xs font-semibold" style={{background:"transparent",color:"#6b7280",border:"1px dashed #374151"}}>
+              ⚑ Report data issue
+            </a>
           </div>
           {/* Suchfilter: Projected Level + Alter (gelten für Board/Watchlist/Level-Up/College —
               nicht für die modellfreien Ansichten Youth Radar und Future Classes) */}
@@ -18312,7 +18392,7 @@ export default function App() {
 
   useEffect(()=>{
     setLoading(true);
-    fetch(`${API_BASE}/years`)
+    ptFetch("/years")
       .then(r=>r.json())
       .then(yearData=>{
         const yrs = yearData.years || [];
@@ -18320,7 +18400,7 @@ export default function App() {
         if (yearData.api_version) setApiVersion(yearData.api_version);
         const latestYear = yearData.latest || 2026;
         setYearFilter(String(latestYear));
-        return fetch(`${API_BASE}/board?n=200&year=${latestYear}`)
+        return ptFetch(`/board?n=200&year=${latestYear}`)
           .then(r=>r.json())
           .then(d=>{
             const players = d.players||[];
