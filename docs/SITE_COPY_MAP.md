@@ -120,6 +120,14 @@ FDR"-Badge nur payload-getrieben (`outcome.bh_sig`; Render-Test zählt
 sie). Der Regime-Vorbehalt („is not a claim draft samples can support")
 ist Pflicht-Copy.
 
+## FO-Lab: Value Capture + Hit-Kontext (2026-07-28)
+
+| Element | Regel |
+|---|---|
+| Kartenkopf „Captured X% of attainable value" | Nur ab n ≥ 15 (Export-Guard). NIE als Skill/Rating formulieren — Tooltip + Method sagen „record, not a rating" (Regret trennt Regimes pick-kontrolliert nicht). |
+| Hits-Unterzeile „best available within 30" | Steht jetzt auch bei HITS (Simmons-Lücke); bei missed = 0 stattdessen „the best player still on the board". Render-Test zählt beide gegen die Payload. |
+| Method „Two questions per pick" | Slot-Frage (PVA) vs. Opportunitäts-Frage (Capture) immer als ZWEI Fragen führen; Liga-Quote payload-getrieben (`capture_league`). |
+
 ## FO-Lab: UX v2 — Glance-Strip + Outcome nach Typ (2026-07-28)
 
 | Element | Regel |

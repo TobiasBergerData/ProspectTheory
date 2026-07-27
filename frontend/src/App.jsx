@@ -12454,6 +12454,14 @@ function FoRegimeCard({ r, open, onToggle, consMean }) {
           )}</div>
         <div className="text-gray-400">Total peak WA
           <span className="text-gray-200 ml-1">{foNum(r.wa_total, 1)}</span></div>
+        {r.capture && (
+          <div className="text-gray-400 col-span-2"
+               title="Portfolio replay: at this regime's own draft slots, greedily re-picking the best player still available gives the attainable total. Like PVA this is a record, not a skill rating — slot-controlled regret does not separate regimes beyond chance.">
+            Captured <span className="text-gray-200">{foPct(r.capture.rate)}</span> of
+            attainable value at their slots
+            <span className="text-gray-600"> · {foNum(r.capture.actual, 0)} of {foNum(r.capture.optimal, 0)} WA</span>
+          </div>
+        )}
         <div className="text-gray-400 col-span-2">
           95% CI
           <span className="ml-1" style={{ color: (r.ci?.[0] ?? 0) > 0 || (r.ci?.[1] ?? 0) < 0 ? "#e5e7eb" : "#6b7280" }}>
@@ -12503,11 +12511,26 @@ function FoRegimeCard({ r, open, onToggle, consMean }) {
           <div>
             <div className="text-[10px] font-semibold text-gray-300 mb-0.5">Best outcomes vs. slot</div>
             {(r.hits || []).map((h, i) => (
-              <div key={i} className="text-[11px] flex gap-2">
-                <span className="text-gray-500 shrink-0" style={{ minWidth: 62 }}>{h.y} #{h.p}</span>
-                <span className="text-gray-200 flex-1">{h.name}</span>
-                <span className="text-gray-400">{foNum(h.wa, 1)} WA</span>
-                <span style={{ color: foPvaColor(h.pva), minWidth: 46, textAlign: "right" }}>{foNum(h.pva, 1, true)}</span>
+              <div key={i} className="text-[11px]">
+                <div className="flex gap-2">
+                  <span className="text-gray-500 shrink-0" style={{ minWidth: 62 }}>{h.y} #{h.p}</span>
+                  <span className="text-gray-200 flex-1">{h.name}</span>
+                  <span className="text-gray-400">{foNum(h.wa, 1)} WA</span>
+                  <span style={{ color: foPvaColor(h.pva), minWidth: 46, textAlign: "right" }}>{foNum(h.pva, 1, true)}</span>
+                </div>
+                {/* Opportunitäts-Kontext auch bei HITS (28.07.2026): ein
+                    +5.7-Pick kann trotzdem Wins auf dem Board gelassen haben
+                    (Simmons vs. Sabonis) — vorher stand das nur bei Misses. */}
+                {h.best && (h.missed ?? 0) > 0 && (
+                  <div className="text-[10px] text-gray-500 pl-[70px]">
+                    best available within 30: {h.best} ({foNum(h.best_wa, 1)} WA)
+                  </div>
+                )}
+                {h.best && (h.missed ?? 0) === 0 && (
+                  <div className="text-[10px] text-gray-600 pl-[70px]">
+                    — the best player still on the board within 30
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -12905,6 +12928,23 @@ function FoMethod({ data }) {
         outcomes, never our own projections, because our models are trained on those same outcomes
         and scoring GMs with them would be circular. Players who never reached the NBA count as 0,
         not as missing — that is the whole point of grading a draft slot.
+      </div>
+      <div>
+        <div className="text-xs font-semibold text-gray-200 mb-1">Two questions per pick — slot and opportunity</div>
+        PVA asks the <span className="text-gray-200">slot question</span>: did this pick return
+        more than that draft position historically does? A pick can pass it and still leave value
+        on the board — a #1 who out-earns the slot average is a positive PVA even when a better
+        player went three picks later. That second, harsher standard is the
+        {" "}<span className="text-gray-200">opportunity question</span>: was the best player still
+        available taken? The page answers it in three places: every hit and miss lists the best
+        player still on the board within the next 30 picks; the Draft Replay view shows the full
+        board at each pick; and the card header's "captured … of attainable value" replays each
+        regime's own slots with perfect hindsight
+        {data.capture_league !== null && data.capture_league !== undefined && (
+          <> — league-wide, front offices captured {foPct(data.capture_league)} of what their
+          slots could have returned</>
+        )}. Like PVA, capture is a record, not a rating: with picks controlled to their exact
+        slot, regret does not separate regimes beyond chance either.
       </div>
       <div>
         <div className="text-xs font-semibold text-gray-200 mb-1">Why there is no ranking</div>

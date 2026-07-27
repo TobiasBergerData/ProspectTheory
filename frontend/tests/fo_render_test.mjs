@@ -284,6 +284,32 @@ if (nd) {
     "Need-Block zieht keine Karten-Konsequenz ('no need-vs-BPA badge')");
 }
 
+// (m3) Value Capture + Opportunitaets-Kontext (2026-07-28): Capture-Zeile
+//      exakt auf den Regimes mit payload.capture; Hits mit missed > 0 tragen
+//      die best-available-Unterzeile; Method beantwortet beide Fragen.
+const capN = (payload.regimes || []).filter(r => r.capture).length;
+const capShown = T.cards.slice(0, regimes.length)
+  .filter(c => c.includes("of attainable value")).length;
+ok(capShown === capN,
+  `Capture-Zeilen (${capShown}) weichen von Regimes mit capture-Daten (${capN}) ab`);
+const hitCtx = (payload.regimes || []).flatMap(r => r.hits || [])
+  .filter(h => h.best && (h.missed ?? 0) > 0).length;
+const hitBestTaken = (payload.regimes || []).flatMap(r => r.hits || [])
+  .filter(h => h.best && (h.missed ?? 0) === 0).length;
+const realJoined = T.cards.slice(0, regimes.length).join(" ");
+const missCtx = (payload.regimes || []).flatMap(r => r.misses || [])
+  .filter(m => m.best).length;
+ok((realJoined.match(/best available within 30/g) || []).length === hitCtx + missCtx,
+  "best-available-Zeilen decken nicht Hits(missed>0) + Misses ab");
+ok((realJoined.match(/the best player still on the board within 30/g) || []).length === hitBestTaken,
+  "Bester-Verfuegbarer-genommen-Zeilen weichen von Hits mit missed=0 ab");
+ok(/Two questions per pick/.test(T.method) && /opportunity question/.test(T.method),
+  "Method trennt Slot- und Opportunitaets-Frage nicht");
+if (payload.capture_league !== null && payload.capture_league !== undefined) {
+  ok(T.method.includes(`${(payload.capture_league * 100).toFixed(0)}%`),
+    "Method nennt die Liga-Capture-Quote nicht (payload-getrieben)");
+}
+
 // (j) Bänder sind bewusst ungetestet — ohne den Disclaimer liest sich das
 //     Profil wie ein Befund.
 const anyBands = (payload.regimes || []).some(r => (r.bands || []).length);
