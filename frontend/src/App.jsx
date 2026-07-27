@@ -15092,6 +15092,105 @@ function FutureClassesView({ watchlist = null, onToggleWatch = null }) {
 }
 
 // ═══════════════════════════════════════════════════════════
+// MARKET REPORT — Recruiting-Lens: das teilbare Markt-Snapshot-Artefakt.
+// Ein-Seiten-Zusammenfassung der drei Markt-Payloads (intl, ncaa, future),
+// gedacht zum Weiterschicken (Deep-Link ?lens=recruiting&view=report).
+// EHRLICH: ein Snapshot des aktuellen Daten-Builds, kein News-Feed —
+// "was hat sich für MICH geändert" beantwortet die Watchlist (Baseline-
+// Diff), nicht diese Seite. BEWUSST OHNE "Riser"-Sektion: das Momentum-
+// Signal wurde vorab getestet (validate_riser.py, 18.486 Ligasaisons)
+// und fiel durch — roh +3pp, aber nach Dominanz-Kontrolle −0.7pp
+// (p=0.84): "wer gerade steigt" ist Konfundierung, kein Signal.
+// ═══════════════════════════════════════════════════════════
+function MarketReportView({ onSelect }) {
+  const [intl, setIntl] = useState(null);
+  const [ncaa, setNcaa] = useState(null);
+  const [future, setFuture] = useState(null);
+  const [err, setErr] = useState(false);
+  const NBA_LOCK = 85, TOP_N = 8, CLIMB_MIN = 0.08;
+  useEffect(() => {
+    let alive = true;
+    const get = (path, set) => fetch(`${API_BASE}${path}`)
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(d => { if (alive) set(d); })
+      .catch(() => { if (alive) setErr(true); });
+    get("/market/intl", setIntl); get("/market/ncaa", setNcaa); get("/future-classes", setFuture);
+    return () => { alive = false; };
+  }, []);
+  const empty = (msg) => (
+    <div style={{ padding: 24, color: "#9ca3af", background: "#111827", borderRadius: 12, border: "1px solid #1f2937", lineHeight: 1.6 }}>{msg}</div>
+  );
+  if (err) return empty("The market report needs the market payloads — they are generated at deploy and are not available in this build yet.");
+  if (!intl || !ncaa || !future) return empty("Building the market report…");
+
+  const map = (pl) => { const m = mapProfile(pl) || {}; m.name = pl.name || m.name; return m; };
+  const iPool = (intl.players || []).map(map).filter(p => p.intlLevelEv != null && nbaFlightPct(p) < NBA_LOCK);
+  const nPool = (ncaa.players || []).map(map).filter(p => p.intlLevelEv != null && nbaFlightPct(p) < NBA_LOCK);
+  const proReady = [...iPool].sort((a, b) => b.intlLevelEv - a.intlLevelEv).slice(0, TOP_N);
+  const climbers = iPool.filter(p => p.confStrength != null && p.intlLevelEv - p.confStrength >= CLIMB_MIN)
+    .sort((a, b) => (b.intlLevelEv - b.confStrength) - (a.intlLevelEv - a.confStrength)).slice(0, TOP_N);
+  const c2pTop = [...nPool].sort((a, b) => b.intlLevelEv - a.intlLevelEv).slice(0, TOP_N);
+  const bridges = (future.players || []).filter(p => p.pro)
+    .sort((a, b) => (b.pro.aap ?? -99) - (a.pro.aap ?? -99)).slice(0, TOP_N);
+  const tierColor = (t) => (INTL_TIERS.find(x => x.key === t)?.color) || "#9ca3af";
+  const date = intl.generated || ncaa.generated || future.generated;
+
+  const Section = ({ title, note, children }) => (
+    <div className="rounded-xl overflow-hidden" style={{ background: "#111827", border: "1px solid #1f2937", marginBottom: 12 }}>
+      <div style={{ padding: "8px 14px", borderBottom: "1px solid #1f2937" }}>
+        <b style={{ color: "#e5e7eb", fontSize: 13 }}>{title}</b>
+        <span style={{ color: "#6b7280", fontSize: 11, marginLeft: 8 }}>{note}</span>
+      </div>
+      <div style={{ padding: "6px 0" }}>{children}</div>
+    </div>
+  );
+  const Row = ({ p, right, sub }) => (
+    <div className="flex items-center justify-between px-4 py-1.5 cursor-pointer hover:bg-white hover:bg-opacity-5"
+         onClick={() => onSelect && onSelect(p.name)}>
+      <div>
+        <span style={{ color: "#e5e7eb", fontWeight: 600, fontSize: 13 }}>{p.name}</span>
+        <span style={{ color: "#6b7280", fontSize: 11, marginLeft: 8 }}>{sub}</span>
+      </div>
+      <div style={{ fontSize: 12 }}>{right}</div>
+    </div>
+  );
+  return (
+    <div>
+      <div className="rounded-xl" style={{ background: "#111827", border: "1px solid #1f2937", padding: "12px 16px", marginBottom: 12, lineHeight: 1.6 }}>
+        <b style={{ color: "#e5e7eb" }}>Market Report</b>
+        {date && <span style={{ color: "#6b7280", fontSize: 12 }}> · data build {date}</span>}
+        <div style={{ color: "#9ca3af", fontSize: 12 }}>
+          One page, four markets — built to be shared (the URL carries this exact view). A <b>snapshot of the current
+          data build</b>, not a news feed: for "what changed on my list", use the Watchlist and its baseline diff.
+          Every number comes from the calibrated models documented in Methods; nothing here is recomputed.
+        </div>
+      </div>
+      <Section title="🏟 Pro-Ready" note="internationals by absolute projected level — who can hold a rotation spot at which level, undervalued or not">
+        {proReady.map((p, i) => <Row key={i} p={p} sub={`${p.team || ""} · age ${p.age != null ? ageOnDraftDay(p.age).toFixed(1) : "—"}`}
+          right={<span style={{ color: tierColor(p.predIntlTier) }}>{p.predIntlTier || "—"} <b>{p.intlLevelEv.toFixed(2)}</b></span>}/>)}
+      </Section>
+      <Section title="▲ Undervalued" note={`projected ≥ +${CLIMB_MIN} above current environment — the validated buy-low threshold`}>
+        {climbers.length ? climbers.map((p, i) => <Row key={i} p={p} sub={`${p.team || ""} · level ${p.confStrength?.toFixed(2)} now`}
+          right={<span style={{ color: "#22c55e" }}>▲ +{(p.intlLevelEv - p.confStrength).toFixed(2)}</span>}/>)
+          : <div style={{ padding: "6px 16px", color: "#6b7280", fontSize: 12 }}>No player currently clears the validated threshold — an honest empty list beats a lowered bar.</div>}
+      </Section>
+      <Section title="🧳 College-to-Pro" note="NCAA players by absolute projected pro level — first-contract signings, no top-200 cap">
+        {c2pTop.map((p, i) => <Row key={i} p={p} sub={`${p.team || ""}${p.conf ? " · " + p.conf : ""}`}
+          right={<span style={{ color: tierColor(p.predIntlTier) }}>{p.predIntlTier || "—"} <b>{p.intlLevelEv.toFixed(2)}</b></span>}/>)}
+      </Section>
+      <Section title="🌱 Future Classes" note="2027+ prospects already earning pro minutes — the relationship-scouting shortlist">
+        {bridges.map((p, i) => <Row key={i} p={p} sub={`${p.pro.league || p.pro.team || "pro"} · ${p.pro.mpg ?? "—"} mpg · age ${p.pro.age_draft_day ?? "—"}`}
+          right={<span style={{ color: "#22c55e" }}>Class of {p.class_min}</span>}/>)}
+      </Section>
+      <div style={{ color: "#4b5563", fontSize: 10, padding: "0 4px" }}>
+        Momentum ("who is rising right now") is deliberately absent: tested on 18,486 league-seasons, the effect
+        vanishes once current dominance is controlled (−0.7pp, p=0.84) — recency is bias here, not signal.
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
 // COLLEGE-TO-PRO — Recruiting-Lens: der VOLLE NCAA-Markt (~3.850) als
 // Einkaufsliste für internationale Front Offices. Moneyball-Logik: der
 // produktive Senior ohne NBA-Upside fällt aus jeder Peak-WAR-Top-200-
@@ -17449,7 +17548,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
   // Deep-Link: view=<name> im Hash-Query macht jede Recruiting-Ansicht teilbar
   // ("#/…?lens=recruiting&view=c2p"). Einmalig aus dem Hash lesen, danach
   // spiegeln (nur den view-Key anfassen — lens/room bleiben unberührt).
-  const PT_INTL_VIEWS = ["board","watch","levelup","portal","college","similar","c2p","youth","future"];
+  const PT_INTL_VIEWS = ["board","watch","levelup","portal","college","similar","c2p","youth","future","report"];
   const [intlView,setIntlView]=useState(()=>{
     if (typeof window==="undefined") return "board";
     const v = ptHashQuery().get("view");
@@ -17730,7 +17829,8 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
           <div className="flex gap-1 mb-3 flex-wrap">
             {[["board","☰ Recruiting Board"],["watch",`★ Watchlist${watchlist.length?` (${watchlist.length})`:""}`],
               ["levelup","📈 Level-Up"],["portal","🌀 Portal Radar"],["college","🎓 College Targets"],
-              ["similar","⇄ Similar"],["c2p","🧳 College-to-Pro"],["youth","🔭 Youth Radar"],["future","🌱 Future Classes"]].map(([v,l])=>(
+              ["similar","⇄ Similar"],["c2p","🧳 College-to-Pro"],["youth","🔭 Youth Radar"],["future","🌱 Future Classes"],
+              ["report","📰 Report"]].map(([v,l])=>(
               <button key={v} onClick={()=>setIntlView(v)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
                 style={{background:intlView===v?"#10b981":"#1f2937",color:intlView===v?"#000":"#9ca3af"}}>
                 {l}
@@ -17739,7 +17839,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
           </div>
           {/* Suchfilter: Projected Level + Alter (gelten für Board/Watchlist/Level-Up/College —
               nicht für die modellfreien Ansichten Youth Radar und Future Classes) */}
-          {intlView!=="youth" && intlView!=="future" && intlView!=="c2p" && (
+          {intlView!=="youth" && intlView!=="future" && intlView!=="c2p" && intlView!=="report" && (
             <div className="flex items-center gap-3 mb-3 flex-wrap">
               <div className="flex gap-1 items-center">
                 <span className="text-[10px] uppercase tracking-wider" style={{color:"#4b5563"}}>Level</span>
@@ -17779,12 +17879,14 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
             </div>
           )}
           {(()=>{
-            const intlFiltered = (intlView==="youth" || intlView==="future" || intlView==="c2p") ? filtered : filtered.filter(p =>
+            const intlFiltered = (intlView==="youth" || intlView==="future" || intlView==="c2p" || intlView==="report") ? filtered : filtered.filter(p =>
               (intlLevelFilter==="All" || p.predIntlTier===intlLevelFilter) &&
               (intlAgeMax>=99 || (p.age!=null && ageOnDraftDay(p.age)<=intlAgeMax)) &&
               (intlRoleFilter==="All" || (p.archetypesAll || p.archetype || "").split("|").includes(intlRoleFilter)) &&
               (!intlLurkOnly || isLurker(p)));
-            return intlView==="future" ? (
+            return intlView==="report" ? (
+              <MarketReportView onSelect={onSelect}/>
+            ) : intlView==="future" ? (
               <FutureClassesView watchlist={watchlist} onToggleWatch={toggleWatch}/>
             ) : intlView==="c2p" ? (
               <CollegeToProView onSelect={onSelect} watchlist={watchlist} onToggleWatch={toggleWatch}/>

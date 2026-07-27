@@ -155,7 +155,7 @@ ok((src.match(/ptExportCsv\(/g) || []).length >= 4,
 ok(src.includes('q.set("view", want)'), "Recruiting-Deep-Link (view=) wird nicht geschrieben");
 ok(/const v = ptHashQuery\(\)\.get\("view"\)/.test(src),
    "Recruiting-Deep-Link (view=) wird nicht gelesen");
-ok(/PT_INTL_VIEWS = \["board","watch","levelup","portal","college","similar","c2p","youth","future"\]/.test(src),
+ok(/PT_INTL_VIEWS = \["board","watch","levelup","portal","college","similar","c2p","youth","future","report"\]/.test(src),
    "Deep-Link-Whitelist deckt nicht alle Recruiting-Views");
 // Positions-Filter in den drei neuen/erweiterten Views
 ok((src.match(/\["All", "Playmaker", "Wing", "Big"\]\.map/g) || []).length >= 2,
@@ -174,6 +174,24 @@ ok(src.includes(">new on list<"), "Watchlist-Diff: Kennzeichnung neuer Einträge
 // Schwellen der Diff-Chips müssen in der Copy stehen (keine stillen Schwellen)
 ok(/level ≥0\.02, tier, NBA risk ≥5pp, WA ≥0\.3/.test(src),
    "Watchlist-Diff: Chip-Schwellen nicht in der Copy benannt");
+
+/* ── 8. Market Report (teilbares Snapshot-Artefakt) + Riser-Negativbefund ── */
+ok(src.includes("function MarketReportView"), "MarketReportView fehlt");
+ok(src.includes('"report","📰 Report"'), "Report-Button nicht registriert");
+ok(src.includes('intlView==="report"'), "Render-Zweig für Report fehlt");
+ok(src.includes('"board","watch","levelup","portal","college","similar","c2p","youth","future","report"'),
+   "Deep-Link-Whitelist ohne report");
+const rep = src.slice(src.indexOf("function MarketReportView"),
+                      src.indexOf("function ", src.indexOf("function MarketReportView") + 10));
+ok(/snapshot of the current\s+data build/i.test(rep), "Report-Copy: Snapshot-Vorbehalt fehlt");
+ok(/not a news feed/i.test(rep), "Report-Copy: News-Feed-Abgrenzung fehlt");
+ok(/nothing here is recomputed/i.test(rep), "Report-Copy: Eine-Quelle-Prinzip fehlt");
+// Der Riser-Negativbefund MUSS benannt sein (Schutz vor Recency-Bias) —
+// und mit den echten Gate-Zahlen, nicht als vage Behauptung.
+ok(/18,486 league-seasons/.test(rep) && /−0\.7pp, p=0\.84/.test(rep),
+   "Report: Riser-Negativbefund (validate_riser.py) fehlt oder ohne Zahlen");
+ok(/an honest empty list beats a lowered bar/i.test(rep),
+   "Report: Empty-State der Undervalued-Sektion fehlt");
 
 /* ── Ergebnis ── */
 if (fails.length) {

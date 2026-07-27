@@ -114,7 +114,9 @@ def _build_market_intl_payload(conn: sqlite3.Connection) -> dict:
         "SELECT COUNT(*) FROM board WHERE source='intl' AND is_current_class=1"
     ).fetchone()[0]
     results = _rows_to_entries(conn, rows)
+    from datetime import datetime, timezone
     return {
+        "generated": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         "count": len(results),
         # Ehrlichkeit: wie viele intl-Zeilen die Qualitäts-Filter kosten —
         # keine stille Kappung (aktuell 0, aber das kann sich ändern).
@@ -182,7 +184,9 @@ def _build_market_ncaa_payload(conn: sqlite3.Connection) -> dict:
     # Einkaufs-Reihenfolge: absolutes projiziertes Level (Pro-Ready), nulls ans Ende.
     results.sort(key=lambda e: -(e.get("intl_level_ev")
                                  if e.get("intl_level_ev") is not None else -99))
+    from datetime import datetime, timezone
     return {
+        "generated": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         "count": len(results),
         "n_excluded_quality": n_total - len(results),
         "players": results,
