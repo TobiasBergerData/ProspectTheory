@@ -87,6 +87,45 @@ def _build_board_payload(conn: sqlite3.Connection, year: int | None, n: int = BO
         params + [n],
     ).fetchall()
 
+    results = _rows_to_entries(conn, rows)
+
+    return {
+        "year": year,
+        "count": len(results),
+        "players": results,
+    }
+
+
+def _build_market_intl_payload(conn: sqlite3.Connection) -> dict:
+    """Sprint Recruiting-Fundament: der VOLLE internationale Markt der
+    aktuellen Klasse — ohne Top-N-Cap. Das Board-File (Top-200 nach WAR)
+    enthält nur eine Handvoll Internationals, weil die WAR-Sortierung
+    NCAA-lastig ist; die Recruiting-Views (College Targets, Level-Up,
+    Similar) brauchen aber den ganzen Markt. Gleiche Qualitäts-Filter wie
+    das Board (confidence, Alter), gleiches Entry-Format (die Frontend-
+    Views laufen unverändert über mapProfile). ~160 Spieler, statisch."""
+    rows = conn.execute(
+        "SELECT * FROM board WHERE source='intl' AND is_current_class=1 "
+        "AND (confidence != 'very_low' OR confidence IS NULL) "
+        "AND (age IS NULL OR age <= 24.5) "
+        "ORDER BY COALESCE(war, mu, 0) DESC",
+    ).fetchall()
+    n_total = conn.execute(
+        "SELECT COUNT(*) FROM board WHERE source='intl' AND is_current_class=1"
+    ).fetchone()[0]
+    results = _rows_to_entries(conn, rows)
+    return {
+        "count": len(results),
+        # Ehrlichkeit: wie viele intl-Zeilen die Qualitäts-Filter kosten —
+        # keine stille Kappung (aktuell 0, aber das kann sich ändern).
+        "n_excluded_quality": n_total - len(results),
+        "players": results,
+    }
+
+
+def _rows_to_entries(conn: sqlite3.Connection, rows: list) -> list:
+    """board-Rows + Profile-Blobs → Frontend-Player-Entries (exakt das
+    Format von main.py:get_board(), Single Source of Truth via _BOARD_FIELDS)."""
     pids = [r["player_id"] for r in rows]
     blobs: dict = {}
     if pids:
@@ -128,11 +167,7 @@ def _build_board_payload(conn: sqlite3.Connection, year: int | None, n: int = BO
                 entry[field] = v
         results.append(entry)
 
-    return {
-        "year": year,
-        "count": len(results),
-        "players": results,
-    }
+    return results
 
 
 def _get_years_from_db(conn: sqlite3.Connection) -> list[int]:
@@ -187,6 +222,14 @@ def main():
     size_current = _write_json(out_current, payload_current)
     total_bytes += size_current
     print(f"  ✓ board_current.json ({len(payload_current['players']):>4} players, {size_current/1024:>7.1f} KB)")
+
+    # ── 2b) Intl-Markt (Recruiting-Fundament): alle current-class intl ──────
+    payload_market = _build_market_intl_payload(conn)
+    size_market = _write_json(STATIC_DIR / "market_intl.json", payload_market)
+    total_bytes += size_market
+    print(f"  ✓ market_intl.json ({len(payload_market['players']):>4} players, "
+          f"{size_market/1024:>7.1f} KB, quality-excluded: "
+          f"{payload_market['n_excluded_quality']})")
 
     # ── 3) Years-Liste ──────────────────────────────────────────────────────
     years_payload = {

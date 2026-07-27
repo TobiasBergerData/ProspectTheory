@@ -1142,6 +1142,20 @@ async def get_awards(response: Response):
     return json.loads(p.read_text(encoding="utf-8"))
 
 
+@app.get("/api/market/intl")
+async def get_market_intl(response: Response):
+    """Intl-Markt (Recruiting-Fundament): ALLE current-class Internationals
+    (~160), nicht nur die wenigen im WAR-Top-200-Board. Gleiche Entry-
+    Struktur wie /api/board (mapProfile-kompatibel), gleiche Qualitäts-
+    Filter. Statisch materialisiert von export_board_static.py — kein
+    DB-Hit, Free-Tier-sicher."""
+    static = _serve_static_or_none("market_intl.json", response, max_age=600)
+    if static:
+        return static
+    raise HTTPException(status_code=503, detail="intl market not yet built "
+                        "(run export_board_static.py)")
+
+
 @app.get("/api/future-classes")
 async def get_future_classes(response: Response):
     """Future Classes (Recruiting-Lens): Jugendspieler der NÄCHSTEN

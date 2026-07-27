@@ -15074,13 +15074,32 @@ function FutureClassesView() {
 function CollegeTargetsView({ players, onSelect, watchlist = null, onToggleWatch = null }) {
   const _awards = useAwards();
   const COLLEGE_MAX_AGE = 21;
-  const rows = players
+  const COLLEGE_ELIG_AGE = 19; // NBA: eligible im Jahr des 19. Geburtstags
+  // Kohorten-Tabs (Recruiting-Vorlauf): früheste Draft-Klasse aus dem exakten
+  // Draft-Day-Alter — 0 = dieses Jahr eligible, 1 = nächste Klasse, 2 = danach.
+  // Für College-Programme ist die NÄCHSTE Klasse der eigentliche Recruiting-
+  // Horizont; die bisherige Ansicht mischte alle Jahrgänge in eine WAR-Liste.
+  const [cohort, setCohort] = useState(0);
+  const eligIn = (p) => {
+    const a = ageOnDraftDay(p.age);
+    return a == null ? null : a >= COLLEGE_ELIG_AGE ? 0 : Math.ceil(COLLEGE_ELIG_AGE - a);
+  };
+  const pool = players
     .filter(p => p.source && p.source !== "ncaa")
-    .filter(p => p.age != null && ageOnDraftDay(p.age) <= COLLEGE_MAX_AGE)
+    .filter(p => p.age != null && ageOnDraftDay(p.age) <= COLLEGE_MAX_AGE);
+  const inCohort = (p, k) => (k < 2 ? eligIn(p) === k : eligIn(p) >= 2);
+  const baseYear = pool.find(p => p.yr != null)?.yr ?? 2026;
+  const tabs = [0, 1, 2].map(k => ({
+    k,
+    label: k < 2 ? `Class of ${baseYear + k}` : `Class of ${baseYear + 2}+`,
+    n: pool.filter(p => inCohort(p, k)).length,
+  }));
+  const rows = pool
+    .filter(p => inCohort(p, cohort))
     .sort((a, b) => (b.war ?? -99) - (a.war ?? -99))
     .slice(0, 100);
   const tierColor = (t) => (INTL_TIERS.find(x => x.key === t)?.color) || "#9ca3af";
-  if (!rows.length) return (
+  if (!pool.length) return (
     <div style={{ padding: 24, color: "#9ca3af", background: "#111827", borderRadius: 12, border: "1px solid #1f2937" }}>
       No international prospects in the college-age window match the current selection — try a different year filter.
     </div>
@@ -15091,12 +15110,27 @@ function CollegeTargetsView({ players, onSelect, watchlist = null, onToggleWatch
         <b style={{ color: "#e5e7eb" }}>College Targets</b> — international prospects in the college-age window
         (draft-day age ≤ {COLLEGE_MAX_AGE}), ranked by projected peak talent. In the NIL era, college programs recruit
         internationals with real budgets — and here <b>NBA upside is a selling point</b>, not a risk: a high NBA-track
-        percentage means draft-pipeline visibility and NIL value. Columns show where he plays now, his current
+        percentage means draft-pipeline visibility and NIL value. The tabs split the pool by <b>earliest draft
+        class</b> (from exact draft-day age): recruiting is a pipeline, and the next class — not the current one — is
+        where relationships are built. Columns show where he plays now, his current
         environment level, projected peak Added Wins and his NBA odds. <b style={{color:"#fbbf24"}}>Eligibility is
         case-by-case</b> (amateur status, pro contracts, seasons rules) — this is a talent radar, not an eligibility
-        determination. For U16–U20 prospects before their senior debut, see the Youth Radar.
+        determination. For U16–U20 prospects before their senior debut, see the Youth Radar and Future Classes.
         {onToggleWatch && <> Use <b style={{color:"#10b981"}}>☆</b> to track a target.</>}
       </div>
+      <div className="flex gap-1 flex-wrap" style={{ padding: "10px 14px", borderBottom: "1px solid #1f2937" }}>
+        {tabs.map(t => (
+          <button key={t.k} onClick={() => setCohort(t.k)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+            style={{ background: cohort === t.k ? "#10b981" : "#1f2937", color: cohort === t.k ? "#000" : "#9ca3af" }}>
+            {t.label} ({t.n})
+          </button>
+        ))}
+      </div>
+      {!rows.length && (
+        <div style={{ padding: 24, color: "#9ca3af" }}>
+          No prospects in this cohort match the current selection.
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr style={{ background: "#0a0e17" }}>
@@ -15180,12 +15214,21 @@ function LevelUpView({ players, onSelect, watchlist = null, onToggleWatch = null
   const _awards = useAwards();
   const CLIMB_MIN = 0.08;   // gleiche Schwelle wie Value ▲ auf dem Recruiting Board
   const NBA_LOCK = 85;
-  const rows = players
+  // Zwei Sortierungen derselben kalibrierten Größe (bewusst KEINE neue Metrik):
+  // "climb" = Unterbewertung (projiziert − Umfeld, backtest-validierte Schwelle —
+  // nicht aufweichen), "level" = absolutes projiziertes Level ("Pro-Ready":
+  // wer kann auf welchem Niveau spielen — ein Spieler, der schon richtig
+  // einsortiert ist, taucht unter Climb nie auf, ist für eine EuroLeague-
+  // Roster-Entscheidung aber genauso relevant).
+  const [mode, setMode] = useState("climb");
+  const base = players
     .filter(p => p.source && p.source !== "ncaa")
-    .filter(p => p.intlLevelEv != null && p.confStrength != null && nbaFlightPct(p) < NBA_LOCK)
-    .map(p => ({ ...p, _climb: p.intlLevelEv - p.confStrength }))
-    .filter(p => p._climb >= CLIMB_MIN)
-    .sort((a, b) => b._climb - a._climb)
+    .filter(p => p.intlLevelEv != null && nbaFlightPct(p) < NBA_LOCK)
+    .map(p => ({ ...p, _climb: p.confStrength != null ? p.intlLevelEv - p.confStrength : null }));
+  const rows = (mode === "climb"
+    ? base.filter(p => p._climb != null && p._climb >= CLIMB_MIN)
+          .sort((a, b) => b._climb - a._climb)
+    : base.sort((a, b) => (b.intlLevelEv ?? -99) - (a.intlLevelEv ?? -99)))
     .slice(0, 100);
   const tierColor = (t) => (INTL_TIERS.find(x => x.key === t)?.color) || "#9ca3af";
   const flight = (pct) => pct >= 60 ? { l: "high", c: "#ef4444" } : pct >= 30 ? { l: "med", c: "#f97316" } : { l: "low", c: "#22c55e" };
@@ -15197,16 +15240,29 @@ function LevelUpView({ players, onSelect, watchlist = null, onToggleWatch = null
   return (
     <div className="rounded-xl overflow-hidden" style={{ background: "#111827", border: "1px solid #1f2937" }}>
       <div style={{ padding: "10px 14px", fontSize: 12, color: "#9ca3af", borderBottom: "1px solid #1f2937", lineHeight: 1.6 }}>
-        <b style={{ color: "#e5e7eb" }}>Level-Up Portal</b> — international players projected clearly <b>above the league
+        <b style={{ color: "#e5e7eb" }}>Level-Up Portal</b> — international players and the league level they can
+        actually play at, in two readings of the <b>same calibrated level scale</b>.
+        <b style={{ color: "#22c55e" }}> Climb</b> lists players projected clearly <b>above the league
         they play in today</b>, sorted by the size of that climb (projected sustainable level minus current environment,
-        same calibrated scale as Value ▲ on the Recruiting Board). This surfaces the players dominating a second division
-        or a mid-tier national league who are ready for the next step — exactly the profile a front office one or two
-        levels up wants to sign before the market prices him in. League-adjusted BPM is shown as the production evidence
-        behind the projection. NBA near-locks are excluded; NCAA players have their own path (Recruiting Board → College
-        filter). <b style={{color:"#cbd5e1"}}>Backtested out-of-time:</b> flagged players climbed a league level about
-        eight times as often as unflagged ones, the signal is calibrated in both directions (it also identifies decliners),
-        and it is <b>strongest for players under 23</b> — read the age column accordingly. Reproducible via
-        validate_level_up.py; see Methods → Cross-Market Views.{onToggleWatch && <> Use <b style={{color:"#10b981"}}>☆</b> to track a candidate.</>}
+        same scale as Value ▲ on the Recruiting Board) — the players dominating a second division
+        or a mid-tier national league, ready for the next step before the market prices them in.
+        <b style={{ color: "#3b82f6" }}> Pro-Ready</b> sorts by the <b>absolute projected level</b> instead: who can
+        hold a rotation spot at which level right now — a player already playing at his correct level never shows a
+        climb, but he is exactly who a EuroLeague or first-division roster builder needs on the list. League-adjusted
+        BPM is the production evidence behind the projection. NBA near-locks are excluded; NCAA players have their own
+        path (Recruiting Board → College filter). <b style={{color:"#cbd5e1"}}>Backtested out-of-time
+        (validate_level_up.py):</b> flagged climb-players moved up a league level about
+        eight times as often as unflagged ones, projected level correlates strongly with realized level, the signal is
+        calibrated in both directions and <b>strongest for players under 23</b> — read the age column accordingly.
+        See Methods → Cross-Market Views.{onToggleWatch && <> Use <b style={{color:"#10b981"}}>☆</b> to track a candidate.</>}
+      </div>
+      <div className="flex gap-1 flex-wrap" style={{ padding: "10px 14px", borderBottom: "1px solid #1f2937" }}>
+        {[["climb", "▲ Climb (undervalued)"], ["level", "🏟 Pro-Ready (absolute level)"]].map(([v, l]) => (
+          <button key={v} onClick={() => setMode(v)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+            style={{ background: mode === v ? "#10b981" : "#1f2937", color: mode === v ? "#000" : "#9ca3af" }}>
+            {l}
+          </button>
+        ))}
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
@@ -15262,7 +15318,8 @@ function LevelUpView({ players, onSelect, watchlist = null, onToggleWatch = null
                     {p.predIntlTier || "—"}
                     <span style={{ color: "#6b7280", fontWeight: 400 }}> ({p.intlLevelEv.toFixed(2)})</span>
                   </td>
-                  <td className="px-3 py-2.5 text-sm font-bold" style={{ color: "#22c55e", fontFamily: "'Oswald',sans-serif" }}>▲ +{p._climb.toFixed(2)}</td>
+                  <td className="px-3 py-2.5 text-sm font-bold" style={{ color: p._climb != null && p._climb >= 0 ? "#22c55e" : "#9ca3af", fontFamily: "'Oswald',sans-serif" }}>
+                    {p._climb != null ? `${p._climb >= 0 ? "▲ +" : "▼ "}${p._climb.toFixed(2)}` : "—"}</td>
                   <td className="px-3 py-2.5 text-xs" style={{ color: p.bpm != null ? (p.bpm > 6 ? "#22c55e" : p.bpm > 3 ? "#86efac" : "#9ca3af") : "#374151" }}>{p.bpm != null ? fmt(p.bpm, 1) : "—"}</td>
                   <td className="px-3 py-2.5 text-xs font-semibold" style={{ color: fr.c }}>{nbaFlightPct(p).toFixed(0)}% <span style={{ fontWeight: 400, color: "#6b7280" }}>({fr.l})</span></td>
                 </tr>
@@ -15272,7 +15329,9 @@ function LevelUpView({ players, onSelect, watchlist = null, onToggleWatch = null
         </table>
       </div>
       <div style={{ padding: "10px 16px", color: "#6b7280", fontSize: 10, borderTop: "1px solid #1f2937" }}>
-        Sorted by climb (projected − current level, min +{CLIMB_MIN.toFixed(2)}) · NBA near-locks excluded · adj. BPM = production translated onto the NCAA-equivalent scale · Click = full profile
+        {mode === "climb"
+          ? <>Sorted by climb (projected − current level, min +{CLIMB_MIN.toFixed(2)})</>
+          : <>Sorted by absolute projected level (Pro-Ready — no climb threshold, undervalued or not)</>} · NBA near-locks excluded · adj. BPM = production translated onto the NCAA-equivalent scale · Click = full profile
       </div>
     </div>
   );
@@ -17110,6 +17169,11 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
     try { return JSON.parse(window.localStorage.getItem(WATCHLIST_KEY)) || []; } catch { return []; }
   });
   const [intlView,setIntlView]=useState("board"); // "board" | "watch" | "levelup" | "college" | "youth" | "future"
+  // Recruiting-Fundament: der VOLLE Intl-Markt (~160 current-class Spieler,
+  // /api/market/intl) zusätzlich zum WAR-Top-200-Board, das nur eine Handvoll
+  // Internationals enthält. null = noch nicht geladen, [] = Fetch-Fehler
+  // (Board-only-Fallback, Views funktionieren wie bisher).
+  const [marketIntl,setMarketIntl]=useState(null);
   // Recruiting-Suchfilter: Projected Level + Alters-Fenster — wirken auf alle
   // spielerbasierten Recruiting-Ansichten (nicht auf das modellfreie Youth Radar).
   const [intlLevelFilter,setIntlLevelFilter]=useState("All");
@@ -17178,8 +17242,40 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
     }
   },[roomPicks, allPlayers]);
 
+  // Intl-Markt einmalig laden, sobald die Recruiting-Lens aktiv wird.
+  // mapProfile wie in installPlayers; Registrierung in PLAYERS nur für die
+  // Navigation (selectPlayer schlägt dort nach) und nur auf freie Keys —
+  // Board-Einträge werden nie überschrieben, PLAYER_LIST (Basis des
+  // NBA-Lens-Pools) bleibt unberührt.
+  useEffect(()=>{
+    if (lens!=="intl" || marketIntl!==null) return;
+    let alive=true;
+    fetch(`${API_BASE}/market/intl`)
+      .then(r=>r.ok?r.json():Promise.reject(r.status))
+      .then(d=>{
+        if(!alive) return;
+        const mapped=(d.players||[]).map(pl=>{
+          const m=mapProfile(pl)||{};
+          m.player_id=pl.player_id||m.player_id;
+          m.slug=pl.slug||m.slug;
+          m.name=pl.name||m.name;
+          return m;
+        });
+        mapped.forEach(m=>{ if(m.name && !PLAYERS[m.name]) PLAYERS[m.name]=m; });
+        setMarketIntl(mapped);
+      })
+      .catch(()=>{ if(alive) setMarketIntl([]); });
+    return ()=>{alive=false;};
+  },[lens, marketIntl]);
+
   const filtered = useMemo(()=>{
+    // Recruiting-Lens: Board-Pool + Markt-Extras (Dedupe über player_id —
+    // die wenigen Board-Internationals bleiben die Board-Version).
     let list = allPlayers;
+    if (lens==="intl" && marketIntl && marketIntl.length) {
+      const seen = new Set(allPlayers.map(p=>p.player_id));
+      list = allPlayers.concat(marketIntl.filter(m=>!seen.has(m.player_id)));
+    }
     // Position + International filter
     if (posFilter === "International") {
       list = list.filter(p => p.source && p.source !== "ncaa");
@@ -17227,7 +17323,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
     // International-Board braucht den vollen Pool (Spieler mit NBA% < 20 % liegen
     // gerade UNTER dem WAR-Top-100); IntlBoardView filtert + capped selbst.
     return lens === "intl" ? withRanges : withRanges.slice(0, 100);
-  }, [allPlayers, sortBy, posFilter, gmRisk, lens]);
+  }, [allPlayers, marketIntl, sortBy, posFilter, gmRisk, lens]);
 
   const posColors = {Playmaker:"#3b82f6", Wing:"#f97316", Big:"#8b5cf6"};
 

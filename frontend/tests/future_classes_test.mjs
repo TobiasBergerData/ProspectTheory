@@ -105,6 +105,27 @@ ok(/not a projection/i.test(view), "Copy: 'not a projection'-Vorbehalt fehlt");
 ok(/class_exact \? p\.class_min : `≥ \$\{p\.class_min\}`/.test(view),
    "Render: exakte vs. ≥-Kohorten-Anzeige fehlt");
 
+/* ── 4. Recruiting-Fundament (Markt-Pool + Kohorten-Tabs + Pro-Ready) ──
+   Mit im selben Test, weil dieselbe Baustelle: der volle Intl-Markt
+   (/api/market/intl) speist College Targets, Level-Up und Similar. */
+ok(src.includes("/market/intl"), "fetch-Route /market/intl fehlt");
+ok(/marketIntl\.filter\(m=>!seen\.has\(m\.player_id\)\)/.test(src),
+   "Markt-Merge ohne player_id-Dedupe gegen den Board-Pool");
+ok(src.includes("if(m.name && !PLAYERS[m.name]) PLAYERS[m.name]=m;"),
+   "Markt-Spieler überschreiben Board-Einträge in PLAYERS (nur freie Keys erlaubt)");
+const college = src.slice(src.indexOf("function CollegeTargetsView"),
+                          src.indexOf("function ", src.indexOf("function CollegeTargetsView") + 10));
+ok(/Class of \$\{baseYear/.test(college), "College Targets: Kohorten-Tabs fehlen");
+ok(/earliest draft\s+class/.test(college), "College Targets: Kohorten-Copy fehlt");
+const lvl = src.slice(src.indexOf("function LevelUpView"),
+                      src.indexOf("function ", src.indexOf("function LevelUpView") + 10));
+ok(/\[mode, setMode\] = useState\("climb"\)/.test(lvl),
+   "Level-Up: Climb/Pro-Ready-Toggle fehlt (Default muss climb bleiben)");
+ok(/CLIMB_MIN = 0\.08/.test(lvl),
+   "Level-Up: validierte Climb-Schwelle 0.08 verändert — nicht ohne neuen Backtest");
+ok(/p\._climb != null \? /.test(lvl),
+   "Level-Up: Climb-Zelle nicht null-sicher (Pro-Ready-Modus hat Spieler ohne Umfeld-Level)");
+
 /* ── Ergebnis ── */
 if (fails.length) {
   console.error(`FAIL  ${fails.length} Verstöße:`);
