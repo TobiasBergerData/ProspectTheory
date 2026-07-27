@@ -13469,14 +13469,40 @@ function DraftSharpeLab() {
 // History-Einträge, der Zurück-Button bleibt unverändert.
 // SSR-SICHER: die Render-Tests führen Komponenten in Node aus — ohne
 // window-Guard würde jeder useState-Initializer crashen.
-const ptHashParts = () => (typeof window === "undefined" ? []
-  : window.location.hash.replace(/^#\/?/, "").split("/").filter(Boolean));
-const ptSetHash = (parts) => {
+// FORMAT: "#/pfad/segmente?lens=recruiting&room=a,b" — Pfad UND Parameter
+// koexistieren. Rückwärtskompatibel: ein Alt-Link "#lens=recruiting" (ohne
+// führenden Slash) wird komplett als Parameter-Teil gelesen. Lens- und
+// Room-Effekte schreiben NUR über ptSetHashQuery — ein URLSearchParams-
+// Rewrite über den ganzen Hash würde den Pfad-Teil percent-encodieren
+// und zerstören (28.07.2026 beim Zusammenführen der beiden Hash-Systeme
+// gefunden, bevor es live ging).
+const ptHashRaw = () => (typeof window === "undefined" ? ""
+  : window.location.hash.replace(/^#/, ""));
+const ptHashSplit = () => {
+  const raw = ptHashRaw();
+  if (!raw.startsWith("/")) return ["", raw];          // Legacy: alles Query
+  const i = raw.indexOf("?");
+  return i < 0 ? [raw, ""] : [raw.slice(0, i), raw.slice(i + 1)];
+};
+const ptHashParts = () =>
+  ptHashSplit()[0].replace(/^\//, "").split("/").filter(Boolean);
+const ptHashQuery = () => new URLSearchParams(ptHashSplit()[1]);
+const ptWriteHash = (parts, q) => {
   if (typeof window === "undefined") return;
-  const h = parts.length ? "#/" + parts.join("/") : window.location.pathname;
-  if (window.location.hash !== (parts.length ? h : "")) {
-    window.history.replaceState(null, "", h);
+  const qs = q.toString();
+  let h = "";
+  if (parts.length) h = "#/" + parts.join("/") + (qs ? "?" + qs : "");
+  else if (qs) h = "#" + qs;                            // Legacy-Form erhalten
+  if ((window.location.hash || "") !== h) {
+    window.history.replaceState(window.history.state, "",
+      window.location.pathname + window.location.search + h);
   }
+};
+const ptSetHash = (parts) => ptWriteHash(parts, ptHashQuery());
+const ptSetHashQuery = (mutate) => {
+  const q = ptHashQuery();
+  mutate(q);
+  ptWriteHash(ptHashParts(), q);
 };
 const ptInitSeg = (idx, allowed, fallback) => {
   const s = ptHashParts()[idx];
@@ -17006,8 +17032,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
     if (typeof window==="undefined" || _roomHashApplied.current || !allPlayers.length) return;
     _roomHashApplied.current = true;
     if (lens==="intl") return;
-    const h = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-    const r = h.get("room");
+    const r = ptHashQuery().get("room");
     if (!r) return;
     const found = r.split(",").filter(Boolean)
       .map(id => allPlayers.find(p => p.slug===id || p.name===decodeURIComponent(id))?.name)
@@ -17018,14 +17043,11 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
   // Deep-Link schreiben: Picks → room=-Param (nur diesen Key anfassen, lens= bleibt).
   useEffect(()=>{
     if (typeof window==="undefined" || !_roomHashApplied.current) return;
-    const h = new URLSearchParams(window.location.hash.replace(/^#/, ""));
     const want = roomPicks.length
       ? roomPicks.map(n => allPlayers.find(p=>p.name===n)?.slug || encodeURIComponent(n)).join(",")
       : null;
-    if ((h.get("room") || null) !== want) {
-      if (want) h.set("room", want); else h.delete("room");
-      const hs = h.toString();
-      window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search + (hs ? `#${hs}` : ""));
+    if ((ptHashQuery().get("room") || null) !== want) {
+      ptSetHashQuery(q => { if (want) q.set("room", want); else q.delete("room"); });
     }
   },[roomPicks, allPlayers]);
 
@@ -17635,12 +17657,10 @@ export default function App() {
     if (typeof window==="undefined") return;
     // Parametrisierter Hash: dieser Effect verwaltet NUR den lens-Key und lässt
     // andere Hash-Parameter (z.B. room= für den Draft-Room-Deep-Link) unberührt.
-    const h = new URLSearchParams(window.location.hash.replace(/^#/, ""));
     const want = lens==="intl" ? "recruiting" : null;
-    if ((h.get("lens") || null) !== want) {
-      if (want) h.set("lens", want); else h.delete("lens");
-      const hs = h.toString();
-      window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search + (hs ? `#${hs}` : ""));
+    if ((ptHashQuery().get("lens") || null) !== want) {
+      // NUR über den Query-Helper schreiben — Pfad-Segmente bleiben erhalten.
+      ptSetHashQuery(q => { if (want) q.set("lens", want); else q.delete("lens"); });
     }
   },[lens,sel]);
   useEffect(()=>{

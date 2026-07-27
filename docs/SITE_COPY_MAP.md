@@ -133,11 +133,20 @@ Schema `#/{tab}/{bereich}/{view}` — teilbare Adressen:
 | Archetype Value Bands | `prospecttheory.io/#/research/archetypes` |
 | Stats Lab / Methods | `prospecttheory.io/#/lab` · `…/#/methods` |
 
-Regeln: Hash-URLs (kein Server-Rewrite nötig); `replaceState`, also keine
-History-Einträge; unbekannte Segmente fallen still auf den Default zurück.
-Neue Views bekommen ihr Segment über `ptInitSeg`/`ptSyncHash` — Guard
-gegen das Kind-vor-Eltern-Effekt-Rennen nicht entfernen (Kommentar am
-Helper erklärt es).
+**Spieler-Profile** haben ECHTE Pfade (kein Hash): `prospecttheory.io/player/{slug}`
+— pushState beim Öffnen, popstate-Handler, Deep-Link-Resolver (Slug direkt →
+Namens-Suche-Fallback), Vercel-Rewrite `/player/:slug` → index.html, SEO-Metatags,
+48k-URL-Sitemap. Bestand schon vor dem Hash-Routing; NICHT auf Hash umstellen
+(SEO/Sitemap hängen an den Pfaden).
+
+Hash-FORMAT seit 2026-07-28 vereinheitlicht: `#/pfad/segmente?lens=…&room=…` —
+Pfad-Teil (Bereiche/Views) und Parameter-Teil (Lens, Draft-Room) koexistieren.
+Alt-Links `#lens=recruiting` (ohne Slash) bleiben lesbar. REGELN: Lens/Room
+schreiben NUR über `ptSetHashQuery` (ein URLSearchParams-Rewrite über den ganzen
+Hash würde den Pfad percent-encodieren und zerstören); Views über
+`ptInitSeg`/`ptSyncHash` — der Guard gegen das Kind-vor-Eltern-Effekt-Rennen
+bleibt (Kommentar am Helper). `replaceState`, keine History-Einträge; unbekannte
+Segmente fallen still auf den Default zurück.
 
 ## FO-Lab: Value Capture + Hit-Kontext (2026-07-28)
 
