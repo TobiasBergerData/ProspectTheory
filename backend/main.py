@@ -1156,6 +1156,21 @@ async def get_market_intl(response: Response):
                         "(run export_board_static.py)")
 
 
+@app.get("/api/market/ncaa")
+async def get_market_ncaa(response: Response):
+    """NCAA-Markt (College-to-Pro): ALLE current-class NCAA-Spieler
+    (~3.850) im LEAN-Feldsatz — der Moneyball-Pool für internationale
+    Front Offices, die College-Absolventen als Erstlingsprofis holen.
+    Kein Top-N-Cap: der alte produktive Senior ohne NBA-Upside fällt aus
+    jeder Peak-WAR-Sortierung, ist hier aber genau das Ziel. Statisch
+    materialisiert von export_board_static.py."""
+    static = _serve_static_or_none("market_ncaa.json", response, max_age=600)
+    if static:
+        return static
+    raise HTTPException(status_code=503, detail="ncaa market not yet built "
+                        "(run export_board_static.py)")
+
+
 @app.get("/api/future-classes")
 async def get_future_classes(response: Response):
     """Future Classes (Recruiting-Lens): Jugendspieler der NÄCHSTEN

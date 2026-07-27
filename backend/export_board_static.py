@@ -123,6 +123,72 @@ def _build_market_intl_payload(conn: sqlite3.Connection) -> dict:
     }
 
 
+# College-to-Pro (Moneyball-Sicht für intl Front Offices): LEAN-Feldsatz,
+# weil der volle NCAA-Markt ~3.850 Spieler hat — mit allen 108 Feldern wären
+# das ~7 MB Payload. Diese Felder decken genau, was die View braucht:
+# Identität, Kontext, Level-Projektion, NBA-Flight-Risk (tiers via prob_*),
+# Produktions-Evidenz. KEIN Top-N-Cap — der klassische Moneyball-Fund (alter
+# produktiver Senior ohne NBA-Upside) fällt aus jeder Peak-WAR-Sortierung.
+_MARKET_NCAA_BOARD_COLS = (
+    "team", "pos", "year", "conf", "source", "war", "age", "bpm",
+    "archetype", "confidence",
+    "prob_super", "prob_allstar", "prob_starter",
+    "prob_role", "prob_repl", "prob_out",
+)
+_MARKET_NCAA_BLOB_COLS = (
+    "ht", "pred_intl_tier", "intl_level_ev", "conf_strength",
+    "intl_comps", "p_intl_career", "gp", "min",
+)
+
+
+def _build_market_ncaa_payload(conn: sqlite3.Connection) -> dict:
+    """Alle current-class NCAA-Spieler (gleiche Qualitäts-Filter wie das
+    Board), lean. Blobs werden CHUNKED dekomprimiert und sofort auf die
+    Lean-Felder reduziert — nie alle ~3.850 vollen Profile gleichzeitig im
+    Speicher (Render-Build läuft, aber wir bleiben bewusst sparsam)."""
+    rows = conn.execute(
+        "SELECT * FROM board WHERE source='ncaa' AND is_current_class=1 "
+        "AND (confidence != 'very_low' OR confidence IS NULL) "
+        "AND (age IS NULL OR age <= 24.5)",
+    ).fetchall()
+    n_total = conn.execute(
+        "SELECT COUNT(*) FROM board WHERE source='ncaa' AND is_current_class=1"
+    ).fetchone()[0]
+
+    results = []
+    CHUNK = 400
+    for i in range(0, len(rows), CHUNK):
+        chunk = rows[i:i + CHUNK]
+        pids = [r["player_id"] for r in chunk]
+        blobs = {}
+        placeholders = ",".join(["?"] * len(pids))
+        for b in conn.execute(
+            f"SELECT player_id, data FROM profiles WHERE player_id IN ({placeholders})",
+            pids,
+        ):
+            full = _decompress_blob(b["data"]) or {}
+            blobs[b["player_id"]] = {k: full.get(k) for k in _MARKET_NCAA_BLOB_COLS}
+        for r in chunk:
+            entry = {"player_id": r["player_id"],
+                     "slug": r["slug"], "name": r["name"]}
+            for k in _MARKET_NCAA_BOARD_COLS:
+                v = r[k] if k in r.keys() else None
+                if v is not None:
+                    entry["yr" if k == "year" else k] = v
+            for k, v in blobs.get(r["player_id"], {}).items():
+                if v is not None and entry.get(k) is None:
+                    entry[k] = v
+            results.append(entry)
+    # Einkaufs-Reihenfolge: absolutes projiziertes Level (Pro-Ready), nulls ans Ende.
+    results.sort(key=lambda e: -(e.get("intl_level_ev")
+                                 if e.get("intl_level_ev") is not None else -99))
+    return {
+        "count": len(results),
+        "n_excluded_quality": n_total - len(results),
+        "players": results,
+    }
+
+
 def _rows_to_entries(conn: sqlite3.Connection, rows: list) -> list:
     """board-Rows + Profile-Blobs → Frontend-Player-Entries (exakt das
     Format von main.py:get_board(), Single Source of Truth via _BOARD_FIELDS)."""
@@ -230,6 +296,14 @@ def main():
     print(f"  ✓ market_intl.json ({len(payload_market['players']):>4} players, "
           f"{size_market/1024:>7.1f} KB, quality-excluded: "
           f"{payload_market['n_excluded_quality']})")
+
+    # ── 2c) NCAA-Markt (College-to-Pro): alle current-class NCAA, lean ──────
+    payload_ncaa = _build_market_ncaa_payload(conn)
+    size_ncaa = _write_json(STATIC_DIR / "market_ncaa.json", payload_ncaa)
+    total_bytes += size_ncaa
+    print(f"  ✓ market_ncaa.json ({len(payload_ncaa['players']):>4} players, "
+          f"{size_ncaa/1024:>7.1f} KB, quality-excluded: "
+          f"{payload_ncaa['n_excluded_quality']})")
 
     # ── 3) Years-Liste ──────────────────────────────────────────────────────
     years_payload = {

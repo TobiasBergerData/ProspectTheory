@@ -14946,7 +14946,7 @@ function YouthRadarView() {
 // — sie bleiben im Youth Radar. Quelle: /api/future-classes (statisch,
 // gebaut von export_future_classes.py — alle Zahlen aus dem Payload).
 // ═══════════════════════════════════════════════════════════
-function FutureClassesView() {
+function FutureClassesView({ watchlist = null, onToggleWatch = null }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(false);
   const [cls, setCls] = useState(null);
@@ -14998,13 +14998,20 @@ function FutureClassesView() {
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr style={{ background: "#0a0e17" }}>
-            {["#", "Player", "Class", "Pos", "Ht", "Pro season", "GP", "MPG", "PTS", "REB", "AST", "TS%", ""].map((h, i) => (
+            {[...(onToggleWatch ? ["★"] : []), "#", "Player", "Class", "Pos", "Ht", "Pro season", "GP", "MPG", "PTS", "REB", "AST", "TS%", ""].map((h, i) => (
               <th key={i} className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold"
                   style={{ color: "#6b7280", borderBottom: "1px solid #1f2937" }}>{h}</th>))}
           </tr></thead>
           <tbody>
             {rows.map((p, i) => (
               <tr key={p.slug || p.name} style={{ borderBottom: "1px solid #1f293744", background: p.pro ? "#10b98108" : "transparent" }}>
+                {onToggleWatch && (
+                  <td className="px-3 py-2.5 text-sm" onClick={() => onToggleWatch(p.name)}
+                      title="Track this prospect — he appears on the Watchlist (as a pipeline note until he enters the market pool)."
+                      style={{ cursor: "pointer", color: (watchlist || []).includes(p.name) ? "#fbbf24" : "#374151" }}>
+                    {(watchlist || []).includes(p.name) ? "★" : "☆"}
+                  </td>
+                )}
                 <td className="px-3 py-2.5 font-bold text-xs" style={{ color: "#475569" }}>{i + 1}</td>
                 <td className="px-3 py-2.5">
                   <div className="font-semibold" style={{ color: "#e5e7eb" }}>{p.name}</div>
@@ -15057,6 +15064,146 @@ function FutureClassesView() {
       <div style={{ padding: "10px 16px", color: "#6b7280", fontSize: 10, borderTop: "1px solid #1f2937" }}>
         Within a class: pro-minute players first (by age-adjusted production), then youth-only players by scoring ·
         stats are youth-tournament production · green row tint = already under a pro roster · ↗ opens the RealGM profile
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// COLLEGE-TO-PRO — Recruiting-Lens: der VOLLE NCAA-Markt (~3.850) als
+// Einkaufsliste für internationale Front Offices. Moneyball-Logik: der
+// produktive Senior ohne NBA-Upside fällt aus jeder Peak-WAR-Top-200-
+// Sortierung — hier führt das absolute projizierte Liga-Level (dieselbe
+// kalibrierte Skala wie Level-Up/Pro-Ready), NBA-Near-Locks sind raus.
+// Quelle: /api/market/ncaa (lean, statisch, export_board_static.py).
+// ═══════════════════════════════════════════════════════════
+function CollegeToProView({ onSelect, watchlist = null, onToggleWatch = null }) {
+  const _awards = useAwards();
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(false);
+  const [ageBand, setAgeBand] = useState("all"); // "all" | "u21" | "senior"
+  const [q, setQ] = useState("");
+  const NBA_LOCK = 85;
+  const SHOW_N = 150;
+  useEffect(() => {
+    let alive = true;
+    fetch(`${API_BASE}/market/ncaa`)
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(d => {
+        if (!alive) return;
+        const mapped = (d.players || []).map(pl => {
+          const m = mapProfile(pl) || {};
+          m.player_id = pl.player_id || m.player_id;
+          m.slug = pl.slug || m.slug;
+          m.name = pl.name || m.name;
+          return m;
+        });
+        // Navigation: nur freie Keys registrieren, Board-Einträge unangetastet.
+        mapped.forEach(m => { if (m.name && !PLAYERS[m.name]) PLAYERS[m.name] = m; });
+        setData(mapped);
+      })
+      .catch(() => { if (alive) setErr(true); });
+    return () => { alive = false; };
+  }, []);
+
+  const tierColor = (t) => (INTL_TIERS.find(x => x.key === t)?.color) || "#9ca3af";
+  const flight = (pct) => pct >= 60 ? { l: "high", c: "#ef4444" } : pct >= 30 ? { l: "med", c: "#f97316" } : { l: "low", c: "#22c55e" };
+  const empty = (msg) => (
+    <div style={{ padding: 24, color: "#9ca3af", background: "#111827", borderRadius: 12, border: "1px solid #1f2937", lineHeight: 1.6 }}>{msg}</div>
+  );
+  if (err) return empty("The college-to-pro market is not available in this build yet (it is generated at deploy).");
+  if (!data) return empty("Loading the college-to-pro market…");
+  const ql = q.trim().toLowerCase();
+  const pool = data
+    .filter(p => p.intlLevelEv != null && nbaFlightPct(p) < NBA_LOCK)
+    .filter(p => {
+      const a = ageOnDraftDay(p.age);
+      if (ageBand === "u21") return a != null && a <= 21;
+      if (ageBand === "senior") return a != null && a >= 21.5;
+      return true;
+    })
+    .filter(p => !ql || (p.name || "").toLowerCase().includes(ql) || (p.team || "").toLowerCase().includes(ql))
+    .sort((a, b) => (b.intlLevelEv ?? -99) - (a.intlLevelEv ?? -99));
+  const rows = pool.slice(0, SHOW_N);
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ background: "#111827", border: "1px solid #1f2937" }}>
+      <div style={{ padding: "10px 14px", fontSize: 12, color: "#9ca3af", borderBottom: "1px solid #1f2937", lineHeight: 1.6 }}>
+        <b style={{ color: "#e5e7eb" }}>College-to-Pro</b> — the <b>full NCAA market</b> ({data.length.toLocaleString()} current-class
+        players, no top-200 cap) as a signing list for international front offices: college players leaving for their
+        <b> first professional contract</b>. Sorted by <b>absolute projected league level</b> (the same calibrated scale
+        as Level-Up / Pro-Ready — where can he hold a rotation spot, not how high is his NBA ceiling). This is the
+        moneyball cut: the productive senior with no NBA upside disappears from every draft board, but he is exactly
+        who a EuroLeague or first-division roster builder signs. NBA near-locks (≥{NBA_LOCK}% flight risk) are excluded —
+        everyone listed is realistically signable; the risk column shows how contested the signing would be.
+        {onToggleWatch && <> Use <b style={{ color: "#10b981" }}>☆</b> to track a target.</>}
+      </div>
+      <div className="flex gap-2 flex-wrap items-center" style={{ padding: "10px 14px", borderBottom: "1px solid #1f2937" }}>
+        {[["all", "All ages"], ["u21", "U21"], ["senior", "Seniors (21.5+)"]].map(([v, l]) => (
+          <button key={v} onClick={() => setAgeBand(v)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+            style={{ background: ageBand === v ? "#10b981" : "#1f2937", color: ageBand === v ? "#000" : "#9ca3af" }}>
+            {l}
+          </button>
+        ))}
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name / college…"
+          className="px-3 py-1.5 rounded-lg text-xs" style={{ background: "#1f2937", color: "#e5e7eb", border: "1px solid #374151", minWidth: 180 }}/>
+        <span style={{ fontSize: 10, color: "#6b7280" }}>{pool.length.toLocaleString()} signable · showing top {Math.min(SHOW_N, pool.length)}</span>
+      </div>
+      {!rows.length && <div style={{ padding: 24, color: "#9ca3af" }}>No players match the current filters.</div>}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead><tr style={{ background: "#0a0e17" }}>
+            {[...(onToggleWatch ? ["★"] : []), "#", "Player & career comps", "Pos", "Age", "College", "Projected level", "Climb vs NCAA env", "NBA risk"].map((h, i) => (
+              <th key={i} className="px-3 py-2.5 text-left text-xs uppercase tracking-wider font-semibold"
+                  style={{ color: "#6b7280", borderBottom: "1px solid #1f2937" }}>{h}</th>))}
+          </tr></thead>
+          <tbody>
+            {rows.map((p, i) => {
+              const fp = nbaFlightPct(p);
+              const fr = flight(fp);
+              const climb = p.confStrength != null ? p.intlLevelEv - p.confStrength : null;
+              return (
+                <tr key={p.player_id || p.name} className="cursor-pointer hover:bg-white hover:bg-opacity-5 transition-colors"
+                    onClick={() => onSelect(p.name)} style={{ borderBottom: "1px solid #1f293744" }}>
+                  {onToggleWatch && (
+                    <td className="px-3 py-2.5 text-sm" onClick={e => { e.stopPropagation(); onToggleWatch(p.name); }}
+                        style={{ cursor: "pointer", color: (watchlist || []).includes(p.name) ? "#fbbf24" : "#374151" }}>
+                      {(watchlist || []).includes(p.name) ? "★" : "☆"}
+                    </td>
+                  )}
+                  <td className="px-3 py-2.5 font-bold text-xs" style={{ color: "#475569" }}>{i + 1}</td>
+                  <td className="px-3 py-2.5">
+                    <div className="font-semibold" style={{ color: "#e5e7eb" }}>{p.name}<AwardBadge name={p.name} awards={_awards}/></div>
+                    {p.intlComps && (
+                      <div style={{ fontSize: 10, color: "#6b7280" }}>
+                        ≈ {p.intlComps.split(" | ").slice(0, 2).join(" · ")}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 text-xs" style={{ color: "#9ca3af" }}>{p.archetype || p.pos || "—"}</td>
+                  <td className="px-3 py-2.5 text-xs" style={{ color: "#9ca3af" }}>{p.age != null ? ageOnDraftDay(p.age).toFixed(1) : "—"}</td>
+                  <td className="px-3 py-2.5 text-xs" style={{ color: "#9ca3af" }}>
+                    {p.team || "—"}{p.conf ? <span style={{ color: "#4b5563" }}> · {p.conf}</span> : null}
+                  </td>
+                  <td className="px-3 py-2.5 text-xs">
+                    <span className="px-2 py-0.5 rounded font-semibold"
+                      style={{ background: tierColor(p.predIntlTier) + "22", color: tierColor(p.predIntlTier) }}>
+                      {p.predIntlTier || "—"}
+                    </span>
+                    <span style={{ marginLeft: 6, color: "#6b7280", fontSize: 10 }}>{p.intlLevelEv?.toFixed(2)}</span>
+                  </td>
+                  <td className="px-3 py-2.5 text-sm font-bold" style={{ color: climb != null && climb >= 0 ? "#22c55e" : "#9ca3af", fontFamily: "'Oswald',sans-serif" }}>
+                    {climb != null ? `${climb >= 0 ? "▲ +" : "▼ "}${climb.toFixed(2)}` : "—"}
+                  </td>
+                  <td className="px-3 py-2.5 text-xs font-semibold" style={{ color: fr.c }}>{fp.toFixed(0)}% <span style={{ fontWeight: 400, color: "#6b7280" }}>({fr.l})</span></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ padding: "10px 16px", color: "#6b7280", fontSize: 10, borderTop: "1px solid #1f2937" }}>
+        Sorted by absolute projected level · NBA near-locks (≥{NBA_LOCK}%) excluded · Climb = projected level − NCAA
+        conference environment (same scale as Value ▲) · Click = full profile
       </div>
     </div>
   );
@@ -15687,7 +15834,8 @@ function IntlBoardView({ players, onSelect, watchlist = null, onToggleWatch = nu
               <button onClick={() => onToggleWatch && onToggleWatch(n)} title="Remove from watchlist"
                 style={{ color: "#4b5563", marginLeft: 3 }}>✕</button>
             </span>
-          ))} <span style={{ color: "#4b5563" }}>— try a different year filter to see them.</span>
+          ))} <span style={{ color: "#4b5563" }}>— a different year filter may show them; Future-Classes prospects
+          stay here as pipeline notes until they enter the market pool.</span>
         </div>
       )}
     </div>
@@ -17437,7 +17585,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
           <div className="flex gap-1 mb-3 flex-wrap">
             {[["board","☰ Recruiting Board"],["watch",`★ Watchlist${watchlist.length?` (${watchlist.length})`:""}`],
               ["levelup","📈 Level-Up"],["portal","🌀 Portal Radar"],["college","🎓 College Targets"],
-              ["similar","⇄ Similar"],["youth","🔭 Youth Radar"],["future","🌱 Future Classes"]].map(([v,l])=>(
+              ["similar","⇄ Similar"],["c2p","🧳 College-to-Pro"],["youth","🔭 Youth Radar"],["future","🌱 Future Classes"]].map(([v,l])=>(
               <button key={v} onClick={()=>setIntlView(v)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
                 style={{background:intlView===v?"#10b981":"#1f2937",color:intlView===v?"#000":"#9ca3af"}}>
                 {l}
@@ -17446,7 +17594,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
           </div>
           {/* Suchfilter: Projected Level + Alter (gelten für Board/Watchlist/Level-Up/College —
               nicht für die modellfreien Ansichten Youth Radar und Future Classes) */}
-          {intlView!=="youth" && intlView!=="future" && (
+          {intlView!=="youth" && intlView!=="future" && intlView!=="c2p" && (
             <div className="flex items-center gap-3 mb-3 flex-wrap">
               <div className="flex gap-1 items-center">
                 <span className="text-[10px] uppercase tracking-wider" style={{color:"#4b5563"}}>Level</span>
@@ -17486,13 +17634,15 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
             </div>
           )}
           {(()=>{
-            const intlFiltered = (intlView==="youth" || intlView==="future") ? filtered : filtered.filter(p =>
+            const intlFiltered = (intlView==="youth" || intlView==="future" || intlView==="c2p") ? filtered : filtered.filter(p =>
               (intlLevelFilter==="All" || p.predIntlTier===intlLevelFilter) &&
               (intlAgeMax>=99 || (p.age!=null && ageOnDraftDay(p.age)<=intlAgeMax)) &&
               (intlRoleFilter==="All" || (p.archetypesAll || p.archetype || "").split("|").includes(intlRoleFilter)) &&
               (!intlLurkOnly || isLurker(p)));
             return intlView==="future" ? (
-              <FutureClassesView/>
+              <FutureClassesView watchlist={watchlist} onToggleWatch={toggleWatch}/>
+            ) : intlView==="c2p" ? (
+              <CollegeToProView onSelect={onSelect} watchlist={watchlist} onToggleWatch={toggleWatch}/>
             ) : intlView==="youth" ? (
               <YouthRadarView/>
             ) : intlView==="college" ? (

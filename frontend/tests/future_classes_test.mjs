@@ -126,6 +126,26 @@ ok(/CLIMB_MIN = 0\.08/.test(lvl),
 ok(/p\._climb != null \? /.test(lvl),
    "Level-Up: Climb-Zelle nicht null-sicher (Pro-Ready-Modus hat Spieler ohne Umfeld-Level)");
 
+/* ── 5. College-to-Pro (NCAA-Markt) + Watchlist-Durchgriff ── */
+ok(src.includes("/market/ncaa"), "fetch-Route /market/ncaa fehlt");
+ok(src.includes("function CollegeToProView"), "CollegeToProView fehlt");
+ok(src.includes('"c2p","🧳 College-to-Pro"'), "View-Button 'c2p' nicht registriert");
+ok(src.includes('intlView==="c2p"'), "Render-Zweig für 'c2p' fehlt");
+ok(src.includes('intlView!=="youth" && intlView!=="future" && intlView!=="c2p"'),
+   "Filter-Leiste nicht von College-to-Pro ausgenommen");
+const c2p = src.slice(src.indexOf("function CollegeToProView"),
+                      src.indexOf("function ", src.indexOf("function CollegeToProView") + 10));
+ok(/no top-200 cap/i.test(c2p), "C2P-Copy: 'no top-200 cap' fehlt");
+ok(/absolute projected league level/i.test(c2p), "C2P-Copy: Sortier-Behauptung fehlt");
+ok(/nbaFlightPct\(p\) < NBA_LOCK/.test(c2p), "C2P: NBA-Lock-Ausschluss fehlt");
+ok(/first professional contract/i.test(c2p), "C2P-Copy: Erstvertrags-Framing fehlt");
+// Watchlist-Durchgriff: Future Classes trägt ★ und der Watch-View benennt
+// Pipeline-Einträge, die noch nicht im Markt-Pool sind.
+ok(/FutureClassesView watchlist=\{watchlist\} onToggleWatch=\{toggleWatch\}/.test(src),
+   "Future Classes ohne Watchlist-Props");
+ok(/pipeline notes until they enter the market pool/.test(src),
+   "Watch-View: Pipeline-Hinweis für Future-Classes-Einträge fehlt");
+
 /* ── Ergebnis ── */
 if (fails.length) {
   console.error(`FAIL  ${fails.length} Verstöße:`);
