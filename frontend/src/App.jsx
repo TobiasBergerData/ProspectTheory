@@ -13058,7 +13058,9 @@ function FoMethod({ data }) {
 
 function FrontOfficeLab() {
   const { data, err } = useFrontOffice();
-  const [view, setView] = useState("regimes");
+  const [view, setView] = useState(() =>
+    ptInitSeg(2, ["regimes", "replay", "board", "method"], "regimes"));
+  useEffect(() => { ptSyncHash(2, ["research", "front-office", view]); }, [view]);
   const empty = (msg) => (
     <div className="rounded-xl p-6 text-sm text-gray-400 leading-relaxed" style={FO_PANEL}>{msg}</div>
   );
@@ -13408,9 +13410,13 @@ function ShHeadToHead({ h }) {
 }
 
 // ─── Wrapper
+const PT_SH2SEG = { matrix: "matrix", h2h: "equal", method: "method" };
+const PT_SEG2SH = { matrix: "matrix", equal: "h2h", method: "method" };
 function DraftSharpeLab() {
   const { data, err } = useDraftSharpe();
-  const [view, setView] = useState("matrix");
+  const [view, setView] = useState(() =>
+    PT_SEG2SH[ptInitSeg(2, Object.keys(PT_SEG2SH), "matrix")]);
+  useEffect(() => { ptSyncHash(2, ["research", "sharpe", PT_SH2SEG[view]]); }, [view]);
   const [variant, setVariant] = useState("pos_base");
   const empty = (msg) => (
     <div className="rounded-xl p-6 text-sm text-gray-400 leading-relaxed" style={SH_PANEL}>{msg}</div>
@@ -13450,9 +13456,44 @@ function DraftSharpeLab() {
 }
 // ─── SHARPE_BLOCK_END ──────────────────────────────────────────────────────
 
+// ─── Teilbare Hash-URLs (28.07.2026) ────────────────────────────────────────
+// Schema: #/{tab}/{bereich}/{view}, z. B. #/research/front-office/regimes,
+// #/research/sharpe/equal, #/lab, #/methods. Hash statt echter Pfade,
+// weil die SPA so ohne Server-Rewrites teilbar bleibt (Render liefert
+// immer index.html; der Hash erreicht den Server nie).
+// MECHANIK: jede Nav-Ebene liest beim Mount NUR ihr eigenes Segment und
+// schreibt bei Änderung den vollen bekannten Pfad — mit Guard gegen das
+// Effekt-Rennen (Kind-Effekte laufen vor Eltern-Effekten: ohne Guard
+// würde der Eltern-Write den tieferen Pfad des frisch gemounteten Kindes
+// wieder abschneiden). replaceState statt location.hash-Zuweisung: keine
+// History-Einträge, der Zurück-Button bleibt unverändert.
+// SSR-SICHER: die Render-Tests führen Komponenten in Node aus — ohne
+// window-Guard würde jeder useState-Initializer crashen.
+const ptHashParts = () => (typeof window === "undefined" ? []
+  : window.location.hash.replace(/^#\/?/, "").split("/").filter(Boolean));
+const ptSetHash = (parts) => {
+  if (typeof window === "undefined") return;
+  const h = parts.length ? "#/" + parts.join("/") : window.location.pathname;
+  if (window.location.hash !== (parts.length ? h : "")) {
+    window.history.replaceState(null, "", h);
+  }
+};
+const ptInitSeg = (idx, allowed, fallback) => {
+  const s = ptHashParts()[idx];
+  return allowed.includes(s) ? s : fallback;
+};
+// Guard-Write: nur schreiben, wenn das eigene Segment nicht schon stimmt.
+const ptSyncHash = (idx, parts) => {
+  if ((ptHashParts()[idx] || "") !== (parts[idx] || "")) ptSetHash(parts);
+};
+
 // ─── Research-Tab: Archetyp-Bänder + Front Office Lab
+const PT_AREA2SEG = { archetypes: "archetypes", frontoffice: "front-office", sharpe: "sharpe" };
+const PT_SEG2AREA = { "archetypes": "archetypes", "front-office": "frontoffice", "sharpe": "sharpe" };
 function ResearchTab({p}) {
-  const [area, setArea] = useState("archetypes");
+  const [area, setArea] = useState(() =>
+    PT_SEG2AREA[ptInitSeg(1, Object.keys(PT_SEG2AREA), "archetypes")]);
+  useEffect(() => { ptSyncHash(1, ["research", PT_AREA2SEG[area]]); }, [area]);
   const AREAS = [["archetypes", "Archetype Value Bands"], ["frontoffice", "Front Office Lab"], ["sharpe", "Draft Sharpe"]];
   return (
     <div className="space-y-4">
@@ -17573,7 +17614,14 @@ function OutcomeKdeCurve({ player }) {
 export default function App() {
   const [sel,setSel]=useState(null);
   const [tab,setTab]=useState("overview");
-  const [boardView,setBoardView]=useState("bigboard");  // Startseite: bigboard | research | methods
+  // Startseite: bigboard | lab | research | methods — Segment 0 der Hash-URL
+  const [boardView,setBoardView]=useState(() => {
+    const s = ptInitSeg(0, ["research", "lab", "methods"], "bigboard");
+    return s;
+  });
+  useEffect(() => {
+    ptSyncHash(0, boardView === "bigboard" ? [] : [boardView]);
+  }, [boardView]);
   // Lens = Top-Level-IA: zwei Berufe, zwei Fragen. NBA-Scout ("wen draften?") vs.
   // Intl-Sportdirektor ("wen verpflichten?"). Kein Router vorhanden — Hash reicht
   // (#lens=recruiting); Player-/Board-Routing über pathname bleibt unberührt.

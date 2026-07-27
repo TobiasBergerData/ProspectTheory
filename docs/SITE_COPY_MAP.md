@@ -120,6 +120,25 @@ FDR"-Badge nur payload-getrieben (`outcome.bh_sig`; Render-Test zählt
 sie). Der Regime-Vorbehalt („is not a claim draft samples can support")
 ist Pflicht-Copy.
 
+## Teilbare URLs (Hash-Routing, 2026-07-28)
+
+Schema `#/{tab}/{bereich}/{view}` — teilbare Adressen:
+
+| Bereich | URL |
+|---|---|
+| Front Office Lab (Regimes) | `prospecttheory.io/#/research/front-office/regimes` |
+| FO Draft Replay / League Board / Method | `…/front-office/replay` · `…/board` · `…/method` |
+| Draft Sharpe Matrix | `prospecttheory.io/#/research/sharpe/matrix` |
+| Board Said Equal | `prospecttheory.io/#/research/sharpe/equal` |
+| Archetype Value Bands | `prospecttheory.io/#/research/archetypes` |
+| Stats Lab / Methods | `prospecttheory.io/#/lab` · `…/#/methods` |
+
+Regeln: Hash-URLs (kein Server-Rewrite nötig); `replaceState`, also keine
+History-Einträge; unbekannte Segmente fallen still auf den Default zurück.
+Neue Views bekommen ihr Segment über `ptInitSeg`/`ptSyncHash` — Guard
+gegen das Kind-vor-Eltern-Effekt-Rennen nicht entfernen (Kommentar am
+Helper erklärt es).
+
 ## FO-Lab: Value Capture + Hit-Kontext (2026-07-28)
 
 | Element | Regel |
