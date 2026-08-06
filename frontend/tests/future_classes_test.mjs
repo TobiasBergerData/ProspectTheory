@@ -203,6 +203,13 @@ ok(src.includes("pt_role_intro_v1"), "Rollen-Einstieg fehlt");
 ok(src.includes("Report data issue"), "Data-Issue-Link fehlt");
 ok(src.includes("⇪ Export") && src.includes("⇩ Import"), "Watchlist Export/Import fehlt");
 
+/* ── 10. Youth Radar: Turnier-Filter + Deep-Link (?event=) ── */
+ok(src.includes('ptHashQuery().get("event")'), "Youth: event-Deep-Link wird nicht gelesen");
+ok(src.includes('q.set("event", ev)'), "Youth: event-Deep-Link wird nicht geschrieben");
+ok(src.includes("_evSlug(t) === ev"), "Youth: Turnier-Filter fehlt");
+ok(src.includes("re-run the youth scrape"), "Youth: ehrlicher Empty-State für ungescrapte Events fehlt");
+ok(/includes\("'26"\) \? "🔥 " : ""/.test(src), "Youth: Markierung der aktuellen Editionen fehlt");
+
 /* ── Ergebnis ── */
 if (fails.length) {
   console.error(`FAIL  ${fails.length} Verstöße:`);

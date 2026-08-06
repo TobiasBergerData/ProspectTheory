@@ -14894,6 +14894,19 @@ const LURKER_TIP = "Lurker — role headroom: top-30% efficiency on a small role
 function YouthRadarView() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(false);
+  // Turnier-Filter + Deep-Link (?event=<slug>): teilbare Turnier-Bestenliste,
+  // z.B. während einer laufenden EM. Slug = Label ohne Sonderzeichen.
+  const _evSlug = (t) => t.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const [ev, setEv] = useState(() => {
+    try { return ptHashQuery().get("event") || "all"; } catch { return "all"; }
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if ((ptHashQuery().get("event") || "all") !== ev) {
+      ptSetHashQuery(q => { if (ev === "all") q.delete("event"); else q.set("event", ev); });
+    }
+    return () => { try { ptSetHashQuery(q => q.delete("event")); } catch {} };
+  }, [ev]);
   useEffect(() => {
     let alive = true;
     ptFetch("/youth")
@@ -14909,8 +14922,12 @@ function YouthRadarView() {
   );
   if (err) return empty("Youth radar is not available in this build yet.");
   if (!data) return empty("Loading youth tournament data…");
-  const players = data.players || [];
-  if (!players.length) return empty(
+  const allPlayers = data.players || [];
+  // '26er-Editionen (aktueller Sommer-Zyklus) zuerst in der Chip-Leiste
+  const evs = [...(data.tournaments || [])].sort((a, b) => (b.includes("'26") ? 1 : 0) - (a.includes("'26") ? 1 : 0));
+  const players = ev === "all" ? allPlayers
+    : allPlayers.filter(p => (p.tournaments || []).some(t => _evSlug(t) === ev));
+  if (!allPlayers.length) return empty(
     <>No youth tournament data in this build yet — the radar fills up once the ANGT circuit has been scraped for the current season.</>
   );
   return (
@@ -14927,6 +14944,18 @@ function YouthRadarView() {
         an event. Use it to build an early watch universe, then follow players into their senior seasons where the full
         model applies.
       </div>
+      <div className="flex gap-1 flex-wrap" style={{ padding: "8px 14px", borderBottom: "1px solid #1f2937" }}>
+        <button onClick={() => setEv("all")} className="px-2 py-1 rounded text-xs font-semibold"
+          style={{ background: ev === "all" ? "#10b981" : "#1f2937", color: ev === "all" ? "#000" : "#9ca3af" }}>All events</button>
+        {evs.map(t => (
+          <button key={t} onClick={() => setEv(_evSlug(t))} className="px-2 py-1 rounded text-xs font-semibold"
+            title={t.includes("'26") ? "Current-summer edition — refreshed with every scrape while the tournament runs" : t}
+            style={{ background: ev === _evSlug(t) ? "#10b981" : "#1f2937", color: ev === _evSlug(t) ? "#000" : (t.includes("'26") ? "#fbbf24" : "#9ca3af") }}>
+            {t.includes("'26") ? "🔥 " : ""}{t}
+          </button>
+        ))}
+      </div>
+      {!players.length && <div style={{ padding: 24, color: "#9ca3af" }}>No players from this event in the current scrape yet — re-run the youth scrape to pull a running tournament in.</div>}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr style={{ background: "#0a0e17" }}>
