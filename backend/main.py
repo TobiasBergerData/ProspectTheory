@@ -1173,6 +1173,20 @@ async def get_track_record(response: Response):
     return json.loads(p.read_text(encoding="utf-8"))
 
 
+@app.get("/api/system_context")
+async def get_system_context(response: Response):
+    """System-context lines (feature 08/2026, Phase 0): per current-class
+    player the scheme facts for reading his raw style stats (value, team
+    baseline + percentile, raw vs team-relative percentile). DESCRIPTIVE —
+    the pre-registered gates (TEAM_REL_PRERULE T1+T1b) keep team-relative
+    rates OUT of the projections. Built by export_system_context.py."""
+    p = Path(os.environ.get("DATA_DIR", "data/processed")) / "api_system_context.json"
+    if not p.exists():
+        raise HTTPException(status_code=503, detail="system context not yet built")
+    response.headers["Cache-Control"] = "public, max-age=3600"
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
 @app.get("/api/awards")
 async def get_awards(response: Response):
     """League-Award-Badges (Recruiting-Lens): deskriptive Major-Awards je Spieler,

@@ -222,6 +222,22 @@ Zellen beschreiben, was gedraftete Typen zurückgaben; keine Selektions-
 Kausalität behaupten. Sharpe NIE ohne CI zitieren. Vergleiche NIE über
 Bänder hinweg formulieren („Playmaker M schlägt Big L" ist verboten).
 
+## System context card (2026-08-09)
+
+Player-page Overview card "System context": per style stat (STL/BLK/ORB/
+3PAr) the player's value, his team's scheme baseline with percentile, and
+raw vs. team-relative percentile. Payload `api_system_context.json`
+(export_system_context.py, from team_context*.csv; in master_refresh).
+Frontend: `useSystemContext` + `SysContextCard` in `App.jsx` (mounted at
+the top of OverviewTab; renders null for players outside the payload).
+COPY RULE (non-negotiable): this card is DESCRIPTIVE — the pre-registered
+gates (data-pipeline docs/TEAM_REL_PRERULE.md, T1 + T1b) showed
+team-relative rates predict WORSE than raw; the card header says "shown,
+not modeled" and the payload caveat states it. Never phrase this card as a
+correction or feed its numbers into projection copy. Green = scheme
+suppresses the stat (raw understates), blue = scheme inflates
+opportunities. Test: `node frontend/tests/system_context_render_test.mjs`.
+
 ## Session 2026-08-09: internal linking + league translation + mobile cards
 
 Three additions in one session. (1) INTERNAL LINKING: `PTFooterLinks` in

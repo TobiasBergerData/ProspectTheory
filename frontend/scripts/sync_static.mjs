@@ -40,6 +40,7 @@ const FILES = [
   ["api_nationality_map.json", "api_nationality_map.json"],
   ["api_league_pages.json", "api_league_pages.json"],
   ["api_track_record.json", "api_track_record.json"],
+  ["api_system_context.json", "api_system_context.json"],
 ];
 
 let n = 0, missing = [];

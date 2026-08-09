@@ -2990,6 +2990,9 @@ function OverviewTab({p, compTier, setCompTier}) {
 
   return (
     <div className="space-y-5">
+      {/* System context (Phase 0): scheme facts for reading the raw stats.
+          Renders only for current-class players in the payload. */}
+      <SysContextCard p={p}/>
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
         {(() => {
           // Tobias 2026-05-06: Intl-spezifische Header-Felder.
@@ -13540,6 +13543,7 @@ const PT_STATIC_MAP = {
   "/nationality": "/data/api_nationality_map.json",
   "/league_pages": "/data/api_league_pages.json",
   "/track_record": "/data/api_track_record.json",
+  "/system_context": "/data/api_system_context.json",
 };
 function ptFetch(apiPath) {
   let sp = PT_STATIC_MAP[apiPath];
@@ -14022,6 +14026,79 @@ function PTFooterLinks() {
             ))}
           </div>
         </details>
+      )}
+    </div>
+  );
+}
+
+// ── System context (feature 08/2026, Phase 0 of team/coaching context) ──────
+// api_system_context.json: player_id → per style stat {v, tb, tbp, rp, xp}.
+// DESCRIPTIVE ONLY: the pre-registered gates (TEAM_REL_PRERULE, T1+T1b)
+// showed team-relative rates predict worse than raw — projections stay on
+// raw numbers; this card only tells you how to READ them. All numbers and
+// caveats come from the payload.
+let _scData = null, _scPromise = null;
+function useSystemContext() {
+  const [sc, setSc] = useState(_scData);
+  useEffect(() => {
+    if (_scData) return;
+    _scPromise = _scPromise || ptFetch("/system_context")
+      .then(r => (r.ok ? r.json() : null)).catch(() => null)
+      .then(d => { _scData = d; return d; });
+    let alive = true;
+    _scPromise.then(d => { if (alive && d) setSc(d); });
+    return () => { alive = false; };
+  }, []);
+  return sc;
+}
+
+function SysContextCard({ p }) {
+  const sc = useSystemContext();
+  const entry = sc?.players?.[String(p?.player_id || "")];
+  if (!entry) return null;
+  const pct = (x) => Math.round(x * 100);
+  const rows = Object.entries(entry.stats).map(([k, s]) => {
+    const d = s.xp - s.rp;
+    const schemeWord = s.tbp <= 0.2 ? "low" : s.tbp >= 0.8 ? "high" : "mid";
+    return { k, s, d, schemeWord };
+  });
+  const notable = rows.filter(r => Math.abs(r.d) >= 0.1);
+  return (
+    <div className="rounded-xl p-3" style={{ background: "#111827", border: "1px solid #1f2937" }}
+         title={(sc.caveats || []).join("\n")}>
+      <div className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: "#4b5563" }}>
+        System context · {entry.lg} {sc.season_label}
+        <span style={{ color: "#374151" }}> — how to read the raw numbers (shown, not modeled)</span>
+      </div>
+      <div className="flex flex-wrap gap-x-5 gap-y-1">
+        {rows.map(({ k, s, d, schemeWord }) => (
+          <div key={k} className="text-xs" style={{ color: "#9ca3af" }}>
+            <span style={{ color: "#e5e7eb", fontWeight: 600 }}>{(sc.stat_labels || {})[k] || k}</span>
+            {" "}{s.v}{k === "tpa" ? "" : ""} ·{" "}
+            <span title={`Team baseline ${s.tb} — ${pct(s.tbp)}th percentile scheme`}
+                  style={{ color: schemeWord === "mid" ? "#6b7280" : "#fbbf24" }}>
+              {schemeWord}-{k === "tpa" ? "volume" : k} scheme ({pct(s.tbp)}p)
+            </span>
+            {" "}· raw {pct(s.rp)}p
+            {Math.abs(d) >= 0.1 ? (
+              <span style={{ color: d > 0 ? "#22c55e" : "#60a5fa", fontWeight: 600 }}>
+                {" "}→ team-rel {pct(s.xp)}p
+              </span>
+            ) : (
+              <span style={{ color: "#4b5563" }}> ≈ team-rel {pct(s.xp)}p</span>
+            )}
+          </div>
+        ))}
+      </div>
+      {notable.length > 0 && (
+        <p className="text-[10px] mt-1.5" style={{ color: "#6b7280" }}>
+          {notable.some(r => r.d > 0)
+            ? "Green: the scheme suppresses this stat — the raw number understates him. "
+            : ""}
+          {notable.some(r => r.d < 0)
+            ? "Blue: the scheme inflates opportunities here — read the raw number with that in mind."
+            : ""}
+        </p>
       )}
     </div>
   );
