@@ -1,66 +1,66 @@
 {
- "generated_at": "2026-07-24 14:43 UTC",
+ "generated_at": "2026-08-09 11:36 UTC",
  "nba_peak_model": {
-  "oot_r_mean": 0.33,
-  "oot_r_min": 0.299,
-  "oot_r_max": 0.356,
+  "oot_r_mean": 0.343,
+  "oot_r_min": 0.308,
+  "oot_r_max": 0.374,
   "n_splits": 5,
-  "n_training_outcomes": 872,
-  "prec_at_25_model": 0.632,
-  "prec_at_25_consensus": 0.568,
-  "bust_at_25_model": 0.2,
-  "bust_at_25_consensus": 0.224,
+  "n_training_outcomes": 877,
+  "prec_at_25_model": 0.664,
+  "prec_at_25_consensus": 0.552,
+  "bust_at_25_model": 0.192,
+  "bust_at_25_consensus": 0.24,
   "note": "Zeit-Split-Retrains (Splits [2013, 2014, 2015, 2016, 2017], 3 Seeds gemittelt). Entscheidungs-Metriken auf identischem Consensus-Subset — enthält consensus_signal als Feature (Hype-Leakage im Modell-vs-Markt-Vergleich, ehrlich ausgewiesen)."
  },
  "clean_room_backtest": {
-  "top14_peak_model": 7.65,
+  "top14_peak_model": 7.837,
   "top14_peak_draft": 8.782,
-  "bust14_model": 0.371,
+  "bust14_model": 0.343,
   "bust14_draft": 0.229,
-  "rho_model": 0.304,
-  "rho_draft": 0.368,
+  "rho_model": 0.288,
+  "rho_draft": 0.379,
   "n_draft_classes": 5,
   "verdict": "Ohne Markt-Signal schlägt das Modell den realen Draft NICHT — Front-Office-Scouting enthält echte Information jenseits der Box-Stats. Der Produkt-Mehrwert liegt in der KOMBINATION: Markt + Stats schlägt den Markt allein (s. Entscheidungs-Metriken oben)."
  },
  "interval_coverage": {
   "n_test": 465,
-  "coverage_p20_p80": 0.72,
+  "coverage_p20_p80": 0.718,
   "target_p20_p80": 0.6,
-  "coverage_p10_p90": 0.873,
+  "coverage_p10_p90": 0.88,
   "target_p10_p90": 0.8,
   "note": "OOT (train ≤2015, test >2015), Mischung = Ordinal-Probs × PWA-Anker (identisch zur Player-Page-Kurve). projected_war als Feature trägt in-sample-Information → Schätzung eher optimistisch."
  },
  "tier_calibration": {
-  "current_class_n": 5207,
-  "expected_superstars": 3.1,
-  "expected_allstars": 13.5,
+  "current_class_n": 5522,
+  "expected_superstars": 3.5,
+  "expected_allstars": 13.7,
   "base_rate_superstars": 1.0,
   "base_rate_allstars": 4.0,
   "label_distribution": {
-   "Out": 3258,
-   "Replacement": 1907,
-   "Roleplayer": 25,
+   "Out": 4381,
+   "Replacement": 1100,
+   "Roleplayer": 24,
    "Starter": 12,
    "All-Star": 4,
    "Superstar": 1
   }
  },
  "intl_model": {
-  "coverage_prospects_with_intl_tier": 48081,
+  "coverage_prospects_with_intl_tier": 49189,
   "current_class_tier_distribution": {
-   "Second Division": 2927,
-   "Solid Pro": 2251,
-   "Strong National": 19,
-   "EuroLeague": 6,
+   "Second Division": 3251,
+   "Solid Pro": 2242,
+   "Strong National": 20,
+   "EuroLeague": 5,
    "Top-Continental": 4
   },
   "note": "OOT-Validierung (Top-1/ECE/EuroLg-Disc, getrennt NCAA vs. INTL) läuft in intl_tier_model_v2 bei jedem Refresh — s. dessen Log."
  },
  "coverage": {
-  "prospects_total": 48081,
+  "prospects_total": 49189,
   "by_source": {
    "ncaa": 35632,
-   "intl": 12449
+   "intl": 13557
   },
   "leagues_weighted": 70,
   "league_weight_range": [
