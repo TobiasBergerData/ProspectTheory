@@ -222,13 +222,110 @@ Zellen beschreiben, was gedraftete Typen zurückgaben; keine Selektions-
 Kausalität behaupten. Sharpe NIE ohne CI zitieren. Vergleiche NIE über
 Bänder hinweg formulieren („Playmaker M schlägt Big L" ist verboten).
 
-## Bekannte Copy-Altlast (2026-07-25 gefunden, noch offen)
+## Session 2026-08-09: internal linking + league translation + mobile cards
 
-Der Methods-Deep-`sections`-Array in `App.jsx` enthält **sechs doppelte
-`cat`-Labels** — drei davon byte-identisch, drei mit unterschiedlichem Text
-unter demselben Titel: „International Adjustments", „Youth Radar", „Cross-Market
-Views", „Usage Load Curve", „Possession Impact (CFFR)", „Tier Feasibility".
-Der Leser sieht diese Abschnitte doppelt, bei den drei abweichenden Paaren mit
-zwei verschiedenen Erklärungen. Genau der Drift, gegen den diese Map gebaut
-wurde. **Nicht blind bereinigt**, weil bei den abweichenden Paaren eine
-inhaltliche Entscheidung nötig ist, welche Fassung gilt.
+Three additions in one session. (1) INTERNAL LINKING: `PTFooterLinks` in
+the site footer — crawlable anchors to `/track-record` and every league
+page (names/slugs from the league payload, weight-sorted, inside
+`<details>`); track-record flag leagues link to their league pages
+(`league_slug` in the payload); league pages link back to the track
+record. (2) LEAGUE TRANSLATION BLOCK ("NCAA → league: what actually
+travels"): medians over real paired transitions, computed by
+`export_league_pages.build_translation` (pre-registered publish
+threshold ≥15 pairs, below that the page says so). Labels are "style"
+vs. "efficiency — noisy", deliberately NOT the F5 sticky/icky terms:
+those describe rank-order stability, these medians measure LEVEL
+retention — do not mix the two in copy. (3) MOBILE CARDS: the NBA board
+table and the Recruiting Board render as cards under the `md`
+breakpoint (`md:hidden` card list + `hidden md:block` table, same data
+expressions, no logic fork) — when adding a column to either table,
+decide explicitly whether the card needs it too.
+
+## Public track record (SEO, 2026-08-08)
+
+`/track-record` (pathname route, Vercel rewrite, in the sitemap at
+priority 0.8): frozen claim snapshots with pre-registered resolution
+rules — the trust product. Rules FIXED BEFORE the first snapshot in
+data-pipeline `docs/TRACK_RECORD_PRERULE.md`; payload
+`api_track_record.json` built by `export_track_record.py` (in
+master_refresh after the league pages step). Architecture guarantees the
+copy must never contradict: snapshots are APPEND-ONLY (the script
+refuses to rewrite an existing one, hash-verified on every run), the
+page renders from the FROZEN archive (not live model state), and every
+snapshot ships its SHA-256. Content: level-up flag list (status
+open/success/fail/censored — failures stay on the page), intl-tier +
+NBA-board claim counts with resolution dates (2030-08 / 2031-08), gate
+history INCLUDING do_not_publish verdicts (Riser, Tilt×Sharpe), base
+rates next to every rate. Frontend: `useTrackRecord` + `TrackRecordView`
+in `App.jsx` (plumbing next to LeagueView), `showTrackRecord` state with
+popstate/URL-reset/SEO-meta guards. Copy rules: rules, rates, verdicts,
+counts all come FROM the payload; never edit a frozen snapshot — a wrong
+claim is resolved as "fail", not deleted. Test:
+`node frontend/tests/track_record_render_test.mjs`.
+
+## League landing pages (SEO, 2026-08-08)
+
+One indexable page per empirically weighted league: `/league/<slug>`
+(pathname-routed like `/player/<slug>`, Vercel rewrite → `index.html`,
+70 URLs in the sitemap, priority 0.8). Payload `api_league_pages.json`
+built by data-pipeline `export_league_pages.py` (runs in master_refresh
+BEFORE `generate_sitemap.py`): league profile from `league_weights`
+(weight + evidence: n_direct/n_indirect paths, primary path, path
+confidence, anchor/capped flags, metric) + the current-class intl market
+players (EXACT market_intl universe from `api_profiles.json`, same
+filters as `export_board_static`; a player appears on exactly ONE page —
+his max-minutes non-youth league this season). Frontend pieces in
+`App.jsx`: `useLeaguePages` (plumbing next to NatBadge), `LeagueView`
+(evidence line, market table with `NatBadge`, caveats footer),
+`leagueSlug` state + popstate sync + guards in the URL-reset and
+SEO-meta effects. Copy rules: the weight is NEVER shown as a bare
+number — the evidence line renders next to it; all caveats and counts
+come FROM the payload (`caveats`, `n_market_unassigned`); zero-market
+leagues get the explicit "says nothing about league strength" line.
+Maintenance: rerun `export_league_pages.py` + `sync_static.mjs` after
+weight recalcs or class rollover; test:
+`node frontend/tests/league_pages_render_test.mjs`.
+
+## Passport / Bosman layer (2026-08-07)
+
+New recruiting-lens layer: `api_nationality_map.json` (built by
+data-pipeline `export_nationality_map.py`, classification in
+`lib_nationality.py`, curation via `data/nationality_overrides.csv`).
+Frontend pieces in `App.jsx`: `useNationality`/`natOf`/`natMatches`
+(plumbing next to ptFetch), `NatChips` filter (Market filter bar, Youth
+Radar, Future Classes) and `NatBadge` (player rows in Youth Radar +
+Future Classes). Explanation lives in the Methods-Deep section
+"Passport / Bosman layer (Recruiting views)". Copy rules: legend +
+caveats come FROM the payload (`classes`/`caveats`) — no class lists or
+legal claims hard-coded beyond the chip labels; the `natio`-upgrade
+asterisk is explained in the badge tooltip. Maintenance: a new
+nationality string in RealGM makes the exporter fail loudly → extend
+`NAME_TO_ISO`; league roster rules (cupo etc.) are deliberately NOT
+data — keep them out of copy claims.
+
+WARNING (2026-08-07): the Methods dedup below was found REVERTED in the
+working copy (git checkout/older copy) and has been re-applied together
+with this layer. If it reverts again, re-apply from this map's decisions.
+
+## Copy-Altlast: Methods-Duplikate (2026-07-25 gefunden, 2026-08-06 bereinigt)
+
+Der Methods-Deep-`sections`-Array in `App.jsx` enthielt sechs doppelte
+`cat`-Labels. Bereinigung 2026-08-06, Entscheidungsprinzip: **Superset
+gewinnt** (keine Information verlieren), Typografie-Variante verliert.
+
+* Byte-identische Paare („Youth Radar", „Cross-Market Views", „Usage Load
+  Curve"): Duplikat gelöscht, keine inhaltliche Entscheidung nötig.
+* „International Adjustments": die längere Fassung behalten (enthält
+  zusätzlich die Athleticism-Ersatzformel FT-Rate + ORB% für Intl-Spieler —
+  faktisch korrekt und aktueller). Kürzere Fassung gelöscht.
+* „Possession Impact (CFFR)": die längere Fassung behalten (enthält
+  Composite-Definition + Verdict-Tiers). ZUSÄTZLICH die statische
+  Gewichtsangabe „eFG% 40 / TO% 25 / ORB% 20 / FTr 15" aus der Desc
+  entfernt — sie widersprach der neueren Sektion „Position-Aware Weights
+  (NetPV v2)"; die Desc verweist jetzt dorthin. Die NetPV-v2-Sektion wurde
+  direkt hinter die CFFR-Sektion verschoben (Lesefluss).
+* „Tier Feasibility": Fassungen unterschieden sich nur typografisch
+  (Gedankenstrich/×-Zeichen vs. ASCII) — die typografisch saubere behalten.
+
+Falls eine dieser Entscheidungen inhaltlich nicht gewollt ist: git-Diff des
+Bereinigungs-Commits zeigt beide Fassungen nebeneinander.

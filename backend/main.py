@@ -1130,6 +1130,49 @@ async def get_youth_radar(response: Response):
     return json.loads(p.read_text(encoding="utf-8"))
 
 
+@app.get("/api/nationality")
+async def get_nationality_map(response: Response):
+    """Pass-/Bosman-Ebene (Feature 08/2026): realgm_id → [iso, klasse, quelle,
+    ggf. natio_iso]. Klassen + Rechtsstand-Caveats stehen IM Payload (classes/
+    caveats) — Copy zieht von dort, keine Zahlen/Listen im Frontend-Code.
+    Gebaut von export_nationality_map.py (data-pipeline), Kuration via
+    nationality_overrides.csv."""
+    p = Path(os.environ.get("DATA_DIR", "data/processed")) / "api_nationality_map.json"
+    if not p.exists():
+        raise HTTPException(status_code=503, detail="nationality map not yet built")
+    response.headers["Cache-Control"] = "public, max-age=3600"
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
+@app.get("/api/league_pages")
+async def get_league_pages(response: Response):
+    """League landing pages (feature 08/2026): one entry per empirically
+    weighted league — weight WITH evidence fields (n_paths, n_direct,
+    primary_path, primary_confidence), current-class market players (exact
+    market_intl universe), season roster count. All copy is payload-driven
+    (caveats ship in the payload) — no numbers in frontend code. Built by
+    export_league_pages.py (data-pipeline)."""
+    p = Path(os.environ.get("DATA_DIR", "data/processed")) / "api_league_pages.json"
+    if not p.exists():
+        raise HTTPException(status_code=503, detail="league pages not yet built")
+    response.headers["Cache-Control"] = "public, max-age=3600"
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
+@app.get("/api/track_record")
+async def get_track_record(response: Response):
+    """Public track record (feature 08/2026): frozen claim snapshots (SHA-256
+    tamper-evidence), level-up flag list incl. future failures, gate history
+    with do_not_publish verdicts. Rules pre-registered in data-pipeline
+    docs/TRACK_RECORD_PRERULE.md; built by export_track_record.py. All copy
+    payload-driven — no numbers in frontend code."""
+    p = Path(os.environ.get("DATA_DIR", "data/processed")) / "api_track_record.json"
+    if not p.exists():
+        raise HTTPException(status_code=503, detail="track record not yet built")
+    response.headers["Cache-Control"] = "public, max-age=3600"
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
 @app.get("/api/awards")
 async def get_awards(response: Response):
     """League-Award-Badges (Recruiting-Lens): deskriptive Major-Awards je Spieler,

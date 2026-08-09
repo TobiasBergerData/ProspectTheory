@@ -37,6 +37,9 @@ const FILES = [
   ["api_awards.json", "api_awards.json"],
   ["api_front_office.json", "api_front_office.json"],
   ["api_draft_sharpe.json", "api_draft_sharpe.json"],
+  ["api_nationality_map.json", "api_nationality_map.json"],
+  ["api_league_pages.json", "api_league_pages.json"],
+  ["api_track_record.json", "api_track_record.json"],
 ];
 
 let n = 0, missing = [];

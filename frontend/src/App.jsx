@@ -13537,6 +13537,9 @@ const PT_STATIC_MAP = {
   "/awards": "/data/api_awards.json",
   "/front-office": "/data/api_front_office.json",
   "/draft-sharpe": "/data/api_draft_sharpe.json",
+  "/nationality": "/data/api_nationality_map.json",
+  "/league_pages": "/data/api_league_pages.json",
+  "/track_record": "/data/api_track_record.json",
 };
 function ptFetch(apiPath) {
   let sp = PT_STATIC_MAP[apiPath];
@@ -13547,6 +13550,481 @@ function ptFetch(apiPath) {
   return fetch(sp)
     .then(r => (r.ok && (r.headers.get("content-type") || "").includes("json")) ? r : api())
     .catch(api);
+}
+
+// ── Passport / Bosman layer (feature 08/2026) ────────────────────────────────
+// api_nationality_map.json: realgm_id → [iso, class, source, natio_iso?].
+// Class legend + honesty caveats ship IN the payload (payload-driven copy):
+// single-nationality proxy, dual passports via curated overrides, 'natio' =
+// class upgraded from national-team eligibility (FIBA requires the passport).
+const PT_NAT_COLORS = { EU: "#22c55e", EEA: "#22c55e", CH_BILATERAL: "#fbbf24", COTONOU: "#3b82f6", NONE: "#6b7280" };
+let _natData = null, _natPromise = null;
+function useNationality() {
+  const [nat, setNat] = useState(_natData);
+  useEffect(() => {
+    if (_natData) return;
+    _natPromise = _natPromise || ptFetch("/nationality")
+      .then(r => (r.ok ? r.json() : null)).catch(() => null)
+      .then(d => { _natData = d; return d; });
+    let alive = true;
+    _natPromise.then(d => { if (alive && d) setNat(d); });
+    return () => { alive = false; };
+  }, []);
+  return nat;
+}
+const ptRidOf = (p) => {
+  if (p == null) return null;
+  if (p.realgm_id != null) return p.realgm_id;
+  const m = String(p.player_id || "").match(/^rg:(\d+)$/);
+  return m ? m[1] : null;
+};
+const natOf = (nat, rid) => (nat && rid != null) ? (nat.players?.[String(rid)] || null) : null;
+const natMatches = (entry, f) =>
+  f === "all" ? true
+  : f === "BOSMAN" ? !!entry && (entry[1] === "EU" || entry[1] === "EEA")
+  : !!entry && entry[1] === f;
+const NAT_CHIPS = [["all", "All"], ["BOSMAN", "Bosman (EU/EEA)"],
+  ["CH_BILATERAL", "CH"], ["COTONOU", "Cotonou"], ["NONE", "Non-EU"]];
+function NatChips({ nat, val, setVal, compact }) {
+  if (!nat) return null;
+  return (
+    <div className="flex gap-1 items-center flex-wrap" title={(nat.caveats || []).join("\n")}
+         style={compact ? {} : { padding: "8px 14px", borderBottom: "1px solid #1f2937" }}>
+      <span className="text-[10px] uppercase tracking-wider" style={{ color: "#4b5563" }}>Passport</span>
+      {NAT_CHIPS.map(([k, label]) => (
+        <button key={k} onClick={() => setVal(k)} className="px-2 py-1 rounded text-xs font-semibold"
+          style={{ background: val === k ? "#10b981" : "#1f2937", color: val === k ? "#000" : "#9ca3af" }}>
+          {label}
+        </button>
+      ))}
+      {val !== "all" && (
+        <span style={{ fontSize: 10, color: "#4b5563" }}>
+          single-nationality proxy — players without passport data are excluded from specific filters
+        </span>
+      )}
+    </div>
+  );
+}
+function NatBadge({ nat, rid }) {
+  const e = natOf(nat, rid);
+  if (!e) return null;
+  const cls = e[1], legend = (nat.classes || {})[cls] || cls;
+  const src = e[2] === "natio" ? " — passport evidenced by a national-team appearance"
+            : e[2] === "ovr" ? " — curated override" : "";
+  return (
+    <span title={`${legend}${src}`} className="px-1.5 py-0.5 rounded font-semibold"
+      style={{ fontSize: 9, background: (PT_NAT_COLORS[cls] || "#6b7280") + "22",
+               color: PT_NAT_COLORS[cls] || "#6b7280", marginLeft: 4, whiteSpace: "nowrap" }}>
+      {e[0]}{(cls === "EU" || cls === "EEA") ? " · Bosman" : ""}{e[2] === "natio" ? "*" : ""}
+    </span>
+  );
+}
+
+// ── League landing pages (feature 08/2026) ──────────────────────────────────
+// api_league_pages.json: slug → league profile (empirical weight WITH its
+// evidence fields: path counts, primary path, confidence) + current-class
+// market players (the exact market_intl universe). All numbers and caveats
+// come from the payload — nothing is hardcoded here (payload-driven copy).
+let _lpData = null, _lpPromise = null;
+function useLeaguePages() {
+  const [lp, setLp] = useState(_lpData);
+  useEffect(() => {
+    if (_lpData) return;
+    _lpPromise = _lpPromise || ptFetch("/league_pages")
+      .then(r => (r.ok ? r.json() : null)).catch(() => null)
+      .then(d => { _lpData = d; return d; });
+    let alive = true;
+    _lpPromise.then(d => { if (alive && d) setLp(d); });
+    return () => { alive = false; };
+  }, []);
+  return lp;
+}
+
+function LeagueView({ slug, onExit }) {
+  const lp = useLeaguePages();
+  const nat = useNationality();
+  const lg = lp?.leagues?.[slug] || null;
+
+  // SEO meta from payload fields (numbers stay payload-driven).
+  useEffect(() => {
+    if (typeof document === "undefined" || !lg || !lp) return;
+    const prevTitle = document.title;
+    document.title = `${lg.name} — League Strength & Draft Prospects | ProspectTheory`;
+    const desc = `${lg.name}: empirical league strength ${lg.weight.toFixed(2)} ` +
+      `(NCAA = 1.00), ${lg.market.length} current draft-class prospect${lg.market.length === 1 ? "" : "s"}, ` +
+      `${lg.n_roster_2026} players tracked in ${lp.season_label}.`;
+    const md = document.head.querySelector('meta[name="description"]');
+    if (md) md.setAttribute("content", desc);
+    const cl = document.head.querySelector('link[rel="canonical"]');
+    if (cl) cl.setAttribute("href", `https://prospecttheory.io/league/${slug}`);
+    return () => { document.title = prevTitle; };
+  }, [lg, slug, lp]);
+
+  if (!lp) return (
+    <div className="flex flex-col items-center justify-center py-20">
+      <div className="w-12 h-12 rounded-full border-4 border-t-transparent animate-spin mb-4"
+           style={{ borderColor: "#f97316", borderTopColor: "transparent" }}/>
+      <p className="text-sm" style={{ color: "#6b7280" }}>Loading league data...</p>
+    </div>
+  );
+  if (!lg) return (
+    <div className="py-16 text-center">
+      <p className="text-sm mb-4" style={{ color: "#9ca3af" }}>League not found.</p>
+      <button onClick={onExit} className="px-4 py-2 rounded-lg text-sm font-semibold"
+              style={{ background: "#f97316", color: "#000" }}>← Back to the board</button>
+    </div>
+  );
+
+  // Evidence line assembled from payload fields only — the weight is never
+  // shown as a bare number.
+  const evid = [
+    lg.is_anchor ? "anchor league — weight fixed at 1.00 by design" : null,
+    `${lg.n_direct} direct + ${lg.n_indirect} indirect transition path${lg.n_paths === 1 ? "" : "s"}`,
+    lg.primary_path ? `primary evidence: ${lg.primary_path}` : null,
+    lg.primary_confidence != null ? `path confidence ${(lg.primary_confidence * 100).toFixed(0)}%` : null,
+    lg.capped ? "capped at the model maximum" : null,
+    lg.metric_used ? `metric: ${lg.metric_used}` : null,
+  ].filter(Boolean).join(" · ");
+
+  return (
+    <div className="max-w-5xl mx-auto">
+      <button onClick={onExit} className="mb-4 flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:bg-white hover:bg-opacity-5"
+              style={{ color: "#9ca3af", border: "1px solid #374151" }}>← ProspectTheory Board</button>
+      <h1 className="text-2xl font-bold mb-1" style={{ fontFamily: "'Oswald',sans-serif", color: "#e5e7eb" }}>
+        {lg.name}
+      </h1>
+      <p className="text-xs mb-5" style={{ color: "#6b7280" }}>
+        League strength &amp; current draft-class prospects · season {lp.season_label}
+      </p>
+
+      <div className="rounded-xl p-4 mb-5" style={{ background: "#111827", border: "1px solid #1f2937" }}>
+        <div className="flex items-baseline gap-3 flex-wrap">
+          <span className="text-[10px] uppercase tracking-wider" style={{ color: "#4b5563" }}>Empirical league strength</span>
+          <span className="text-3xl font-bold" style={{ fontFamily: "'Oswald',sans-serif", color: "#f97316" }}>
+            {lg.weight.toFixed(2)}
+          </span>
+          <span className="text-xs" style={{ color: "#6b7280" }}>NCAA = 1.00 anchor</span>
+        </div>
+        <p className="text-xs mt-2" style={{ color: "#9ca3af" }}>{evid}</p>
+        <p className="text-xs mt-1" style={{ color: "#4b5563" }}>
+          {lg.n_roster_2026} players tracked this season · weights updated {String(lg.weights_updated || "").slice(0, 10)}
+        </p>
+      </div>
+
+      <h2 className="text-sm font-bold mb-2" style={{ fontFamily: "'Oswald',sans-serif", color: "#e5e7eb" }}>
+        Current draft-class prospects ({lg.market.length})
+      </h2>
+      {lg.market.length === 0 ? (
+        <p className="text-xs mb-5" style={{ color: "#6b7280" }}>
+          No current draft-class market players in this league right now — this
+          says nothing about league strength (see notes below).
+        </p>
+      ) : (
+        <div className="rounded-xl overflow-hidden mb-5" style={{ border: "1px solid #1f2937" }}>
+          <table className="w-full text-sm" style={{ background: "#111827" }}>
+            <thead>
+              <tr className="text-left text-[10px] uppercase tracking-wider" style={{ color: "#4b5563", borderBottom: "1px solid #1f2937" }}>
+                <th className="px-3 py-2">Player</th>
+                <th className="px-3 py-2">Age</th>
+                <th className="px-3 py-2">Pos</th>
+                <th className="px-3 py-2">Team</th>
+                <th className="px-3 py-2">Archetype</th>
+                <th className="px-3 py-2" title="Projected competitive tier (intl tier model v2)">Proj. tier</th>
+                <th className="px-3 py-2">Passport</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lg.market.map((p) => (
+                <tr key={p.slug || p.name} style={{ borderBottom: "1px solid #1f293766" }}>
+                  <td className="px-3 py-2">
+                    {p.slug ? (
+                      <a href={`/player/${p.slug}`} className="font-semibold hover:underline" style={{ color: "#e5e7eb" }}>{p.name}</a>
+                    ) : (
+                      <span className="font-semibold">{p.name}</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2" style={{ color: "#9ca3af" }}>{p.age != null ? p.age.toFixed(1) : "—"}</td>
+                  <td className="px-3 py-2" style={{ color: "#9ca3af" }}>{p.pos || "—"}</td>
+                  <td className="px-3 py-2" style={{ color: "#9ca3af" }}>{p.team || "—"}</td>
+                  <td className="px-3 py-2" style={{ color: "#9ca3af" }}>{p.archetype || "—"}</td>
+                  <td className="px-3 py-2" style={{ color: "#9ca3af" }}>{p.tier || "—"}</td>
+                  <td className="px-3 py-2"><NatBadge nat={nat} rid={p.rid}/></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {lg.translation && (
+        <>
+          <h2 className="text-sm font-bold mb-2" style={{ fontFamily: "'Oswald',sans-serif", color: "#e5e7eb" }}>
+            NCAA → {lg.name}: what actually travels
+          </h2>
+          {lg.translation.stats ? (
+            <div className="rounded-xl overflow-hidden mb-2" style={{ border: "1px solid #1f2937" }}>
+              <table className="w-full text-sm" style={{ background: "#111827" }}>
+                <thead>
+                  <tr className="text-left text-[10px] uppercase tracking-wider" style={{ color: "#4b5563", borderBottom: "1px solid #1f2937" }}>
+                    <th className="px-3 py-2">Stat</th>
+                    <th className="px-3 py-2" title="Median over real NCAA-to-league transitions (paired seasons)">Median retention</th>
+                    <th className="px-3 py-2">Pairs</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(lg.translation.stats).map(([k, s]) => (
+                    <tr key={k} style={{ borderBottom: "1px solid #1f293766" }}>
+                      <td className="px-3 py-2" style={{ color: "#e5e7eb" }}>
+                        {s.label}
+                        {s.class === "efficiency" && (
+                          <span className="px-1.5 py-0.5 rounded font-semibold" title="Shooting efficiency in a first season abroad is mostly small-sample noise — context, never a projection."
+                                style={{ fontSize: 9, marginLeft: 6, background: "#fbbf2422", color: "#fbbf24" }}>
+                            efficiency — noisy
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 font-semibold" style={{ color: s.metric === "ratio"
+                            ? (s.value >= 0.95 ? "#22c55e" : s.value >= 0.75 ? "#fbbf24" : "#ef4444")
+                            : (s.value >= 0 ? "#22c55e" : "#ef4444") }}>
+                        {s.metric === "ratio" ? `${Math.round(s.value * 100)}% of NCAA level`
+                          : `${s.value > 0 ? "+" : ""}${s.value.toFixed(1)} pp`}
+                      </td>
+                      <td className="px-3 py-2" style={{ color: "#6b7280" }}>{s.n}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-xs mb-2" style={{ color: "#6b7280" }}>
+              Only {lg.translation.n_pairs} observed NCAA transfer{lg.translation.n_pairs === 1 ? "" : "s"} in
+              the sample ({lg.translation.window}) — below our {lg.translation.min_pairs}-pair
+              threshold, so we show no retention numbers rather than unstable ones.
+            </p>
+          )}
+          {lg.translation.stats && (
+            <p className="text-xs mb-5" style={{ color: "#4b5563" }}>
+              Medians over {lg.translation.n_pairs} real NCAA → {lg.name} transitions
+              ({lg.translation.window}); first pro season within two years, rotation minutes on both sides.
+            </p>
+          )}
+        </>
+      )}
+
+      <div className="rounded-xl p-4" style={{ background: "#0d1117", border: "1px solid #1f2937" }}>
+        <div className="text-[10px] uppercase tracking-wider mb-2" style={{ color: "#4b5563" }}>How to read this page</div>
+        {(lp.caveats || []).map((c, i) => (
+          <p key={i} className="text-xs mb-1.5" style={{ color: "#6b7280" }}>{c}</p>
+        ))}
+        <p className="text-xs mt-2" style={{ color: "#4b5563" }}>
+          Data as of {lp.generated}. How our projections have actually done:{" "}
+          <a href="/track-record" className="hover:underline" style={{ color: "#9ca3af" }}>public track record</a>.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── Public track record (feature 08/2026) ───────────────────────────────────
+// api_track_record.json: frozen claim snapshots (SHA-256 tamper-evidence),
+// level-up flags incl. future failures, gate history with do_not_publish
+// verdicts. Rules pre-registered BEFORE the first snapshot
+// (data-pipeline docs/TRACK_RECORD_PRERULE.md). Everything rendered here —
+// counts, rates, rules, verdicts — comes from the payload.
+let _trData = null, _trPromise = null;
+function useTrackRecord() {
+  const [tr, setTr] = useState(_trData);
+  useEffect(() => {
+    if (_trData) return;
+    _trPromise = _trPromise || ptFetch("/track_record")
+      .then(r => (r.ok ? r.json() : null)).catch(() => null)
+      .then(d => { _trData = d; return d; });
+    let alive = true;
+    _trPromise.then(d => { if (alive && d) setTr(d); });
+    return () => { alive = false; };
+  }, []);
+  return tr;
+}
+
+function TrackRecordView({ onExit }) {
+  const tr = useTrackRecord();
+  const nat = useNationality();
+
+  useEffect(() => {
+    if (typeof document === "undefined" || !tr) return;
+    const prevTitle = document.title;
+    document.title = "Track Record — Frozen Claims, Failures Included | ProspectTheory";
+    const md = document.head.querySelector('meta[name="description"]');
+    if (md) md.setAttribute("content",
+      `Public model track record since ${tr.tracking_since}: frozen claim snapshots, ` +
+      `pre-registered resolution rules, failures published alongside successes, ` +
+      `and every gate verdict — including the features we tested and did not ship.`);
+    const cl = document.head.querySelector('link[rel="canonical"]');
+    if (cl) cl.setAttribute("href", "https://prospecttheory.io/track-record");
+    return () => { document.title = prevTitle; };
+  }, [tr]);
+
+  if (!tr) return (
+    <div className="flex flex-col items-center justify-center py-20">
+      <div className="w-12 h-12 rounded-full border-4 border-t-transparent animate-spin mb-4"
+           style={{ borderColor: "#f97316", borderTopColor: "transparent" }}/>
+      <p className="text-sm" style={{ color: "#6b7280" }}>Loading track record...</p>
+    </div>
+  );
+
+  const VERDICT_COLORS = { published: "#22c55e", do_not_publish: "#ef4444" };
+  const snap = tr.snapshots?.[0];
+
+  return (
+    <div className="max-w-5xl mx-auto">
+      <button onClick={onExit} className="mb-4 flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:bg-white hover:bg-opacity-5"
+              style={{ color: "#9ca3af", border: "1px solid #374151" }}>← ProspectTheory Board</button>
+      <h1 className="text-2xl font-bold mb-1" style={{ fontFamily: "'Oswald',sans-serif", color: "#e5e7eb" }}>
+        Track Record
+      </h1>
+      <p className="text-xs mb-5" style={{ color: "#6b7280" }}>
+        Tracking since {tr.tracking_since} · claims frozen at snapshot time · failures will be published, not hidden
+      </p>
+
+      {snap && (
+        <div className="rounded-xl p-4 mb-5" style={{ background: "#111827", border: "1px solid #1f2937" }}>
+          <div className="text-[10px] uppercase tracking-wider mb-2" style={{ color: "#4b5563" }}>Frozen snapshot {snap.id}</div>
+          <div className="flex gap-6 flex-wrap">
+            {[["Level-Up flags", snap.n_claims?.level_up_flags],
+              ["Intl tier projections", snap.n_claims?.intl_tier],
+              ["NBA board projections", snap.n_claims?.nba_board]].map(([lbl, n]) => (
+              <div key={lbl}>
+                <div className="text-2xl font-bold" style={{ fontFamily: "'Oswald',sans-serif", color: "#f97316" }}>{n ?? "—"}</div>
+                <div className="text-xs" style={{ color: "#9ca3af" }}>{lbl}</div>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs mt-3" style={{ color: "#4b5563", wordBreak: "break-all" }}>
+            Frozen {String(snap.created).slice(0, 10)} · archive SHA-256 {snap.sha256}
+          </p>
+        </div>
+      )}
+
+      <h2 className="text-sm font-bold mb-1" style={{ fontFamily: "'Oswald',sans-serif", color: "#e5e7eb" }}>
+        Level-Up flags (▲) — every one of them, win or lose
+      </h2>
+      <p className="text-xs mb-2" style={{ color: "#6b7280" }}>
+        Rule: {tr.level_up?.rule}. Success: {tr.level_up?.success_rule}. Backtest base
+        rates: {(tr.level_up?.base_rates?.flagged * 100).toFixed(1)}% for flagged vs.{" "}
+        {(tr.level_up?.base_rates?.unflagged * 100).toFixed(1)}% unflagged ({tr.level_up?.base_rates?.source}).
+      </p>
+      <div className="rounded-xl overflow-hidden mb-5" style={{ border: "1px solid #1f2937" }}>
+        <table className="w-full text-sm" style={{ background: "#111827" }}>
+          <thead>
+            <tr className="text-left text-[10px] uppercase tracking-wider" style={{ color: "#4b5563", borderBottom: "1px solid #1f2937" }}>
+              <th className="px-3 py-2">Player</th>
+              <th className="px-3 py-2">League</th>
+              <th className="px-3 py-2">Age</th>
+              <th className="px-3 py-2" title="Projected sustainable level minus current environment">Climb</th>
+              <th className="px-3 py-2">Status</th>
+              <th className="px-3 py-2">Resolves by</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(tr.level_up?.flags || []).map((f) => (
+              <tr key={f.slug || f.name} style={{ borderBottom: "1px solid #1f293766" }}>
+                <td className="px-3 py-2">
+                  {f.slug ? (
+                    <a href={`/player/${f.slug}`} className="font-semibold hover:underline" style={{ color: "#e5e7eb" }}>{f.name}</a>
+                  ) : <span className="font-semibold">{f.name}</span>}
+                  <NatBadge nat={nat} rid={f.rid}/>
+                </td>
+                <td className="px-3 py-2" style={{ color: "#9ca3af" }}>
+                  {f.league_slug ? (
+                    <a href={`/league/${f.league_slug}`} className="hover:underline" style={{ color: "#9ca3af" }}>{f.league}</a>
+                  ) : (f.league || "—")}
+                </td>
+                <td className="px-3 py-2" style={{ color: "#9ca3af" }}>{f.age != null ? f.age.toFixed(1) : "—"}</td>
+                <td className="px-3 py-2" style={{ color: "#22c55e", fontWeight: 600 }}>▲ +{f.pred_climb?.toFixed(2)}</td>
+                <td className="px-3 py-2" style={{ color: "#fbbf24" }}>{f.status}</td>
+                <td className="px-3 py-2" style={{ color: "#6b7280" }}>{f.resolve_by}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-4 mb-5">
+        {[["Intl tier projections", tr.intl_tier], ["NBA board projections", tr.nba_board]].map(([lbl, blk]) => (
+          <div key={lbl} className="rounded-xl p-4" style={{ background: "#111827", border: "1px solid #1f2937" }}>
+            <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: "#4b5563" }}>{lbl}</div>
+            <p className="text-xs mb-2" style={{ color: "#9ca3af" }}>
+              {blk?.n} frozen projections · full predicted-vs-realized matrix publishes {blk?.resolve_at}
+            </p>
+            {Object.entries(blk?.by_tier || {}).slice(0, 6).map(([t, n]) => (
+              <div key={t} className="flex justify-between text-xs" style={{ color: "#6b7280" }}>
+                <span>{t}</span><span>{n}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+
+      <h2 className="text-sm font-bold mb-2" style={{ fontFamily: "'Oswald',sans-serif", color: "#e5e7eb" }}>
+        Gate history — including what we did NOT ship
+      </h2>
+      <div className="space-y-2 mb-5">
+        {(tr.gate_history || []).map((g) => (
+          <div key={g.id} className="rounded-xl p-3" style={{ background: "#111827", border: "1px solid #1f2937" }}>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-semibold text-sm" style={{ color: "#e5e7eb" }}>{g.name}</span>
+              <span className="px-1.5 py-0.5 rounded font-semibold" style={{ fontSize: 9,
+                background: (VERDICT_COLORS[g.verdict] || "#6b7280") + "22",
+                color: VERDICT_COLORS[g.verdict] || "#6b7280" }}>{g.verdict}</span>
+              <span className="text-xs" style={{ color: "#4b5563" }}>{g.date}</span>
+            </div>
+            <p className="text-xs mt-1" style={{ color: "#9ca3af" }}>{g.result}</p>
+            <p className="text-xs mt-0.5" style={{ color: "#4b5563" }}>Pre-registered rule: {g.rule_doc}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="rounded-xl p-4" style={{ background: "#0d1117", border: "1px solid #1f2937" }}>
+        <div className="text-[10px] uppercase tracking-wider mb-2" style={{ color: "#4b5563" }}>How this record works</div>
+        {(tr.caveats || []).map((c, i) => (
+          <p key={i} className="text-xs mb-1.5" style={{ color: "#6b7280" }}>{c}</p>
+        ))}
+        <p className="text-xs mt-2" style={{ color: "#4b5563" }}>Data as of {tr.generated}.</p>
+      </div>
+    </div>
+  );
+}
+
+// Site footer link block — internal linking for the indexable pages so
+// crawlers reach them via links, not only via the sitemap. League list is
+// payload-driven (name + slug from api_league_pages.json), sorted by weight.
+function PTFooterLinks() {
+  const lp = useLeaguePages();
+  const leagues = lp
+    ? Object.entries(lp.leagues).sort((a, b) => b[1].weight - a[1].weight)
+    : [];
+  return (
+    <div className="max-w-7xl mx-auto px-4 md:px-8">
+      <div className="flex gap-4 flex-wrap items-center justify-center mb-2">
+        <a href="/track-record" className="hover:underline font-semibold" style={{ color: "#9ca3af" }}>
+          Track Record — frozen claims, failures included
+        </a>
+      </div>
+      {leagues.length > 0 && (
+        <details>
+          <summary className="cursor-pointer text-center" style={{ color: "#6b7280" }}>
+            League pages — empirical strength &amp; current prospects ({leagues.length})
+          </summary>
+          <div className="flex gap-x-3 gap-y-1 flex-wrap justify-center mt-2">
+            {leagues.map(([slug, lg]) => (
+              <a key={slug} href={`/league/${slug}`} className="hover:underline"
+                 style={{ color: "#4b5563" }}>{lg.name}</a>
+            ))}
+          </div>
+        </details>
+      )}
+    </div>
+  );
 }
 
 // Guard-Write: nur schreiben, wenn das eigene Segment nicht schon stimmt.
@@ -13613,14 +14091,11 @@ function MethodologyTab() {
     {cat:"Comps Engine — Matching Principles",items:[],desc:"Three principles keep the comparable-player engine honest. (1) SELF-MATCH EXCLUSION: a player is never returned as his own comp — the filter runs centrally at output assembly, covering all five comp dimensions (style, skill, physical, trajectory, outcome) and both the cohort and cluster example lists. No self-fulfilling 100% matches. (2) FULL POOL COVERAGE: historic NBA stars from the pre-play-by-play era (Anthony Davis 2012, Embiid, Wiggins) stay in the comparison pool whenever a known NBA peak exists, even if their college-era tracking data is incomplete — otherwise the most instructive outcomes would be missing from every comp list. (3) FACE-VALIDITY CHECKS: reference prospects are verified to return sensible comps (Davis 2012 → Walker Kessler, Brandon Clarke, Myles Turner — fellow shot-blocking bigs), and mismatches trigger review of the matching weights."},
     {cat:"Tier Probabilities — Calibrated Ordinal Model",items:[],desc:"The six tier probabilities (Superstar / All-Star / Starter / Role Player / Replacement / Out) come from an ordinal classifier trained on the full prospect population — including everyone who never reached the NBA, kept as informative negatives. Its outputs are calibrated against historical base rates: summed over a draft class, the probabilities add up to realistic totals (~1 superstar, ~4 all-stars, ~12 starters per class), because that is how often those careers actually happen. WHY THIS MATTERS: without base-rate anchoring, probability models quietly inflate — a board can end up showing a dozen 'likely all-stars' in one class, which has never happened in draft history. Anchored odds mean a 40% superstar probability is a genuinely rare, strong statement. The tier LABEL shown on the board is assigned top-down along projected peak Wins Added using the same class quotas, so label and probabilities never contradict each other. Out-of-time calibration error is near zero per tier (see Live Validation). CAVEAT: probabilities are pre-team-context and conditional on the information in the model — a unique profile with no historical precedent carries wider real uncertainty than any model can quantify."},
     {cat:"Archetype Value Bands (Research — this tab)",items:[],desc:"A draft-strategy research sub-section shown above (Method tab). For each of 16 NBA archetypes we compute the realized peak Wins Added distribution of past players of that type (~1,210 NBA players, draft classes ~2008–2024): floor (25th percentile = downside), median (typical), and ceiling (90th percentile = upside). Displayed as horizontal value bands so you can read draft strategy by player type: highest ceiling = swing-for-upside pick (Scoring Playmaker / Stretch Rim Protector, ceiling ~28–29 WA); highest floor = safest pick (Stretch Rim Protector); highest median = best balanced bet. Each band carries its SAMPLE SIZE (n) as a data-confidence signal — a type observed 374 times (Scoring Wing) is far better understood than one seen 19 times (3-and-D Wing), whose edges are noisier. Rarity is shown for confidence, NOT as a value claim (rare ≠ better). Hover any band (or see the highlighted card for the current player's type) for EXAMPLE NBA PLAYERS grouped by the tier they reached — a concrete sense of the range (note: these are pre-draft archetypes; some players, like Jokic from a pre-draft 'Scoring Wing', evolved into a different NBA role). The same archetype-value numbers also appear in the Roles & Archetypes tab (each archetype's NBA ceiling tier + % reaching Starter+/All-Star+). PRE-DRAFT → NBA TRANSITION: a second view shows, per pre-draft archetype, what those players actually became in the NBA (drafted classes ≤2020) — including an honest 'Did Not Stick' (never established a rotation role). E.g. a pre-draft Scoring Wing most often does not stick or becomes a role-filler; a Stretch Rim Protector usually becomes a Stretch Big / Rim Protector. A talent overlay then splits the same type by projected-value tier: an elite-projected Scoring Playmaker sticks 75% / All-Star 38%, a marginal one 6% / 0% — quantifying 'a scoring guard has to be elite to be worth it'. (Drafted-player population, so it carries a draft-position confound; thin pre-draft types omitted.)"},
-    {cat:"International Adjustments",items:[],desc:"International players receive three adjustments: (1) League Strength — every league's weight is derived empirically from bridge players (players who appeared in multiple leagues), anchored to NCAA Power = 1.0 and shrunk toward a conservative prior where the evidence is thin. Weights cover 60+ leagues worldwide and are recomputed on every data refresh, never hand-set. (2) League-BPM translation: the raw BPM proxy (PER+eDiff) is scaled per league so international seasons read on the NCAA-equivalent scale before feature engineering. (3) League-strength-adjusted projection with usage-translatability caps for strong leagues. The International Recruiting Board additionally offers a browser-local watchlist (★): tracked targets keep showing even once they become NBA near-locks — a rising flight risk on a tracked player is a signal, not something to hide. The list is stored in this browser only."},
     {cat:"Youth Radar (clubs + national teams, U16-U20)",items:[],desc:"A scouting radar over three youth sources: the adidas Next Generation Tournament (EuroLeague U18 club circuit — qualifiers and finals), the Junior Adriatic / VTB Youth / Youth BCL club leagues, and the FIBA national-team championships from U16 to U20 (European Championships divisions A and B plus the U17 and U19 World Cups, covering the last and the current summer — editions carry a year tag). Per-event leaderboards are aggregated per player, game-weighted across events. Deliberately model-free — samples range from a 2-8-game tournament to a youth-league season, youth events carry no empirically calibrated league weight (they are excluded from the bridge graph on purpose), and the career models are not calibrated for youth populations. So the radar shows raw production only: minutes, scoring, rebounding, playmaking, stocks, true shooting. Two honest reading rules: there is no age adjustment (leaderboards carry no birthdates), so older prospects outproducing the field is expected; and mixing age brackets means raw numbers compare cleanly only within an event, not U16-vs-U20. Intended use: build an early watch universe here, then follow players into their senior-league seasons, where the full model (league weights, tier odds, projected levels) applies."},
     {cat:"Cross-Market Views: College Targets · Level-Up · Source Filter",items:[],desc:"The recruiting lens covers three player markets beyond the main board. COLLEGE TARGETS (audience: college programs in the NIL era) lists international prospects inside the college-age window (draft-day age ≤ 21), ranked by projected peak Added Wins — deliberately the talent scale rather than the league-level scale, because for a college program NBA upside is a selling point (draft-pipeline visibility, NIL value), not a flight risk. Eligibility is explicitly out of scope: amateur status, professional contracts and seasons-of-competition rules are case-by-case decisions, so the view is a talent radar, not an eligibility determination. LEVEL-UP (audience: front offices one or two league levels up) lists international players projected clearly above their current environment, sorted by the size of the climb (projected sustainable level minus current level — the same calibrated quantity as Value ▲ on the board, but ranked by the gap instead of the absolute level, so second-division and mid-league dominators surface before the market prices them in); league-adjusted BPM is shown as the production evidence. SOURCE FILTER on the Recruiting Board splits the market into college players (NCAA players an international club could sign away) and international players (already abroad). PORTAL RADAR (audience: college programs) applies the same undervaluation idea inside the NCAA: players below the high-major stage whose projected peak talent (Added Wins) exceeds their platform — the transfer-portal/NIL shortlist; we do not track actual portal status, the view ranks who is worth the call if available. FIND ME ANOTHER (replacement search) takes a reference player and returns the statistically closest signable profiles in the market pool — similarity over position-stratified percentiles measures profile shape, not equal quality, which is why level, age and value columns sit next to the fit score. LURKERS (🕵 badge + filter) flag a third undervaluation source beyond level mispricing: role headroom — top-30% efficiency on a bottom-40% usage role while staying productive. Backtested on ~3,800 historical role expansions: players with this profile carried a materially larger role (+4pp usage) with above-league-average efficiency and rising production, yet received that larger role barely more often than anyone else — a market inefficiency, flagged honestly as a low-risk expansion candidate rather than a breakout guarantee. All views reuse the same calibrated models — nothing is recomputed per view. VALIDATION (out-of-time backtest, reproducible via validate_level_up.py): the underlying premise holds model-free — top-decile producers of a league historically moved up a level about five times as often as below-median producers (over ten times in weak leagues) — and the model's climb signal adds real precision: among international prospects in the holdout window, flagged players (projected ≥0.08 above their current level) climbed about eight times as often as unflagged ones, projected level correlated strongly with realized level (rank correlation ~0.7), and the calibration is monotone in both directions — strongly negative projections identified actual decliners. The signal is strongest for players under 23 and weakens with age; the flag threshold sits at a validated break point (hit rates roughly quadruple just above it). Honest limits: promotion is market-endogenous (clubs decide, not only ability), the observation window censors late climbers, and near-miss cases show the direction is often right when the magnitude falls just short. LEAGUE AWARDS (🏆 badge, recruiting views + player hero) surface season honors scraped from official league records — MVP, Best Young Player, All-League, Best Defender; weekly and monthly honors are excluded. They are descriptive facts, deliberately not a model input: in a controlled backtest, young-award winners went on to climb league levels at several times the rate of comparable early-career peers (stable across time periods), but award winners are so rare in the pool that a model feature would move almost no predictions — so the signal is shown, not modeled. Award coverage is recent-leaning and varies by league; a missing badge outside a league's coverage window means no data, not no honors. Awards are jury-voted, so they carry reputation and team-success effects alongside ability — a visibility flag, never a causal claim."},
     {cat:"Usage Load Curve (Roles tab)",items:[],desc:"A per-game view of offensive load: every dot is one game (usage share vs. adjusted offensive rating from play-by-play), with the player's own smoothed curve against a peer-expectation reference at the same usage. The display classifies the usage range in three honest zones: PROVEN (at least three games in a 4-point usage bucket with average efficiency no worse than 8 points below peer expectation), FALL-OFF (a tested bucket where efficiency breaks below that reference) and UNTESTED (load he was simply never asked to carry) — the distinction matters because 'never asked' is evidence-absence, not failure. Scope: players with play-by-play game logs (NCAA 2017-18 onward). WHY THIS IS DESCRIPTIVE, NOT PREDICTIVE: we tested whether the proven-usage ceiling predicts NBA offensive roles (peak-3-season PIE as the role proxy) on the NBA-careered pool of recent classes — it added no incremental signal over plain season usage (partial rank correlation ≈ 0), and archetype-specific cutoffs were not estimable at that sample size; the attempt is reproducible in validate_usage_ceiling.py. So the section is presented as scouting evidence about this player's demonstrated load tolerance — a conversation-starter for film work and role planning, not an outcome model. The cutoff parameters shown (−8 vs. peer, 3-game minimum) are the most stable cells of a small sensitivity grid, not empirically optimal constants."},
     {cat:"The 5 Pillars (DNA Scores)",items:["feel","shootScore","defScore","funcAth","selfCreation","overall"],desc:"Position-adjusted percentile scores (0–100) capturing the fundamental dimensions of prospect evaluation. Each pillar uses era-adjusted percentiles computed against ~34k college + ~9k international players since 2008. ALL FIVE PILLARS MEASURE CURRENT SKILL — what the prospect actually does now — not projections of future NBA outcomes. NBA outcome forecasts live in the NBA Projections section (Tier Probabilities, Star+ Creator Projection, etc.). For example: the Creation pillar measures Self-Adjusted Box Creation = Self-Created Scoring (USG × TS × Self-Share) + Passing Creation (AST% × clamp(AST/TO,0.5,2.5)/2.5), position-weighted. The separate Star+ Creator Projection answers a different question — will this skill translate into a Star+ Creator role in the NBA — via a calibrated Logistic Regression model."},
     {cat:"Shooting Projection (Diss-M1/M4, Berger 2022)",items:["projNba3p","projNba3pa","projNba3par","touchPrior"],desc:"Two-stage model from the underlying dissertation (Ch. 7). Stage 1: empirical Bayes shrinkage of college 3P% against the NCAA league-wide distribution (α₀, β₀ fitted via method-of-moments from 16,771 NCAA players ≥20 3PA — league median μ₀=34.8%, effective κ=69). Small samples (Boozer 0%/2 attempts, Saraf 0%/2) get pulled toward the league median. Stage 2: beta regression M1 for NBA 3P% translation = FT% + 2PJ% (PBP, NCAA only) + pre-draft 3P% estimate. Coefficients freshly fitted on the resolved holdout (n=675 NCAA RMSE 0.0380, n=392 intl RMSE 0.0367). Intl gets M1-light without 2PJ% — NO imputation for missing PBP. All values data-driven, no hand-tuning."},
-    {cat:"Possession Impact (CFFR)",items:["fourFactors"],desc:"Context-Free Four Factor Rating measuring possession efficiency per Dean Oliver's framework. Usage-role adjusted: Primary (USG≥28%), Secondary (≥22%), Finisher (≥15%), Low-Usage (<15%). Each factor (eFG% 40%, TO% 25%, ORB% 20%, FTr 15%) is percentiled WITHIN the player's usage bucket, so a primary scorer with 52% eFG rates correctly against peers, not low-usage finishers."},
-    {cat:"Possession Impact — Position-Aware Weights (NetPV v2)",items:[],desc:"The four-factor weights used in the Net Possession Value composite are no longer the legacy Dean Oliver defaults (40 / 25 / 20 / 15) but derived empirically and then Bayesian-shrunken toward the pool default. The starting point is OLS regression of peak Wins Added on each Four Factor's percentile in the NBA-careered pool (n=892), separately per position group. The raw empirical magnitudes (|coefficient|, normalized to sum 1): Playmakers (R²=0.09, n=180) eFG 35 / TO 16 / ORB 27 / FTr 23 — robust signal, ORB% materially higher than the pool. Bigs (R²=0.01, n=186) eFG 26 / TO 17 / ORB 32 / FTr 26 — directionally sensible but per-factor coefficients sit close to noise. Wings (R²=0.004, n=526) eFG 43 / TO 5 / ORB 17 / FTr 35 — pattern is statistically indistinguishable from random within the four-factor model. Pool default (R²=0.015, n=892) eFG 39 / TO 14 / ORB 20 / FTr 28. To avoid surfacing position-specific noise as if it were signal, the displayed weights are α × empirical + (1-α) × default, with α = R² / (R² + r²_prior) and r²_prior = 0.03. Effective data weight per position: PM α=0.75 (most empirical signal survives), Big α=0.25 (shrinks heavily toward default), Wing α=0.12 (essentially the pool defaults). FINAL WEIGHTS used in the composite: Playmaker eFG 36 / TO 15 / ORB 25 / FTr 24 — the position-specific story (Playmakers weight ORB more than pool) survives intact. Big eFG 36 / TO 14 / ORB 23 / FTr 27 — ORB still nudged above pool, eFG slightly below, but the position-specific deviation softens. Wing eFG 39 / TO 13 / ORB 19 / FTr 28 — essentially identical to pool, which is the honest read of the Wing data. DIRECTION stays classic Dean Oliver for every position — eFG up, low-TO up, ORB up, FTr up = better. We use magnitudes only, not OLS signs, because the raw OLS sign on TO% inverts for several positions: high z_tov (= low raw TO%) correlates with LOW peak Wins Added, but only because low-usage specialists post lower TO% than high-usage initiators within the same usage bucket — a sample artifact, not a basketball signal. Treating TO% as a magnitude-only weight on the classical direction is the cleanest call. The Possession Impact section sub-line tells you which weight set is in use plus the data-weight α; the per-factor tooltip carries the position-specific weight directly. R² of the position-specific regressions remains modest in absolute terms — the Four Factors alone explain a small share of peak-WA variance — so the composite serves its original purpose: a position-fair efficiency snapshot for scout reading, not a stand-alone outcome predictor."},
     {cat:"Pool & Era Caveats (Honest Framing)",items:[],desc:"Several sections in this tool use NBA-careered pools as the validation anchor — Skill Intersections (n=919), NetPV v2 weights (n=892), Half-Split tier-correlations (n=182), and Trajectory Validation cohorts (n=518). All of these are CONDITIONAL on the player reaching the NBA. So when we say 'players above-average in both ORB% and AST% reached Star+ at 47.7% in the Playmaker pool', that means 47.7% of those who made it to the NBA and shared this pre-draft profile — not 47.7% of all college players. The unconditional Star+ rate from a random pre-draft sample is far lower. Read every NBA-careered cohort number as 'conditional on making it' — that's still useful (the profile correlates with star outcomes among NBA-careered peers) but it doesn't translate to the broader prospect pool without further adjustment. We deliberately don't do that adjustment in the section UI because the conditional rate is the cleaner scout-eye comparison. Era and pace also matter: NCAA pace rose from ~67 to ~70 possessions/game between 2017 and 2025, and 3PA rose meaningfully too, so cross-era pooling for half-split or trajectory metrics quietly favours recent seasons. Where we pool across eras (Half-Split percentiles, Trajectory slopes), the median values are dominated by the more frequent recent seasons. We accept this trade-off because the sample-size lift from pooling beats the era-correction precision we could realistically achieve here. Position classification matters too: the Playmaker / Wing / Big groups use height-based rules (Big ≥84\" unconditional, ≥82\" with non-wing usage profile, ≥80\" with elite shot-blocking; Playmaker high-AST short; Wing everything else), so a 6'10\" stretch forward sits in 'Wing' even if he plays Big in some lineups. Every position-stratified analysis inherits this classification and its edge-case behaviour."},
     {cat:"Development Tab — Trajectory Validation",items:[],desc:"For each headline stat with a multi-season trajectory (BPM, TS%, USG%), the slope per year is compared to the historical NCAA pool of multi-season players (n=14,281). Each slope is rendered as a value (+0.45 BPM per year, e.g.), a percentile rank vs the pool, and a cohort outcome anchor: 'players in this slope-quartile reached Star+ at X%, Bust at Y%' built from the NBA-careered subset (n=518). HONEST FRAMING: BPM and TS% slopes are weak predictors by themselves — every slope quartile produces Star+ at 11–16% and Bust at 44–54%. A rising BPM curve is a positive signal but not a star differentiator on its own. USG slope carries a moderate signal: top quartile (USG rising +3.4 to +15 points/yr) reaches Star+ at 20.8% vs 12.3% in the bottom quartile, and Bust drops from 54.6% to 40.8%. Players who EXPAND their offensive load over their NCAA career are more often legit lottery-tier prospects than developers who plateau. Section header explicitly says which signal carries weight; each stat row has its own caveat sentence so the reader knows when to push hard on the cohort number and when to treat it as context."},
     {cat:"Scouting Tab — Skill Intersections",items:[],desc:"Two stat pairs that don't usually go together at the college level — bigs who pass like guards, point guards who block like rim protectors. Being above the position average in BOTH is structurally rare and historically tied to a meaningful peak Wins Added lift. Two pairs are surfaced: Crasher + Distributor (ORB% × AST%) and Two-Way Skill (AST% × BLK%). Per pair, two z-score bars (one per stat) are rendered Four-Factors-style. A status pill at the top reads 'Above-Avg in BOTH', 'Below avg in one', or 'Insufficient data'. The hover tooltip carries the hypothesis in plain English plus historical validators — Jokic · KAT · Blake Griffin · Haliburton · Ja Morant · Draymond Green · Kawhi Leonard for Crasher + Distributor; Joel Embiid · KAT · Paul George · Draymond Green · Klay Thompson · John Wall · Tyrese Haliburton for Two-Way Skill. POOL: 919 NBA-careered players from draft years 2008–2020 with known peak outcome, joined with 224 international stars (Jokic, Doncic, Embiid, Porzingis, Gasol, Ginobili and others) via diacritic-resilient name matching, so the comparison anchor reflects the modern global player pool. METHODOLOGY: each pair is validated three ways — (1) Pearson/Spearman global correlation to confirm the anti-correlated trade-off (Crasher+Distributor r=−0.55, Two-Way Skill r=−0.42); (2) position-stratified above-average lift (z≥0 in both stats vs the position pool); (3) continuous z-score regression peak WA ~ min(z_a, z_b), reporting slope + 95% CI + p-value (Crasher+Distributor +2.03 WA per +1σ, p=0.002; Two-Way Skill +2.88 WA per +1σ, p<0.001). REJECTED PAIRS (listed transparently in the footer): 3PAr × ORB% (Wing dropper signal negative), 3PAr × FTR (sample too small), Rim Frequency × Low TO% (rim-frequency mixes rolling bigs, cutting wings, and actual drivers), Rim Pressure × Low TO% (the 'driving leads to turnovers' assumption doesn't show up in pre-NBA data). HONEST FRAMING: these are scout-eye intersections that historically tie to outcome lift — not deterministic NBA predictors. A player can be above-average in both and still bust; a player can fail both and still star. The section sits under Possession Impact precisely to be read alongside the Four Factors, not as a standalone projection."},
@@ -13639,14 +14114,12 @@ function MethodologyTab() {
     {cat:"Body Tab — Anthro vs. NBA-Tier Comparison",items:[],desc:"Reference markers for height, weight, wingspan, and standing reach grouped by NBA career tier (Replacement / Role Player / Starter / All-Star) × 5-position (PG / SG / SF / PF / C). Tier boundaries are fixed peak-Wins-Added quantiles (Replacement ≤ 0.8, RP 0.8-3.3, Starter 3.3-10.1, All-Star > 10.1) chosen so the buckets describe realized NBA outcomes, not subjective \"Starter\"-vs-\"All-Star\" labels. Within each (tier × position) cell, the marker value is the per-cell MEDIAN from the joined Combine × NBA pool (NBA Combine 2000-2022 inner-joined with the nba_added_wins_peak.csv pool by NFKD-normalized name — n=231 players with all four measurements + peak_wa). The medians are then monotonized along the tier axis so every higher tier is ≥ the previous (small distortion to keep the picture monotone-readable). Three caveats matter for reading these markers correctly: (1) SELECTION-BIAS in the All-Star cell — many All-Star-level prospects (Top-5 picks) skip the NBA Combine entirely, so the Combine-pool All-Stars are a non-random subset; (2) SAMPLE THIN at Role Player and Starter (per-cell n typically 5-13, single-cell minimum n=1 for Starter/C → kept current value as fallback); (3) NON-MONOTONICITY in raw wingspan and standing reach across tiers — in the joined raw data several All-Star cells have LOWER wingspan medians than the Starter cells of the same position, because skill outweighs reach among the absolute outliers (Brunson 75″ wingspan and Trae 75″ wingspan are All-Stars). The monotonization step hides that in the displayed values; the Methods Tab makes it explicit. CONSEQUENCE: treat these markers as DESCRIPTIVE reference (\"where does this prospect's height sit vs. NBA pool of position-X Role Players?\") not as PREDICTIVE thresholds (\"if he hits this number he's an All-Star\"). The recalibration is reproducible via data-pipeline/scripts/recalibrate_anthro_tier_medians.py; the full per-cell n + raw vs monotonized table lives in data-pipeline/data/processed/anthro_tier_medians_recalibrated.json. Re-run this script when the NBA-careered pool gets refreshed (new draft classes mature) — the tier boundaries stay fixed, only the per-cell medians shift."},
     {cat:"Body Tab — Functional Frame v2 (NBA-Pro architecture)",items:[],desc:"Answers 'does he play bigger than his measured size?' across three anthro dimensions (height, wingspan, weight) × two sides (defensive, offensive) — 6 separate Ridge regressions. ARCHITECTURE: Each model takes its OWN feature set (a player's stat profile) and predicts what anthropometric value an NBA-careered player with THAT stat profile typically had. The Δ (predicted − listed) then quantifies whether his stats look like a bigger or smaller player. POOL: NBA-careered players from college draft years 2008–2020 (n=644 with measured height, 485 with wingspan, 87 with weight). FEATURE SELECTION (Sprint-3.38, June 2026): Originally hand-picked from domain knowledge. Re-audited via NBA-Pro empirical workflow: LassoCV with CV-tuned λ (free feature count, no manual cap), Bootstrap-Stability over 100 resamples (⭐ if ≥80% selection frequency), Permutation Importance cross-check, 5-fold Out-of-Sample R² comparison. Result: 4 of 6 targets switched to empirically-selected feature sets, +0.04 to +0.14 OOS R² improvement; 2 kept (where empirical selection was statistically equivalent). CURRENT FEATURE SETS: DEF Height = BLK%, STL%, DRB%, Rim Protection (R²=0.62, residual SD 2.02\"); DEF Wingspan = STL%, DRB%, BLK% (R²=0.61, kept from v1); DEF Weight = STL%, DRB%, DBPM, Rim Protection (R²=0.52, residual SD 16.22 lbs, directional only); OFF Height = dunks, rim%, mid%, 3P%, ORB%, ff_orb, AST%, FTR, OBPM, Rebounder role (R²=0.68, residual SD 1.88\" — biggest gain); OFF Wingspan = identical LASSO selection to OFF Height (R²=0.62, residual SD 2.26\"); OFF Weight = ORB%, AST% (R²=0.64, residual SD 14.00 lbs, directional only). 95% CONFIDENCE CORRIDOR: shaded band on each FrameBar = ±1.96 × in-sample residual SD. DRIVERS PER DIMENSION: top-3 contributing features per model (capped per-dim so each dim is always represented even when one model dominates), shown grouped under Height / Wingspan / Weight headers. Each driver tile shows the contribution magnitude in the unit of the predicted dimension. Green/+ = stat pushed prediction above pool average; red/− = below. IMPORTANT: drivers explain why the prediction differs from the POOL AVERAGE — they do NOT explain the Δ vs. the player's listed measurement (that's a separate comparison shown in each dim-header). 3D COMP MATCHING: nearest-neighbour search in normalized (height, wingspan, weight) space; defensive and offensive lists are cross-list deduplicated (Sprint-3.37.F) so a single pool player can appear in at most one of the two sides for the same prospect. CONDITIONAL PATTERNS (Sprint-3.31/3.33): aggregate correlation of reach Δ with NBA peak Wins Added is just r=+0.04 across the historic pool (n=861) — so the metric does NOT linearly predict star/bust outcomes. HOWEVER, segmenting by frame size reveals three positive sub-segments: SMALL-GIANT (≤6'5\" + plays bigger defensively) → Star+ rate 25% vs 14–21% baseline (Kemba/VanVleet/Lawson archetype); WING-BIG (6'6–6'8\" + plays much bigger) → Bust rate drops to 19% from Wing-mean 41%, strongest stick signal in the analysis (Clarke/Collins archetype); SKILLED-BIG (≥7'0\" + plays smaller offensively) → Star+ 44% + Stick 64% (Wembanyama/Embiid/Markkanen/Porzingis archetype). EFFECTIVE FRAME (Sprint-3.37.G): when a player has no combine measurement on file (most 2026er prospects), the body tab additionally shows a sentence summarizing the predicted-only inference (\"plays as if he were ~X wingspan / Y lbs\") plus a pool-range scale visualization. POSITION-AWARE VERDICTS (Sprint-3.37.D): the textual style/tone label under each Side card switches vocabulary based on the player's position group (Playmaker, Wing, Big) — so a small Playmaker no longer accidentally gets a \"stretch-Big pattern\" label. USE: style-mapping, comp-matching, extreme-pattern detection. For projection see Tier Probabilities, Star+ Creator, and Added Wins on the Projection tab. WHY NOT A PREDICTOR: with aggregate r=+0.04 the metric carries almost no linear outcome signal — the conditional patterns are the right way to read it."},
     {cat:"Shooting Tab — Diss-M1/M4 (Berger 2022) NBA shooter projection",items:[],desc:"Three-stage model from Berger (2022) Chapter 7, modified for role neutrality. STAGE 1 — Pre-draft 3P% estimate via empirical Bayes shrinkage: p̂ᵢ = (α₀ + 3PMᵢ) / (α₀ + β₀ + 3PAᵢ), with α₀ and β₀ fitted from the NCAA league-wide distribution via method-of-moments (16,771 NCAA players ≥20 3PA → α₀=23.89, β₀=44.67, μ₀=34.8%, κ=69). Small 3PA samples are pulled toward the league median (Boozer 0%/2 attempts → 38.2%). STAGE 2 — M1 for NBA 3P%: logit(NBA 3P%) = β₀ + β₁·FT% + β₂·2PJ% + β₃·3P-Estimate. NCAA n=675 RMSE=0.0380 (beats the dissertation value 0.0559); intl n=383 RMSE=0.0367 (M1-light without 2PJ%, NO imputation for missing PBP). STAGE 3 — M4 for NBA 3PAr (3PA/FGA): logit(NBA 3PAr) = β₀ + β₁·NCAA-3PAr + β₂·2PJ% + β₃·FT% + β₄·3P-Estimate. NCAA n=662 RMSE=0.130, intl n=383 RMSE=0.126. IMPORTANT: the dissertation's original M4 projected 3PAp40 (role-dependent — driven by possessions and minutes). We switched the target to 3PAr (3PA/FGA), a pure shooter signature that's independent of role and playing time. Together 3P% (efficiency) and 3PAr (tendency) describe the shooter completely without any role assumption. ALL values data-driven, no hand-tuning."},
-    {cat:"Possession Impact (CFFR)",items:["fourFactors"],desc:"Context-Free Four Factor Rating measuring possession efficiency per Dean Oliver's Four Factors framework. Usage-role adjusted: Primary (USG≥28%), Secondary (≥22%), Finisher (≥15%), Low-Usage (<15%). Each factor (eFG% 40%, TO% 25%, ORB% 20%, FTr 15%) is percentiled WITHIN the player's usage bucket — so a primary scorer with 52% eFG rates against fellow primaries, not against low-usage finishers. Composite: Net Possession Value (0–100). Verdict tiers: Elite Floor Raiser (≥70), Winning Piece (55–70), Role Dependent (45–55), High Maintenance (<45)."},
+    {cat:"Possession Impact (CFFR)",items:["fourFactors"],desc:"Context-Free Four Factor Rating measuring possession efficiency per Dean Oliver's Four Factors framework. Usage-role adjusted: Primary (USG≥28%), Secondary (≥22%), Finisher (≥15%), Low-Usage (<15%). Each factor is percentiled WITHIN the player's usage bucket — so a primary scorer with 52% eFG rates against fellow primaries, not against low-usage finishers. Composite: Net Possession Value (0–100), built with position-aware factor weights (see ‘Possession Impact — Position-Aware Weights (NetPV v2)’). Verdict tiers: Elite Floor Raiser (≥70), Winning Piece (55–70), Role Dependent (45–55), High Maintenance (<45)."},
+    {cat:"Possession Impact — Position-Aware Weights (NetPV v2)",items:[],desc:"The four-factor weights used in the Net Possession Value composite are no longer the legacy Dean Oliver defaults (40 / 25 / 20 / 15) but derived empirically and then Bayesian-shrunken toward the pool default. The starting point is OLS regression of peak Wins Added on each Four Factor's percentile in the NBA-careered pool (n=892), separately per position group. The raw empirical magnitudes (|coefficient|, normalized to sum 1): Playmakers (R²=0.09, n=180) eFG 35 / TO 16 / ORB 27 / FTr 23 — robust signal, ORB% materially higher than the pool. Bigs (R²=0.01, n=186) eFG 26 / TO 17 / ORB 32 / FTr 26 — directionally sensible but per-factor coefficients sit close to noise. Wings (R²=0.004, n=526) eFG 43 / TO 5 / ORB 17 / FTr 35 — pattern is statistically indistinguishable from random within the four-factor model. Pool default (R²=0.015, n=892) eFG 39 / TO 14 / ORB 20 / FTr 28. To avoid surfacing position-specific noise as if it were signal, the displayed weights are α × empirical + (1-α) × default, with α = R² / (R² + r²_prior) and r²_prior = 0.03. Effective data weight per position: PM α=0.75 (most empirical signal survives), Big α=0.25 (shrinks heavily toward default), Wing α=0.12 (essentially the pool defaults). FINAL WEIGHTS used in the composite: Playmaker eFG 36 / TO 15 / ORB 25 / FTr 24 — the position-specific story (Playmakers weight ORB more than pool) survives intact. Big eFG 36 / TO 14 / ORB 23 / FTr 27 — ORB still nudged above pool, eFG slightly below, but the position-specific deviation softens. Wing eFG 39 / TO 13 / ORB 19 / FTr 28 — essentially identical to pool, which is the honest read of the Wing data. DIRECTION stays classic Dean Oliver for every position — eFG up, low-TO up, ORB up, FTr up = better. We use magnitudes only, not OLS signs, because the raw OLS sign on TO% inverts for several positions: high z_tov (= low raw TO%) correlates with LOW peak Wins Added, but only because low-usage specialists post lower TO% than high-usage initiators within the same usage bucket — a sample artifact, not a basketball signal. Treating TO% as a magnitude-only weight on the classical direction is the cleanest call. The Possession Impact section sub-line tells you which weight set is in use plus the data-weight α; the per-factor tooltip carries the position-specific weight directly. R² of the position-specific regressions remains modest in absolute terms — the Four Factors alone explain a small share of peak-WA variance — so the composite serves its original purpose: a position-fair efficiency snapshot for scout reading, not a stand-alone outcome predictor."},
     {cat:"Comps Tab",items:[],desc:"Multi-dimensional comparable-player engine. Instead of one opaque similarity score, each prospect is matched along five explicit dimensions (production, efficiency, physical profile, role, age/stage) against historical pre-draft seasons — you see WHERE two players are alike, not just that they are. Cohort forecasts show how the prospect's closest historical peers actually turned out (realized NBA outcomes), giving the projection a human-readable reference set. Pre-draft seasons only — comparing what players looked like before the NBA."},
     {cat:"Position Reclassification",items:[],desc:"Stats-driven position groups (Playmaker / Wing / Big) used throughout the site. Rules: Big = Height ≥84\" unconditional, OR Height ≥82\" with non-wing usage profile (USG<25 AND AST%<15), OR Height ≥80\" with elite shot-blocking (BLK%≥5 AND non-wing usage). Playmaker = AST%≥25 AND Height ≤6'5\", OR AST%≥30 AND Height ≤6'7\". Wing = everything else. Designed to keep tall wings (Bailey-style 6'10\" forwards) classified as Wings rather than misclassified to Big purely by height."},
     {cat:"International Adjustments",items:[],desc:"International players receive three adjustments: (1) League Strength — every league's weight is derived empirically from bridge players (players who appeared in multiple leagues), anchored to NCAA Power = 1.0 and shrunk toward a conservative prior where evidence is thin. Weights cover 60+ leagues worldwide and are recomputed on every data refresh — never hand-set. (2) League-BPM translation: the raw BPM proxy is scaled by league so an international season reads on the NCAA-equivalent scale before feature engineering. (3) League-strength-adjusted projection with usage-translatability caps for strong leagues. For Athleticism, an FT-Rate + ORB%-based formula replaces dunk rate (unavailable for most international players). The International Recruiting Board additionally offers a browser-local watchlist (★): tracked targets keep showing even once they become NBA near-locks — a rising flight risk on a tracked player is a signal, not something to hide. The list is stored in this browser only."},
-    {cat:"Youth Radar (clubs + national teams, U16-U20)",items:[],desc:"A scouting radar over three youth sources: the adidas Next Generation Tournament (EuroLeague U18 club circuit — qualifiers and finals), the Junior Adriatic / VTB Youth / Youth BCL club leagues, and the FIBA national-team championships from U16 to U20 (European Championships divisions A and B plus the U17 and U19 World Cups, covering the last and the current summer — editions carry a year tag). Per-event leaderboards are aggregated per player, game-weighted across events. Deliberately model-free — samples range from a 2-8-game tournament to a youth-league season, youth events carry no empirically calibrated league weight (they are excluded from the bridge graph on purpose), and the career models are not calibrated for youth populations. So the radar shows raw production only: minutes, scoring, rebounding, playmaking, stocks, true shooting. Two honest reading rules: there is no age adjustment (leaderboards carry no birthdates), so older prospects outproducing the field is expected; and mixing age brackets means raw numbers compare cleanly only within an event, not U16-vs-U20. Intended use: build an early watch universe here, then follow players into their senior-league seasons, where the full model (league weights, tier odds, projected levels) applies."},
-    {cat:"Cross-Market Views: College Targets · Level-Up · Source Filter",items:[],desc:"The recruiting lens covers three player markets beyond the main board. COLLEGE TARGETS (audience: college programs in the NIL era) lists international prospects inside the college-age window (draft-day age ≤ 21), ranked by projected peak Added Wins — deliberately the talent scale rather than the league-level scale, because for a college program NBA upside is a selling point (draft-pipeline visibility, NIL value), not a flight risk. Eligibility is explicitly out of scope: amateur status, professional contracts and seasons-of-competition rules are case-by-case decisions, so the view is a talent radar, not an eligibility determination. LEVEL-UP (audience: front offices one or two league levels up) lists international players projected clearly above their current environment, sorted by the size of the climb (projected sustainable level minus current level — the same calibrated quantity as Value ▲ on the board, but ranked by the gap instead of the absolute level, so second-division and mid-league dominators surface before the market prices them in); league-adjusted BPM is shown as the production evidence. SOURCE FILTER on the Recruiting Board splits the market into college players (NCAA players an international club could sign away) and international players (already abroad). PORTAL RADAR (audience: college programs) applies the same undervaluation idea inside the NCAA: players below the high-major stage whose projected peak talent (Added Wins) exceeds their platform — the transfer-portal/NIL shortlist; we do not track actual portal status, the view ranks who is worth the call if available. FIND ME ANOTHER (replacement search) takes a reference player and returns the statistically closest signable profiles in the market pool — similarity over position-stratified percentiles measures profile shape, not equal quality, which is why level, age and value columns sit next to the fit score. LURKERS (🕵 badge + filter) flag a third undervaluation source beyond level mispricing: role headroom — top-30% efficiency on a bottom-40% usage role while staying productive. Backtested on ~3,800 historical role expansions: players with this profile carried a materially larger role (+4pp usage) with above-league-average efficiency and rising production, yet received that larger role barely more often than anyone else — a market inefficiency, flagged honestly as a low-risk expansion candidate rather than a breakout guarantee. All views reuse the same calibrated models — nothing is recomputed per view. VALIDATION (out-of-time backtest, reproducible via validate_level_up.py): the underlying premise holds model-free — top-decile producers of a league historically moved up a level about five times as often as below-median producers (over ten times in weak leagues) — and the model's climb signal adds real precision: among international prospects in the holdout window, flagged players (projected ≥0.08 above their current level) climbed about eight times as often as unflagged ones, projected level correlated strongly with realized level (rank correlation ~0.7), and the calibration is monotone in both directions — strongly negative projections identified actual decliners. The signal is strongest for players under 23 and weakens with age; the flag threshold sits at a validated break point (hit rates roughly quadruple just above it). Honest limits: promotion is market-endogenous (clubs decide, not only ability), the observation window censors late climbers, and near-miss cases show the direction is often right when the magnitude falls just short. LEAGUE AWARDS (🏆 badge, recruiting views + player hero) surface season honors scraped from official league records — MVP, Best Young Player, All-League, Best Defender; weekly and monthly honors are excluded. They are descriptive facts, deliberately not a model input: in a controlled backtest, young-award winners went on to climb league levels at several times the rate of comparable early-career peers (stable across time periods), but award winners are so rare in the pool that a model feature would move almost no predictions — so the signal is shown, not modeled. Award coverage is recent-leaning and varies by league; a missing badge outside a league's coverage window means no data, not no honors. Awards are jury-voted, so they carry reputation and team-success effects alongside ability — a visibility flag, never a causal claim."},
-    {cat:"Usage Load Curve (Roles tab)",items:[],desc:"A per-game view of offensive load: every dot is one game (usage share vs. adjusted offensive rating from play-by-play), with the player's own smoothed curve against a peer-expectation reference at the same usage. The display classifies the usage range in three honest zones: PROVEN (at least three games in a 4-point usage bucket with average efficiency no worse than 8 points below peer expectation), FALL-OFF (a tested bucket where efficiency breaks below that reference) and UNTESTED (load he was simply never asked to carry) — the distinction matters because 'never asked' is evidence-absence, not failure. Scope: players with play-by-play game logs (NCAA 2017-18 onward). WHY THIS IS DESCRIPTIVE, NOT PREDICTIVE: we tested whether the proven-usage ceiling predicts NBA offensive roles (peak-3-season PIE as the role proxy) on the NBA-careered pool of recent classes — it added no incremental signal over plain season usage (partial rank correlation ≈ 0), and archetype-specific cutoffs were not estimable at that sample size; the attempt is reproducible in validate_usage_ceiling.py. So the section is presented as scouting evidence about this player's demonstrated load tolerance — a conversation-starter for film work and role planning, not an outcome model. The cutoff parameters shown (−8 vs. peer, 3-game minimum) are the most stable cells of a small sensitivity grid, not empirically optimal constants."},
-    {cat:"Tier Feasibility (vs NBA)",items:[],desc:"How does this prospect stack up against the actual pre-draft college numbers of players who reached each NBA tier? Built from the mature draft cohort 2008-2018 (n=353 NBA players with realized peak Wins Added). We grouped them by their realized NBA outcome - Replacement, Role Player, Starter, All-Star - using peak-WA percentile cuts (10/30/60/85). For each (tier x position) we then took the MEDIAN of every pre-draft college stat (BPM, USG%, TS%, AST%, TO%, STL%, BLK%, ORB%, DRB%, AdjOE) and used that as the in-range center. Frontend automatically derives p25 = median x 0.75 and p75 = median x 1.30 around it: above median is green (In-Range), below median is orange (Below Median), below p25 is red (Critical Gap) - or yellow (Compensated) if a position-core metric is elite enough to offset (Wings core = TS% + 3P%; Playmakers core = AST% + TO%; Bigs core = BLK% + ORB%). Thresholds are MONOTONIZED along the tier axis (a higher tier's threshold never sits below a lower tier's; TO% inverse), at the cost of small distortion - pre-draft college stats only weakly separate Starter from All-Star, because the real talent spike happens AFTER the draft via role + minutes + team context. So a player can clear all Starter thresholds and still NOT clear All-Star simply because the Starter and All-Star pre-draft stats overlap. Read this view as a diagnostic - how many tier markers does he hit - not as a forecast."},
+    {cat:"Passport / Bosman layer (Recruiting views)",items:[],desc:"Market, Youth Radar and Future Classes carry a passport filter and per-player passport badges, built from a static map (RealGM player bios, ~40k players) that classifies every known nationality into EU (Bosman), EEA (Bosman-equivalent), Switzerland (bilateral free movement — league-dependent), Cotonou/OACPS (legally league-dependent) and non-EU. Honest limits, shipped inside the payload and shown on the filter: RealGM lists ONE nationality, so dual passports are structurally missing — a curated override list corrects known cases, and a national-team evidence rule upgrades classes automatically (FIBA eligibility requires the federation&#39;s passport, so a U.S.-born player appearing for Germany&#39;s U18s holds a German passport; such upgrades are marked with *). Territorial passports are mapped to the issuing state (Martinique/Tahiti → France = EU, Aruba/Cura\u00e7ao → Netherlands = EU, Puerto Rico/USVI/Guam → US). Players without passport data drop out of specific filters rather than being silently classified. League roster rules (ACB cupo, BBL 6+6, \u2026) are NOT encoded as data — they vary by league and season; the layer answers the passport question only."},
     {cat:"Front Office Lab (Research area)",items:[],desc:"The Research area's first study: how NBA front offices actually drafted. ANALYSIS UNIT IS THE REGIME, never the franchise — a regime is one person in charge of one team over one continuous span, so a team's picks are split across the executives who owned them, and draft-night trades are attributed to the team a pick was selected FOR rather than the team that called the name. PICK VALUE ADDED (PVA) is realized peak Wins Added minus what that draft slot historically returned, on an isotonic slot curve fitted in two eras (the pre-2011 and post-2011 value of an early pick differ enough that one curve would flatter the modern regimes and punish the old ones). PVA is deliberately ex-post and model-free: scoring front offices with our own projections would grade them against the same outcomes those projections were trained on. WHY THERE IS NO GM RANKING — this was pre-registered before the numbers were seen (validate_fo_signal.py): a split-half reliability test on alternating picks plus a permutation test of between-regime variance decide the page's own truth claim, and the verdict ships inside the payload so the copy cannot outrun the evidence. Outcome quality has not cleared that bar, so the PVA views are labelled descriptive draft history — what happened, not who is good at it — and the empirical-Bayes shrinkage confirms it from the other side: with essentially no between-regime variance left after sampling noise, every shrunk estimate collapses to zero, which is the finding rather than a bug. WHAT DOES HOLD UP IS BEHAVIOUR. Type preferences are tested against an availability counterfactual: for each pick we form the pool of players still on the board (everyone drafted later that year), so a regime's expected share of young or international picks is the share its own slots actually offered, not a league average. Each regime × type cell gets an exact binomial test with Benjamini-Hochberg FDR control across all cells, because roughly two hundred cells at α=0.05 would manufacture about ten findings from pure noise. Non-significant tendencies stay visible, marked as such — hiding them would turn the page into a highlight reel of whatever survived. Note the asymmetry the page states openly: a few strong individual cells can survive FDR while the league-wide omnibus permutation on the same dimension does not, because the cell test conditions on each pick's own board while the omnibus dilutes a handful of distinctive regimes across forty. RISK APPETITE is a two-component z-score (young share plus international share) — a descriptive composite, not a validated construct; reach (pick minus consensus-implied slot) is reported separately and is only interpretable relative to the league mean. LIMITS, all stated on the page: recent drafts are right-censored and excluded until careers mature, peak Wins Added is one yardstick among several, draft decisions are collective and cap-constrained in ways we cannot observe, and the whole exercise is hindsight by construction. Live gate values, window and sample sizes are shown in the view itself (Research → Front Office Lab → Method), which is the authoritative method text and updates with every refresh."},
     {cat:"Data Sources & Coverage",items:[],desc:"NCAA Box Stats: BartTorvik (34k+ player-seasons 2008–2026, per-game + advanced + shooting zones — barttorvik.com). NCAA Play-by-Play: ESPN Play-by-Play (event-level data 2017-18 through 2025-26, ~700k player-game-events tracked). International Box Stats: RealGM (~20k player-seasons across 70+ leagues worldwide — every senior national league plus continental competitions — realgm.com). NBA Outcomes: NBA Stats API Advanced stats (27 seasons, used for peak Wins-Added computation). Anthropometrics: NBA Draft Combine measurements (NBA.com) + Databallr wingspan dataset. National Team / FIBA: FIBA event statistics for international youth and senior tournaments. All data is processed through our own pipeline — no external services are queried at runtime."},
   ];
@@ -14894,6 +15367,8 @@ const LURKER_TIP = "Lurker — role headroom: top-30% efficiency on a small role
 function YouthRadarView() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(false);
+  const [natF, setNatF] = useState("all");   // Passport/Bosman layer
+  const nat = useNationality();
   // Turnier-Filter + Deep-Link (?event=<slug>): teilbare Turnier-Bestenliste,
   // z.B. während einer laufenden EM. Slug = Label ohne Sonderzeichen.
   const _evSlug = (t) => t.toLowerCase().replace(/[^a-z0-9]+/g, "");
@@ -14925,8 +15400,9 @@ function YouthRadarView() {
   const allPlayers = data.players || [];
   // '26er-Editionen (aktueller Sommer-Zyklus) zuerst in der Chip-Leiste
   const evs = [...(data.tournaments || [])].sort((a, b) => (b.includes("'26") ? 1 : 0) - (a.includes("'26") ? 1 : 0));
-  const players = ev === "all" ? allPlayers
-    : allPlayers.filter(p => (p.tournaments || []).some(t => _evSlug(t) === ev));
+  const players = (ev === "all" ? allPlayers
+    : allPlayers.filter(p => (p.tournaments || []).some(t => _evSlug(t) === ev)))
+    .filter(p => natMatches(natOf(nat, p.realgm_id), natF));
   if (!allPlayers.length) return empty(
     <>No youth tournament data in this build yet — the radar fills up once the ANGT circuit has been scraped for the current season.</>
   );
@@ -14955,6 +15431,7 @@ function YouthRadarView() {
           </button>
         ))}
       </div>
+      <NatChips nat={nat} val={natF} setVal={setNatF} />
       {!players.length && <div style={{ padding: 24, color: "#9ca3af" }}>No players from this event in the current scrape yet — re-run the youth scrape to pull a running tournament in.</div>}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
@@ -14968,7 +15445,7 @@ function YouthRadarView() {
               <tr key={p.slug || p.name} style={{ borderBottom: "1px solid #1f293744" }}>
                 <td className="px-3 py-2.5 font-bold text-xs" style={{ color: "#475569" }}>{i + 1}</td>
                 <td className="px-3 py-2.5">
-                  <div className="font-semibold" style={{ color: "#e5e7eb" }}>{p.name}</div>
+                  <div className="font-semibold" style={{ color: "#e5e7eb" }}>{p.name}<NatBadge nat={nat} rid={p.realgm_id} /></div>
                   <div style={{ fontSize: 10, color: "#6b7280" }}>
                     {[p.club, p.country].filter(Boolean).join(" · ")}
                     {p.tournaments?.length > 1 && <span style={{ color: "#4b5563" }}> · {p.tournaments.length} tournaments</span>}
@@ -15021,6 +15498,8 @@ function FutureClassesView({ watchlist = null, onToggleWatch = null }) {
   const [err, setErr] = useState(false);
   const [cls, setCls] = useState(null);
   const [posBand, setPosBand] = useState("All"); // Youth-Positionen: G/F/C (erste Stelle)
+  const [natF, setNatF] = useState("all");       // Passport/Bosman layer
+  const nat = useNationality();
   useEffect(() => {
     let alive = true;
     ptFetch("/future-classes")
@@ -15039,7 +15518,8 @@ function FutureClassesView({ watchlist = null, onToggleWatch = null }) {
   const classes = data.classes || [];
   if (!classes.length) return empty("No future-class prospects in this build yet.");
   const rows = (data.players || []).filter(p => p.class_min === cls)
-    .filter(p => posBand === "All" || (p.pos || "")[0] === posBand);
+    .filter(p => posBand === "All" || (p.pos || "")[0] === posBand)
+    .filter(p => natMatches(natOf(nat, p.realgm_id), natF));
   const nPro = rows.filter(p => p.pro).length;
   return (
     <div className="rounded-xl overflow-hidden" style={{ background: "#111827", border: "1px solid #1f2937" }}>
@@ -15074,6 +15554,7 @@ function FutureClassesView({ watchlist = null, onToggleWatch = null }) {
           {nPro} of {rows.length} already play pro minutes
         </span>
       </div>
+      <NatChips nat={nat} val={natF} setVal={setNatF} />
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr style={{ background: "#0a0e17" }}>
@@ -15093,7 +15574,7 @@ function FutureClassesView({ watchlist = null, onToggleWatch = null }) {
                 )}
                 <td className="px-3 py-2.5 font-bold text-xs" style={{ color: "#475569" }}>{i + 1}</td>
                 <td className="px-3 py-2.5">
-                  <div className="font-semibold" style={{ color: "#e5e7eb" }}>{p.name}</div>
+                  <div className="font-semibold" style={{ color: "#e5e7eb" }}>{p.name}<NatBadge nat={nat} rid={p.realgm_id} /></div>
                   <div style={{ fontSize: 10, color: "#6b7280" }}>
                     {[p.club, p.country].filter(Boolean).join(" · ")}
                     {p.tournaments?.length > 0 && <span style={{ color: "#4b5563" }} title={p.tournaments.join(", ")}> · {p.tournaments.length} event{p.tournaments.length > 1 ? "s" : ""}</span>}
@@ -16047,7 +16528,49 @@ function IntlBoardView({ players, onSelect, watchlist = null, onToggleWatch = nu
           </>
         )}
       </div>
-      <div className="overflow-x-auto">
+      {/* Mobile cards (feature 08/2026): same data, card layout under md. */}
+      <div className="md:hidden">
+        {rows.map((p, i) => {
+          const cs = p.confStrength;
+          const delta = (p.intlLevelEv != null && cs != null) ? p.intlLevelEv - cs : null;
+          const fr = flight(nbaPct(p));
+          const watched = (watchlist || []).includes(p.name);
+          return (
+            <div key={p.name} onClick={() => onSelect(p.name)} className="px-3 py-3 cursor-pointer" style={{ borderBottom: "1px solid #1f293744" }}>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-xs" style={{ color: "#475569", minWidth: 18 }}>{i + 1}</span>
+                <span className="font-semibold" style={{ color: "#e5e7eb" }}>{p.name}</span>
+                {p.source && p.source !== "ncaa" && <span className="text-xs" style={{ color: "#10b981" }}>🌐</span>}
+                {onToggleWatch && (
+                  <button onClick={(e) => { e.stopPropagation(); onToggleWatch(p.name); }} className="ml-auto w-6 h-6 rounded text-xs font-bold"
+                    style={{ background: watched ? "#10b981" : "#1f2937", color: watched ? "#000" : "#6b7280",
+                             border: `1px solid ${watched ? "#34d399" : "#374151"}` }}>
+                    {watched ? "★" : "☆"}
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2 mt-1 text-xs" style={{ color: "#9ca3af" }}>
+                <span className="px-2 py-0.5 rounded font-semibold" style={{ background: (posColors[p.pos] || "#6b7280") + "22", color: posColors[p.pos] || "#6b7280" }}>{p.pos}</span>
+                <span>{p.team || p.conf}</span>
+                <span>age {p.age != null ? ageOnDraftDay(p.age).toFixed(1) : "—"}</span>
+              </div>
+              <div className="flex items-baseline gap-3 mt-1.5 text-xs flex-wrap">
+                <span className="font-bold" style={{ color: tierColor(p.predIntlTier) }}>
+                  {p.predIntlTier || "—"}{p.intlLevelEv != null && <span style={{ color: "#6b7280", fontWeight: 400 }}> ({p.intlLevelEv.toFixed(2)})</span>}
+                </span>
+                <span style={{ color: "#9ca3af" }}>now {cs != null ? cs.toFixed(2) : "—"}</span>
+                {delta != null && (
+                  <span className="font-semibold" style={{ color: delta >= 0.08 ? "#22c55e" : delta <= -0.08 ? "#6b7280" : "#9ca3af" }}>
+                    {delta >= 0.08 ? `▲ +${delta.toFixed(2)}` : delta <= -0.08 ? `▼ ${delta.toFixed(2)}` : "="}
+                  </span>
+                )}
+                <span className="font-semibold" style={{ color: fr.c }}>NBA {nbaPct(p).toFixed(0)}%</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="overflow-x-auto hidden md:block">
         <table className="w-full text-sm">
           <thead><tr style={{ background: "#0a0e17" }}>
             {[...(onToggleWatch ? ["★"] : []), "#", "Player & career comps", "Pos", "Age", "Current level", "Projected level", "P(pro)", "Value", "NBA risk"].map((h, i) => (
@@ -17661,6 +18184,8 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
   const [intlAgeMax,setIntlAgeMax]=useState(99);
   const [intlRoleFilter,setIntlRoleFilter]=useState("All");
   const [intlLurkOnly,setIntlLurkOnly]=useState(false);
+  const [intlNatFilter,setIntlNatFilter]=useState("all"); // Passport/Bosman layer
+  const natMap = useNationality();
   const toggleWatch=(name)=>setWatchlist(prev=>{
     const next = prev.includes(name) ? prev.filter(n=>n!==name) : [...prev, name];
     try { window.localStorage.setItem(WATCHLIST_KEY, JSON.stringify(next)); } catch {}
@@ -17985,6 +18510,7 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
                 style={{background:intlLurkOnly?"#10b981":"#1f2937",color:intlLurkOnly?"#000":"#9ca3af"}}>
                 🕵 Lurkers only
               </button>
+              <NatChips nat={natMap} val={intlNatFilter} setVal={setIntlNatFilter} compact />
             </div>
           )}
           {(()=>{
@@ -17992,7 +18518,8 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
               (intlLevelFilter==="All" || p.predIntlTier===intlLevelFilter) &&
               (intlAgeMax>=99 || (p.age!=null && ageOnDraftDay(p.age)<=intlAgeMax)) &&
               (intlRoleFilter==="All" || (p.archetypesAll || p.archetype || "").split("|").includes(intlRoleFilter)) &&
-              (!intlLurkOnly || isLurker(p)));
+              (!intlLurkOnly || isLurker(p)) &&
+              natMatches(natOf(natMap, ptRidOf(p)), intlNatFilter));
             return intlView==="report" ? (
               <MarketReportView onSelect={onSelect}/>
             ) : intlView==="future" ? (
@@ -18034,7 +18561,57 @@ function BigBoardView({onSelect, boardData, setBoardData, loading, setLoading, a
           Click any player for the full profile — or use the <b style={{color:"#a78bfa"}}>⚔ buttons</b> to send 2–3 players
           into the Draft Room for a side-by-side decision.
         </div>
-        <div className="overflow-x-auto">
+        {/* Mobile cards (feature 08/2026): same data, card layout under md.
+            The table stays the md+ view — no logic forked, only markup. */}
+        <div className="md:hidden">
+          {filtered.map((p, i) => {
+            const t = p.tiers || p.v2TierProbs || {};
+            const up = (t["Superstar"]||0) + (t["All-Star"]||0);
+            const out = t["Negative"]||0;
+            return (
+              <div key={p.name} onClick={()=>onSelect(p.name)} className="px-3 py-3 cursor-pointer"
+                   style={{borderBottom:"1px solid #1f293744"}}>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-xs" style={{color:"#475569",minWidth:18}}>{i+1}</span>
+                  <span className="font-semibold" style={{color:"#e5e7eb"}}>{p.name}</span>
+                  {p.source && p.source!=="ncaa" && <span className="text-xs" style={{color:"#10b981"}}>🌐</span>}
+                  <button onClick={(e)=>{e.stopPropagation();togglePick(p.name);}} className="ml-auto w-6 h-6 rounded text-xs font-bold"
+                    style={{background:roomPicks.includes(p.name)?"#6d28d9":"#1f2937",
+                            color:roomPicks.includes(p.name)?"#e9d5ff":"#6b7280",
+                            border:`1px solid ${roomPicks.includes(p.name)?"#a78bfa":"#374151"}`}}>
+                    {roomPicks.includes(p.name)?"✓":"+"}
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 mt-1 text-xs" style={{color:"#9ca3af"}}>
+                  <span className="px-2 py-0.5 rounded font-semibold" style={{background:(posColors[p.pos]||"#6b7280")+"22",color:posColors[p.pos]||"#6b7280"}}>{p.pos}</span>
+                  <span>{p.team||p.conf}</span>
+                  <span style={{color: p.age!=null && p.age<20 ? "#86efac":"#9ca3af"}}>age {p.age!=null?ageOnDraftDay(p.age).toFixed(1):"—"}</span>
+                </div>
+                <div className="flex items-baseline gap-3 mt-1.5">
+                  <span title="Added Wins — projected peak NBA value" className="font-bold text-lg"
+                        style={{color: p.war==null ? "#374151" : (TC[p.predTier]||"#6b7280"), fontFamily:"'Oswald',sans-serif"}}>
+                    {p.war!=null ? (p.war>=10?fmt(p.war,0):fmt(p.war,1)) : "—"}<span style={{fontSize:10,color:"#6b7280",fontFamily:"'Barlow',sans-serif"}}> AW</span>
+                  </span>
+                  <span className="text-xs font-bold" style={{color:TC[p.predTier]||"#6b7280"}}>{p.predTier||"—"}</span>
+                  {(up>0||out>0) && (
+                    <span style={{fontSize:9,whiteSpace:"nowrap"}}>
+                      <span style={{color: up>=25?"#22c55e":up>=10?"#86efac":"#6b7280"}}>▲{up.toFixed(0)}% AS+</span>
+                      <span style={{color:"#374151"}}> · </span>
+                      <span style={{color: out>=30?"#ef4444":out>=15?"#f97316":"#6b7280"}}>▼{out.toFixed(0)}% out</span>
+                    </span>
+                  )}
+                </div>
+                {((p.badges||[]).length>0 || (p.redFlags||[]).length>0) && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {(p.badges||[]).slice(0,3).map((b,j)=><span key={j} className="px-1.5 py-0 rounded" style={{background:"#22c55e22",color:"#22c55e",fontSize:9}}>{b}</span>)}
+                    {(p.redFlags||[]).slice(0,2).map((f,j)=><span key={`r${j}`} className="px-1.5 py-0 rounded" style={{background:"#ef444422",color:"#ef4444",fontSize:9}}>{f}</span>)}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <div className="overflow-x-auto hidden md:block">
           <table className="w-full text-sm">
             <thead>
               <tr style={{background:"#0a0e17"}}>
@@ -18367,6 +18944,15 @@ function OutcomeKdeCurve({ player }) {
 
 export default function App() {
   const [sel,setSel]=useState(null);
+  // League landing pages (/league/<slug>): pathname-routed like /player/<slug>,
+  // SPA-rendered, indexed via sitemap + Vercel rewrite (feature 08/2026).
+  const [leagueSlug,setLeagueSlug]=useState(() =>
+    typeof window !== "undefined"
+      ? (window.location.pathname.match(/^\/league\/([^/]+)\/?$/)?.[1] ?? null)
+      : null);
+  // Public track record (/track-record): same pathname mechanism.
+  const [showTrackRecord,setShowTrackRecord]=useState(() =>
+    typeof window !== "undefined" && /^\/track-record\/?$/.test(window.location.pathname));
   const [tab,setTab]=useState("overview");
   // Startseite: bigboard | lab | research | methods — Segment 0 der Hash-URL
   const [boardView,setBoardView]=useState(() => {
@@ -18535,6 +19121,10 @@ export default function App() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const onPop = () => {
+      // Keep the league + track-record views in sync with back/forward navigation.
+      const lm = window.location.pathname.match(/^\/league\/([^/]+)\/?$/);
+      setLeagueSlug(lm ? decodeURIComponent(lm[1]) : null);
+      setShowTrackRecord(/^\/track-record\/?$/.test(window.location.pathname));
       const m = window.location.pathname.match(/^\/player\/([^/]+)\/?$/);
       if (m) {
         const wanted = decodeURIComponent(m[1]);
@@ -18562,14 +19152,18 @@ export default function App() {
       sawFirstSelChange.current = true;
       return;
     }
-    if (sel === null && window.location.pathname !== '/') {
+    // leagueSlug/track-record guard: an active league or track-record page
+    // owns its URL — don't clobber it just because no player is selected.
+    if (sel === null && !leagueSlug && !showTrackRecord && window.location.pathname !== '/') {
       window.history.pushState({}, '', '/' + (window.location.hash || ""));
     }
-  }, [sel]);
+  }, [sel, leagueSlug, showTrackRecord]);
 
   // SEO meta tags — sync title/description/OG/Twitter to current player or board.
   useEffect(() => {
     if (typeof document === "undefined") return;
+    // League/track-record pages own their meta (view effects) — don't overwrite.
+    if ((leagueSlug || showTrackRecord) && !sel) return;
     const setMeta = (selector, attrName, attrVal, content) => {
       let el = document.head.querySelector(selector);
       if (!el) {
@@ -18629,7 +19223,7 @@ export default function App() {
     setMeta('meta[name="twitter:title"]', 'name', 'twitter:title', title);
     setMeta('meta[name="twitter:description"]', 'name', 'twitter:description', desc);
     setLink('canonical', url);
-  }, [sel, profileCache]);
+  }, [sel, profileCache, leagueSlug, showTrackRecord]);
 
   const selectPlayer = async (name) => {
     setSel(name); setSearch(""); setShowS(false); setTab("overview");
@@ -18790,7 +19384,17 @@ export default function App() {
         </div>
       </header>
       <main className="max-w-7xl mx-auto px-4 md:px-8 py-6">
-        {!sel ? (
+        {!sel && showTrackRecord ? (
+          <TrackRecordView onExit={() => {
+            setShowTrackRecord(false);
+            if (typeof window !== "undefined") window.history.pushState({}, "", "/" + (window.location.hash || ""));
+          }}/>
+        ) : !sel && leagueSlug ? (
+          <LeagueView slug={leagueSlug} onExit={() => {
+            setLeagueSlug(null);
+            if (typeof window !== "undefined") window.history.pushState({}, "", "/" + (window.location.hash || ""));
+          }}/>
+        ) : !sel ? (
           <>
             {/* Top-Level lens switch — zwei Berufe, zwei Fragen (IA-Umbau): Boards,
                 Player-Hero und Vokabular folgen der Lens; Suche, Player-Pages,
@@ -18956,8 +19560,14 @@ export default function App() {
           </>
         )}
       </main>
-      <footer className="mt-12 py-6 text-center text-xs" style={{color:"#374151",borderTop:"1px solid #111827"}}>
-        <span style={{color:"#6b7280"}}>ProspectTheory</span> · NBA Draft Intelligence · Data: BartTorvik, RealGM, NBA API, Draft Combine, Databallr
+      <footer className="mt-12 py-6 text-xs" style={{color:"#374151",borderTop:"1px solid #111827"}}>
+        {/* Internal SEO linking (feature 08/2026): real crawlable anchors to the
+            indexable pages — /track-record + one link per weighted league
+            (names/slugs payload-driven via useLeaguePages). */}
+        <PTFooterLinks/>
+        <div className="text-center mt-4">
+          <span style={{color:"#6b7280"}}>ProspectTheory</span> · NBA Draft Intelligence · Data: BartTorvik, RealGM, NBA API, Draft Combine, Databallr
+        </div>
       </footer>
     </div>
   );
