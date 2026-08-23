@@ -67,7 +67,27 @@ ok(gates.some(g => g.id === "tilt_sharpe" && g.verdict === "do_not_publish"),
 for (const g of gates) ok(g.name && g.date && g.rule_doc && g.result,
    `gate entry complete (${g.id})`);
 
+// 6. Weekly board ledger (claim class 4, rule added 2026-08-23) —
+// validated once the payload ships it; loud warning until export re-runs.
+let wbNote = "weekly ledger: NOT IN PAYLOAD YET (re-run export_track_record.py)";
+if (d.weekly_boards) {
+  const wb = d.weekly_boards;
+  ok(Number.isInteger(wb.n) && wb.n >= 1, `weekly ledger present (${wb.n})`);
+  ok(wb.verified === wb.n, `all weekly hashes verified (${wb.verified}/${wb.n})`);
+  ok(/append-only|never retro-edited|retro/i.test(wb.rule || "") || /frozen/i.test(wb.rule || ""),
+     "weekly rule text ships in payload");
+  ok(Array.isArray(wb.entries) && wb.entries.length === wb.n, "entries match n");
+  for (const e of wb.entries) {
+    ok(/^board_\d{4}_\d{4}-W\d{2}\.csv\.gz$/.test(e.file), `entry file format (${e.file})`);
+    ok(/^[0-9a-f]{64}$/.test(e.sha256), `entry sha256 format (${e.file})`);
+    ok(Number.isInteger(e.class_year) && e.n_players > 100, `entry class/n (${e.file})`);
+  }
+  wbNote = `weekly ledger: ${wb.n} states, ${wb.verified} verified`;
+} else {
+  console.warn("WARN  " + wbNote);
+}
+
 console.log(`OK  track record: snapshot ${s.id} (${s.n_claims.level_up_flags} flags, ` +
   `${s.n_claims.intl_tier} intl tier, ${s.n_claims.nba_board} board claims), ` +
   `${gates.length} gates (${gates.filter(g => g.verdict === "do_not_publish").length} negative) — ` +
-  `${checks} checks green (contract, freeze, thresholds, accountability).`);
+  `${checks} checks green (contract, freeze, thresholds, accountability). ` + wbNote);

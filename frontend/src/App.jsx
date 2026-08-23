@@ -13969,6 +13969,33 @@ function TrackRecordView({ onExit }) {
         ))}
       </div>
 
+      {(tr.weekly_boards?.n || 0) > 0 && (
+        <div className="rounded-xl p-4 mb-5" style={{ background: "#111827", border: "1px solid #1f2937" }}>
+          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: "#4b5563" }}>
+            Weekly frozen board states — the anti-retroactivity layer
+          </div>
+          <p className="text-xs mb-2" style={{ color: "#9ca3af" }}>
+            {tr.weekly_boards.n} weekly snapshots, {tr.weekly_boards.verified} hash-verified at publish
+            ({String(tr.weekly_boards.first).slice(0, 10)} → {String(tr.weekly_boards.last).slice(0, 10)}).{" "}
+            <span style={{ color: "#6b7280" }}>{tr.weekly_boards.rule}</span>
+          </p>
+          <div className="space-y-1">
+            {tr.weekly_boards.entries.slice(-8).reverse().map((e) => (
+              <div key={e.file} className="flex flex-wrap justify-between text-xs gap-x-3" style={{ color: "#6b7280" }}>
+                <span style={{ color: "#9ca3af" }}>{e.file}</span>
+                <span>{e.frozen_at} · class {e.class_year} · {e.n_players?.toLocaleString?.("en-US") ?? e.n_players} players</span>
+                <span style={{ fontFamily: "monospace" }}>sha256 {String(e.sha256).slice(0, 12)}…</span>
+              </div>
+            ))}
+            {tr.weekly_boards.n > 8 && (
+              <p className="text-[10px]" style={{ color: "#4b5563" }}>
+                …and {tr.weekly_boards.n - 8} earlier states (full ledger in the payload; snapshots are git-timestamped).
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       <h2 className="text-sm font-bold mb-2" style={{ fontFamily: "'Oswald',sans-serif", color: "#e5e7eb" }}>
         Gate history — including what we did NOT ship
       </h2>
@@ -14100,7 +14127,39 @@ function SysContextCard({ p }) {
             : ""}
         </p>
       )}
+      <SysCoachLine sc={sc} entry={entry} />
     </div>
+  );
+}
+
+// Coach-change context (gate PASS 2026-08-12, COACH_PORTABILITY_PRERULE):
+// the payload decides everything — `proj` is present ONLY when the
+// pre-registered display rule applies (arrival window + eligible prior D1
+// job). No thresholds live here; we render what ships.
+function SysCoachLine({ sc, entry }) {
+  const ct = sc?.coach_context;
+  const t = ct?.teams?.[entry?.tm || ""];
+  if (!t) return null;
+  const pct = (x) => Math.round(x * 100);
+  return (
+    <p className="text-[10px] mt-1.5" style={{ color: "#6b7280" }} title={ct.gate}>
+      <span style={{ color: "#9ca3af" }}>Coach: {t.coach}</span>
+      {" "}(year {t.regime_year}{entry.tm ? ` at ${entry.tm}` : ""})
+      {t.proj ? (
+        <>
+          {" "}· scheme projection from {t.proj.school} {t.proj.years}:{" "}
+          {Object.entries(t.proj.stats).map(([k, v], i) => (
+            <span key={k}>
+              {i > 0 ? " · " : ""}
+              {(sc.stat_labels || {})[k] || k} {pct(v)}p
+            </span>
+          ))}
+          <span style={{ color: "#4b5563" }}> — {ct.label}</span>
+        </>
+      ) : t.arrival ? (
+        <span style={{ color: "#4b5563" }}> · new coach — no prior D1 head-coaching history to project from</span>
+      ) : null}
+    </p>
   );
 }
 

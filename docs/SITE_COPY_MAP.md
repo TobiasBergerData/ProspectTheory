@@ -238,6 +238,52 @@ correction or feed its numbers into projection copy. Green = scheme
 suppresses the stat (raw understates), blue = scheme inflates
 opportunities. Test: `node frontend/tests/system_context_render_test.mjs`.
 
+## System context card: coach line + scheme projection (2026-08-12)
+
+Extension of the system-context card, licensed by the FIRST positive gate
+at the team/coach layer (data-pipeline docs/COACH_PORTABILITY_PRERULE.md,
+verdict `pass`: mean ρ 0.34 [0.28, 0.39] across the 6 style axes,
+permutation p = 0.0002, n = 235 D1→D1 coach moves; also entry #5 in the
+public track record's gate history — the four before it are negative).
+
+What renders (`SysCoachLine` in App.jsx, below the stat rows): the team's
+current coach + regime year for every covered NCAA team; at a COACH CHANGE
+(payload flag `arrival`) additionally either (a) the incoming coach's
+style-percentile profile from his previous D1 job, labeled "scheme
+projection from <school> <years> — projection, not a measurement of this
+team", or (b) the honest gap line "new coach — no prior D1 head-coaching
+history to project from".
+
+COPY RULES (non-negotiable):
+- ALL decisions live in the payload (`coach_context` in
+  api_system_context.json, built by export_system_context.py from
+  team_context_coach.csv + coach_regimes.csv): arrival window, prior-job
+  eligibility, percentiles, label text, gate line. The frontend renders
+  `proj`/`arrival` if present and holds ZERO thresholds.
+- The projection is ALWAYS labeled as projection, never phrased as a
+  measurement of the new team; ρ 0.34 = moderate transfer (the payload
+  caveat says so). All four card stats ship or none (per-axis display
+  differences would need a new registered rule).
+- Still "shown, not modeled": nothing here feeds projections
+  (TEAM_REL_PRERULE verdicts unchanged).
+Test: coach block section in system_context_render_test.mjs (warns loudly
+while the payload predates the export re-run, validates fully after).
+
+## Track record: weekly frozen board states (2026-08-23)
+
+New section on /track-record ("Weekly frozen board states — the
+anti-retroactivity layer"), payload-driven from `weekly_boards` in
+api_track_record.json (export_track_record.py re-verifies EVERY snapshot
+hash at publish and refuses on mismatch — the FATAL is the feature).
+Claim-class rule registered in data-pipeline docs/TRACK_RECORD_PRERULE.md
+§4 (added 2026-08-23): weekly states are NOT separate predictive claims,
+they prove rankings were never retro-edited and inherit the class
+resolution rules. COPY RULES: the section renders ONLY when the payload
+ships a non-empty ledger; rule text, counts, dates and hashes all come
+from the payload (no numbers in frontend code); never describe the ledger
+as predictions. Test: weekly section in track_record_render_test.mjs
+(loud WARN until the payload is rebuilt).
+
 ## Session 2026-08-09: internal linking + league translation + mobile cards
 
 Three additions in one session. (1) INTERNAL LINKING: `PTFooterLinks` in
