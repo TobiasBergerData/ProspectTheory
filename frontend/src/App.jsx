@@ -14128,7 +14128,23 @@ function SysContextCard({ p }) {
         </p>
       )}
       <SysCoachLine sc={sc} entry={entry} />
+      <SysWeakLeagueLine sc={sc} entry={entry} />
     </div>
+  );
+}
+
+// Weak-league sample flag (Tobias decision 2026-08-25, option B of
+// WEAK_LEAGUE_T2_DESIGN §Design v2): the payload decides who carries
+// `wl` and at what grade — no thresholds live here, no number changes.
+function SysWeakLeagueLine({ sc, entry }) {
+  const wl = entry?.wl;
+  if (!wl) return null;
+  return (
+    <p className="text-[10px] mt-1.5" style={{ color: "#b45309" }} title={sc?.wl_note || ""}>
+      <span style={{ fontWeight: 600 }}>Weak-league sample</span>
+      {" "}— {entry.lg} grades {wl.lw}
+      <span style={{ color: "#6b7280" }}> · projection unchanged, read with caution</span>
+    </p>
   );
 }
 

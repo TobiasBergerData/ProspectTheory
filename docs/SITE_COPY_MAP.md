@@ -391,3 +391,28 @@ gewinnt** (keine Information verlieren), Typografie-Variante verliert.
 
 Falls eine dieser Entscheidungen inhaltlich nicht gewollt ist: git-Diff des
 Bereinigungs-Commits zeigt beide Fassungen nebeneinander.
+
+## System context card: weak-league sample flag (2026-08-25)
+
+Tobias' deployment decision on the weak-league discount (data-pipeline
+docs/WEAK_LEAGUE_T2_DESIGN.md §Design v2, option B): the T1 gate PASSED
+(remedy transfers OOT), but the E0 dry run showed the correction demotes
+the famous weak-league HITS (Jokić, Sengun, LaMelo) together with the
+busts — mean error improves, tail cost is asymmetric. Therefore: NO
+number changes anywhere; affected players carry a labeled risk marker.
+
+What renders (`SysWeakLeagueLine` in App.jsx, below the coach line):
+for intl players whose payload entry carries `wl`, the amber line
+"Weak-league sample — <league> grades <lw> · projection unchanged, read
+with caution"; tooltip = payload `wl_note` (states "not a correction"
+and that famous exceptions exist).
+
+COPY RULES (non-negotiable):
+- The knee (0.85 — the value the re-run gate passed at) and every flag
+  decision live in export_system_context.py / the payload; league grades
+  come from empirical_league_weights.json (same file 10b models with).
+  The frontend renders `wl` if present and holds ZERO thresholds.
+- The projection number is NEVER changed by this feature — the line says
+  so explicitly. NCAA players never carry the flag.
+Test: wl section in system_context_render_test.mjs (warns loudly while
+the payload predates the export re-run, validates fully after).

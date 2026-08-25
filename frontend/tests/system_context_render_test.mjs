@@ -93,8 +93,29 @@ if (d.coach_context) {
   console.warn("WARN  " + coachNote);
 }
 
+// 5. Weak-league sample flag (Tobias decision 2026-08-25, option B of
+// WEAK_LEAGUE_T2_DESIGN §Design v2) — validated once the payload ships
+// it; loud warning until export_system_context.py has been re-run.
+let wlNote = "wl flag: NOT IN PAYLOAD YET (re-run export_system_context.py)";
+const wlPlayers = Object.values(d.players).filter(e => e.wl);
+if (d.wl_note || wlPlayers.length) {
+  ok(typeof d.wl_note === "string" && /not a correction/i.test(d.wl_note),
+     "wl_note ships and states 'not a correction'");
+  ok(Number.isFinite(d.wl_knee) && d.wl_knee > 0 && d.wl_knee < 1,
+     "wl_knee documented in payload");
+  ok(wlPlayers.length >= 5, `flagged players present (${wlPlayers.length})`);
+  for (const e of wlPlayers) {
+    ok(e.lg !== "NCAA", "wl flag never on NCAA players");
+    ok(Number.isFinite(e.wl.lw) && e.wl.lw > 0 && e.wl.lw < d.wl_knee,
+       `wl.lw below the knee (${e.lg}: ${e.wl.lw})`);
+  }
+  wlNote = `wl flag: ${wlPlayers.length} players (knee ${d.wl_knee})`;
+} else {
+  console.warn("WARN  " + wlNote);
+}
+
 console.log(`OK  system context: ${d.n_players.toLocaleString("en-US")} players ` +
   `(NCAA ${nNcaa}, intl ${nIntl}), ${nStats.toLocaleString("en-US")} stat entries, ` +
   `${waglerLike.length} suppression / ${inflated.length} inflation cases — ` +
   `${checks.toLocaleString("en-US")} checks green (contract, entry format, semantics). ` +
-  coachNote);
+  coachNote + " · " + wlNote);
